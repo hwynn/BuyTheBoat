@@ -1,0 +1,56 @@
+<Window x:Class="MyMoneyForecast.App.CreateOneTimeGoalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Create One-Time Goal" Height="560" Width="480"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,14"
+                   Text="For a single future expense — a trip, a big purchase, anything you're saving up for once. This creates both the goal itself and a savings plan for it; no need to think about either separately."/>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="320"
+                       VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <Button Content="Cancel" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnCancelClick"/>
+            <Button Content="Create" Width="90" Padding="0,5" Click="OnCreateClick"/>
+        </StackPanel>
+
+        <StackPanel>
+            <TextBlock Text="What are you saving for?"/>
+            <TextBox x:Name="DescriptionTextBox" Margin="0,2,0,10"/>
+
+            <TextBlock Text="How much do you need?"/>
+            <TextBox x:Name="AmountNeededTextBox" Margin="0,2,0,10"/>
+
+            <TextBlock Text="When do you need it by?"/>
+            <DatePicker x:Name="DueDatePicker" Margin="0,2,0,10"/>
+
+            <TextBlock Text="When do you want to start saving?"/>
+            <DatePicker x:Name="StartDatePicker" Margin="0,2,0,4"/>
+            <CheckBox x:Name="StartTodayCheckBox" Content="Start today" Checked="OnStartTodayChanged" Unchecked="OnStartTodayChanged" Margin="0,0,0,10"/>
+
+            <TextBlock Text="How important is this?" FontWeight="Bold"/>
+            <TextBlock TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,2,0,4"
+                       Text="This decides which goals get funded first when money is tight — not the timing below. 1 is the LOWEST priority (first to be delayed); 5 is the HIGHEST (protected first)."/>
+            <ComboBox x:Name="PriorityComboBox" Margin="0,0,0,10" SelectedIndex="2">
+                <ComboBoxItem Content="1 — Low: nice to have, fine to delay" Tag="1"/>
+                <ComboBoxItem Content="2 — Below average" Tag="2"/>
+                <ComboBoxItem Content="3 — Average" Tag="3"/>
+                <ComboBoxItem Content="4 — Above average" Tag="4"/>
+                <ComboBoxItem Content="5 — High: protect this before lower-priority goals" Tag="5"/>
+            </ComboBox>
+
+            <Expander Header="Advanced: choose a specific savings schedule" Margin="0,4,0,0">
+                <StackPanel Margin="0,10,0,0">
+                    <TextBlock TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,6"
+                               Text="You don't need to set this — exactly when money gets set aside is expected to be reorganized automatically based on priority and what's actually available. This only overrides the starting plan."/>
+                    <TextBlock Text="How often should money be set aside?"/>
+                    <ComboBox x:Name="FrequencyComboBox" Margin="0,2,0,0" SelectedIndex="2">
+                        <ComboBoxItem Content="Weekly"/>
+                        <ComboBoxItem Content="Every other week"/>
+                        <ComboBoxItem Content="Monthly"/>
+                    </ComboBox>
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+    </DockPanel>
+</Window>
