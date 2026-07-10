@@ -213,8 +213,14 @@ public class TransactionLogBookFactoryTests
             financialPatterns: [bigBill]));
 
         result.HasNegativeFreeBalance.ShouldBeTrue();
-        result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 2, 1));
-        SnapshotOn(result, new DateOnly(2025, 2, 1)).ExpectedFreeAmount.ShouldBe(-400m);
+
+        // The car repair is a mandatory bill due Feb 1 with no income before
+        // it, so its full amount is reserved immediately (behaviour B). The
+        // shortfall therefore shows from the as-of day (Jan 1) — you can't
+        // afford the upcoming repair *now*, not merely when it finally hits.
+        result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 1, 1));
+        SnapshotOn(result, new DateOnly(2025, 1, 1)).ExpectedFreeAmount.ShouldBe(-400m); // 100 - 500 reserved
+        SnapshotOn(result, new DateOnly(2025, 2, 1)).ExpectedFreeAmount.ShouldBe(-400m); // still short once paid
     }
 
     [Fact]
@@ -383,6 +389,92 @@ public class TransactionLogBookFactoryTests
         // linear-ramp fraction (19/31 of $310 = $190.00) — proving the
         // snap-to-full branch fired, not a coincidence.
         Jar(SnapshotOn(result, new DateOnly(2025, 1, 20)), 30).ShouldBe(310.00m);
+    }
+
+    [Fact]
+    public void A_brand_new_bills_first_occurrence_before_any_income_is_fully_reserved_from_the_as_of_day()
+    {
+        // A mandatory bill whose first-ever occurrence is in the future (no
+        // prior cycle) and lands before any paycheck. The money must already
+        // be in hand, so it should be fully reserved on the current (as-of)
+        // day — the gap that previously left a brand-new upcoming bill
+        // looking unfunded until it hit.
+        var registration = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 100,
+            Source = "Registration",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [20],
+                Start = new DateOnly(2025, 1, 20),
+                Until = new DateOnly(2025, 12, 20),
+            }),
+            Amount = -300m,
+        });
+        registration.Mandatory.ShouldBeTrue();
+
+        // No income at all -> nothing arrives before the Jan 20 due date -> B.
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 1000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 2, 1),
+            financialPatterns: [registration]));
+
+        var asOfDay = SnapshotOn(result, new DateOnly(2025, 1, 1));
+        Jar(asOfDay, 100).ShouldBe(300m); // fully reserved from day one
+        asOfDay.ExpectedFreeAmount.ShouldBe(700m); // 1000 - 300, not a misleading 1000
+    }
+
+    [Fact]
+    public void A_brand_new_bills_first_occurrence_after_a_paycheck_paces_from_the_forecast_start()
+    {
+        // Paycheck Jan 15 lands before the bill's first occurrence (Feb 15),
+        // so a future paycheck helps fund it -> behaviour A. With no prior
+        // cycle to anchor to, the ramp paces from the as-of date (Jan 1)
+        // rather than reserving nothing.
+        var paycheck = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 101,
+            Source = "Employer",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [15],
+                Start = new DateOnly(2025, 1, 15),
+                Until = new DateOnly(2025, 12, 15),
+            }),
+            Amount = 2000m,
+        });
+
+        var tuition = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 102,
+            Source = "Tuition",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [15],
+                Start = new DateOnly(2025, 2, 15),
+                Until = new DateOnly(2025, 12, 15),
+            }),
+            Amount = -450m,
+        });
+        tuition.Mandatory.ShouldBeTrue();
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 3, 1),
+            financialPatterns: [paycheck, tuition]));
+
+        // Jan 1 (as-of): pacing has just begun -> nothing reserved yet.
+        Jar(SnapshotOn(result, new DateOnly(2025, 1, 1)), 102).ShouldBe(0m);
+
+        // Jan 15 (paycheck snapshot): 14 of the 45 days from Jan 1 to the
+        // Feb 15 due date have elapsed -> 14/45 * $450 = $140, proving the
+        // first-cycle ramp is anchored to the forecast start, not stuck at 0.
+        Jar(SnapshotOn(result, new DateOnly(2025, 1, 15)), 102).ShouldBe(140m);
     }
 
     [Fact]

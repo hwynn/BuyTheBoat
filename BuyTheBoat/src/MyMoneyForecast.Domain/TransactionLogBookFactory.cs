@@ -152,7 +152,7 @@ public static class TransactionLogBookFactory
         var autoBillTargets = new Dictionary<int, decimal>();
         foreach (var bill in autoBills)
         {
-            var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, options.AsOfDate);
+            var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, options.AsOfDate, options.AsOfDate);
             jarValues[bill.FinanceId] = target;
             autoBillTargets[bill.FinanceId] = target;
         }
@@ -190,7 +190,7 @@ public static class TransactionLogBookFactory
             // snapshot dates, so stepping between them loses nothing.
             foreach (var bill in autoBills)
             {
-                var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, date);
+                var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, options.AsOfDate, date);
                 var delta = target - autoBillTargets[bill.FinanceId];
                 autoBillTargets[bill.FinanceId] = target;
                 if (delta != 0m)
@@ -369,46 +369,71 @@ public static class TransactionLogBookFactory
         return jars;
     }
 
-    // Linear interpolation between consecutive bill occurrences — 0 exactly
-    // on (and right after) a due date, rising toward the full bill amount as
-    // the *next* due date approaches. Anchoring to the most recent
-    // occurrence *at or before* `date` matters: the bill's own due-date
-    // ExpectedTransaction already reduces the balance that day, so the jar
-    // must already read 0 that day too, or the bill's amount would be
-    // subtracted twice.
+    // How much of a bill is reserved on `date`, deciding per day between two
+    // behaviours the user wants BOTH of (2026-07-10):
     //
-    // The ramp only makes sense if more income is still coming before the
-    // bill is due — it's a pacing curve, implicitly assuming a future
-    // paycheck completes the reservation by the due date. Once the last
-    // income event before the due date has passed (or there never was one),
-    // pacing has nothing left to pace against: the full remaining amount is
-    // reserved immediately. This only affects the automatic bill mechanism —
-    // a user's own EarMarkPattern is a deliberate, hand-chosen schedule the
-    // engine leaves alone even if it runs out of runway (that shows up as a
-    // GoalShortfall instead).
-    private static decimal BillAccrualAt(FinancialPattern bill, List<DateOnly> occurrences, List<DateOnly> incomeOccurrences, DateOnly date)
+    //   A (pace) — if a paycheck arrives before the bill's next due date, a
+    //     future paycheck will help fund it, so reserve only a linear
+    //     fraction of the way through the current cycle. Avoids being overly
+    //     cautious for distant bills.
+    //   B (reserve in full) — if the bill's next occurrence lands before any
+    //     further income, the money must already be in hand, so reserve the
+    //     whole amount immediately. Keeps short-term free balance honest.
+    //
+    // The A/B choice is exactly "is there income between tomorrow and the
+    // bill's next due date." Walking forward, a bill ramps (A) until the last
+    // paycheck before its due date passes, then snaps to full (B).
+    //
+    // Anchoring A's ramp to the most recent occurrence *at or before* `date`
+    // matters: the bill's own due-date ExpectedTransaction already reduces
+    // the balance that day, so the jar must read 0 that day too, or the
+    // amount would be subtracted twice. For the bill's very FIRST occurrence
+    // there is no prior cycle to anchor to, so A paces from the forecast's
+    // own start (`asOfDate`) instead — without this, a brand-new bill's first
+    // instance reserved nothing at all until it hit, which is the gap that
+    // made an upcoming bill look unfunded on the current day.
+    //
+    // This only affects the automatic bill mechanism — a user's own
+    // EarMarkPattern is a deliberate, hand-chosen schedule the engine leaves
+    // alone even if it runs out of runway (that shows up as a GoalShortfall
+    // instead).
+    private static decimal BillAccrualAt(
+        FinancialPattern bill,
+        List<DateOnly> occurrences,
+        List<DateOnly> incomeOccurrences,
+        DateOnly asOfDate,
+        DateOnly date)
     {
-        var searchResult = occurrences.BinarySearch(date);
-        var paidThroughIndex = searchResult >= 0 ? searchResult : ~searchResult - 1;
-
-        if (paidThroughIndex < 0 || paidThroughIndex + 1 >= occurrences.Count)
+        if (occurrences.Count == 0)
         {
-            // Before the bill's very first occurrence, or after its last —
-            // either way there's no current cycle to accrue within.
             return 0m;
         }
 
-        var paidThrough = occurrences[paidThroughIndex];
-        var next = occurrences[paidThroughIndex + 1];
-        var amount = Math.Abs(bill.Amount);
+        var searchResult = occurrences.BinarySearch(date);
+        var paidThroughIndex = searchResult >= 0 ? searchResult : ~searchResult - 1;
 
+        // At or after the bill's last occurrence ever — no upcoming due date
+        // left to reserve toward.
+        if (paidThroughIndex >= occurrences.Count - 1)
+        {
+            return 0m;
+        }
+
+        var amount = Math.Abs(bill.Amount);
+        var next = occurrences[paidThroughIndex + 1];
+
+        // B: nothing more arrives before the bill is due — reserve it all now.
         if (!HasOccurrenceInRange(incomeOccurrences, date.AddDays(1), next))
         {
             return amount;
         }
 
-        var cycleDays = next.DayNumber - paidThrough.DayNumber;
-        var elapsedDays = date.DayNumber - paidThrough.DayNumber;
+        // A: pace toward the due date. Anchor to the previous occurrence when
+        // one exists; for the first-ever occurrence (paidThroughIndex < 0),
+        // pace from the forecast start instead.
+        var anchor = paidThroughIndex >= 0 ? occurrences[paidThroughIndex] : asOfDate;
+        var cycleDays = next.DayNumber - anchor.DayNumber;
+        var elapsedDays = date.DayNumber - anchor.DayNumber;
 
         var fraction = (decimal)elapsedDays / cycleDays;
         return Math.Round(amount * fraction, 2);
