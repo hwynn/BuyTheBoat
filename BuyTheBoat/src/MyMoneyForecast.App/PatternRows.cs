@@ -56,6 +56,13 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
     public decimal Balance => Snapshot.ExpectedAmount ?? 0m;
     public string Reserved => FormatReserved(Snapshot, jarLabels);
     public decimal FreeBalance => Snapshot.ExpectedFreeAmount ?? 0m;
+
+    // Drives the red "Free Balance" cell — a light-touch warning for any day
+    // free goes negative (a debt day, an over-committed reservation, or the
+    // as-of day if commitments already exceed the balance). All three are worth
+    // surfacing; the red is per-row rather than a nagging popup.
+    public bool FreeBalanceNegative => FreeBalance < 0m;
+
     public string Events => FormatEvents(Snapshot, jarLabels);
 
     // Internal (not private): ForecastSpreadsheetExporter reuses these so the

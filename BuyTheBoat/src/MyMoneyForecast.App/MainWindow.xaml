@@ -102,7 +102,19 @@
                                 <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100"/>
                                 <DataGridTextColumn Header="Expected Balance" Binding="{Binding Balance, StringFormat={}{0:C}}" Width="130"/>
                                 <DataGridTextColumn Header="Reserved" Binding="{Binding Reserved}" Width="260"/>
-                                <DataGridTextColumn Header="Free Balance" Binding="{Binding FreeBalance, StringFormat={}{0:C}}" Width="110"/>
+                                <DataGridTextColumn Header="Free Balance" Binding="{Binding FreeBalance, StringFormat={}{0:C}}" Width="110">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <!-- Free balance in the red on days it goes negative. -->
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FreeBalanceNegative}" Value="True">
+                                                    <Setter Property="Foreground" Value="#FFB00020"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                                 <DataGridTextColumn Header="Events" Binding="{Binding Events}" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>

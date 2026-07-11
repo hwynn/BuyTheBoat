@@ -64,9 +64,19 @@ clean context. **Read first:** [`06-deallocation-math.md`](06-deallocation-math.
   cushion that can't fit alongside other jars can alternate refill↔drain on
   successive event dates (the reservation-lag family from Step 2) — visible only
   when chronically over-committed.
-- **Next (deferred this phase):** the "what if I buy X on date D?" hypothetical
-  (its own pass); revisit the deferred `HasNegativeFreeBalance` semantics
-  (decision #4); per-jar distinct drain colors; a dedicated hide-cushion toggle.
+- **Post-Step-3 follow-ups (author, 2026-07-11):**
+  - **`HasNegativeFreeBalance` — RESOLVED, keep as-is.** Its three overlapping
+    meanings (genuine debt / over-committed-now / one-day reservation blip) are
+    all valid to surface, so no redesign. The flag is currently read nowhere and
+    does NOT trigger deallocation (that's the per-day `IsDeallocationDay`); left
+    computed for possible later use. The user-facing warning is instead a
+    per-row cue: the timeline **"Free Balance" cell turns red** on any day free
+    < 0 (`TimelineRow.FreeBalanceNegative` + a `DataTrigger`) — no nagging popup.
+  - **"What if I buy X on date D?" — DEPRIORITIZED (lowest).** For now users get
+    the same answer by editing the current-balance field to simulate. Not
+    planned unless revisited.
+  - Still open/optional: per-jar distinct drain colors; a dedicated hide-cushion
+    toggle; and Q4 (goal readjustment), the big remaining design area.
 
 ## What this phase adds, in one sentence
 
