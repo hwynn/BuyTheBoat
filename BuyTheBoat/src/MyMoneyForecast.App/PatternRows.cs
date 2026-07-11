@@ -109,20 +109,32 @@ public sealed class JarDetailRow
     public required string DueDate { get; init; }
     public required string Status { get; init; }
 
+    // True when this jar was raided on a deallocation day (drives the red row).
+    public bool Drained { get; init; }
+
     public static JarDetailRow From(
         FundJar jar,
+        BalanceSnapshot snapshot,
         IReadOnlyDictionary<int, string> jarLabels,
-        IReadOnlyDictionary<int, GoalShortfall> shortfallsByFinanceId)
+        IReadOnlyDictionary<int, GoalShortfall> shortfallsByFinanceId,
+        decimal cushionTarget)
     {
+        // A deallocation-day give-back is a negative isolated earmark; on a
+        // normal day that same shape is a planned goal payout — so flag red only
+        // when the day deallocated AND this jar's net isolated earmark is < 0.
+        var drained = snapshot.IsDeallocationDay
+            && NetIsolatedEarmark(snapshot, jar.FinanceId) < 0m;
+
         if (jar.FinanceId is not { } financeId)
         {
             return new JarDetailRow
             {
                 Jar = "Safety cushion",
                 Saved = jar.ExpectedAmount,
-                ShouldHaveSaved = "—",
+                ShouldHaveSaved = cushionTarget > 0m ? cushionTarget.ToString("C") : "—",
                 DueDate = "—",
-                Status = "Not yet configured",
+                Status = CushionStatus(jar.ExpectedAmount, cushionTarget),
+                Drained = drained,
             };
         }
 
@@ -135,6 +147,7 @@ public sealed class JarDetailRow
                 ShouldHaveSaved = jar.MilestoneAmount is { } milestone ? milestone.ToString("C") : "—",
                 DueDate = shortfall.DueDate.ToString(),
                 Status = GoalStatusRow.FormatStatus(shortfall),
+                Drained = drained,
             };
         }
 
@@ -147,7 +160,25 @@ public sealed class JarDetailRow
             ShouldHaveSaved = "—",
             DueDate = "—",
             Status = "Automatic bill reserve",
+            Drained = drained,
         };
+    }
+
+    // Sum of this finance id's isolated (non-repeated) earmark amounts on the
+    // day — negative once a deallocation give-back outweighs any scheduled fill.
+    private static decimal NetIsolatedEarmark(BalanceSnapshot snapshot, int? financeId) =>
+        snapshot.EarMarkEvents
+            .Where(earmark => !earmark.RepeatedEarmark && earmark.FinanceId == financeId)
+            .Sum(earmark => earmark.ExpectedAmount);
+
+    private static string CushionStatus(decimal saved, decimal target)
+    {
+        if (target <= 0m)
+        {
+            return "Not set";
+        }
+
+        return saved >= target ? "Funded" : $"Below target by {(target - saved):C}";
     }
 }
 
@@ -181,7 +212,8 @@ public sealed class DayEventRow
                 Event = TimelineRow.JarLabel(earmarkEvent.FinanceId, jarLabels),
                 Kind = earmarkEvent.RepeatedEarmark
                     ? "Planned allocation"
-                    : earmarkEvent.ExpectedAmount >= 0 ? "Automatic allocation" : "Automatic release",
+                    : earmarkEvent.ExpectedAmount >= 0 ? "Automatic allocation"
+                    : snapshot.IsDeallocationDay ? "Deallocation" : "Automatic release",
                 Amount = earmarkEvent.ExpectedAmount,
             });
         }

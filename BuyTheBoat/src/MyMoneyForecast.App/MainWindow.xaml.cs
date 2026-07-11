@@ -51,7 +51,8 @@ public partial class MainWindow : Window
         CurrentBalanceTextBox.Text = saved.Balance.ToString(CultureInfo.InvariantCulture);
         AsOfDatePicker.SelectedDate = saved.AsOfDate.ToDateTime(TimeOnly.MinValue);
         HorizonEndDatePicker.SelectedDate = saved.HorizonEndDate.ToDateTime(TimeOnly.MinValue);
-        RefreshForecast(saved.Balance, saved.AsOfDate, saved.HorizonEndDate);
+        SafetyCushionTextBox.Text = saved.IdealSafetyCushion.ToString(CultureInfo.InvariantCulture);
+        RefreshForecast(saved.Balance, saved.AsOfDate, saved.HorizonEndDate, saved.IdealSafetyCushion);
     }
 
     private void OnForecastClick(object sender, RoutedEventArgs e)
@@ -83,14 +84,30 @@ public partial class MainWindow : Window
             return;
         }
 
-        _currentBalance.Save(balance, asOfDate, horizonEndDate);
-        RefreshForecast(balance, asOfDate, horizonEndDate);
+        // Blank cushion = 0 (off); a non-empty, unparseable, or negative value
+        // is a mistake worth flagging rather than silently zeroing.
+        var idealSafetyCushion = 0m;
+        if (!string.IsNullOrWhiteSpace(SafetyCushionTextBox.Text)
+            && !decimal.TryParse(SafetyCushionTextBox.Text, out idealSafetyCushion))
+        {
+            MessageBox.Show(this, "Enter a valid safety cushion, or leave it blank.", "Invalid cushion", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (idealSafetyCushion < 0m)
+        {
+            MessageBox.Show(this, "Safety cushion can't be negative.", "Invalid cushion", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _currentBalance.Save(balance, asOfDate, horizonEndDate, idealSafetyCushion);
+        RefreshForecast(balance, asOfDate, horizonEndDate, idealSafetyCushion);
     }
 
     // No upper bound on the horizon by design — years out is a legitimate
     // request (long-term goals, mortgage-length planning), so this is left to
     // whatever the user picks rather than an app-imposed ceiling.
-    private void RefreshForecast(decimal balance, DateOnly asOfDate, DateOnly horizonEndDate)
+    private void RefreshForecast(decimal balance, DateOnly asOfDate, DateOnly horizonEndDate, decimal idealSafetyCushion)
     {
         var forecast = TransactionLogBookFactory.CreateForecast(new ForecastOptions
         {
@@ -99,6 +116,7 @@ public partial class MainWindow : Window
             StartingBalance = balance,
             AsOfDate = asOfDate,
             HorizonEndDate = horizonEndDate,
+            IdealSafetyCushion = idealSafetyCushion,
         });
 
         _lastForecast = forecast;
@@ -132,9 +150,10 @@ public partial class MainWindow : Window
 
         var shortfallsByFinanceId = forecast.GoalShortfalls.ToDictionary(shortfall => shortfall.FinanceId);
 
+        var cushionTarget = forecast.PrimaryAccountPage.IdealSafetyCushion;
         DayDetailHeader.Text = $"Selected day — {row.Date:D}";
         JarDetailGrid.ItemsSource = row.Snapshot.FundJars
-            .Select(jar => JarDetailRow.From(jar, forecast.JarLabels, shortfallsByFinanceId))
+            .Select(jar => JarDetailRow.From(jar, row.Snapshot, forecast.JarLabels, shortfallsByFinanceId, cushionTarget))
             .ToList();
         DayEventsGrid.ItemsSource = DayEventRow.From(row.Snapshot, forecast.JarLabels);
     }

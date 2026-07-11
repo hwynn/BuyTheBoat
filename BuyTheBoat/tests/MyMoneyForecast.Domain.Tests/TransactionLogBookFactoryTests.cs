@@ -31,13 +31,15 @@ public class TransactionLogBookFactoryTests
         DateOnly asOfDate,
         DateOnly horizonEndDate,
         IReadOnlyList<FinancialPattern>? financialPatterns = null,
-        IReadOnlyList<EarMarkPattern>? earMarkPatterns = null) => new()
+        IReadOnlyList<EarMarkPattern>? earMarkPatterns = null,
+        decimal idealSafetyCushion = 0m) => new()
         {
             StartingBalance = startingBalance,
             AsOfDate = asOfDate,
             HorizonEndDate = horizonEndDate,
             FinancialPatterns = financialPatterns ?? [],
             EarMarkPatterns = earMarkPatterns ?? [],
+            IdealSafetyCushion = idealSafetyCushion,
         };
 
     private static BalanceSnapshot SnapshotOn(ForecastResult result, DateOnly date) =>
@@ -45,6 +47,9 @@ public class TransactionLogBookFactoryTests
 
     private static decimal Jar(BalanceSnapshot snapshot, int financeId) =>
         snapshot.FundJars.Single(jar => jar.FinanceId == financeId).ExpectedAmount;
+
+    private static decimal CushionJar(BalanceSnapshot snapshot) =>
+        snapshot.FundJars.Single(jar => jar.FinanceId is null).ExpectedAmount;
 
     [Fact]
     public void Single_pattern_projection_matches_the_known_1240_oracle()
@@ -954,5 +959,360 @@ public class TransactionLogBookFactoryTests
             entry.Snapshot.ExpectedFreeAmount.ShouldBe(
                 entry.Snapshot.ExpectedAmount!.Value - entry.Snapshot.FundJars.Sum(jar => jar.ExpectedAmount));
         }
+    }
+
+    // ===== Step 2: deallocation integrated into the cascade =====
+
+    // A goal jar pre-loaded with `alreadySaved` and no in-window activity: the
+    // purchase and the savings schedule are both parked far in the future, so
+    // the jar just sits at `alreadySaved` until something drains it. Lets a
+    // deallocation scenario start from a known jar balance.
+    private static (FinancialPattern Goal, EarMarkPattern Earmark) ParkedGoal(
+        int financeId, int priority, decimal alreadySaved, string label)
+    {
+        var farFuture = new DateOnly(2030, 1, 1);
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = financeId,
+            Source = label,
+            Description = label,
+            Priority = priority,
+            Mandatory = false,
+            Amount = -1000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = farFuture,
+                Count = 1,
+            }),
+        });
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = financeId,
+                StartingAllocation = alreadySaved,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Yearly,
+                    Start = farFuture,
+                    Count = 1,
+                }),
+            },
+            goal);
+        return (goal, earmark);
+    }
+
+    // A one-off NON-mandatory expense: has an ExpectedTransaction but no
+    // auto-reservation jar, so it lands as pure unpaired spending (`au`).
+    private static FinancialPattern Discretionary(int financeId, decimal amount, DateOnly date, string label) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = financeId,
+            Source = label,
+            Description = label,
+            Mandatory = false,
+            Amount = amount,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = date,
+                Count = 1,
+            }),
+        });
+
+    [Fact]
+    public void An_unpaired_expense_drains_a_goal_jar_on_a_deallocation_day()
+    {
+        // $500 parked in a Vacation jar; balance is exactly that, so free is $0.
+        // A $400 purchase can't come from free funds → it deallocates, pulling
+        // $400 out of the Vacation jar (06/07 decision #3).
+        var (goal, earmark) = ParkedGoal(financeId: 1, priority: 5, alreadySaved: 500m, label: "Vacation");
+        var purchase = Discretionary(financeId: 2, amount: -400m, date: new DateOnly(2025, 6, 1), label: "New couch");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 500m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, purchase],
+            earMarkPatterns: [earmark]));
+
+        // Before the purchase the jar holds the full 500 (the as-of row).
+        Jar(SnapshotOn(result, new DateOnly(2025, 1, 1)), 1).ShouldBe(500m);
+
+        // On the purchase day it is drained to 100 and free stays at 0.
+        var purchaseDay = SnapshotOn(result, new DateOnly(2025, 6, 1));
+        Jar(purchaseDay, 1).ShouldBe(100m);
+        purchaseDay.ExpectedFreeAmount.ShouldBe(0m);
+        result.HasNegativeFreeBalance.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Deallocation_drains_the_lower_priority_jar_first()
+    {
+        // Two $300 jars; a $200 purchase deallocates. Priority 1 (lower) drains
+        // before priority 5 (higher / more protected) — doc 07 decision #7.
+        var (lowGoal, lowEarmark) = ParkedGoal(1, priority: 1, alreadySaved: 300m, label: "Low priority");
+        var (highGoal, highEarmark) = ParkedGoal(2, priority: 5, alreadySaved: 300m, label: "High priority");
+        var purchase = Discretionary(3, -200m, new DateOnly(2025, 6, 1), "Purchase");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 600m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [lowGoal, highGoal, purchase],
+            earMarkPatterns: [lowEarmark, highEarmark]));
+
+        var day = SnapshotOn(result, new DateOnly(2025, 6, 1));
+        Jar(day, 1).ShouldBe(100m); // lower priority drained first
+        Jar(day, 2).ShouldBe(300m); // higher priority untouched
+        day.ExpectedFreeAmount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void Total_jar_allocation_never_exceeds_available_funds_across_the_timeline()
+    {
+        // A $500 jar, then three $200 purchases: the first two deallocate and
+        // stay solvent, the third overruns into debt. On every day allocation
+        // stays capped at (non-negative) funds, and free is only negative once
+        // the jars are fully drained.
+        var (goal, earmark) = ParkedGoal(1, priority: 5, alreadySaved: 500m, label: "Goal");
+        var p1 = Discretionary(2, -200m, new DateOnly(2025, 3, 1), "Buy 1");
+        var p2 = Discretionary(3, -200m, new DateOnly(2025, 6, 1), "Buy 2");
+        var p3 = Discretionary(4, -200m, new DateOnly(2025, 9, 1), "Buy 3");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 500m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, p1, p2, p3],
+            earMarkPatterns: [earmark]));
+
+        foreach (var entry in result.GetTimeline())
+        {
+            var expected = entry.Snapshot.ExpectedAmount!.Value;
+            var allocated = entry.Snapshot.FundJars.Sum(jar => jar.ExpectedAmount);
+
+            allocated.ShouldBeLessThanOrEqualTo(Math.Max(0m, expected));
+            // Free is non-negative unless we're in debt, in which case every jar
+            // has been fully drained.
+            (entry.Snapshot.ExpectedFreeAmount >= 0m || allocated == 0m).ShouldBeTrue();
+        }
+
+        // The third purchase is the debt day.
+        var debtDay = SnapshotOn(result, new DateOnly(2025, 9, 1));
+        Jar(debtDay, 1).ShouldBe(0m);
+        debtDay.ExpectedFreeAmount.ShouldBe(-100m);
+    }
+
+    [Fact]
+    public void A_debt_day_drains_every_jar_to_zero_and_reports_a_negative_free_balance()
+    {
+        // Balance 100, all parked in a jar; a $300 purchase can't be covered
+        // even by draining the jar → debt of $200 (Goal 2.2).
+        var (goal, earmark) = ParkedGoal(1, priority: 5, alreadySaved: 100m, label: "Goal");
+        var purchase = Discretionary(2, -300m, new DateOnly(2025, 6, 1), "Emergency");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 100m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, purchase],
+            earMarkPatterns: [earmark]));
+
+        var day = SnapshotOn(result, new DateOnly(2025, 6, 1));
+        Jar(day, 1).ShouldBe(0m);
+        day.ExpectedFreeAmount.ShouldBe(-200m); // c + au = 100 - 300
+        result.HasNegativeFreeBalance.ShouldBeTrue();
+        result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 6, 1));
+    }
+
+    [Fact]
+    public void A_scheduled_goal_contribution_on_a_deallocation_day_is_cancelled()
+    {
+        // Jar at $200 with a scheduled +$100 contribution on the same day a $50
+        // purchase deallocates. The contribution is cancelled (the jar does not
+        // rise) and $50 more is pulled out — the Step-B Intention-2 path.
+        var farFuture = new DateOnly(2030, 1, 1);
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Goal",
+            Description = "Goal",
+            Priority = 5,
+            Mandatory = false,
+            Amount = -1000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = farFuture,
+                Count = 1,
+            }),
+        });
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                StartingAllocation = 200m,
+                Amount = -100m, // +100 into the jar
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 2, 1),
+                    Until = new DateOnly(2025, 2, 1),
+                }),
+            },
+            goal);
+        var purchase = Discretionary(2, -50m, new DateOnly(2025, 2, 1), "Purchase");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 200m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, purchase],
+            earMarkPatterns: [earmark]));
+
+        var day = SnapshotOn(result, new DateOnly(2025, 2, 1));
+        // Without deallocation the jar would be 200 + 100 = 300; instead the
+        // contribution is undone and $50 drained, leaving 150.
+        Jar(day, 1).ShouldBe(150m);
+        day.ExpectedFreeAmount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void A_drained_auto_bill_jar_keeps_a_single_isolated_earmark_for_the_day()
+    {
+        // A mandatory bill mid-ramp plus a parked goal; a purchase deallocates
+        // on a day the bill is still accruing. The bill jar carries an isolated
+        // reservation delta AND a deallocation give-back — they must MERGE into
+        // one isolated earmark, never two (EarMarkEvent's one-isolated-per-jar
+        // rule), or the detail pane double-counts.
+        var (goal, earmark) = ParkedGoal(1, priority: 5, alreadySaved: 350m, label: "Goal");
+        var bill = OneOffPattern("Rent", -300m, new DateOnly(2025, 6, 1)); // mandatory → auto-reserved
+        var paycheck = OneOffPattern("Paycheck", 100m, new DateOnly(2025, 5, 1)); // income before due → bill ramps
+        var purchase = Discretionary(2, -100m, new DateOnly(2025, 4, 1), "Purchase");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 350m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, bill, paycheck, purchase],
+            earMarkPatterns: [earmark]));
+
+        // No jar ever carries more than one isolated earmark on any day.
+        foreach (var entry in result.GetTimeline())
+        {
+            entry.Snapshot.EarMarkEvents
+                .Where(e => !e.RepeatedEarmark)
+                .GroupBy(e => e.FinanceId)
+                .ShouldAllBe(group => group.Count() == 1);
+        }
+
+        // On the deallocation day the goal drains and the bill's reservation is
+        // cancelled, but the bill still shows exactly one (merged) earmark.
+        var day = SnapshotOn(result, new DateOnly(2025, 4, 1));
+        Jar(day, 1).ShouldBe(250m);
+        Jar(day, bill.FinanceId).ShouldBe(0m);
+        day.EarMarkEvents.Count(e => e.FinanceId == bill.FinanceId).ShouldBe(1);
+    }
+
+    // ===== Step 3: safety cushion =====
+
+    [Fact]
+    public void The_safety_cushion_occupies_free_funds_up_to_its_target()
+    {
+        // A $100 cushion against a $500 balance with no other jars: free reads
+        // $400, and the cushion jar holds the $100.
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 500m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            idealSafetyCushion: 100m));
+
+        var today = SnapshotOn(result, new DateOnly(2025, 1, 1));
+        CushionJar(today).ShouldBe(100m);
+        today.ExpectedFreeAmount.ShouldBe(400m);
+    }
+
+    [Fact]
+    public void The_cushion_is_drained_before_any_goal_jar_on_a_deallocation_day()
+    {
+        // Balance 500 = $100 cushion + $300 goal + $100 free. A $250 purchase:
+        // the $100 free absorbs part, then the cushion (priority 0) empties
+        // fully before the goal gives up only what's still needed.
+        var (goal, earmark) = ParkedGoal(1, priority: 5, alreadySaved: 300m, label: "Goal");
+        var purchase = Discretionary(2, -250m, new DateOnly(2025, 6, 1), "Purchase");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 500m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, purchase],
+            earMarkPatterns: [earmark],
+            idealSafetyCushion: 100m));
+
+        var day = SnapshotOn(result, new DateOnly(2025, 6, 1));
+        CushionJar(day).ShouldBe(0m);   // drained first, fully
+        Jar(day, 1).ShouldBe(250m);     // goal only gives up the remaining 50
+        day.ExpectedFreeAmount.ShouldBe(0m);
+        day.IsDeallocationDay.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void The_cushion_refills_toward_its_target_after_a_drain_once_funds_allow()
+    {
+        // Balance 100, all in a $100 cushion (free $0). A $50 purchase drains
+        // the cushion to $50; a later $200 paycheck lets it refill to $100.
+        var purchase = Discretionary(1, -50m, new DateOnly(2025, 3, 1), "Purchase");
+        var paycheck = Discretionary(2, 200m, new DateOnly(2025, 6, 1), "Paycheck");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 100m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [purchase, paycheck],
+            idealSafetyCushion: 100m));
+
+        CushionJar(SnapshotOn(result, new DateOnly(2025, 3, 1))).ShouldBe(50m);  // drained
+        CushionJar(SnapshotOn(result, new DateOnly(2025, 6, 1))).ShouldBe(100m); // refilled
+    }
+
+    [Fact]
+    public void An_unaffordable_firm_cushion_reserves_in_full_and_drives_free_negative()
+    {
+        // Firm target: a $200 cushion against a $100 balance reserves the whole
+        // $200, so reported free goes -$100 from the as-of day.
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 100m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            idealSafetyCushion: 200m));
+
+        var today = SnapshotOn(result, new DateOnly(2025, 1, 1));
+        CushionJar(today).ShouldBe(200m);
+        today.ExpectedFreeAmount.ShouldBe(-100m);
+        result.HasNegativeFreeBalance.ShouldBeTrue();
+        result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 1, 1));
+    }
+
+    [Fact]
+    public void The_deallocation_day_flag_is_set_only_on_days_that_actually_deallocate()
+    {
+        // A tiny early expense (covered by free) is not a deallocation day; the
+        // later big one (which raids the goal jar) is.
+        var (goal, earmark) = ParkedGoal(1, priority: 5, alreadySaved: 300m, label: "Goal");
+        var small = Discretionary(2, -10m, new DateOnly(2025, 3, 1), "Small");
+        var big = Discretionary(3, -250m, new DateOnly(2025, 6, 1), "Big");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 500m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, small, big],
+            earMarkPatterns: [earmark]));
+
+        SnapshotOn(result, new DateOnly(2025, 3, 1)).IsDeallocationDay.ShouldBeFalse();
+        SnapshotOn(result, new DateOnly(2025, 6, 1)).IsDeallocationDay.ShouldBeTrue();
     }
 }

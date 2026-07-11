@@ -37,6 +37,10 @@
                             <TextBlock Text="Show forecast through" FontSize="11" Foreground="Gray"/>
                             <DatePicker x:Name="HorizonEndDatePicker" Width="130"/>
                         </StackPanel>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Safety cushion" FontSize="11" Foreground="Gray"/>
+                            <TextBox x:Name="SafetyCushionTextBox" Width="110" VerticalAlignment="Bottom" Height="23"/>
+                        </StackPanel>
                         <Button Content="Forecast" Padding="16,5" VerticalAlignment="Bottom" Click="OnForecastClick"/>
                         <Button x:Name="ExportForecastSpreadsheetButton" Content="Export as Spreadsheet..." Padding="16,5" Margin="8,0,0,0"
                                 VerticalAlignment="Bottom" IsEnabled="False" Click="OnExportForecastSpreadsheetClick"/>
@@ -57,6 +61,17 @@
                                 <ColumnDefinition Width="2*"/>
                             </Grid.ColumnDefinitions>
                             <DataGrid x:Name="JarDetailGrid" Grid.Column="0" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
+                                <DataGrid.RowStyle>
+                                    <!-- A jar raided to cover a shortfall on a deallocation day is shown in red. -->
+                                    <Style TargetType="DataGridRow">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Drained}" Value="True">
+                                                <Setter Property="Background" Value="#FFF6E0E0"/>
+                                                <Setter Property="Foreground" Value="#FFB00020"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGrid.RowStyle>
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Allocation" Binding="{Binding Jar}" Width="200"/>
                                     <DataGridTextColumn Header="Saved by this day" Binding="{Binding Saved, StringFormat={}{0:C}}" Width="120"/>

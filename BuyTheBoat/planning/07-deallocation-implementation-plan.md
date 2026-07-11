@@ -3,8 +3,70 @@
 The Q2 phase ("can I afford X?"), written 2026-07-10 to be resumable from a
 clean context. **Read first:** [`06-deallocation-math.md`](06-deallocation-math.md)
 (the math spec — fully resolved) and [`05-original-structure-restructure.md`](05-original-structure-restructure.md)
-(the engine architecture + assumed-pairing philosophy + divergence tags). No
-code for this phase exists yet.
+(the engine architecture + assumed-pairing philosophy + divergence tags).
+
+## Status
+
+- **Step 1 — DONE (2026-07-10).** The pure deallocation function is
+  implemented and proof-faithful. `DeallocationCalculator` (with input records
+  `DeallocationJar`/`PairedTransaction` and output records
+  `JarDeallocation`/`DeallocationResult`) lives in
+  `src/MyMoneyForecast.Domain/DeallocationCalculator.cs`; it exposes
+  `Deallocate(...)` (Step A paired `p` + Step B balancing `b` over all jars in
+  priority order, floor `M = 0`, returns the debt remainder `Nbn+1`) and an
+  `IsDeallocationDay(...)` helper. Tests in
+  `tests/MyMoneyForecast.Domain.Tests/DeallocationCalculatorTests.cs`: `06`'s
+  two worked examples + the Q1/debt examples, the three end-goal invariants as
+  a reusable oracle, and **14 numeric vectors mined from
+  `DeallocationProof.ods` sheet `DeallTest_2`** (regenerate with
+  `redesign/extract_deallocation_vectors.py`). Full suite green at 82 (68 domain + 14
+  scenario), 0 warnings. No cascade integration yet — that's Step 2.
+- **Step 2 — DONE (2026-07-11).** Deallocation is wired into
+  `TransactionLogBookFactory`'s cascade. Per non-seed day it classifies today's
+  expected transactions into paired (`ap`, finance id has an EarMarkPattern) vs.
+  unpaired (`au`), builds `DeallocationJar`s from the previous day's balances +
+  the day's scheduled earmarks (cushion first at priority 0), and on a
+  deallocation day appends the give-backs — MERGING into an existing isolated
+  earmark (auto-bill reservation delta) so a jar never carries two. The
+  normal-day goal release (`3.13c.a10`) and Step A's paired earmark are mutually
+  exclusive (the pre-added release loop was removed; it's now a per-day branch).
+  The seed/initial snapshot is deliberately NOT deallocated (its negative free
+  is the Q2 "short right now" signal). Helpers `AppendDeallocationOrGoalReleases`
+  + `MergeOrAppendIsolatedEarmark` in the factory. 6 new cascade tests (drain a
+  goal jar, priority order, allocation-capped invariant, debt, cancel scheduled
+  contribution, bill-jar single-isolated-earmark merge). Suite green at **88 (74
+  domain + 14 scenario), 0 warnings**; every prior oracle unchanged. Verified
+  end-to-end in the WPF app (crafted DB, restored after): the drained jar and an
+  "Automatic release" earmark render correctly. **Known interim artifacts (Step
+  3 / deferred):** `HasNegativeFreeBalance` now means "first debt day" (doc #4
+  still deferred); and a scheduled contribution can over-allocate for one event
+  day before the next event deallocates it (deallocation-day test uses the
+  PREVIOUS day's jars, so today's reservation lags — the pre-existing
+  reservation-over-allocation "you're short" signal, harmless but visible as a
+  one-day free-balance dip in extreme over-saving scenarios).
+- **Step 3 — DONE (2026-07-11).** The safety cushion is real. `ForecastOptions`
+  carries `IdealSafetyCushion` (default 0); the factory threads a `cushionValue`
+  (seeded to the full target, firm/bill-like) through the cascade — a per-day
+  null-id fill earmark refills it toward the target, `Deallocate` drains it
+  first (priority 0), the floor loop applies null-id events to it, and
+  `ExpectedFreeAmount` subtracts it. `BalanceSnapshot.IsDeallocationDay` is now
+  surfaced (from `AppendDeallocationOrGoalReleases`, which returns a bool).
+  Persistence: `IdealSafetyCushion TEXT NULL` on `CurrentBalance` + repository
+  round-trip (IsDBNull→0), same shape as `HorizonEndDate`. UI: a "Safety
+  cushion" input on the Forecast tab; the detail pane shows the cushion's
+  target + status; a `DataGrid.RowStyle` `DataTrigger` on a new
+  `JarDetailRow.Drained` paints raided jars **red**; give-back events read
+  **"Deallocation"** (vs "Automatic release" for a planned goal payout).
+  6 new tests (5 domain + 1 persistence); suite green at **94 (79 domain + 15
+  scenario), 0 warnings**. Verified end-to-end in the WPF app (crafted DB,
+  restored): the cushion occupies free funds, drains first, both raided jars
+  render red, and give-backs read "Deallocation". **Known artifact:** a firm
+  cushion that can't fit alongside other jars can alternate refill↔drain on
+  successive event dates (the reservation-lag family from Step 2) — visible only
+  when chronically over-committed.
+- **Next (deferred this phase):** the "what if I buy X on date D?" hypothetical
+  (its own pass); revisit the deferred `HasNegativeFreeBalance` semantics
+  (decision #4); per-jar distinct drain colors; a dedicated hide-cushion toggle.
 
 ## What this phase adds, in one sentence
 
@@ -163,7 +225,13 @@ contributions → goal-release (`3.13c.a10`) → bill auto-reservation (ramp/sna
 
 ## Suggested resumption prompt
 
-"Implement Step 1 of planning/07 — the pure deallocation function — with tests
-against 06's examples, the end-goal invariants, and vectors mined from
-DeallocationProof.ods. No cascade integration yet." Then re-enter plan mode for
-Step 2.
+Steps 1–3 are done (see Status above) — the deallocation engine, cushion, and
+Q2 UI are complete. The remaining follow-ups (each its own plan-mode pass): the
+**"what if I buy X on date D?" hypothetical** (inject a one-off expected expense
+into `ForecastOptions`, re-run `CreateForecast`, report whether it fits / what
+deallocates); revisit the deferred **`HasNegativeFreeBalance`** semantics
+(decision #4, now effectively "first debt day"); per-jar distinct drain colors;
+a dedicated hide-cushion toggle. These are polish/optional — the four core
+questions (Q1 free money, Q2 afford X, Q3 on track) are answered; Q4 (goal
+readjustment) remains the big open design area (see
+`redesign/04-project-goals-and-user-questions.md`).

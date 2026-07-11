@@ -47,4 +47,12 @@ public sealed record BalanceSnapshot
     public required IReadOnlyList<ExpectedTransaction> ExpectedTransactions { get; init; }
 
     public required IReadOnlyList<EarMarkEvent> EarMarkEvents { get; init; }
+
+    // True when this day's spending overdrew free funds and jars had to be
+    // drained to cover it (DeallocationCalculator.IsDeallocationDay returned
+    // true). Lets display layers distinguish a deallocation raid — a negative
+    // isolated earmark here means "pulled out to cover a shortfall" — from a
+    // planned goal payout on a normal day (also a negative isolated earmark).
+    // Not `required`: the dateless initial snapshot is never a deallocation day.
+    public bool IsDeallocationDay { get; init; }
 }

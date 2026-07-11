@@ -93,30 +93,18 @@ public static class TransactionLogBookFactory
             }
         }
 
-        // ASSUMED-PAIRING(3.13c.a10): on a goal's own occurrence the money
-        // leaves the account via its ExpectedTransaction, so the jar must
-        // release the same amount or it would be double-counted. In the
-        // documented model this implicit withdrawal is created when a PAIRED
-        // ACTUAL transaction lands ("if this is not a deallocation day, and
-        // an expected transaction with a fund jar has a paired actual
-        // transaction on this day, create an implicit earmark for that fund
-        // jar with the actual transaction's amount") — with pairing assumed,
-        // the expected occurrence itself triggers it.
-        foreach (var earmark in options.EarMarkPatterns)
-        {
-            var goal = patternsById[earmark.FinanceId];
-            foreach (var date in goal.DatePattern.GetOccurrences(options.AsOfDate, options.HorizonEndDate))
-            {
-                GetOrAdd(earmarkEventsByDate, date).Add(new EarMarkEvent
-                {
-                    FinanceId = earmark.FinanceId,
-                    EarmarkDate = date,
-                    RepeatedEarmark = false,
-                    ExpectedAmount = -Math.Abs(goal.Amount),
-                    ExplicitAmount = 0m,
-                });
-            }
-        }
+        // ASSUMED-PAIRING(3.13c.a10): a goal's own occurrence releases the
+        // money its jar was holding, or it would be double-counted against the
+        // occurrence's ExpectedTransaction (in the documented model this
+        // implicit withdrawal is created when a PAIRED ACTUAL transaction
+        // lands; with pairing assumed, the expected occurrence triggers it).
+        // This is now decided PER DAY in the cascade below, because on a
+        // deallocation day the release IS Step A's paired earmark (06/07
+        // decision #1: the SAME earmark, mutually exclusive with the normal-day
+        // release). A goal occurrence is simply an expected transaction whose
+        // finance id has an EarMarkPattern (earmarkedIds), and it is already an
+        // ExpectedTransaction in expectedByDate — so nothing is materialized
+        // here; the cascade classifies it as a paired transaction on its day.
 
         // Snapshot dates: exactly the dates with at least one event
         // (adjust_snapshots / 3.13.a3). The as-of day itself is represented
@@ -157,6 +145,14 @@ public static class TransactionLogBookFactory
             autoBillTargets[bill.FinanceId] = target;
         }
 
+        // The safety cushion (finance_id = null jar, priority 0) can't live in
+        // jarValues (its key is a non-nullable int), so it rides alongside as a
+        // running value. Firm target: seeded to the full amount and refilled to
+        // it each day; deallocation drains it first. 0 (the default) keeps the
+        // pre-cushion behaviour exactly.
+        var cushionTarget = options.IdealSafetyCushion;
+        var cushionValue = cushionTarget;
+
         var initialSnapshot = new BalanceSnapshot
         {
             SnapshotDate = null,
@@ -165,8 +161,8 @@ public static class TransactionLogBookFactory
             // happened up to and including that day.
             FullAmount = options.StartingBalance,
             ExpectedAmount = options.StartingBalance,
-            ExpectedFreeAmount = options.StartingBalance - jarValues.Values.Sum(),
-            FundJars = BuildJars(jarValues, milestones, currentIsKnown: true),
+            ExpectedFreeAmount = options.StartingBalance - jarValues.Values.Sum() - cushionValue,
+            FundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: true),
             ActualTransactions = [],
             ExpectedTransactions = [],
             EarMarkEvents = [],
@@ -218,15 +214,52 @@ public static class TransactionLogBookFactory
             var expected = previousExpected
                 + (isSeedDay ? 0m : expectedTransactions.Where(t => !t.Cancelled).Sum(t => t.ExpectedAmount));
 
-            // 3.13.5.3.a1 per jar: previous day's amount + today's earmark
-            // events, floored at 0 (a jar can be emptied, never negative).
+            var isDeallocationDay = false;
             if (!isSeedDay)
             {
+                // The safety cushion refills toward its standing target each day
+                // via a positive isolated null-id earmark — the auto-bill
+                // reservation pattern above, but toward a fixed target with no
+                // due date and no reset (delta is 0 once at target). After a
+                // deallocation drained it, this steps it back up.
+                var cushionFill = cushionTarget - cushionValue;
+                if (cushionFill != 0m)
+                {
+                    earMarkEvents.Add(new EarMarkEvent
+                    {
+                        FinanceId = null,
+                        EarmarkDate = date,
+                        RepeatedEarmark = false,
+                        ExpectedAmount = cushionFill,
+                        ExplicitAmount = 0m,
+                    });
+                }
+
+                // At this point earMarkEvents holds exactly the day's SCHEDULED
+                // earmarks (er + ei): repeated goal contributions + auto-bill and
+                // cushion reservation deltas. jarValues + cushionValue still hold
+                // the PREVIOUS day's balances (f) — the floor loop below applies
+                // today's events. Deallocation runs first and appends its
+                // give-backs (the cushion, priority 0, is drained before any real
+                // jar); the seed day is skipped on purpose (its over-allocation
+                // is the correct Q2 "short right now" signal, not a thing to
+                // drain away).
+                isDeallocationDay = AppendDeallocationOrGoalReleases(
+                    earMarkEvents, date, previousExpected, jarValues, cushionValue,
+                    expectedTransactions, patternsById, earmarkedIds);
+
+                // 3.13.5.3.a1 per jar: previous day's amount + today's earmark
+                // events, floored at 0 (a jar can be emptied, never negative).
+                // Deallocation/release give-backs are ordinary earmark events, so
+                // the jars — and the cushion — come down here for free: the ONLY
+                // place balances move.
                 foreach (var earMarkEvent in earMarkEvents)
                 {
                     if (earMarkEvent.FinanceId is not { } financeId)
                     {
-                        continue; // cushion events don't exist yet
+                        // The finance_id = null safety cushion (fill or give-back).
+                        cushionValue = Math.Max(0m, cushionValue + earMarkEvent.ExpectedAmount);
+                        continue;
                     }
 
                     jarValues[financeId] = Math.Max(0m, jarValues[financeId] + earMarkEvent.ExpectedAmount);
@@ -240,8 +273,9 @@ public static class TransactionLogBookFactory
                 }
             }
 
-            // 3.13.4.a1: free = expected minus everything sitting in jars.
-            var expectedFree = expected - jarValues.Values.Sum();
+            // 3.13.4.a1: free = expected minus everything sitting in jars,
+            // including the safety cushion.
+            var expectedFree = expected - jarValues.Values.Sum() - cushionValue;
 
             balanceRecord[date] = new BalanceSnapshot
             {
@@ -249,10 +283,11 @@ public static class TransactionLogBookFactory
                 FullAmount = null, // 10.2: unknowable until the day occurs
                 ExpectedAmount = expected,
                 ExpectedFreeAmount = expectedFree,
-                FundJars = BuildJars(jarValues, milestones, currentIsKnown: false),
+                FundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: false),
                 ActualTransactions = [],
                 ExpectedTransactions = expectedTransactions,
                 EarMarkEvents = earMarkEvents,
+                IsDeallocationDay = isDeallocationDay,
             };
 
             previousExpected = expected;
@@ -267,8 +302,8 @@ public static class TransactionLogBookFactory
             StartDate = options.AsOfDate,
             EndDate = options.HorizonEndDate,
             Expired = false,
-            IdealSafetyCushion = 0m, // placeholder until the cushion phase
-            SafetyPriority = 0,      // placeholder until the cushion phase
+            IdealSafetyCushion = options.IdealSafetyCushion,
+            SafetyPriority = 0, // fixed at 0 — the cushion is always drained first
             FinancePatterns = options.FinancialPatterns,
             EarmarkPatterns = options.EarMarkPatterns,
             InitialSnapshot = initialSnapshot,
@@ -334,12 +369,149 @@ public static class TransactionLogBookFactory
         return list;
     }
 
+    // The Q2 engine (07 Step 2): on a deallocation day drain the lowest-priority
+    // jars first to cap allocation at available funds; otherwise release each
+    // goal's jar on its own occurrence. Either way the result is appended to the
+    // day's earMarkEvents (mutated in place) and applied by the caller's floor
+    // loop — deallocation never rewrites jar values directly.
+    //
+    // Proof-term mapping (06): c = previousExpected; f = each jar's PREVIOUS-day
+    // balance (jarValues, not yet updated for today); ap = today's goal
+    // occurrences (finance id has an EarMarkPattern); au = every other expected
+    // transaction; er + ei = the day's already-scheduled earmark events.
+    // Returns true if this was a deallocation day (spending overdrew free funds
+    // and jars were drained) — surfaced onto the snapshot for the UI drain
+    // highlight and the "Deallocation" event label.
+    private static bool AppendDeallocationOrGoalReleases(
+        List<EarMarkEvent> earMarkEvents,
+        DateOnly date,
+        decimal previousExpected,
+        IReadOnlyDictionary<int, decimal> jarValues,
+        decimal cushionValue,
+        IReadOnlyList<ExpectedTransaction> expectedTransactions,
+        IReadOnlyDictionary<int, FinancialPattern> patternsById,
+        IReadOnlySet<int> earmarkedIds)
+    {
+        // Paired (ap) vs. unpaired (au).
+        var pairedTransactions = new List<PairedTransaction>();
+        var unpaired = 0m;
+        foreach (var transaction in expectedTransactions)
+        {
+            if (transaction.Cancelled)
+            {
+                continue;
+            }
+
+            if (earmarkedIds.Contains(transaction.FinanceId))
+            {
+                pairedTransactions.Add(new PairedTransaction(transaction.FinanceId, transaction.ExpectedAmount));
+            }
+            else
+            {
+                unpaired += transaction.ExpectedAmount;
+            }
+        }
+
+        // Each jar's already-scheduled earmark total (er + ei) for the day;
+        // the cushion's own fill delta is tracked separately (null finance id).
+        var existingByJar = new Dictionary<int, decimal>();
+        var cushionExisting = 0m;
+        foreach (var earMarkEvent in earMarkEvents)
+        {
+            if (earMarkEvent.FinanceId is { } id)
+            {
+                existingByJar[id] = existingByJar.GetValueOrDefault(id) + earMarkEvent.ExpectedAmount;
+            }
+            else
+            {
+                cushionExisting += earMarkEvent.ExpectedAmount;
+            }
+        }
+
+        // The finance_id=null safety cushion goes FIRST at priority 0 (drained
+        // before every real jar), with its previous balance and today's fill
+        // delta. Then every real jar with its previous balance (f) and
+        // scheduled earmark total.
+        var jars = new List<DeallocationJar>(jarValues.Count + 1)
+        {
+            new(FinanceId: null, Priority: 0, Balance: cushionValue, ExistingEarmark: cushionExisting),
+        };
+        foreach (var (financeId, balance) in jarValues)
+        {
+            jars.Add(new DeallocationJar(
+                FinanceId: financeId,
+                Priority: patternsById[financeId].Priority,
+                Balance: balance,
+                ExistingEarmark: existingByJar.GetValueOrDefault(financeId)));
+        }
+
+        var isDeallocationDay =
+            DeallocationCalculator.IsDeallocationDay(previousExpected, jars, pairedTransactions, unpaired);
+        if (isDeallocationDay)
+        {
+            // Step A's paired earmark IS the goal release (decision #1), so the
+            // normal-day release below must NOT also fire on a deallocation day.
+            var deallocation = DeallocationCalculator.Deallocate(
+                previousExpected, jars, pairedTransactions, unpaired);
+            foreach (var (financeId, amount) in deallocation.EarmarkEvents)
+            {
+                MergeOrAppendIsolatedEarmark(earMarkEvents, financeId, amount, date);
+            }
+        }
+        else
+        {
+            // Not a deallocation day: each goal occurrence releases its jar in
+            // full, exactly as before deallocation existed.
+            foreach (var paired in pairedTransactions)
+            {
+                earMarkEvents.Add(new EarMarkEvent
+                {
+                    FinanceId = paired.FinanceId,
+                    EarmarkDate = date,
+                    RepeatedEarmark = false,
+                    ExpectedAmount = -Math.Abs(paired.Amount),
+                    ExplicitAmount = 0m,
+                });
+            }
+        }
+
+        return isDeallocationDay;
+    }
+
+    // A deallocation give-back merges into any ISOLATED earmark the jar already
+    // carries that day (an auto-bill reservation delta), preserving "one
+    // isolated earmark per finance id per day" and avoiding a duplicate
+    // detail-pane row; otherwise it is appended. Repeated earmarks are left
+    // alone — an isolated and a repeated earmark for the same jar/day coexist.
+    private static void MergeOrAppendIsolatedEarmark(
+        List<EarMarkEvent> events, int? financeId, decimal amount, DateOnly date)
+    {
+        for (var i = 0; i < events.Count; i++)
+        {
+            if (!events[i].RepeatedEarmark && events[i].FinanceId == financeId)
+            {
+                events[i] = events[i] with { ExpectedAmount = events[i].ExpectedAmount + amount };
+                return;
+            }
+        }
+
+        events.Add(new EarMarkEvent
+        {
+            FinanceId = financeId,
+            EarmarkDate = date,
+            RepeatedEarmark = false,
+            ExpectedAmount = amount,
+            ExplicitAmount = 0m,
+        });
+    }
+
     // Jar order is stable (insertion order of jarValues: goals, then auto
     // bills), with the safety cushion appended last. Exactly one null-id jar
-    // per snapshot (9.5.a1); its real math is the cushion phase — 0 for now.
+    // per snapshot (9.5.a1), carrying the running cushion value.
     private static List<FundJar> BuildJars(
         Dictionary<int, decimal> jarValues,
         Dictionary<int, decimal> milestones,
+        decimal cushionValue,
         bool currentIsKnown)
     {
         var jars = new List<FundJar>(jarValues.Count + 1);
@@ -361,8 +533,8 @@ public static class TransactionLogBookFactory
         jars.Add(new FundJar
         {
             FinanceId = null,
-            CurrentAmount = currentIsKnown ? 0m : null,
-            ExpectedAmount = 0m,
+            CurrentAmount = currentIsKnown ? cushionValue : null,
+            ExpectedAmount = cushionValue,
             MilestoneAmount = null, // "the fund jar for safety cushion will not have a milestone amount"
         });
 

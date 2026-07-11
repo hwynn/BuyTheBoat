@@ -99,7 +99,8 @@ public sealed class PatternDatabase
                 Id INTEGER PRIMARY KEY CHECK (Id = 1),
                 Balance TEXT NOT NULL,
                 AsOfDate TEXT NOT NULL,
-                HorizonEndDate TEXT NULL
+                HorizonEndDate TEXT NULL,
+                IdealSafetyCushion TEXT NULL
             );
             """;
         command.ExecuteNonQuery();
@@ -109,6 +110,7 @@ public sealed class PatternDatabase
         // had CurrentBalance from before HorizonEndDate existed won't pick up
         // the new column from the statement above.
         EnsureColumn(connection, "CurrentBalance", "HorizonEndDate", "TEXT NULL");
+        EnsureColumn(connection, "CurrentBalance", "IdealSafetyCushion", "TEXT NULL");
         EnsureColumn(connection, "EarMarkPatterns", "StartingAllocation", "TEXT NOT NULL DEFAULT '0'");
     }
 
