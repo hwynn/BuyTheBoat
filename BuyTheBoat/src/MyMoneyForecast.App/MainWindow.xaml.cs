@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using MyMoneyForecast.Domain;
 using MyMoneyForecast.Persistence;
@@ -20,6 +22,18 @@ public partial class MainWindow : Window
     // Backs the spreadsheet export button and the selected-day detail pane —
     // both only make sense once a forecast has actually been computed.
     private ForecastResult? _lastForecast;
+
+    // The non-date inputs the shown forecast was computed from (dates live on
+    // _lastForecast itself) — the Forecast button's pending-state compares the
+    // fields against these (philosophy §1).
+    private decimal? _shownBalance;
+    private decimal? _shownCushion;
+
+    // Calendar selection is manual (day cells are Buttons): exactly one cell
+    // is selected at a time, tracked here and flagged on the row itself so the
+    // cell template's trigger re-renders it — recycling-safe, cross-month.
+    private DayCellRow? _selectedDayCell;
+    private Dictionary<DateOnly, DayCellRow> _dayCellsByDate = [];
 
     public MainWindow()
     {
@@ -106,7 +120,8 @@ public partial class MainWindow : Window
 
     // No upper bound on the horizon by design — years out is a legitimate
     // request (long-term goals, mortgage-length planning), so this is left to
-    // whatever the user picks rather than an app-imposed ceiling.
+    // whatever the user picks rather than an app-imposed ceiling. The calendar
+    // stays cheap at that scale because the outer ListBox virtualizes months.
     private void RefreshForecast(decimal balance, DateOnly asOfDate, DateOnly horizonEndDate, decimal idealSafetyCushion)
     {
         var forecast = TransactionLogBookFactory.CreateForecast(new ForecastOptions
@@ -120,42 +135,165 @@ public partial class MainWindow : Window
         });
 
         _lastForecast = forecast;
-        TimelineGrid.ItemsSource = forecast.GetTimeline()
-            .Select(entry => new TimelineRow(entry, forecast.JarLabels))
-            .ToList();
+        _shownBalance = balance;
+        _shownCushion = idealSafetyCushion;
+
+        var months = BuildCalendarMonths(forecast);
+        _dayCellsByDate = months
+            .SelectMany(month => month.Cells)
+            .Where(cell => cell.HasSnapshot)
+            .ToDictionary(cell => cell.Date!.Value);
+        _selectedDayCell = null;
+        TimelineCalendar.ItemsSource = months;
         ExportForecastSpreadsheetButton.IsEnabled = true;
 
-        // Pre-select the as-of row so the detail pane is never blank after a
+        // Pre-select the as-of cell so the detail pane is never blank after a
         // forecast — it's the "what's my situation right now" view.
-        if (TimelineGrid.Items.Count > 0)
+        if (_dayCellsByDate.TryGetValue(forecast.AsOfDate, out var asOfCell))
         {
-            TimelineGrid.SelectedIndex = 0;
+            SelectDay(asOfCell);
+        }
+
+        // Land the viewport on today's month when today is in range (§2.g);
+        // otherwise start at the top. Deferred to Loaded priority because the
+        // virtualizing panel hasn't measured at the moment ItemsSource is set.
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var targetMonth = today >= forecast.AsOfDate && today <= forecast.HorizonEndDate
+            ? months.FirstOrDefault(month => month.MonthAutomationId == $"Month_{today:yyyy-MM}") ?? months[0]
+            : months[0];
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => TimelineCalendar.ScrollIntoView(targetMonth));
+
+        UpdateForecastButtonState();
+    }
+
+    // Every calendar day from the as-of month's first day through the horizon
+    // month's last: days with a BalanceSnapshot are live cells; event-less and
+    // out-of-range days render faint (every day stays visible — §2.I.d).
+    // GetTimeline() already folds the dateless initial snapshot in under the
+    // as-of date, so keying by date is collision-free.
+    private static List<MonthRow> BuildCalendarMonths(ForecastResult forecast)
+    {
+        var snapshotsByDate = forecast.GetTimeline()
+            .ToDictionary(entry => entry.Date, entry => entry.Snapshot);
+
+        var months = new List<MonthRow>();
+        var firstOfMonth = new DateOnly(forecast.AsOfDate.Year, forecast.AsOfDate.Month, 1);
+        while (firstOfMonth <= forecast.HorizonEndDate)
+        {
+            var cells = new List<DayCellRow>();
+            for (var padding = 0; padding < (int)firstOfMonth.DayOfWeek; padding++)
+            {
+                cells.Add(DayCellRow.Padding());
+            }
+
+            var daysInMonth = DateTime.DaysInMonth(firstOfMonth.Year, firstOfMonth.Month);
+            for (var day = 1; day <= daysInMonth; day++)
+            {
+                var date = new DateOnly(firstOfMonth.Year, firstOfMonth.Month, day);
+                cells.Add(new DayCellRow(date, snapshotsByDate.GetValueOrDefault(date)));
+            }
+
+            months.Add(new MonthRow
+            {
+                Title = firstOfMonth.ToString("MMMM yyyy"),
+                MonthAutomationId = $"Month_{firstOfMonth:yyyy-MM}",
+                Cells = cells,
+            });
+            firstOfMonth = firstOfMonth.AddMonths(1);
+        }
+
+        return months;
+    }
+
+    private void OnDayCellClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: DayCellRow { HasSnapshot: true } cell })
+        {
+            SelectDay(cell);
         }
     }
 
-    // The detail pane is the inner layer of the display onion: the timeline
-    // row IS a BalanceSnapshot, and selecting it shows everything that day
-    // holds — every fund jar (with its milestone and on-track status) and
-    // every event, including the system-generated implicit ones the
-    // at-a-glance Events column leaves out.
-    private void OnTimelineSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void SelectDay(DayCellRow cell)
     {
-        if (TimelineGrid.SelectedItem is not TimelineRow row || _lastForecast is not { } forecast)
+        if (_selectedDayCell is { } previous)
         {
-            DayDetailHeader.Text = "Selected day";
-            JarDetailGrid.ItemsSource = null;
-            DayEventsGrid.ItemsSource = null;
+            previous.IsSelected = false;
+        }
+
+        _selectedDayCell = cell;
+        cell.IsSelected = true;
+        ShowDayDetail(cell);
+    }
+
+    // The detail pane is the inner layer of the display onion (§3): the cell
+    // IS a BalanceSnapshot, and selecting it shows everything the day holds —
+    // every event ("what happened today", left) and every fund jar with its
+    // per-type health (right), plus the day's free amount.
+    private void ShowDayDetail(DayCellRow cell)
+    {
+        if (_lastForecast is not { } forecast || cell.Snapshot is not { } snapshot || cell.Date is not { } date)
+        {
             return;
         }
 
-        var shortfallsByFinanceId = forecast.GoalShortfalls.ToDictionary(shortfall => shortfall.FinanceId);
+        var page = forecast.PrimaryAccountPage;
+        var context = new DayDetailContext
+        {
+            Date = date,
+            JarLabels = forecast.JarLabels,
+            ShortfallsByFinanceId = forecast.GoalShortfalls.ToDictionary(shortfall => shortfall.FinanceId),
+            PatternsById = page.FinancePatterns.ToDictionary(pattern => pattern.FinanceId),
+            EarmarkedIds = page.EarmarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet(),
+            CushionTarget = page.IdealSafetyCushion,
+        };
 
-        var cushionTarget = forecast.PrimaryAccountPage.IdealSafetyCushion;
-        DayDetailHeader.Text = $"Selected day — {row.Date:D}";
-        JarDetailGrid.ItemsSource = row.Snapshot.FundJars
-            .Select(jar => JarDetailRow.From(jar, row.Snapshot, forecast.JarLabels, shortfallsByFinanceId, cushionTarget))
+        DayDetailHeader.Text = $"Selected day — {date:D}";
+        DeallocationDayChip.Visibility = snapshot.IsDeallocationDay ? Visibility.Visible : Visibility.Collapsed;
+
+        var free = snapshot.ExpectedFreeAmount ?? 0m;
+        FreeToSpendText.Text = free.ToString("C");
+        FreeToSpendText.Foreground = free < 0m
+            ? (Brush)FindResource("RedTextBrush")
+            : Brushes.Black;
+
+        DayEventsList.ItemsSource = DayEventRow.From(snapshot, context);
+        JarDetailList.ItemsSource = snapshot.FundJars
+            .Select(jar => JarDetailRow.From(jar, snapshot, context))
             .ToList();
-        DayEventsGrid.ItemsSource = DayEventRow.From(row.Snapshot, forecast.JarLabels);
+    }
+
+    // Philosophy §1: the Forecast button reads as actionable only while an
+    // input (range, balance, or cushion) differs from the forecast on screen.
+    // Wired to every input's change event; unparseable text counts as "differs"
+    // so the button stays live and the click handler can explain what's wrong.
+    private void OnForecastInputChanged(object sender, RoutedEventArgs e) => UpdateForecastButtonState();
+
+    private void UpdateForecastButtonState()
+    {
+        if (ForecastButton is null)
+        {
+            return; // input events can fire while InitializeComponent is mid-parse
+        }
+
+        if (_lastForecast is not { } shown)
+        {
+            ForecastButton.IsEnabled = true;
+            return;
+        }
+
+        var datesMatch =
+            AsOfDatePicker.SelectedDate is { } asOf && DateOnly.FromDateTime(asOf) == shown.AsOfDate
+            && HorizonEndDatePicker.SelectedDate is { } horizon && DateOnly.FromDateTime(horizon) == shown.HorizonEndDate;
+
+        var balanceMatches = decimal.TryParse(CurrentBalanceTextBox.Text, out var balance)
+            && balance == _shownBalance;
+
+        var cushionText = SafetyCushionTextBox.Text;
+        var cushionMatches = string.IsNullOrWhiteSpace(cushionText)
+            ? _shownCushion == 0m
+            : decimal.TryParse(cushionText, out var cushion) && cushion == _shownCushion;
+
+        ForecastButton.IsEnabled = !(datesMatch && balanceMatches && cushionMatches);
     }
 
     // Output-only snapshot of whatever forecast is currently on screen — not

@@ -3,6 +3,24 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="MyMoneyForecast" Height="700" Width="1100"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Semantic palette shared by the calendar + selected-day templates.
+             Green = good, amber = watch, red = short/raided; the indigo accent
+             (today frame, selection) stays separate from the semantic colors. -->
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF1E66D0"/>
+        <SolidColorBrush x:Key="SelectionBrush" Color="#FFE3EDFB"/>
+        <SolidColorBrush x:Key="GoodTextBrush" Color="#FF1E7B45"/>
+        <SolidColorBrush x:Key="GoodBgBrush" Color="#FFDCF2E4"/>
+        <SolidColorBrush x:Key="WatchTextBrush" Color="#FF8A6A00"/>
+        <SolidColorBrush x:Key="WatchBgBrush" Color="#FFFBF0D0"/>
+        <SolidColorBrush x:Key="RedTextBrush" Color="#FFB00020"/>
+        <SolidColorBrush x:Key="RedBgBrush" Color="#FFF6E0E0"/>
+        <SolidColorBrush x:Key="NeutralBgBrush" Color="#FFECECEF"/>
+        <SolidColorBrush x:Key="NeutralTextBrush" Color="#FF555560"/>
+        <SolidColorBrush x:Key="CellBorderBrush" Color="#FFE3E3E8"/>
+    </Window.Resources>
     <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -23,101 +41,311 @@
 
         <TabControl Grid.Row="1">
             <TabItem Header="Forecast">
+                <!-- Design philosophy: planning/08-forecast-tab-design-philosophy.md.
+                     Three regions with distinct jobs — TOP CONTROLS (forecast range +
+                     a Forecast button that should only look active when the shown
+                     forecast's range differs from the fields), the OVERVIEW timeline
+                     (many days at a glance: totals, allocations, trends, and days worth
+                     a closer look — NOT every allocation or every actual transaction),
+                     and the SELECTED-DAY detail (the full snapshot: every transaction,
+                     every jar, and per-goal health answering Q3). Whatever element
+                     represents TODAY must be visually distinct from all other days. -->
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="As of" FontSize="11" Foreground="Gray"/>
-                            <DatePicker x:Name="AsOfDatePicker" Width="130"/>
+                            <DatePicker x:Name="AsOfDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged"/>
                         </StackPanel>
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="Current balance" FontSize="11" Foreground="Gray"/>
-                            <TextBox x:Name="CurrentBalanceTextBox" Width="120" VerticalAlignment="Bottom" Height="23"/>
+                            <TextBox x:Name="CurrentBalanceTextBox" Width="120" VerticalAlignment="Bottom" Height="23" TextChanged="OnForecastInputChanged"/>
                         </StackPanel>
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="Show forecast through" FontSize="11" Foreground="Gray"/>
-                            <DatePicker x:Name="HorizonEndDatePicker" Width="130"/>
+                            <DatePicker x:Name="HorizonEndDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged"/>
                         </StackPanel>
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="Safety cushion" FontSize="11" Foreground="Gray"/>
-                            <TextBox x:Name="SafetyCushionTextBox" Width="110" VerticalAlignment="Bottom" Height="23"/>
+                            <TextBox x:Name="SafetyCushionTextBox" Width="110" VerticalAlignment="Bottom" Height="23" TextChanged="OnForecastInputChanged"/>
                         </StackPanel>
-                        <Button Content="Forecast" Padding="16,5" VerticalAlignment="Bottom" Click="OnForecastClick"/>
+                        <!-- Pending-state affordance (philosophy §1): looks active only
+                             while an input differs from the forecast on screen. -->
+                        <Button x:Name="ForecastButton" Content="Forecast" Padding="16,5" VerticalAlignment="Bottom" Click="OnForecastClick"/>
                         <Button x:Name="ExportForecastSpreadsheetButton" Content="Export as Spreadsheet..." Padding="16,5" Margin="8,0,0,0"
                                 VerticalAlignment="Bottom" IsEnabled="False" Click="OnExportForecastSpreadsheetClick"/>
                     </StackPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,12" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
-                               Text="Forecast only — assumes every bill and paycheck happens exactly as scheduled. No real transactions are tracked yet. Select a day in the timeline to see everything that day holds."/>
+                               Text="Forecast only — assumes every bill and paycheck happens exactly as scheduled. No real transactions are tracked yet. Select a day in the calendar to see everything that day holds."/>
 
-                    <Grid DockPanel.Dock="Bottom" Height="210" Margin="0,12,0,0">
+                    <!-- SELECTED DAY (philosophy §3): the full snapshot. Two panes,
+                         "What happened today" LEFT and fund jars RIGHT (the author's
+                         chosen direction — see planning/mockups/README.md). -->
+                    <Grid DockPanel.Dock="Bottom" Height="230" Margin="0,12,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBlock x:Name="DayDetailHeader" Text="Selected day" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <DockPanel Margin="0,0,0,6">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="DayDetailHeader" Text="Selected day" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <Border x:Name="DeallocationDayChip" Background="{StaticResource RedBgBrush}" CornerRadius="3"
+                                        Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
+                                        AutomationProperties.AutomationId="DeallocationDayChip">
+                                    <TextBlock Text="DEALLOCATION DAY" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource RedTextBrush}"/>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
                         <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="3*"/>
-                                <ColumnDefinition Width="12"/>
                                 <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="3*"/>
                             </Grid.ColumnDefinitions>
-                            <DataGrid x:Name="JarDetailGrid" Grid.Column="0" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
-                                <DataGrid.RowStyle>
-                                    <!-- A jar raided to cover a shortfall on a deallocation day is shown in red. -->
-                                    <Style TargetType="DataGridRow">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Drained}" Value="True">
-                                                <Setter Property="Background" Value="#FFF6E0E0"/>
-                                                <Setter Property="Foreground" Value="#FFB00020"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </DataGrid.RowStyle>
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Allocation" Binding="{Binding Jar}" Width="200"/>
-                                    <DataGridTextColumn Header="Saved by this day" Binding="{Binding Saved, StringFormat={}{0:C}}" Width="120"/>
-                                    <DataGridTextColumn Header="Should have saved" Binding="{Binding ShouldHaveSaved}" Width="125"/>
-                                    <DataGridTextColumn Header="Due date" Binding="{Binding DueDate}" Width="90"/>
-                                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
-                            <DataGrid x:Name="DayEventsGrid" Grid.Column="2" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Event" Binding="{Binding Event}" Width="160"/>
-                                    <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="140"/>
-                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="*"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
+
+                            <DockPanel Grid.Column="0">
+                                <TextBlock DockPanel.Dock="Top" Text="WHAT HAPPENED TODAY" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="DayEventsList" AutomationProperties.AutomationId="DayEventsList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid x:Name="EventRow" Margin="0,1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="78"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border x:Name="EventChip" Background="{StaticResource NeutralBgBrush}" CornerRadius="3"
+                                                            Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                        <TextBlock x:Name="EventChipText" Text="{Binding Chip}" FontSize="9" FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource NeutralTextBrush}"/>
+                                                    </Border>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Event}" VerticalAlignment="Center" Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock x:Name="EventAmount" Grid.Column="2" Text="{Binding AmountText}" VerticalAlignment="Center"
+                                                               FontFamily="Consolas" FontSize="13"/>
+                                                </Grid>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Indented}" Value="True">
+                                                        <Setter TargetName="EventRow" Property="Margin" Value="20,1,0,1"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="In">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource GoodBgBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="Aside">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="Pull">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource RedBgBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsPositive}" Value="True">
+                                                        <Setter TargetName="EventAmount" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                        <Setter TargetName="EventAmount" Property="FontWeight" Value="SemiBold"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsPull}" Value="True">
+                                                        <Setter TargetName="EventAmount" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+
+                            <DockPanel Grid.Column="2">
+                                <TextBlock DockPanel.Dock="Top" Text="FUND JARS — WHERE IT ALL SITS" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="JarDetailList" AutomationProperties.AutomationId="JarDetailList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border x:Name="JarRow" Padding="6,4" BorderBrush="{StaticResource CellBorderBrush}" BorderThickness="0,0,0,1">
+                                                    <StackPanel>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock x:Name="JarName" Text="{Binding Jar}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                                <Border x:Name="StatusPill" Background="{StaticResource NeutralBgBrush}" CornerRadius="8"
+                                                                        Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                    <TextBlock x:Name="StatusPillText" Text="{Binding StatusText}" FontSize="10"
+                                                                               Foreground="{StaticResource NeutralTextBrush}"/>
+                                                                </Border>
+                                                                <Border Background="{StaticResource WatchBgBrush}" CornerRadius="8" Padding="7,1" Margin="6,0,0,0"
+                                                                        VerticalAlignment="Center"
+                                                                        Visibility="{Binding ShowAdjustNudge, Converter={StaticResource BoolToVis}}">
+                                                                    <!-- The Q4 on-ramp: inert for now, the restructure flow is future work. -->
+                                                                    <TextBlock Text="Adjust the plan →" FontSize="10" Foreground="{StaticResource WatchTextBrush}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="1" Text="{Binding AmountText}" FontFamily="Consolas" FontSize="14" FontWeight="SemiBold"/>
+                                                        </Grid>
+                                                        <ProgressBar x:Name="JarProgress" Height="5" Minimum="0" Maximum="1" Value="{Binding ProgressFraction, Mode=OneWay}"
+                                                                     Margin="0,4,0,2" Foreground="{StaticResource AccentBrush}" Background="{StaticResource NeutralBgBrush}"
+                                                                     BorderThickness="0" Visibility="{Binding ShowProgress, Converter={StaticResource BoolToVis}}"/>
+                                                        <TextBlock Text="{Binding SubText}" FontSize="10" Foreground="Gray"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding StatusKind}" Value="FullyCovered">
+                                                        <Setter TargetName="StatusPill" Property="Background" Value="{StaticResource GoodTextBrush}"/>
+                                                        <Setter TargetName="StatusPillText" Property="Foreground" Value="White"/>
+                                                        <Setter TargetName="JarProgress" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatusKind}" Value="OnTrack">
+                                                        <Setter TargetName="StatusPill" Property="Background" Value="{StaticResource GoodBgBrush}"/>
+                                                        <Setter TargetName="StatusPillText" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                        <Setter TargetName="JarProgress" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatusKind}" Value="Behind">
+                                                        <Setter TargetName="StatusPill" Property="Background" Value="{StaticResource WatchBgBrush}"/>
+                                                        <Setter TargetName="StatusPillText" Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+                                                        <Setter TargetName="JarProgress" Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatusText}" Value="">
+                                                        <Setter TargetName="StatusPill" Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <!-- Raided on a deallocation day: the red treatment. -->
+                                                    <DataTrigger Binding="{Binding Drained}" Value="True">
+                                                        <Setter TargetName="JarRow" Property="Background" Value="{StaticResource RedBgBrush}"/>
+                                                        <Setter TargetName="JarName" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
                         </Grid>
                     </Grid>
 
+                    <!-- OVERVIEW (philosophy §2): the chosen calendar direction — month
+                         sections of day cells; per-day free + total set aside; every day
+                         in range present; attention tints; TODAY framed (§2.g). Outer
+                         ListBox = virtualization + ScrollIntoView; months themselves are
+                         not selectable (bare item template) — day-cell Buttons are the
+                         interactive unit, selection handled manually in code-behind. -->
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Text="Timeline" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <DataGrid x:Name="TimelineGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
-                                  SelectionMode="Single" SelectionChanged="OnTimelineSelectionChanged">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100"/>
-                                <DataGridTextColumn Header="Expected Balance" Binding="{Binding Balance, StringFormat={}{0:C}}" Width="130"/>
-                                <DataGridTextColumn Header="Reserved" Binding="{Binding Reserved}" Width="260"/>
-                                <DataGridTextColumn Header="Free Balance" Binding="{Binding FreeBalance, StringFormat={}{0:C}}" Width="110">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <!-- Free balance in the red on days it goes negative. -->
-                                        <Style TargetType="TextBlock">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding FreeBalanceNegative}" Value="True">
-                                                    <Setter Property="Foreground" Value="#FFB00020"/>
-                                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                                <DataGridTextColumn Header="Events" Binding="{Binding Events}" Width="*"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                        <TextBlock Text="Overview" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ListBox x:Name="TimelineCalendar" Grid.Row="1"
+                                 AutomationProperties.AutomationId="TimelineCalendar"
+                                 BorderThickness="0" Background="Transparent"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling"
+                                 VirtualizingPanel.ScrollUnit="Pixel"
+                                 VirtualizingPanel.CacheLength="1" VirtualizingPanel.CacheLengthUnit="Page"
+                                 ScrollViewer.CanContentScroll="True"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Focusable" Value="False"/>
+                                    <Setter Property="AutomationProperties.AutomationId" Value="{Binding MonthAutomationId}"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <ContentPresenter Margin="0,0,0,16"/>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13" Margin="2,0,0,3"/>
+                                        <UniformGrid Columns="7" Margin="0,0,0,2">
+                                            <TextBlock Text="SU" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="MO" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="TU" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="WE" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="TH" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="FR" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="SA" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                        </UniformGrid>
+                                        <ItemsControl ItemsSource="{Binding Cells}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Columns="7"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Click="OnDayCellClick"
+                                                            IsEnabled="{Binding HasSnapshot}"
+                                                            Focusable="{Binding HasSnapshot}"
+                                                            AutomationProperties.AutomationId="{Binding AutomationId}"
+                                                            AutomationProperties.Name="{Binding AutomationName}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="CellBorder" BorderThickness="1" Margin="1"
+                                                                        BorderBrush="{StaticResource CellBorderBrush}"
+                                                                        Background="White" MinHeight="58" Padding="4,2">
+                                                                    <StackPanel>
+                                                                        <DockPanel>
+                                                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Height="7">
+                                                                                <Ellipse Width="5" Height="5" Margin="1,0" Fill="{StaticResource GoodTextBrush}"
+                                                                                         Visibility="{Binding HasIncome, Converter={StaticResource BoolToVis}}"/>
+                                                                                <Ellipse Width="5" Height="5" Margin="1,0" Fill="{StaticResource RedTextBrush}"
+                                                                                         Visibility="{Binding HasExpense, Converter={StaticResource BoolToVis}}"/>
+                                                                                <Ellipse Width="5" Height="5" Margin="1,0" Fill="{StaticResource AccentBrush}"
+                                                                                         Visibility="{Binding HasAllocation, Converter={StaticResource BoolToVis}}"/>
+                                                                            </StackPanel>
+                                                                            <TextBlock x:Name="DayNumberText" Text="{Binding DayNumber}" FontSize="10" Foreground="Gray"/>
+                                                                        </DockPanel>
+                                                                        <TextBlock x:Name="FreeText" Text="{Binding FreeText}" FontWeight="SemiBold" FontSize="12"
+                                                                                   FontFamily="Consolas" Margin="0,2,0,0"/>
+                                                                        <TextBlock Text="{Binding AllocatedText}" FontSize="9" Foreground="Gray" TextTrimming="CharacterEllipsis"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsPadding}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="Visibility" Value="Hidden"/>
+                                                                    </DataTrigger>
+                                                                    <!-- Event-less days: present but faint (§2.I.d). -->
+                                                                    <DataTrigger Binding="{Binding HasSnapshot}" Value="False">
+                                                                        <Setter TargetName="CellBorder" Property="Opacity" Value="0.45"/>
+                                                                    </DataTrigger>
+                                                                    <!-- A day worth a closer look (§2.II). -->
+                                                                    <DataTrigger Binding="{Binding NeedsAttention}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource RedBgBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding FreeNegative}" Value="True">
+                                                                        <Setter TargetName="FreeText" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <!-- TODAY is unmistakable (§2.g). -->
+                                                                    <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                                        <Setter TargetName="CellBorder" Property="BorderThickness" Value="2"/>
+                                                                        <Setter TargetName="DayNumberText" Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                                        <Setter TargetName="DayNumberText" Property="FontWeight" Value="Bold"/>
+                                                                    </DataTrigger>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </Grid>
                 </DockPanel>
             </TabItem>

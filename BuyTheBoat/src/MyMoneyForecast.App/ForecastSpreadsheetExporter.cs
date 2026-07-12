@@ -6,9 +6,16 @@ namespace MyMoneyForecast.App;
 // Output-only: a human-readable snapshot of an already-computed forecast,
 // for sharing/archiving outside the app. Distinct from MainWindow's Export
 // Data/Import Data (which copy the raw SQLite file byte-for-byte for
-// backup/transfer) — this never round-trips back in. Two sheets mirror the
-// Forecast tab's own display, so the file reads the same as what's already
-// on screen.
+// backup/transfer) — this never round-trips back in.
+//
+// Design philosophy: planning/08-forecast-tab-design-philosophy.md §4. Because
+// the export can't offer dynamic day-selection, it has to lay ALL the detail
+// out statically: per day, the current/free amounts, a breakdown of every fund
+// jar, and every transaction — with the full amount due + due date shown for
+// EVERY expense type (unlike the tailored on-screen views), and colors/clear
+// headers/grouped columns doing the work of communicating good-vs-bad at a
+// glance. (Today it's a two-sheet mirror of the on-screen grids; §4 is the
+// target it should grow toward, and one day may offer multiple layouts.)
 public static class ForecastSpreadsheetExporter
 {
     public static void Export(ForecastResult forecast, string path)
