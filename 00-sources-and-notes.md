@@ -22,7 +22,7 @@ This document catalogs every source file read while reconstructing the design do
 
 ### `assumptions/` folder — uxf charts & supporting scripts
 
-Content has since been parsed for `assumptionChartSimpleLines.uxf`, `assumptionChartTests.uxf`, and (box inventory only) `assumptionChart.uxf` and `assumptionChartTiers1.uxf` — see [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md). The rest of the `assumptionChartSimpleLines1-8.uxf`/`NoLines*` family below is still dates-only.
+Content has since been parsed for `assumptionChartSimpleLines.uxf`, `assumptionChartTests.uxf`, and (box inventory only) `assumptionChart.uxf` and `assumptionChartTiers1.uxf` — see [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md). *(Update 2026-07-17: both content-bearing charts' full box/annotation text is now also transcribed **verbatim** in [06-assumption-chart-full-text.md](06-assumption-chart-full-text.md), and the remaining inferred-not-sourced readings are collected as answerable questions in [07-assumption-open-questions.md](07-assumption-open-questions.md).)* *(Update 2026-07-18: the author answered all of 07's questions, which revealed that 05's **arrow-geometry** parse is unreliable — the charts route edges line→line — so the authoritative dependency graph was rebuilt from the reliable box TEXT in [08-assumption-graph-reconciled.md](08-assumption-graph-reconciled.md), regenerable via `build_assumption_graph.py`. Use 08, not 05's edges.)* The rest of the `assumptionChartSimpleLines1-8.uxf`/`NoLines*` family below is still dates-only.
 
 | File | Last Modified | Note |
 |---|---|---|
