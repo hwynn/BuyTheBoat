@@ -102,6 +102,13 @@ public sealed class PatternDatabase
                 HorizonEndDate TEXT NULL,
                 IdealSafetyCushion TEXT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS ManualEarmarks (
+                FinanceId INTEGER NOT NULL REFERENCES EarMarkPatterns(FinanceId),
+                EarmarkDate TEXT NOT NULL,
+                Amount TEXT NOT NULL,
+                PRIMARY KEY (FinanceId, EarmarkDate)
+            );
             """;
         command.ExecuteNonQuery();
 

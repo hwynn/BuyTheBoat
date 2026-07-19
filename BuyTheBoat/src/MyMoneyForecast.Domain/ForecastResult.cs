@@ -19,6 +19,12 @@ public sealed record ForecastResult
     public required bool HasNegativeFreeBalance { get; init; }
     public required DateOnly? FirstNegativeFreeBalanceDate { get; init; }
 
+    // Days where a manual withdrawal exceeded what its jar held and got
+    // floored (delivered only what was available). Mechanically safe — the
+    // floor can't create money — but the user's stated intent didn't fully
+    // happen, so the UI flags these in place (planning/09, validation policy).
+    public IReadOnlyList<(DateOnly Date, int FinanceId)> FlooredManualEarmarks { get; init; } = [];
+
     public AccountTransactionPage PrimaryAccountPage =>
         Book.LogPages[0].AccountPages[TransactionLogBookFactory.PrimaryAccountName];
 

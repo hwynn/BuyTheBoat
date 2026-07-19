@@ -8,6 +8,10 @@ public sealed record ForecastOptions
 {
     public required IReadOnlyList<FinancialPattern> FinancialPatterns { get; init; }
     public required IReadOnlyList<EarMarkPattern> EarMarkPatterns { get; init; }
+
+    // User-created one-off jar adjustments (planning/09-manual-earmarks.md).
+    // Not `required`: defaults to none, so existing callers are unaffected.
+    public IReadOnlyList<ManualEarmark> ManualEarmarks { get; init; } = [];
     public required decimal StartingBalance { get; init; }
     public required DateOnly AsOfDate { get; init; }
     public required DateOnly HorizonEndDate { get; init; }

@@ -20,6 +20,8 @@
         <SolidColorBrush x:Key="NeutralBgBrush" Color="#FFECECEF"/>
         <SolidColorBrush x:Key="NeutralTextBrush" Color="#FF555560"/>
         <SolidColorBrush x:Key="CellBorderBrush" Color="#FFE3E3E8"/>
+        <SolidColorBrush x:Key="ManualBgBrush" Color="#FFEDE4F7"/>
+        <SolidColorBrush x:Key="ManualTextBrush" Color="#FF6A3FA0"/>
     </Window.Resources>
     <Grid Margin="14">
         <Grid.RowDefinitions>
@@ -87,6 +89,9 @@
                         </Grid.RowDefinitions>
                         <DockPanel Margin="0,0,0,6">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="AdjustFundsButton" Content="Adjust funds..." Padding="10,2" Margin="0,0,16,0"
+                                        IsEnabled="False" Click="OnAdjustFundsClick"
+                                        AutomationProperties.AutomationId="AdjustFundsButton"/>
                                 <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
                             </StackPanel>
@@ -143,6 +148,10 @@
                                                         <Setter TargetName="EventChip" Property="Background" Value="{StaticResource RedBgBrush}"/>
                                                         <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="Manual">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource ManualBgBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource ManualTextBrush}"/>
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsPositive}" Value="True">
                                                         <Setter TargetName="EventAmount" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
                                                         <Setter TargetName="EventAmount" Property="FontWeight" Value="SemiBold"/>
@@ -189,7 +198,7 @@
                                                         <ProgressBar x:Name="JarProgress" Height="5" Minimum="0" Maximum="1" Value="{Binding ProgressFraction, Mode=OneWay}"
                                                                      Margin="0,4,0,2" Foreground="{StaticResource AccentBrush}" Background="{StaticResource NeutralBgBrush}"
                                                                      BorderThickness="0" Visibility="{Binding ShowProgress, Converter={StaticResource BoolToVis}}"/>
-                                                        <TextBlock Text="{Binding SubText}" FontSize="10" Foreground="Gray"/>
+                                                        <TextBlock x:Name="JarSubText" Text="{Binding SubText}" FontSize="10" Foreground="Gray" TextWrapping="Wrap"/>
                                                     </StackPanel>
                                                 </Border>
                                                 <DataTemplate.Triggers>
@@ -215,6 +224,11 @@
                                                     <DataTrigger Binding="{Binding Drained}" Value="True">
                                                         <Setter TargetName="JarRow" Property="Background" Value="{StaticResource RedBgBrush}"/>
                                                         <Setter TargetName="JarName" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <!-- A manual withdrawal that exceeded the jar (planning/09): amber warning. -->
+                                                    <DataTrigger Binding="{Binding Floored}" Value="True">
+                                                        <Setter TargetName="JarSubText" Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+                                                        <Setter TargetName="JarSubText" Property="FontWeight" Value="SemiBold"/>
                                                     </DataTrigger>
                                                 </DataTemplate.Triggers>
                                             </DataTemplate>
@@ -384,6 +398,26 @@
                     </StackPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills, one-time goals, and eventually the safety cushion. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Rows marked &quot;(Automatic)&quot; aren't something you created — every mandatory bill without its own earmark reserves money toward itself automatically; there's nothing to edit or delete there."/>
+
+                    <!-- Manual adjustments (planning/09): one-off, user-made jar
+                         changes on top of the automatic plans above. Also
+                         creatable from the Forecast tab's selected-day pane. -->
+                    <DockPanel DockPanel.Dock="Bottom" Height="170" Margin="0,10,0,0">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Manual adjustments" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <Button Content="Add..." Padding="10,3" Click="OnAddManualEarmarkClick"/>
+                            <Button Content="Edit Selected..." Padding="10,3" Margin="6,0,0,0" Click="OnEditManualEarmarkClick"/>
+                            <Button Content="Delete Selected" Padding="10,3" Margin="6,0,0,0" Click="OnDeleteManualEarmarkClick"/>
+                        </StackPanel>
+                        <DataGrid x:Name="ManualEarmarksGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="110"/>
+                                <DataGridTextColumn Header="Fund" Binding="{Binding Target}" Width="260"/>
+                                <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="120"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+
                     <DataGrid x:Name="EarMarkPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Allocation target" Binding="{Binding Goal}" Width="280"/>

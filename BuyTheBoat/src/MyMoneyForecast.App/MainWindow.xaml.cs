@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly FinancialPatternRepository _financialPatterns;
     private readonly EarMarkPatternRepository _earMarkPatterns;
     private readonly CurrentBalanceRepository _currentBalance;
+    private readonly ManualEarmarkRepository _manualEarmarks;
 
     // Backs the spreadsheet export button and the selected-day detail pane —
     // both only make sense once a forecast has actually been computed.
@@ -43,6 +44,7 @@ public partial class MainWindow : Window
         _financialPatterns = new FinancialPatternRepository(database);
         _earMarkPatterns = new EarMarkPatternRepository(database, _financialPatterns);
         _currentBalance = new CurrentBalanceRepository(database);
+        _manualEarmarks = new ManualEarmarkRepository(database, _earMarkPatterns);
 
         RefreshGrids();
         LoadSavedBalance();
@@ -128,6 +130,7 @@ public partial class MainWindow : Window
         {
             FinancialPatterns = _financialPatterns.GetAll(),
             EarMarkPatterns = _earMarkPatterns.GetAll(),
+            ManualEarmarks = _manualEarmarks.GetAll(),
             StartingBalance = balance,
             AsOfDate = asOfDate,
             HorizonEndDate = horizonEndDate,
@@ -175,6 +178,9 @@ public partial class MainWindow : Window
     {
         var snapshotsByDate = forecast.GetTimeline()
             .ToDictionary(entry => entry.Date, entry => entry.Snapshot);
+        var flooredDates = forecast.FlooredManualEarmarks
+            .Select(floored => floored.Date)
+            .ToHashSet();
 
         var months = new List<MonthRow>();
         var firstOfMonth = new DateOnly(forecast.AsOfDate.Year, forecast.AsOfDate.Month, 1);
@@ -190,7 +196,7 @@ public partial class MainWindow : Window
             for (var day = 1; day <= daysInMonth; day++)
             {
                 var date = new DateOnly(firstOfMonth.Year, firstOfMonth.Month, day);
-                cells.Add(new DayCellRow(date, snapshotsByDate.GetValueOrDefault(date)));
+                cells.Add(new DayCellRow(date, snapshotsByDate.GetValueOrDefault(date), flooredDates.Contains(date)));
             }
 
             months.Add(new MonthRow
@@ -245,8 +251,13 @@ public partial class MainWindow : Window
             PatternsById = page.FinancePatterns.ToDictionary(pattern => pattern.FinanceId),
             EarmarkedIds = page.EarmarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet(),
             CushionTarget = page.IdealSafetyCushion,
+            FlooredFinanceIds = forecast.FlooredManualEarmarks
+                .Where(floored => floored.Date == date)
+                .Select(floored => floored.FinanceId)
+                .ToHashSet(),
         };
 
+        AdjustFundsButton.IsEnabled = page.EarmarkPatterns.Count > 0;
         DayDetailHeader.Text = $"Selected day — {date:D}";
         DeallocationDayChip.Visibility = snapshot.IsDeallocationDay ? Visibility.Visible : Visibility.Collapsed;
 
@@ -294,6 +305,98 @@ public partial class MainWindow : Window
             : decimal.TryParse(cushionText, out var cushion) && cushion == _shownCushion;
 
         ForecastButton.IsEnabled = !(datesMatch && balanceMatches && cushionMatches);
+    }
+
+    // Re-runs the forecast with the inputs it's already showing — for when
+    // data that feeds it (manual earmarks) changed rather than the inputs —
+    // keeping the same selected day when it still exists.
+    private void RefreshShownForecast()
+    {
+        if (_lastForecast is not { } shown || _shownBalance is not { } balance || _shownCushion is not { } cushion)
+        {
+            return;
+        }
+
+        var selectedDate = _selectedDayCell?.Date;
+        RefreshForecast(balance, shown.AsOfDate, shown.HorizonEndDate, cushion);
+        if (selectedDate is { } date && _dayCellsByDate.TryGetValue(date, out var cell))
+        {
+            SelectDay(cell);
+        }
+    }
+
+    private void OnAdjustFundsClick(object sender, RoutedEventArgs e) =>
+        ShowManualEarmarkDialog(initialDate: _selectedDayCell?.Date, editTarget: null);
+
+    private void OnAddManualEarmarkClick(object sender, RoutedEventArgs e) =>
+        ShowManualEarmarkDialog(initialDate: null, editTarget: null);
+
+    private void OnEditManualEarmarkClick(object sender, RoutedEventArgs e)
+    {
+        if (ManualEarmarksGrid.SelectedItem is not ManualEarmarkRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        ShowManualEarmarkDialog(initialDate: null, editTarget: row.Earmark);
+    }
+
+    private void OnDeleteManualEarmarkClick(object sender, RoutedEventArgs e)
+    {
+        if (ManualEarmarksGrid.SelectedItem is not ManualEarmarkRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        if (!ConfirmDelete($"the {row.Target} adjustment on {row.Date}"))
+        {
+            return;
+        }
+
+        _manualEarmarks.Delete(row.Earmark.FinanceId, row.Earmark.Date);
+        RefreshGrids();
+        RefreshShownForecast();
+    }
+
+    private void ShowManualEarmarkDialog(DateOnly? initialDate, ManualEarmark? editTarget)
+    {
+        var patterns = _earMarkPatterns.GetAll();
+        if (patterns.Count == 0)
+        {
+            MessageBox.Show(
+                this,
+                "Create a savings plan first — manual adjustments live inside a fund's plan (its timeline is the fund's lifetime).",
+                "No funds yet", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var labels = _financialPatterns.GetAll()
+            .ToDictionary(pattern => pattern.FinanceId, pattern => pattern.Description ?? pattern.Source);
+
+        var window = new ManualEarmarkWindow(
+            patterns, labels, _manualEarmarks.GetAll(), _lastForecast, initialDate, editTarget)
+        {
+            Owner = this,
+        };
+        if (window.ShowDialog() != true)
+        {
+            return;
+        }
+
+        foreach (var earmark in window.SavedEarmarks)
+        {
+            _manualEarmarks.Save(earmark);
+        }
+
+        foreach (var (financeId, date) in window.DeletedEarmarks)
+        {
+            _manualEarmarks.Delete(financeId, date);
+        }
+
+        RefreshGrids();
+        RefreshShownForecast();
     }
 
     // Output-only snapshot of whatever forecast is currently on screen — not
@@ -355,6 +458,14 @@ public partial class MainWindow : Window
             .Cast<object>();
 
         EarMarkPatternsGrid.ItemsSource = explicitRows.Concat(automaticRows).ToList();
+
+        ManualEarmarksGrid.ItemsSource = _manualEarmarks.GetAll()
+            .Select(earmark => new ManualEarmarkRow(
+                earmark,
+                financialPatterns.FirstOrDefault(pattern => pattern.FinanceId == earmark.FinanceId) is { } owner
+                    ? owner.Description ?? owner.Source
+                    : $"(finance id {earmark.FinanceId})"))
+            .ToList();
     }
 
     // Export/Import move the raw SQLite file rather than any intermediate

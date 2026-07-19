@@ -93,6 +93,28 @@ public static class TransactionLogBookFactory
             }
         }
 
+        // Manual (user-created) isolated earmarks in the window (planning/09):
+        // ExplicitAmount = the user's number (8.4.a2 / 3.13.8.5.a1) — kept
+        // distinct so a deallocation-day give-back can merge in without losing
+        // the user's intent (3.13c.8.4.a2). One dated exactly on the as-of day
+        // is already folded into the seed above; it's attached here too so the
+        // day DISPLAYS it, and the seed-day rule (no deltas) prevents double
+        // counting.
+        foreach (var manual in options.ManualEarmarks)
+        {
+            if (manual.Date >= options.AsOfDate && manual.Date <= options.HorizonEndDate)
+            {
+                GetOrAdd(earmarkEventsByDate, manual.Date).Add(new EarMarkEvent
+                {
+                    FinanceId = manual.FinanceId,
+                    EarmarkDate = manual.Date,
+                    RepeatedEarmark = false,
+                    ExpectedAmount = manual.Amount,
+                    ExplicitAmount = manual.Amount,
+                });
+            }
+        }
+
         // ASSUMED-PAIRING(3.13c.a10): a goal's own occurrence releases the
         // money its jar was holding, or it would be double-counted against the
         // occurrence's ExpectedTransaction (in the documented model this
@@ -126,7 +148,13 @@ public static class TransactionLogBookFactory
         {
             var goal = patternsById[earmark.FinanceId];
             var contributed = earmark.StartingAllocation
-                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, options.AsOfDate).Count;
+                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, options.AsOfDate).Count
+                // Manual adjustments already made on/before the as-of date are
+                // part of the jar's settled history (planning/09) — dated
+                // StartingAllocation, effectively.
+                + options.ManualEarmarks
+                    .Where(manual => manual.FinanceId == earmark.FinanceId && manual.Date <= options.AsOfDate)
+                    .Sum(manual => manual.Amount);
             var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.Start, options.AsOfDate).Count;
             jarValues[earmark.FinanceId] = Math.Max(0m, contributed - withdrawn);
 
@@ -173,6 +201,7 @@ public static class TransactionLogBookFactory
         var balanceRecord = new SortedDictionary<DateOnly, BalanceSnapshot>();
         var previousExpected = initialSnapshot.ExpectedAmount!.Value;
         DateOnly? firstNegativeDate = initialSnapshot.ExpectedFreeAmount < 0m ? options.AsOfDate : null;
+        var flooredManualEarmarks = new List<(DateOnly Date, int FinanceId)>();
 
         foreach (var date in snapshotDates)
         {
@@ -262,7 +291,20 @@ public static class TransactionLogBookFactory
                         continue;
                     }
 
-                    jarValues[financeId] = Math.Max(0m, jarValues[financeId] + earMarkEvent.ExpectedAmount);
+                    var unfloored = jarValues[financeId] + earMarkEvent.ExpectedAmount;
+
+                    // A clamped event whose user-entered portion is a withdrawal
+                    // means the user's stated intent didn't fully happen — only
+                    // what the jar held actually moved. Reported so the UI can
+                    // flag it in place (planning/09). System-only events never
+                    // over-pull (deallocation's W = Max(-Fa, N) is bounded), so
+                    // this only fires on manual withdrawals.
+                    if (unfloored < 0m && earMarkEvent.ExplicitAmount is < 0m)
+                    {
+                        flooredManualEarmarks.Add((date, financeId));
+                    }
+
+                    jarValues[financeId] = Math.Max(0m, unfloored);
 
                     // 3.13.5.4.a1: milestone accumulates repeated
                     // (pattern-scheduled) contributions only.
@@ -341,6 +383,7 @@ public static class TransactionLogBookFactory
                 pair => pair.Value.Description ?? pair.Value.Source),
             HasNegativeFreeBalance = firstNegativeDate is not null,
             FirstNegativeFreeBalanceDate = firstNegativeDate,
+            FlooredManualEarmarks = flooredManualEarmarks,
         };
     }
 

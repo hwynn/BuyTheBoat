@@ -178,7 +178,9 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
 
     public static DayCellRow Padding() => new(null, null);
 
-    public DayCellRow(DateOnly? date, BalanceSnapshot? snapshot)
+    // `flagged` marks a day worth attention for reasons the snapshot itself
+    // doesn't carry — today: a floored manual earmark (planning/09).
+    public DayCellRow(DateOnly? date, BalanceSnapshot? snapshot, bool flagged = false)
     {
         Date = date;
         Snapshot = snapshot;
@@ -205,7 +207,7 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
         HasExpense = snapshot.ExpectedTransactions.Any(t => !t.Cancelled && t.ExpectedAmount < 0m);
         HasAllocation = snapshot.EarMarkEvents.Any(e => e.RepeatedEarmark || e.ExpectedAmount > 0m);
 
-        NeedsAttention = snapshot.IsDeallocationDay || FreeNegative;
+        NeedsAttention = snapshot.IsDeallocationDay || FreeNegative || flagged;
         AutomationName = $"{date:MMMM d, yyyy} — free {FreeText}";
     }
 }
@@ -227,6 +229,10 @@ public sealed class DayDetailContext
     public required IReadOnlyDictionary<int, FinancialPattern> PatternsById { get; init; }
     public required IReadOnlySet<int> EarmarkedIds { get; init; }
     public required decimal CushionTarget { get; init; }
+
+    // Finance ids whose manual withdrawal got floored on THIS day (only what
+    // the jar held actually moved) — flagged in place per planning/09.
+    public IReadOnlySet<int> FlooredFinanceIds { get; init; } = new HashSet<int>();
 }
 
 // One fund jar in the selected-day detail pane, rendered per its ExpenseKind
@@ -247,6 +253,10 @@ public sealed class JarDetailRow
     // True when this jar was raided on a deallocation day (drives the red row).
     public bool Drained { get; init; }
 
+    // True when a manual withdrawal on this day exceeded what the jar held and
+    // got floored (planning/09) — drives the amber warning on the sub line.
+    public bool Floored { get; init; }
+
     // The Q4 on-ramp (§3.III.a): a behind goal invites restructuring its plan.
     // Inert affordance for now — the restructure flow is future design work.
     public bool ShowAdjustNudge { get; init; }
@@ -265,6 +275,7 @@ public sealed class JarDetailRow
             return Cushion(saved, context.CushionTarget, drained);
         }
 
+        var floored = context.FlooredFinanceIds.Contains(financeId);
         var label = TimelineRow.JarLabel(financeId, context.JarLabels);
         if (!context.PatternsById.TryGetValue(financeId, out var pattern))
         {
@@ -273,30 +284,34 @@ public sealed class JarDetailRow
             return new JarDetailRow
             {
                 Jar = label, AmountText = saved.ToString("C"), StatusKind = "Neutral",
-                StatusText = string.Empty, SubText = string.Empty, Drained = drained,
+                StatusText = string.Empty, SubText = string.Empty, Drained = drained, Floored = floored,
             };
         }
 
         var kind = ExpenseKindClassifier.Classify(pattern, context.EarmarkedIds.Contains(financeId));
         return kind switch
         {
-            ExpenseKind.Bill => Bill(label, pattern, jar, saved, context, drained),
-            ExpenseKind.OneTimeGoal => Goal(label, pattern, jar, saved, context, drained, oneTime: true),
-            ExpenseKind.RepeatingGoal => Goal(label, pattern, jar, saved, context, drained, oneTime: false),
+            ExpenseKind.Bill => Bill(label, pattern, jar, saved, context, drained, floored),
+            ExpenseKind.OneTimeGoal => Goal(label, pattern, jar, saved, context, drained, floored, oneTime: true),
+            ExpenseKind.RepeatingGoal => Goal(label, pattern, jar, saved, context, drained, floored, oneTime: false),
             _ => new JarDetailRow
             {
                 Jar = label, AmountText = saved.ToString("C"), StatusKind = "Neutral",
-                StatusText = string.Empty, SubText = string.Empty, Drained = drained,
+                StatusText = string.Empty, SubText = string.Empty, Drained = drained, Floored = floored,
             },
         };
     }
+
+    // The floored warning leads the sub line so it can't be missed.
+    private static string WithFlooredWarning(string subText, bool floored) =>
+        floored ? $"⚠ a manual withdrawal exceeded this jar — only what it held moved · {subText}" : subText;
 
     // §3.III.c — a regular bill: show the amount due; styling distinguishes
     // "on track vs. the milestone" (green) from "could pay the whole bill right
     // now" (strongest green). Precise due date, month as a word.
     private static JarDetailRow Bill(
         string label, FinancialPattern pattern, FundJar jar, decimal saved,
-        DayDetailContext context, bool drained)
+        DayDetailContext context, bool drained, bool floored)
     {
         var amountDue = Math.Abs(pattern.Amount);
         var nextDue = pattern.DatePattern.GetOccurrences(context.Date).FirstOrDefault();
@@ -323,12 +338,15 @@ public sealed class JarDetailRow
             AmountText = saved.ToString("C"),
             StatusKind = statusKind,
             StatusText = statusText,
-            SubText = nextDue == default
-                ? $"amount due {amountDue:C0} · no upcoming due date"
-                : $"amount due {amountDue:C0} · due {nextDue:MMMM d}",
+            SubText = WithFlooredWarning(
+                nextDue == default
+                    ? $"amount due {amountDue:C0} · no upcoming due date"
+                    : $"amount due {amountDue:C0} · due {nextDue:MMMM d}",
+                floored),
             ProgressFraction = amountDue > 0m ? Math.Min(1.0, (double)(saved / amountDue)) : 0.0,
             ShowProgress = true,
             Drained = drained,
+            Floored = floored,
         };
     }
 
@@ -337,7 +355,7 @@ public sealed class JarDetailRow
     // get a relative due summary when far out; repeating ones a precise date.
     private static JarDetailRow Goal(
         string label, FinancialPattern pattern, FundJar jar, decimal saved,
-        DayDetailContext context, bool drained, bool oneTime)
+        DayDetailContext context, bool drained, bool floored, bool oneTime)
     {
         var behind = context.ShortfallsByFinanceId.TryGetValue(pattern.FinanceId, out var shortfall)
             && shortfall.ShortfallAmount > 0m;
@@ -356,12 +374,13 @@ public sealed class JarDetailRow
             AmountText = saved.ToString("C"),
             StatusKind = behind ? "Behind" : "OnTrack",
             StatusText = behind ? $"Behind {shortfall!.ShortfallAmount:C0}" : "On track",
-            SubText = $"milestone {milestone:C0} · goal {goalAmount:C0} · {dueText}",
+            SubText = WithFlooredWarning($"milestone {milestone:C0} · goal {goalAmount:C0} · {dueText}", floored),
             ProgressFraction = milestone > 0m
                 ? Math.Min(1.0, (double)(saved / milestone))
                 : saved > 0m ? 1.0 : 0.0,
             ShowProgress = true,
             Drained = drained,
+            Floored = floored,
             ShowAdjustNudge = behind,
         };
     }
@@ -448,6 +467,7 @@ public sealed class DayEventRow
     {
         var income = new List<DayEventRow>();
         var asides = new List<DayEventRow>();
+        var manual = new List<DayEventRow>();
         var expenses = new List<DayEventRow>();
         var releases = new List<DayEventRow>();
         var pulls = new List<DayEventRow>();
@@ -478,7 +498,21 @@ public sealed class DayEventRow
         foreach (var earmark in snapshot.EarMarkEvents)
         {
             var label = TimelineRow.JarLabel(earmark.FinanceId, context.JarLabels);
-            if (earmark.RepeatedEarmark || earmark.ExpectedAmount >= 0m)
+            if (!earmark.RepeatedEarmark && earmark.ExplicitAmount is { } explicitAmount && explicitAmount != 0m)
+            {
+                // The user's own adjustment (planning/09) — a nonzero
+                // ExplicitAmount is what distinguishes it from system events.
+                // On a deallocation day the merged give-back rides along in
+                // ExpectedAmount; the jar rows + day chip tell that story.
+                manual.Add(new DayEventRow
+                {
+                    Event = label, Chip = "MANUAL", ChipKind = "Manual",
+                    AmountText = earmark.ExpectedAmount >= 0m
+                        ? $"+{earmark.ExpectedAmount:C}"
+                        : earmark.ExpectedAmount.ToString("C"),
+                });
+            }
+            else if (earmark.RepeatedEarmark || earmark.ExpectedAmount >= 0m)
             {
                 asides.Add(new DayEventRow
                 {
@@ -517,8 +551,17 @@ public sealed class DayEventRow
                 .ToList();
         }
 
-        return [.. income, .. asides, .. expenses, .. releases, .. pulls];
+        return [.. income, .. asides, .. manual, .. expenses, .. releases, .. pulls];
     }
+}
+
+// One row of the Allocations tab's "Manual adjustments" grid.
+public sealed class ManualEarmarkRow(ManualEarmark earmark, string target)
+{
+    public ManualEarmark Earmark { get; } = earmark;
+    public DateOnly Date => Earmark.Date;
+    public string Target { get; } = target;
+    public decimal Amount => Earmark.Amount;
 }
 
 // Per-goal savings status, reused by the spreadsheet export's Goals sheet

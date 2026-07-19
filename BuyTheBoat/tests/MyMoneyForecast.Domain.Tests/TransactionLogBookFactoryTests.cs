@@ -32,7 +32,8 @@ public class TransactionLogBookFactoryTests
         DateOnly horizonEndDate,
         IReadOnlyList<FinancialPattern>? financialPatterns = null,
         IReadOnlyList<EarMarkPattern>? earMarkPatterns = null,
-        decimal idealSafetyCushion = 0m) => new()
+        decimal idealSafetyCushion = 0m,
+        IReadOnlyList<ManualEarmark>? manualEarmarks = null) => new()
         {
             StartingBalance = startingBalance,
             AsOfDate = asOfDate,
@@ -40,6 +41,7 @@ public class TransactionLogBookFactoryTests
             FinancialPatterns = financialPatterns ?? [],
             EarMarkPatterns = earMarkPatterns ?? [],
             IdealSafetyCushion = idealSafetyCushion,
+            ManualEarmarks = manualEarmarks ?? [],
         };
 
     private static BalanceSnapshot SnapshotOn(ForecastResult result, DateOnly date) =>
@@ -1314,5 +1316,187 @@ public class TransactionLogBookFactoryTests
 
         SnapshotOn(result, new DateOnly(2025, 3, 1)).IsDeallocationDay.ShouldBeFalse();
         SnapshotOn(result, new DateOnly(2025, 6, 1)).IsDeallocationDay.ShouldBeTrue();
+    }
+
+    // ===== Manual (explicit) earmarks — planning/09 =====
+
+    // A goal whose savings plan is LIVE in the 2025 test window: $100 on the
+    // 1st of each month (Jan–Dec 2025), $100 already saved, purchase far out.
+    private static (FinancialPattern Goal, EarMarkPattern Earmark) LiveGoal(int financeId, string label = "Goal")
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = financeId,
+            Source = label,
+            Description = label,
+            Priority = 5,
+            Mandatory = false,
+            Amount = -10000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2026, 6, 1),
+                Count = 1,
+            }),
+        });
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = financeId,
+                StartingAllocation = 100m,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            goal);
+        return (goal, earmark);
+    }
+
+    private static ManualEarmark Manual(EarMarkPattern pattern, DateOnly date, decimal amount) =>
+        ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = pattern.FinanceId, Date = date, Amount = amount },
+            pattern);
+
+    [Fact]
+    public void A_manual_addition_raises_the_jar_on_its_day_and_persists_forward()
+    {
+        var (goal, earmark) = LiveGoal(1);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark],
+            manualEarmarks: [Manual(earmark, new DateOnly(2025, 6, 15), 300m)]));
+
+        // Seed (Jan 1): 100 saved + Jan contribution = 200; by Jun 1: +500.
+        Jar(SnapshotOn(result, new DateOnly(2025, 6, 1)), 1).ShouldBe(700m);
+
+        var manualDay = SnapshotOn(result, new DateOnly(2025, 6, 15));
+        Jar(manualDay, 1).ShouldBe(1000m);
+        manualDay.ExpectedFreeAmount.ShouldBe(4000m); // 5000 − 1000
+
+        // Persists: still there before the next scheduled contribution.
+        Jar(SnapshotOn(result, new DateOnly(2025, 7, 1)), 1).ShouldBe(1100m);
+    }
+
+    [Fact]
+    public void A_manual_earmark_on_or_before_the_asof_date_folds_into_the_seed()
+    {
+        var (goal, earmark) = LiveGoal(1);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 3, 15),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark],
+            manualEarmarks: [Manual(earmark, new DateOnly(2025, 2, 10), 300m)]));
+
+        // Seed: 100 start + Jan/Feb/Mar contributions (300) + manual 300 = 700.
+        Jar(SnapshotOn(result, new DateOnly(2025, 3, 15)), 1).ShouldBe(700m);
+    }
+
+    [Fact]
+    public void A_manual_addition_never_moves_the_milestone()
+    {
+        var (goal, earmark) = LiveGoal(1);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark],
+            manualEarmarks: [Manual(earmark, new DateOnly(2025, 6, 15), 300m)]));
+
+        // 3.13.5.4.a1: the milestone counts scheduled (repeated) contributions
+        // only — Jan..Jun = 600. The manual catch-up closes the gap to it, it
+        // does not redefine it.
+        SnapshotOn(result, new DateOnly(2025, 6, 15)).FundJars.Single(j => j.FinanceId == 1)
+            .MilestoneAmount.ShouldBe(600m);
+    }
+
+    [Fact]
+    public void An_oversized_manual_withdrawal_floors_at_the_jar_and_is_reported()
+    {
+        var (goal, earmark) = LiveGoal(1);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark],
+            manualEarmarks: [Manual(earmark, new DateOnly(2025, 6, 15), -5000m)]));
+
+        // Jar held 700 on Jun 15 — the withdrawal delivers only that (no money
+        // from nothing) and the shortfall is reported for the UI flag.
+        var day = SnapshotOn(result, new DateOnly(2025, 6, 15));
+        Jar(day, 1).ShouldBe(0m);
+        day.ExpectedFreeAmount.ShouldBe(5000m); // free gained the 700 that existed, no more
+        result.FlooredManualEarmarks.ShouldContain((new DateOnly(2025, 6, 15), 1));
+    }
+
+    [Fact]
+    public void A_move_between_jars_is_two_manual_earmarks_and_leaves_free_unchanged()
+    {
+        var (goalA, earmarkA) = LiveGoal(1, "Boat");
+        var (goalB, earmarkB) = LiveGoal(2, "Japan trip");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goalA, goalB],
+            earMarkPatterns: [earmarkA, earmarkB],
+            manualEarmarks:
+            [
+                Manual(earmarkA, new DateOnly(2025, 6, 15), -200m),
+                Manual(earmarkB, new DateOnly(2025, 6, 15), 200m),
+            ]));
+
+        var before = SnapshotOn(result, new DateOnly(2025, 6, 1));
+        var moveDay = SnapshotOn(result, new DateOnly(2025, 6, 15));
+
+        Jar(moveDay, 1).ShouldBe(Jar(before, 1) - 200m);
+        Jar(moveDay, 2).ShouldBe(Jar(before, 2) + 200m);
+        moveDay.ExpectedFreeAmount.ShouldBe(before.ExpectedFreeAmount); // net-zero on free
+        result.FlooredManualEarmarks.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_deallocation_day_give_back_merges_into_the_manual_earmark_keeping_the_users_amount()
+    {
+        var (goal, earmark) = LiveGoal(1);
+        var expense = Discretionary(9, -4800m, new DateOnly(2025, 6, 15), "Emergency");
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal, expense],
+            earMarkPatterns: [earmark],
+            manualEarmarks: [Manual(earmark, new DateOnly(2025, 6, 15), 50m)]));
+
+        // Free before the day is 4300 (jar 700); the −4800 spend deallocates.
+        // The give-back merges INTO the user's isolated event (3.13c.8.4.a2):
+        // expected = explicit (+50) + implicit (−550) = −500; ExplicitAmount
+        // stays the user's 50.
+        var day = SnapshotOn(result, new DateOnly(2025, 6, 15));
+        day.IsDeallocationDay.ShouldBeTrue();
+
+        var manualEvent = day.EarMarkEvents.Single(e => e.FinanceId == 1 && !e.RepeatedEarmark);
+        manualEvent.ExplicitAmount.ShouldBe(50m);
+        manualEvent.ExpectedAmount.ShouldBe(-500m);
+
+        Jar(day, 1).ShouldBe(200m); // 700 + (−500)
+        day.ExpectedFreeAmount.ShouldBe(0m);
     }
 }

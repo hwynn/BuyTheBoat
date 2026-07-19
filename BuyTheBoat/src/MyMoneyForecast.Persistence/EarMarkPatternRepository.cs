@@ -74,7 +74,13 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM EarMarkPatterns WHERE FinanceId = $FinanceId;";
+        // The pattern's span is the fund jar's lifetime (planning/09), so the
+        // jar's manual adjustments die with the pattern — otherwise they'd be
+        // orphans pointing at a jar that no longer exists.
+        command.CommandText = """
+            DELETE FROM ManualEarmarks WHERE FinanceId = $FinanceId;
+            DELETE FROM EarMarkPatterns WHERE FinanceId = $FinanceId;
+            """;
         command.Parameters.AddWithValue("$FinanceId", financeId);
         command.ExecuteNonQuery();
     }
