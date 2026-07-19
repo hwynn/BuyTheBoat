@@ -16,7 +16,7 @@ What it does:
   reported as "contains these boxes" instead.
 
 This was built while reconstructing the dependency graph documented in
-05-assumption-dependency-graph.md -- see that file for what the output means
+06-assumption-dependency-graph.md -- see that file for what the output means
 and for the specific findings (dangling edges, process regions, test bundles).
 Only assumptionChartSimpleLines.uxf and assumptionChartTests.uxf were fully
 mined; rerun this against the other assumptionChart*.uxf files to extend that
