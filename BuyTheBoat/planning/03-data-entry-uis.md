@@ -15,7 +15,7 @@ Before building anything, worth knowing this was already prototyped once, in Pyt
 
 This matters for two reasons:
 - It's a **validated proof that the four core questions can be answered using only patterns + rrules + a balance + a date** — no actual transactions required. That's exactly the subset this C# rework is now limited to, so the ceiling here is "at least match what MiniFundJars did," per your framing.
-- `MmfUtility.py`'s `count_to_until_rrule` function is the same "count must become until" conversion already found independently in the assumption chart ([05-assumption-dependency-graph.md, chart-only content](../../05-assumption-dependency-graph.md#chart-only-content-not-in-any-txt-file)) — two independent parts of this project's history arrived at the same rule. `RecurrenceRule.Create` (below) enforces it directly.
+- `MmfUtility.py`'s `count_to_until_rrule` function is the same "count must become until" conversion already found independently in the assumption chart ([06-assumption-dependency-graph.md, chart-only content](../../06-assumption-dependency-graph.md#notes-on-the-charts-notation-and-coverage)) — two independent parts of this project's history arrived at the same rule. `RecurrenceRule.Create` (below) enforces it directly.
 
 ## RRule designer — built
 

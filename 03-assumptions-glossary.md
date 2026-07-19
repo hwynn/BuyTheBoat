@@ -2,7 +2,7 @@
 
 Every assumption below is reproduced **verbatim** from its source file (whitespace/indentation normalized for markdown readability only — no words, numbers, or punctuation changed). Each chapter is a direct excerpt, cited by source file and original line range, so you can go back and check it against the original at any time.
 
-**This is raw material, not the final word.** Per `assumptionNotes.txt`, the author considered `a01.txt`/`a02.txt`/`a03.txt` to have "too many unneeded requirements" compared to `assumptionChartSimpleLines.uxf` — see [00-sources-and-notes.md](00-sources-and-notes.md) for the full nuance on that claim (including why it's not entirely clear-cut). This document exists to make the *content* of those files easy to navigate before we reconcile it against the chart, per your instructions.
+This reproduces the assumption text from the `.txt` planning files (`a01.txt`/`a02.txt`/`a03.txt`), which carry prose descriptions the chart doesn't. Where a `.txt` requirement set differs from the same assumption's set in `assumptionChartSimpleLines.uxf`, the chart is authoritative (per `assumptionNotes.txt`) — the chart's box text is reproduced in [05-assumption-chart-full-text.md](05-assumption-chart-full-text.md) and the resulting graph in [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md). This document is the readable prose companion to those.
 
 Each entry keeps the original two-line shape from the source files:
 ```

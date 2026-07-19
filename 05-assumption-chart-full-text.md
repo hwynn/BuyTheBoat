@@ -5,13 +5,13 @@ Complete, mechanically-extracted transcription of **every element** of the two c
 1. **`assumptionChartSimpleLines.uxf`** (last modified 2021-10-03 10:03 PM) — the file `assumptionNotes.txt` calls "the most up to date and correct documentation." 118 boxes, 193 edges, 14 dotted regions, 15 text annotations.
 2. **`assumptionChartTests.uxf`** (2021-10-03 4:09 PM, ~6 hours earlier the same day) — the test-bundling plan. 88 boxes (24 `T`-numbered test bundles + 64 assumption boxes), 147 edges, and the *same* 14 regions / 15 text annotations as the final chart.
 
-**Why this document exists:** [03-assumptions-glossary.md](03-assumptions-glossary.md) reproduces `a01.txt`/`a02.txt`/`a03.txt` verbatim, and [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md) reconstructs the chart's *edges* — but the chart's own **box text** (the thing `assumptionNotes.txt` declares authoritative) was never itself brought into `redesign/` verbatim. It bundles multiple assumptions per box, carries requirement sets that differ from the `.txt` files, and uses notation (parenthesized IDs, double `{...}` blocks) found nowhere else. This document closes that gap. Extracted with [`uxf_graph_tool.py`](uxf_graph_tool.py); **no source file was modified.**
+This is the source companion to [03-assumptions-glossary.md](03-assumptions-glossary.md) (which reproduces the `a01/a02/a03.txt` assumption files verbatim) and [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md) (which gives the graph structure derived from this text). The chart is the record the author maintained as authoritative; it bundles multiple assumptions per box, and its requirement sets sometimes differ from the `.txt` files. Extracted with [`uxf_graph_tool.py`](uxf_graph_tool.py); **no source file was modified.**
 
 **Transcription policy** (same as 03): text inside the fenced blocks is exactly what the chart element contains — including typos, UMLet style tags (`bg=pink`, `layer=1`, `style=wordwrap`), stray punctuation, and inconsistent whitespace (only trailing newlines trimmed). Editorial remarks appear *outside* the fences only.
 
-**How to read a box:** the heading names the box by its first/label ID, but many boxes *bundle* several assumptions — every `ID` + description pair inside the fence is its own assumption. `{...}` lines are requirement sets. Style-tag lines (`bg=...`, `layer=...`, `fg=...`) are part of the box's stored attributes. For what the tags and line styles *mean* (inferred), see [05's legend](05-assumption-dependency-graph.md#legend-what-each-line-style-means); for the open questions about the notation found only here (parenthesized IDs, second `{...}` blocks), see [07-assumption-open-questions.md](07-assumption-open-questions.md).
+**How to read a box:** the heading names the box by its first/label ID, but many boxes *bundle* several assumptions — every `ID` + description pair inside the fence is its own assumption. `{...}` lines are requirement sets. Style-tag lines (`bg=...`, `layer=...`, `fg=...`) are part of the box's stored attributes. Two notation quirks appear only in the chart: a **parenthesized** ID inside a `{...}` set marks a prerequisite already implied by another member (redundant, shown for convenience); a **second `{...}` block** on a box is a reduced restatement of the first. The colour/scope tags on the drawn arrows encode the `b`/`c`/`f`/`p`/`n` instance grammar (orange = previous instance, red = next) — the same couplings captured in [06](06-assumption-dependency-graph.md).
 
-Chapters mirror [03-assumptions-glossary.md](03-assumptions-glossary.md) so you can flip between a box and the `.txt` original of the same assumption. Box coordinates are included so the [33 dangling edges cataloged in 05](05-assumption-dependency-graph.md#discrepancies--open-questions) can be chased back to specific spots on the canvas if ever needed.
+Chapters mirror [03-assumptions-glossary.md](03-assumptions-glossary.md) so you can flip between a box and the `.txt` original of the same assumption.
 
 ---
 
@@ -19,7 +19,7 @@ Chapters mirror [03-assumptions-glossary.md](03-assumptions-glossary.md) so you 
 
 ### Chart-level inventory
 
-- **Boxes:** 118 &nbsp; **Edges:** 193 (fully cataloged in [05](05-assumption-dependency-graph.md)) &nbsp; **Dotted regions:** 14 &nbsp; **Text annotations:** 15
+- **Boxes:** 118 &nbsp; **Edges:** 193 (the dependency structure they render is in [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md)) &nbsp; **Dotted regions:** 14 &nbsp; **Text annotations:** 15
 
 ### Ch.1 TransactionLogPage
 
@@ -1128,7 +1128,7 @@ if self.paired_amount != None and self.paired_actual_date != None and we are not
 
 ### Free-floating text annotations (process-step labels)
 
-These are the plain-language labels the dotted process regions sit next to — see [05's Process regions section](05-assumption-dependency-graph.md#process-regions) for which region each labels and the interpretation. Reproduced verbatim (the trailing `style=wordwrap` is a stored UMLet attribute):
+These are the plain-language labels the dotted process regions sit next to — see [06's Process regions section](06-assumption-dependency-graph.md#process-regions--the-cascade-steps) for which assumptions each labels. Reproduced verbatim (the trailing `style=wordwrap` is a stored UMLet attribute):
 
 *(text at x=168, y=396)*
 ```
@@ -1230,26 +1230,7 @@ style=wordwrap
 
 ### Dotted region outlines
 
-> **⚠ The "Boxes enclosed" column below is geometric and WRONG in many rows** (author review, 2026-07-18). Overlapping/close-packed outlines defeated the point-in-bbox heuristic, and one whole region ("New events created. Old events removed.") was missed entirely. **Use the author-corrected memberships in [07](07-assumption-open-questions.md#author-corrected-region-memberships-authoritative-2026-07-18) instead.** The `style` and `nearest label` columns are reliable; the membership is not. Regions are a visualization aid, not a spec.
-
-Raw geometric inventory (single-dot `lt=.` vs double-dot `lt=..` outlines mark nesting level) — retained only so the two charts' geometry can be compared:
-
-| # | Line style | Nearest text label | Boxes enclosed |
-|---|---|---|---|
-| 1 | `lt=.` | This Balance Snapshot has full_amount | `1.2.3.12.2.a1`, `3.13.a4`, `3.13c.2.a1`, `3.13c.2.a2`, `3.13c.2.a3`, `3.13c.8.4.a2`, `3.13c.a7` |
-| 2 | `lt=.` | all* earmarks created on this page | `1.2.3c.13.a3`, `3.13.8.1.a1`, `3.13.8.3.a1`, `3.13.8.a3`, `3.13.8.a7`, `3.13.a2`, `3.13c.8.a4`, `3.13c.8.a5` |
-| 3 | `lt=.` | Loop over pages and fix patterns | `1.2.3c.11.a4`, `3.13.7.a1`, `3.13.7.a3`, `3.13.8.a1`, `3.13.8.a2`, `7.1.a1`, `8.4.a2`, `9.7.6.a1`, `10.4.a1` |
-| 4 | `lt=.` | The whole page is cleaned of obsolete events and balance snapshots | `1.2.3.12.2.a1`, `1.2.3c.13.a3`, `3.13.a2`, `3.13.a3`, `3.13.a4`, `3.13c.2.a2`, `3.13c.2.a3` |
-| 5 | `lt=.` | If this is a deallocation day, the implicit earmarks are made. | `3.13.5.2.a1`, `3.13.5.2.a3`, `3.13c.a6`, `3.13c.a8` |
-| 6 | `lt=..` | If this is a deallocation day, the implicit earmarks are made. | `1.2.3.12.4.a1`, `3.13.5.2.a1`, `3.13.5.2.a2`, `3.13.5.2.a3`, `3.13c.5.2.a4`, `3.13c.5.2.a5`, `3.13c.8.4.a2`, `3.13c.a8` |
-| 7 | `lt=.` | Finance patterns in this page are perfect | `1.2.3.10.a1`, `1.2.3c.10.a4`, `3.10.a1`, `3.10.a2`, `3.11.2.a1` |
-| 8 | `lt=.` | transactions are paired | `1.2.3.13.6.a1`, `1.2.3.13.a1`, `1.2.3.13.a2`, `3.13.8.3.a1`, `3.13.8.a3`, `3.13.8.a6`, `3.13.8.a7`, `3.13.a5`, `6.4.a1` |
-| 9 | `lt=.` | transactions are paired | `1.2.3.13.6.a1`, `1.2.3.13.a1`, `1.2.3c.11.a4`, `3.8.a1`, `3.9.a1`, `3.10.a3`, `3.13.5.a1`, `3.13.5.a3`, `3.13.5.a4`, `3.13.6.a2`, `3.13.7.a1`, `3.13.7.a3`, `3.13.7.a4`, `3.13.8.1.a3`, `3.13.8.4.a1`, `3.13.8.5.a1`, `3.13.8.a1`, `3.13.a5`, `6.4.a1`, `7.1.a1`, `7.3.a1`, `7.4.a1`, `8.1.a1`, `8.4.a1`, `8.4.a2`, `9.6.2.a1`, `9.7.6.a1`, `10.3.a1`, `10.4.a1` |
-| 10 | `lt=..` | Earmark patterns in this page are perfect | `1.2.3.10.a1`, `1.2.3c.10.a4`, `1.2.3c.11.a1`, `1.2.3c.11.a2`, `1.2.3c.11.a3`, `1.2.3c.11.a4`, `3.8.a1`, `3.9.a1`, `3.10.a1`, `3.10.a2`, `3.10.a3`, `3.11.1.a1`, `3.11.2.a1`, `3.13.1.a1`, `3.13.5.a1`, `3.13.5.a3`, `3.13.5.a4`, `3.13.7.a1`, `3.13.7.a2`, `3.13.7.a3`, `3.13.7.a4`, `3.13.8.1.a3`, `3.13.8.4.a1`, `3.13.8.a1`, `3.13.8.a2`, `7.1.a1`, `7.3.a1`, `7.4.a1`, `8.1.a1`, `8.4.a1`, `8.4.a2`, `10.3.a1`, `10.4.a1` |
-| 11 | `lt=..` | also calculate current_unpaid_expected for each page | *(none — encloses empty canvas)* |
-| 12 | `lt=.` | initial snapshot is good except for expected amount | `1.2.3.12.5.a2`, `1.2.3c.12.a1`, `3.12.1.a1`, `3.12.a1`, `3.13.2.a4`, `3.13.3.a1`, `3:13.a9`, `9.1.a1`, `9.8.2.a1`, `9.8.6.a1` |
-| 13 | `lt=..` | Loop over all pages, updating expected_free_amount on initial snapshots. | `1.2.3.5.a1`, `1.2.3.6.a1`, `1.2.3.12.3.a2`, `1.2.3.12.4.a1`, `1.2.3.12.4.a2`, `1.2.3.12.5.a2`, `1.2.3c.12.a2`, `1.2.3c.12.a3`, `2.3.a1`, `3.1.a1`, `3.5.a1`, `3.7.a1`, `3.7.a2`, `3.13.3.a1`, `3.13.4.a1`, `3.13.5.2.a1`, `3.13.5.2.a2`, `3.13.5.4.a1`, `3.13.5.a5`, `3.13.6.a3`, `3.13.7.a5`, `3.13.8.a8`, `3:13.a9`, `3.a1`, `3.a2` |
-| 14 | `lt=.` | Fund Jar.. stuff | `3.12.5.a1`, `9.5.1.a1`, `9.5.a1` |
+The chart draws 14 dotted outlines grouping related assumptions, each next to a plain-language label. The outlines have no text of their own — their labels are transcribed above under [Free-floating text annotations](#free-floating-text-annotations). Each outline marks one step of the cascade update; the labels and the assumptions in each step are laid out in [06-assumption-dependency-graph.md → Process regions](06-assumption-dependency-graph.md#process-regions--the-cascade-steps). Single-dot (`lt=.`) vs double-dot (`lt=..`) outlines mark the nesting level where regions sit inside one another.
 
 ---
 
@@ -1257,7 +1238,7 @@ Raw geometric inventory (single-dot `lt=.` vs double-dot `lt=..` outlines mark n
 
 Saved the same day as the final chart, ~6 hours earlier. Two kinds of boxes:
 
-- **24 `T`-numbered test-bundle boxes** (`2.T1`, `3.T01`...`3.T11`, etc.) — each contains the full text of every assumption that one test function would verify together. [05's test-plan section](05-assumption-dependency-graph.md#test-plan-from-assumptioncharttestsuxf) tabulates the bundles; the verbatim text below is the source of that table. Note `2.T1` is the only place anywhere in the project that *names* the chart-only month-boundary rules as **`2.1.a2`** and **`2.2.a2`**.
+- **24 `T`-numbered test-bundle boxes** (`2.T1`, `3.T01`...`3.T11`, etc.) — each contains the full text of every assumption that one test function would verify together. [06's test-bundling plan](06-assumption-dependency-graph.md#the-authors-test-bundling-plan) tabulates the bundles; the verbatim text below is the source of that table. Note `2.T1` is the only place anywhere in the project that *names* the chart-only month-boundary rules as **`2.1.a2`** and **`2.2.a2`**.
 - **64 assumption boxes** — near-duplicates of the same boxes in `assumptionChartSimpleLines.uxf`, except that in several of them the requirement sets are **rewired to reference test IDs** (e.g. `1.2.3.10.a2`'s requirements become `{4.T1, 1.2.3b.10.a4, 1.T01}`) — the assumption graph being converted into a test-dependency graph in place.
 
 Its 15 text annotations are byte-identical to Part 1's (verified mechanically) and are not repeated here. Its 14 dotted regions carry the *same set of labels* but are **not** identical — outlines were drawn/kept independently in each file, so memberships differ (this chart predates the final chart by ~6 hours and boxes sat in different places). Both region tables are included so they can be compared.
@@ -2260,24 +2241,7 @@ if self.paired_amount != None and self.paired_actual_date != None
 
 ### Dotted region outlines (tests chart)
 
-> **⚠ Same caveat as Part 1's region table** — the "Boxes enclosed" column is geometric and unreliable; the author-corrected memberships (for the SimpleLines chart) are in [07](07-assumption-open-questions.md#author-corrected-region-memberships-authoritative-2026-07-18). Kept here only for geometry comparison.
-
-| # | Line style | Nearest text label | Boxes enclosed |
-|---|---|---|---|
-| 1 | `lt=.` | This Balance Snapshot has full_amount | `1.2.3.12.2.a1`, `3.13.a4`, `3.13c.2.a1`, `3.13c.2.a2`, `3.13c.2.a3`, `3.13c.a7` |
-| 2 | `lt=.` | all* earmarks created on this page | `3.T07`, `3.T08`, `3.T09` |
-| 3 | `lt=.` | Earmark patterns in this page are perfect | `1.T04`, `3.T04`, `3.T05`, `10.T1` |
-| 4 | `lt=.` | The whole page is cleaned of obsolete events and balance snapshots | `1.2.3.12.2.a1`, `1.2.3c.13.a3`, `3.13.a2`, `3.13.a3` |
-| 5 | `lt=.` | If this is a deallocation day, the implicit earmarks are made. | `3.13.5.2.a3`, `3.13c.5.2.a4`, `3.13c.8.4.a2`, `3.13c.a6`, `3.13c.a8` |
-| 6 | `lt=..` | This Balance Snapshot has full_amount | `1.2.3.12.4.a1`, `3.13.5.2.a1`, `3.13.5.2.a2`, `3.13.5.2.a3`, `3.13c.2.a1`, `3.13c.2.a3`, `3.13c.5.2.a4`, `3.13c.5.2.a5`, `3.13c.8.4.a2`, `3.13c.a7`, `3.13c.a8` |
-| 7 | `lt=.` | Finance patterns in this page are perfect | `1.2.3.10.a2`, `1.T02`, `3.T02` |
-| 8 | `lt=.` | transactions are paired | `1.2.3.13.6.a1`, `1.2.3.13.a1`, `1.2.3.13.a2`, `3.13.a5`, `6.4.a1` |
-| 9 | `lt=.` | New events created.  | `3.10.a3`, `3.13.5.a1`, `3.13.5.a3`, `3.13.5.a4`, `3.13.7.a4`, `3.13.8.1.a3`, `3.13.a5`, `3.T06`, `3.T10`, `3.T11`, `6.T1`, `7.T01`, `7.T02`, `8.T1`, `9.T01`, `9.T02`, `10.T1` |
-| 10 | `lt=..` | Earmark patterns in this page are perfect | `1.2.3.10.a2`, `1.T02`, `1.T04`, `3.T02`, `3.T04`, `3.T05`, `3.T11`, `7.T01`, `8.T1`, `9.T01`, `10.T1` |
-| 11 | `lt=..` | also calculate current_unpaid_expected for each page | `1.2.3.5.a1`, `1.2.a1`, `2.3.a1`, `3.1.a1`, `3.7.a1`, `3.7.a2`, `3.13.4.a1`, `3.13.5.4.a1`, `3.a2` |
-| 12 | `lt=.` | initial snapshot is good except for expected amount | `1.2.3c.12.a1`, `3.12.1.a1`, `3.12.a1`, `3.13.2.a4`, `3:13.a9`, `9.1.a1`, `9.8.2.a1`, `9.8.6.a1` |
-| 13 | `lt=..` | Loop over all pages, updating expected_free_amount on initial snapshots. | `1.2.3.5.a1`, `1.2.3.6.a1`, `1.2.3.12.3.a2`, `1.2.3.12.4.a1`, `1.2.3.12.4.a2`, `1.2.3.12.5.a2`, `1.2.3c.12.a2`, `3.7.a2`, `3.13.3.a1`, `3.13.5.2.a2`, `3.13.5.3.a1`, `3.13.5.4.a1`, `3.13.5.a5`, `3.13.6.a3`, `3.13.7.a5`, `3.13.8.6.a1`, `3.13.8.a8`, `3:13.a9`, `3.a1` |
-| 14 | `lt=.` | Fund Jar.. stuff | `3.12.5.a1`, `9.5.1.a1`, `9.5.a1` |
+The tests chart carries the same 14 region labels as the main chart (its outlines enclose the test-bundle boxes rather than plain assumptions). See the main chart's [Process regions](06-assumption-dependency-graph.md#process-regions--the-cascade-steps) and [test-bundling plan](06-assumption-dependency-graph.md#the-authors-test-bundling-plan) in 06.
 
 ---
 
@@ -2285,7 +2249,7 @@ if self.paired_amount != None and self.paired_actual_date != None
 
 | File | Status |
 |---|---|
-| `assumptionChart.uxf` (146 boxes, the original pre-reduction chart) | Superseded by Part 1, which is a near-total superset — the only assumption present there and missing from the final chart is `3.4.a1` ("expired cannot be None"), whose text survives in `a03.txt` / [03 Ch.9](03-assumptions-glossary.md#chapter-9-page-identity-bounds--top-level-maintenance-summary). See [07-assumption-open-questions.md](07-assumption-open-questions.md) for whether that drop was deliberate. Full transcription can be generated with the same tool if ever wanted. |
+| `assumptionChart.uxf` (146 boxes, the original pre-reduction chart) | Superseded by Part 1, which is a near-total superset — the only assumption present there and missing from the final chart is `3.4.a1` ("expired cannot be None"), whose text survives in `a03.txt` / [03 Ch.9](03-assumptions-glossary.md#chapter-9-page-identity-bounds--top-level-maintenance-summary). (`expired` just shields old pages from the cascade, so this rule was not carried forward.) Full transcription can be generated with the same tool if ever wanted. |
 | `assumptionChartSimpleLines1-8.uxf`, `assumptionChartNoLines*.uxf` | Confirmed near-duplicate working drafts of Part 1 (see [00-sources-and-notes.md](00-sources-and-notes.md)). |
 | `assumptionChartTiers1.uxf` | Zero relations — pure box layout for the `allReduced*` stratification, no unique text. |
-| `assumptionChartSimpleLinesChecks.uxf` (2022-05-16, newest file in the folder) | Confirmed **empty** — zero elements. See [05's discrepancy #5](05-assumption-dependency-graph.md#discrepancies--open-questions). |
+| `assumptionChartSimpleLinesChecks.uxf` (2022-05-16, newest file in the folder) | **Empty** — zero elements; opened and never filled in. |

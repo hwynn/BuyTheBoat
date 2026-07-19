@@ -164,7 +164,7 @@ A single, discrete anticipated event on a specific date — a bill's due date, a
 
 > "Only an actual event can implicitly pull money out of a fund jar. Earmarking is first come first served — even if the highest-priority earmark doesn't have enough money and other fund jars have extra, we will not implicitly draw on that extra to cover the shortfall... We will never implicitly add to a fund jar's expected amount; implicit isolated earmarks are only ever negative (a response to actual transactions overdrawing free funds)." — `class documentation.ods` (condensed)
 
-*Editorial note (added 2026-07-10, per the original author — the docs themselves never state the reasoning):* the "only an actual event can implicitly pull money out" rule exists because **actual transactions were meant to be the driving force that triggers a deallocation day** — a real transaction removing money that had been allocated was to be the only reason funds get recalculated implicitly. This presumed actual transactions would exist. Recorded here for future reference: until actual-transaction import is real, the C# rewrite operates under the **assumed-pairing** philosophy (see `MyMoneyForecast/planning/05-original-structure-restructure.md`) — expected transactions stand in as the trigger, on the assumption their pairings will happen.
+*Why:* the "only an actual event can implicitly pull money out" rule exists because **actual transactions were meant to be the driving force that triggers a deallocation day** — a real transaction removing allocated money was to be the only reason funds get recalculated implicitly. (The rule presumes actual transactions exist; the docs state the rule but not this reasoning — it comes from the author.)
 
 *Two rules from the ODS's fuller passage, condensed away above:* an earmark pattern cannot create more than one event on a single day ("No two repeated earmarks with the same finance_id can occur on the same day"), and implicitly-created isolated earmarks merge into existing isolated earmarks the same way manually-added ones do.
 
@@ -181,9 +181,9 @@ A single, discrete anticipated event on a specific date — a bill's due date, a
 Everything that happened on one specific day, for one `AccountTransactionPage`. There is also exactly one dateless instance per page (`initial_snapshot`).
 
 > "This holds all transactions and earmarks occuring on a specific day.
-> This shows how much money we have on a specific day.This holds all the fund jars, showing how much money we have set aside for various goals at this date." — `class documentation.ods` *(verbatim, sic — added 2026-07-10; earlier passes of this doc only paraphrased it)*
+> This shows how much money we have on a specific day.This holds all the fund jars, showing how much money we have set aside for various goals at this date." — `class documentation.ods` *(verbatim, sic)*
 
-*Per the original author (2026-07-10): a snapshot's properties are where the per-day answers to the project's core questions live — how much money exists (`full_amount`/`expected_amount`), what's allocated to what and whether each goal is on track (`fund_jars`, cross-referenced against milestones), and what's actually free (`expected_free_amount`/the page's `current_free_amount`). The UI is meant to be layered views of this onion at different scales.*
+A snapshot's properties are where the per-day answers to the project's core questions live — how much money exists (`full_amount`/`expected_amount`), what's allocated to what and whether each goal is on track (`fund_jars`, cross-referenced against milestones), and what's actually free (`expected_free_amount`/the page's `current_free_amount`). The UI is meant to be layered views of this onion at different scales.
 
 | Property | Type | Mandatory | Meaning |
 |---|---|---|---|
@@ -215,7 +215,7 @@ A named bucket of money set aside for a goal (or the safety cushion, if `finance
 
 There is also a special **initial, dateless FundJar** per `AccountTransactionPage`/`initial_snapshot`: it holds the starting balance for the period, has no date, can't be altered by events within its own period, and must carry the `finance_id` so later same-period jars can build off it (see the `fund jar` scratch sheet in the ODS for eight hand-worked timeline scenarios around this).
 
-**"Need to see in past / present / future" flags** *(added 2026-07-10 — structured display metadata from the ODS Properties sheet, present on only five properties and previously not carried into this doc; directly relevant to which computed values the UI must surface, and for which time range)*:
+**"Need to see in past / present / future" flags** *(display metadata from the ODS Properties sheet, present on only five properties; it says which computed values the UI must surface, and for which time range)*:
 
 | Property | Past | Present | Future |
 |---|---|---|---|

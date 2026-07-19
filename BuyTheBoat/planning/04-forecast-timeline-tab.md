@@ -18,7 +18,7 @@ Worth reproducing the shape of, not the exact calculation. Structure observed: d
 **You flagged that the underlying calculation was buggy** — specifically an off-by-one when counting paychecks (`make_bill_plan` in `MmfUtility.py`), bad enough that you had to enter an adjacent paycheck date to get correct output. **Take the shape of `output.xlsx` as a reference for what to display, not the algorithm that produced it.** The actual computation for the real tab should be built from the documented assumption model instead — which was written before this bug existed and doesn't share it:
 
 - [03-assumptions-glossary.md, Chapters 11-16](../../03-assumptions-glossary.md#chapter-11-balance-record) — the `BalanceSnapshot`/`FundJar` maintenance rules this tab would be visualizing directly (`3.13.2.a4` full_amount, `3.13.5.4.a1` milestone_amount, etc.).
-- [05-assumption-dependency-graph.md, Process regions](../../05-assumption-dependency-graph.md#process-regions) — already maps out the cascade-update control flow (the nested loop structure) this tab's underlying engine would need to implement, including the deallocation-day handling that governs what happens when actual spending outpaces free funds on a given day.
+- [06-assumption-dependency-graph.md, Process regions](../../06-assumption-dependency-graph.md#process-regions--the-cascade-steps) — already maps out the cascade-update control flow (the nested loop structure) this tab's underlying engine would need to implement, including the deallocation-day handling that governs what happens when actual spending outpaces free funds on a given day.
 
 ## Why this wasn't built yet
 

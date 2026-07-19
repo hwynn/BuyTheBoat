@@ -1,24 +1,14 @@
-# Assumption Dependency Graph — Reconciled (authoritative)
+# Assumption Dependency Graph
 
-Built **2026-07-18** from the **box-text requirement sets** of `assumptionChartSimpleLines.uxf` (the chart the author declared authoritative), cross-referenced with author rulings in [07-assumption-open-questions.md](07-assumption-open-questions.md). **This supersedes the drawn-edge graph in [05](05-assumption-dependency-graph.md)** for all dependency questions.
+The directed dependency graph of the original design's assumptions, built from the requirement sets (`{...}`) each assumption carries in `assumptionChartSimpleLines.uxf` — the chart the author maintained as the authoritative record. Each assumption lists the other assumptions that must already hold before it can. Verbatim assumption text and the raw `{...}` blocks are in [05-assumption-chart-full-text.md](05-assumption-chart-full-text.md); this document is the *structure* — what depends on what, and in what order things become true.
 
-## Why this exists (and why it's trustworthy where 05 wasn't)
-
-[05](05-assumption-dependency-graph.md) reconstructed the graph by parsing the chart's **arrow geometry**. That turned out to be unreliable — the author confirmed (see [07](07-assumption-open-questions.md), observations 7–9) that the charts route many arrows **line→line** (several source lines merge into one shared arrow before reaching a box), and the boxes are packed 12px tall, so endpoint-to-box resolution mis-assigns constantly. Re-parsing the geometry (2026-07-18) reproduced the problem: even "both-endpoints-on-a-box" edges matched the text only ~51% of the time — not because the chart disagrees with itself, but because the pixels can't be read cleanly.
-
-**The reliable content is the box TEXT** — each box literally lists its own `{requirements}`. That text is the chart's actual content, it's what the author maintained, and (unlike the arrows) it parses unambiguously. This document is built from it.
-
-**Evidence it's solid** (all mechanical, reproducible — exact counts in the Counts line just below):
-- **154 assumptions** parsed from the 118 boxes (boxes bundle multiple assumptions).
-- **Zero dangling references** — every assumption named in any requirement set is itself defined somewhere (after applying the one confirmed typo fix `3:13.a9`→`3.13.a9`, [Q31](07-assumption-open-questions.md)). A self-contained graph.
-- **Acyclic** — every assumption places cleanly into a topological layer with no cycles left over, once the deliberate cross-instance couplings (a page/snapshot depending on its *previous*/*next*/*before*/*following* instance) are separated out. Those aren't cycles; they're the cascade.
+**Shape of the graph:** 154 assumptions parsed from the 118 boxes (boxes bundle several assumptions). Every assumption named as a prerequisite is itself defined — the graph is self-contained. It is a directed acyclic graph: every assumption places into a topological layer, once the deliberate **cross-instance couplings** (a page or snapshot depending on its *previous*/*next*/*before*/*following* instance) are set aside. Those couplings aren't cycles — they are the cascade that recomputes each instance from the one before it.
 
 ## How to read this
 - **Requires** = this assumption's own `{...}` set (what must already hold). **Required by** = the reverse (what breaks if this changes).
-- `·L`n = the assumption's topological layer (L0 = axioms with no prerequisites; higher = later). Write/verify things in layer order.
-- **⇄ cross-instance** lists couplings to another page/snapshot instance (the `b`/`c`/`f`/`p`/`n` scope grammar — [07 obs. 3–4](07-assumption-open-questions.md)). `p`=previous, `n`=next, `b`=all-before, `f`=all-following, `c`=current. These are the cascade edges; they're what make the model a forward-recomputation rather than a static check.
+- `·L`n = the assumption's topological layer (L0 = axioms with no prerequisites; higher = later). This is the order to make things true — and to write/verify them — in.
+- **⇄ cross-instance** lists couplings to another page/snapshot instance, via the `b`/`c`/`f`/`p`/`n` scope grammar: `p`=previous, `n`=next, `b`=all-before, `f`=all-following, `c`=current. These are the cascade edges — they make the model a forward recomputation rather than a static check.
 - Scope suffixes are normalized to the base id for graph structure (so `1.2.3c.11.a4`, `1.2.3b.11.a4` are one node); the raw scoped form is preserved in the cross-instance list.
-- Verbatim descriptions and the raw `{...}` blocks (including the parenthesized-redundant and second-reduced-set forms) are in [06](06-assumption-chart-full-text.md); this doc is the *structure*.
 
 - Counts: **154** assumptions · **49** root axioms · **19** `{whatever}`/undetermined · **13** top-level sinks · **32** cross-instance couplings · **21** layers.
 
@@ -598,7 +588,7 @@ L0 has no prerequisites; each later layer depends only on earlier ones (cross-in
 
 ## Undetermined-prerequisite nodes (`{whatever}` / no set)
 
-The author marked these with `{whatever}` (or left no set) — a placeholder meaning *the prerequisites were never pinned down* (the requirement-set analogue of the `?...?` markers; see [07 obs. 5](07-assumption-open-questions.md)). They are **not** axioms — treat their prerequisites as open. They land at L0 in the layering only because no set was recorded:
+The author marked these with `{whatever}` (or left no set) — a placeholder meaning the prerequisites were never pinned down (the requirement-set analogue of the `?...?` markers used elsewhere for values that were left for later). They are **not** axioms — treat their prerequisites as open. They land at L0 in the layering only because no set was recorded:
 
 `1.2.3.12.2.a1`, `1.2.3.12.2.a2`, `1.2.3.12.3.a1`, `1.2.3.12.3.a3`, `1.2.3.12.4.a1`, `1.2.3.12.5.a1`, `1.2.3.12.5.a2`, `1.2.3.12.5.a4`, `1.2.3.12.5.a5`, `1.2.3.12.5.a6`, `1.2.3.12.5.a7`, `3.11.2.a2`, `3.12.a1`, `3.13.5.2.a3`, `3.13.6.3.a1`, `3.13.7.1.a1`, `3.13.a10`, `10.4.a2`, `10.4.a3`
 
@@ -647,17 +637,68 @@ These are dependencies on a *different* page or snapshot instance — the spine 
 
 ---
 
-## Reconciliation notes (graph-affecting author rulings)
+## Notes on the chart's notation and coverage
 
-From [07-assumption-open-questions.md](07-assumption-open-questions.md), the rulings that shaped this graph:
-- **Parenthesized requirement IDs** ([Q5](07-assumption-open-questions.md)) are *redundant-but-shown* — already transitively implied — so they're folded in as ordinary prerequisites here with no special marking (dropping them would not change reachability).
-- **Second `{...}` blocks** ([Q6](07-assumption-open-questions.md)) are a *reduced* restatement of the first (verified: strict subset modulo suffixes). This graph uses the **first (full)** block per box.
-- **`3:13.a9` = `3.13.a9`** ([Q31 #2](07-assumption-open-questions.md)) — merged.
-- **`3.4.a1` ("expired cannot be None")** is absent from the chart and intentionally not reinstated ([Q25](07-assumption-open-questions.md)) — so it is absent here too.
-- **`10.1.a1`/`10.2.a1`** (referenced in `a03.txt`'s `3.10.a3` but never defined, and dropped from the chart's `3.10.a3` box) do **not** appear — the chart box omits them, and they were never given a definition ([Q24](07-assumption-open-questions.md)).
-- **Chart-only assumptions** present here and not in the `.txt` files: `10.4.a2`, `10.4.a3` (milestone rules for repeated expected transactions — [Q33](07-assumption-open-questions.md)), `3.13.a10` (normal-day implicit earmark), and the month-boundary rules (`2.1.a2`/`2.2.a2` are named only in the tests chart — [Q27](07-assumption-open-questions.md); the chart carries their text unlabeled).
-- **Drawn-edge scope tags** (orange = previous instance, red = next / forward re-validation) are captured here as the cross-instance list, sourced from the box text's own scoped IDs rather than from arrow color — same information, reliably.
+- **Parenthesized requirement IDs** in a `{...}` set (e.g. `(9.5.a1)`) are redundant — already implied transitively by another member of the set — so they're folded in as ordinary prerequisites with no special marking. Dropping them would not change reachability.
+- **A second `{...}` block** on some boxes is a reduced restatement of the first (a strict subset once scope suffixes are normalized). This graph uses the first (full) block.
+- **`3:13.a9`** (with a stray colon) is the same assumption as `3.13.a9`, and is merged.
+- **`3.4.a1` ("expired cannot be None")** is not in the chart — `expired` simply shields old pages from cascades — so it is absent here.
+- **`10.1.a1`/`10.2.a1`** appear in `a03.txt`'s `3.10.a3` requirement list but were never given a definition and are dropped from the chart's `3.10.a3` box, so they are absent here.
+- **Assumptions that live only in the chart** (not the `.txt` files): `10.4.a2`/`10.4.a3` (milestone rules for a jar tied to a repeated expected transaction), `3.13.a10` (the normal-day implicit earmark), and the month-boundary rules `2.1.a2`/`2.2.a2` (their text sits unlabeled in the `2.1.a1`/`2.2.a1` boxes; the tests chart is where they get IDs).
+- **The cross-instance scope tags** (`b`/`c`/`f`/`p`/`n`) come from the box text's own scoped IDs — the same information the chart draws as orange (previous) and red (next) arrows.
+- Where a box's `{...}` set differs from the same assumption's set in the `.txt` files, this graph uses the **chart set** (the author's authoritative record); the `.txt` variants are reproduced verbatim in [03-assumptions-glossary.md](03-assumptions-glossary.md).
+- A few bundled sub-rules carry **no set of their own** in the chart (`1.2.3.12.5.a4`–`a7`, `1.2.3.12.3.a3`, `3.13.6.3.a1`, `3.13.7.1.a1`); they show as sinks with "(none stated)" — addenda, not missing data.
 
-### What this does NOT resolve
-- **Per-case chart-vs-`.txt` conflicts** ([Q1](07-assumption-open-questions.md)) — where a box's set differs from the `.txt` set, this graph uses the **box (chart) set**, since the author named the chart authoritative; the `.txt` variants are cataloged per-chapter in [05](05-assumption-dependency-graph.md) and verbatim in [03](03-assumptions-glossary.md). Adjudicate individually when building on any specific node.
-- A handful of bundled sub-rules have **no `{...}` set of their own** in the chart (`1.2.3.12.5.a4`–`a7`, `1.2.3.12.3.a3`, `3.13.6.3.a1`, `3.13.7.1.a1`); they appear as sinks with "(none stated)" — addenda, not missing data.
+---
+
+## Process regions — the cascade steps
+
+On top of the dependency graph, the author drew dotted outlines grouping related assumptions, each labelled with a plain-language note. Each region is one step of the cascade update — the workflow that walks a page's balance record forward, making each cluster of assumptions true in turn. The regions (boxes named by their first assumption; a box may bundle more):
+
+| Cascade step (region label) | Assumptions in the step |
+|---|---|
+| Finance patterns in this page are perfect | `1.2.3.10.a1`, `1.2.3c.10.a4`, `3.10.a1`, `3.10.a2`, `3.11.2.a1` |
+| Earmark patterns in this page are perfect | `1.2.3c.11.a1`, `1.2.3c.11.a2`, `1.2.3c.11.a3`, `3.11.1.a1`, `3.13.1.a1`, `3.11.2.a1`, `1.2.3c.11.a4` *(a fine-dotted outer group wraps this step and the finance-pattern step above)* |
+| Loop over pages and fix patterns | contains the two pattern steps above, plus the fund-jar and deallocation work below |
+| New events created, old events removed | `3.13.8.a2`, `3.9.a1`, `7.1.a1`, `3.13.6.a1`, and the assumptions above them in the same column |
+| The whole page is cleaned of obsolete events and balance snapshots | `3.13.a2`, `1.2.3c.13.a3`, `3.13.a3` |
+| This balance snapshot has full_amount | `3.13c.2.a1`, `3.13c.2.a2`, `3.13c.2.a3`, `1.2.3.12.2.a1`, `3.13.a4` |
+| If this is a deallocation day, the implicit earmarks are made | `3.13c.a6`, `3.13c.a7`, `3.13c.8.4.a2`, `3.13c.a8` |
+| All\* earmarks created on this page *(\* except implicit earmarks, added later on deallocation days)* | `3.13.8.5.a1`, `3.13c.8.a4`, `3.13.8.a6`, `3.13.8.3.a1`, `3.13.8.a3`, `3.13c.8.a5`, `3.13.8.1.a1`, `3.13.8.a7` |
+| Transactions are paired | `3.13.a5`, `6.4.a1`, `1.2.3.13.a1`, `1.2.3.13.6.a1`, `1.2.3.13.a2` |
+| Initial snapshot is good except for expected amount | `3.12.1.a1`, `3.12.a1`, `9.1.a1`, `3.13.2.a4`, `9.8.2.a1`, `9.8.6.a1`, `1.2.3c.12.a1` |
+| Loop over all pages, updating expected_amount / expected_free_amount on initial snapshots | the cross-page rollup, ending with `current_unpaid_expected`, `current_free_amount`, `current_safety_cushion` and each jar's `milestone_amount` (the consciously-applied calculations, run last) |
+| Fund jar validity at the initial snapshot | `3.12.5.a1`, `9.5.1.a1`, `9.5.a1` |
+
+## The author's test-bundling plan
+
+The project was meant to be testing-first. A sibling chart (`assumptionChartTests.uxf`) grouped assumptions into test bundles — one test function verifying a related cluster together — with a colour code for the order to write them in: **green** = no unmet dependencies (write first), **grey** = intermediate, **pink** = end-of-chain completeness checks (write last). It covers 64 of the assumptions in 24 bundles:
+
+| Test | Bundles | Order |
+|---|---|---|
+| `2.T1` | `2.1.a1`, `2.2.a1` + month-boundary `2.1.a2`/`2.2.a2` | |
+| `4.T1` | `4.1.a1`, `4.2.a1` | |
+| `5.T1` | `5.1.a1`, `5.2.a1`, `5.3.a1` | green |
+| `6.T1` | `6.1.a1`, `6.5.a1`, `6.6.a1` | green |
+| `7.T01` | `7.1.a1`, `7.6.a1`, `7.7.a1`, `7.8.a1` | green |
+| `7.T02` | `7.3.a1`, `7.4.a1`, `7.4.a2`, `7.5.a1`, `7.5.a2` | |
+| `8.T1` | `8.1.a1`–`8.5.a1` | |
+| `9.T01` | `9.7.6.a1` | |
+| `9.T02` | `9.6.2.a1` | |
+| `10.T1` | `10.3.a1`, `10.4.a1` + `10.4.a2`/`10.4.a3` | |
+| `1.T01` | `1.2.3.a1`, `1.1.a1` (requires `2.T1`) | |
+| `1.T02` | finance-pattern cross-page continuity (requires `4.T1`, `1.T01`) | |
+| `1.T04` | earmark-pattern cross-page continuity (requires `1.T02`, `3.T04`) | grey |
+| `3.T01` | `3.2.a1`, `3.2.a2`, `3.3.a1`, `3.3.a2`, `3.5.a1`, `3.8.a1`, `3.9.a1` | green |
+| `3.T02` | `3.10.a1`, `3.10.a2` (requires `3.T01`) | |
+| `3.T03` | `3.13.7.6.a1`, `3.13.7.a2` (requires `1.T02`) | |
+| `3.T04` | `3.11.2.a1`, `3.11.2.a2` (requires `5.T1`) | |
+| `3.T05` | `3.13.1.a1` (requires `3.T01`) | |
+| `3.T06` | `3.13.8.a1`, `3.13.8.a2`, `3.13.8.4.a1`, `3.13.8.a6` | |
+| `3.T07` | `3.13.8.3.a1`, `3.13.8.a3` (requires `1.2.3c.11.a4`) | |
+| `3.T08` | `3.13.8.5.a1`, `3.13c.8.a4`, `3.13c.8.a5`, `3.13.8.1.a1`, `3.13.8.1.a2` | |
+| `3.T09` | `3.13.8.a7` (requires `3.T06`, `3.T07`, `3.T08`) | pink |
+| `3.T10` | `3.13.6.a1`, `3.13.6.a2`, `3.13.6.3.a1` | pink |
+| `3.T11` | `3.13.7.a1`, `3.13.7.1.a1`, `3.13.7.a3` (requires `1.2.3c.10.a4`, `3.T03`) | |
+
+A companion file at the project root, `things to test.txt`, holds the worked *scenarios* those tests would simulate (e.g. saving toward a boat, with variations for early/late and paired/unpaired purchases), and `class documentation.ods` supplies numeric examples to check results against.

@@ -22,7 +22,7 @@ This document catalogs every source file read while reconstructing the design do
 
 ### `assumptions/` folder — uxf charts & supporting scripts
 
-Content has since been parsed for `assumptionChartSimpleLines.uxf`, `assumptionChartTests.uxf`, and (box inventory only) `assumptionChart.uxf` and `assumptionChartTiers1.uxf` — see [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md). *(Update 2026-07-17: both content-bearing charts' full box/annotation text is now also transcribed **verbatim** in [06-assumption-chart-full-text.md](06-assumption-chart-full-text.md), and the remaining inferred-not-sourced readings are collected as answerable questions in [07-assumption-open-questions.md](07-assumption-open-questions.md).)* *(Update 2026-07-18: the author answered all of 07's questions, which revealed that 05's **arrow-geometry** parse is unreliable — the charts route edges line→line — so the authoritative dependency graph was rebuilt from the reliable box TEXT in [08-assumption-graph-reconciled.md](08-assumption-graph-reconciled.md), regenerable via `build_assumption_graph.py`. Use 08, not 05's edges.)* The rest of the `assumptionChartSimpleLines1-8.uxf`/`NoLines*` family below is still dates-only.
+The two content-bearing charts, `assumptionChartSimpleLines.uxf` and `assumptionChartTests.uxf`, are transcribed verbatim in [05-assumption-chart-full-text.md](05-assumption-chart-full-text.md), and the dependency graph derived from the former is in [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md) (regenerable via `build_assumption_graph.py`). `assumptionChart.uxf` and `assumptionChartTiers1.uxf` were parsed for box inventory only. The rest of the `assumptionChartSimpleLines1-8.uxf`/`NoLines*` family below is dates-only.
 
 | File | Last Modified | Note |
 |---|---|---|
@@ -37,7 +37,7 @@ Content has since been parsed for `assumptionChartSimpleLines.uxf`, `assumptionC
 | `assumptionChartSimpleLines8.uxf` | 2021-09-28 | Same day as `a03.txt` |
 | `assumptionChartTests.uxf` | 2021-10-03 (4:09 PM) | Minutes before `a01.txt`'s final save |
 | **`assumptionChartSimpleLines.uxf`** | **2021-10-03 (10:03 PM)** | **Same day as `a01.txt`, and the last edit of the evening — see finding below** |
-| `assumptionChartSimpleLinesChecks.uxf` | **2022-05-16** | **Newest file in the entire assumptions folder — postdates even `class documentation.ods`. See open question below.** |
+| `assumptionChartSimpleLinesChecks.uxf` | **2022-05-16** | Newest file in the assumptions folder, but empty — opened and never filled in. |
 
 ### External notes (outside `assumptions/`)
 
@@ -52,22 +52,15 @@ Content has since been parsed for `assumptionChartSimpleLines.uxf`, `assumptionC
 
 Not read (out of the requested scope, but noted for completeness): `things to test.txt` (43 lines) at the project root appears to be a close relative of the "things to test" section already captured inside `planning2simple.txt` (lines ~101-135). Flagging its existence in case it contains a later revision of that list.
 
-## Key cross-reference finding: which assumption files are authoritative?
+## Which assumption files are authoritative?
 
-**`assumptionNotes.txt` says, in its own words:**
+`assumptionNotes.txt` states it directly:
 
 > "Also a01.txt, a02.txt, and a03.txt are the original files for the assumption planning. However, these files have too many unneeded requirements for assumptions. The most up to date and correct documentation is the assumptionChartSimpleLines.uxf file."
 
-This is an explicit statement from you (the original author) that the `.uxf` chart — not the `.txt` files — is the ground truth for the assumption dependency graph. This directly shapes how [03-assumptions-glossary.md](03-assumptions-glossary.md) should be read: it's built from the `.txt` files because that's what was asked for at this stage, but it should be treated as **the raw/verbose material to be checked against the chart**, not as the final word, once we get to the graph-recreation step.
+So the `.uxf` chart is the ground truth for the assumption dependency graph, confirmed by the author. [03-assumptions-glossary.md](03-assumptions-glossary.md) reproduces the `.txt` files verbatim (they carry prose descriptions the chart lacks); [05-assumption-chart-full-text.md](05-assumption-chart-full-text.md) reproduces the chart's own box text; and [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md) builds the graph from that chart text. Where a `.txt` set and the chart set differ for the same assumption, the chart wins.
 
-**However, there's a wrinkle worth flagging before we lean on that quote too heavily:** `assumptionNotes.txt` is dated **2021-08-28**, but `a03.txt` (2021-09-28) and `a01.txt` (2021-10-03) were both **edited a month or more after** that note was written. So the note's claim that "a01/a02/a03 have too many unneeded requirements" was made *before* the final revisions to two of those three files existed. Two readings are both plausible, and I don't have enough information to pick between them:
-
-1. The note is simply stale — a01/a03 kept evolving after Aug 28 and nobody updated the note, so the txt files (particularly their final Oct revisions) may actually be closer to the chart than the note implies.
-2. The txt files and the `.uxf` chart were being hand-kept in sync during Sep–Oct (note `assumptionChartSimpleLines.uxf`'s own last edit is 2021-10-03 at 10:03 PM — the **same day as `a01.txt`**, and later in the evening), meaning the Aug 28 note's verdict still holds and the chart simply continued to receive the same conceptual updates as the text files in parallel.
-
-Either way, **`a01.txt` + `assumptionChartSimpleLines.uxf`, both last touched 2021-10-03, are the most likely "final state" pairing** among the pre-2022 material. Worth deciding together once we're in the chart-reconciliation step.
-
-**Second open question — now resolved:** `assumptionChartSimpleLinesChecks.uxf` (2022-05-16) is the single newest file in the whole `assumptions/` folder, but parsing it (see [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md)) shows it's **completely empty** — zero elements, just the bare UMLet skeleton. It doesn't supersede anything; it looks like a file that got created (opened and immediately saved, or created by some UMLet action) and never actually filled in. Best guess, laid out in full in [05-assumption-dependency-graph.md's discrepancies section](05-assumption-dependency-graph.md#5-the-test-planning-effort-in-assumptionchartestsuxf-was-abandoned-and-assumptionchartsimplelineschecksuxf-is-empty): it was probably meant to merge the test-bundling work found in `assumptionChartTests.uxf` (2021-10-03) into the completed 118-assumption `assumptionChartSimpleLines.uxf`, seven months later, and that merge never happened.
+`a01.txt` and `assumptionChartSimpleLines.uxf` were both last touched 2021-10-03 and represent the final state of the pre-2022 material. The one later file, `assumptionChartSimpleLinesChecks.uxf` (2022-05-16), is empty — it was opened and never filled in, and supersedes nothing.
 
 ## Reduction-file lineage (the `allFoo`/`allReduced*` family)
 
@@ -84,7 +77,7 @@ None of the `allFoo`/`allReduced*` files carry prose descriptions of what each a
 
 ## `class documentation.ods` — sheet inventory
 
-This spreadsheet has 16 sheets *(count corrected 2026-07-10 — a mechanical re-parse found 16; the list below always enumerated 16, only this total miscounted)*. Two (`Sheet10` and `Properties`) are the authoritative class/property specification and are the primary source for the glossary and UML diagram — `Properties` is the more detailed/later of the two (it adds columns for cascade-update behavior: `Initially Set?`, `mutable?`, `created in cascade event?`, `set in cascade event?`, `used for next value in cascade?`, and past/present/future visibility). The rest are the author's scratch work while reasoning through specific scenarios:
+This spreadsheet has 16 sheets. Two (`Sheet10` and `Properties`) are the authoritative class/property specification and are the primary source for the glossary and UML diagram — `Properties` is the more detailed/later of the two (it adds columns for cascade-update behavior: `Initially Set?`, `mutable?`, `created in cascade event?`, `set in cascade event?`, `used for next value in cascade?`, and past/present/future visibility). The rest are the author's scratch work while reasoning through specific scenarios:
 
 - **`Sheet10`, `Properties`** — full class/property spec with prose descriptions, types, and mandatory flags. **Primary source.**
 - **`backupb`, `Sheet1`, `Sheet15`, `Sheet1_2`** — a single worked numeric example (a "boat fund" / "gameboy fund" household budget scenario for May–June 2019) tracing expected/actual/earmark events and fund jar balances day by day.
@@ -96,8 +89,10 @@ This spreadsheet has 16 sheets *(count corrected 2026-07-10 — a mechanical re-
 - **`fund jar`** — eight hand-drawn timeline scenarios reasoning about what a fund jar's `full_amount`/`expected_amount` should be relative to when its earmark pattern starts/ends and where "today" falls.
 - **`Sheet2`, `Sheet12`, `Sheet14`, `Sheet16`** — smaller scratch/pivot tables (a mini balance-check calculation, an alphabetized property-name index, a fund-jar-carry-forward pseudocode trace, and a spreadsheet-formula-reference sheet).
 
-## How to use this alongside the other redesign documents
+## How to use this alongside the other design documents
 
 - [01-glossary-of-terms.md](01-glossary-of-terms.md) — classes, properties, methods, and domain vocabulary, prioritizing `class documentation.ods` (newest/richest) and falling back to the `.txt` notes where the ODS is silent.
 - [02-uml-diagram.md](02-uml-diagram.md) — structural class diagram built from the same material.
-- [03-assumptions-glossary.md](03-assumptions-glossary.md) — every assumption's original wording, organized into chapters by class/topic. Treat as raw material pending reconciliation against `assumptionChartSimpleLines.uxf` (and possibly `assumptionChartSimpleLinesChecks.uxf` — see open question above).
+- [03-assumptions-glossary.md](03-assumptions-glossary.md) — every assumption's original wording from the `.txt` files, organized into chapters by class/topic.
+- [05-assumption-chart-full-text.md](05-assumption-chart-full-text.md) — the assumption chart's own box text, verbatim.
+- [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md) — the dependency graph (what requires what, and in what order), built from the chart text.

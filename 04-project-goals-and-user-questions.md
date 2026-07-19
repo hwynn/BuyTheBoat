@@ -1,6 +1,6 @@
 # Project Goals & User-Facing Questions
 
-Written before diving into the full assumption dependency graph, so that graph can be read against *why* the system needs to be this complicated, rather than as complexity for its own sake. Source material: your message defining the four core questions, plus `project goals.txt.txt`, `planning.txt`, and `planning2simple.txt`'s "Show / Warn / Maintain / Plan" framing (see [01-glossary-of-terms.md](01-glossary-of-terms.md#domain-vocabulary) for that framing's short definition).
+*Why* the system needs to be this complicated — the questions the program exists to answer, which the class model and assumptions all serve. Source material: the four core questions, plus `project goals.txt.txt`, `planning.txt`, and `planning2simple.txt`'s "Show / Warn / Maintain / Plan" framing (see [01-glossary-of-terms.md](01-glossary-of-terms.md#domain-vocabulary) for that framing's short definition).
 
 ## The four core "Plan"-side questions
 
@@ -32,7 +32,7 @@ This is where `FinancialPattern.priority`/`mandatory` and the fund-jar allocatio
 
 This is the one property built specifically to answer this question: `FundJar.milestone_amount` — "how much you *should* have saved by this date" — compared against `FundJar.current_amount`/`expected_amount` — "how much you actually have." The gap between them *is* the answer to "am I on track."
 
-Governing assumptions: `3.13.5.4.a1` (milestone calculation), `10.4.a1` and the newly-found `10.4.a2`/`10.4.a3` (only in the chart, not the `.txt` files — see [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md#chart-only-content-not-in-any-txt-file)), fed by the `EarMarkPattern`/`EarMarkEvent` history. "Which goal" is identified purely by `finance_id` — see [Finance ID](01-glossary-of-terms.md#domain-vocabulary) in the glossary.
+Governing assumptions: `3.13.5.4.a1` (milestone calculation), plus `10.4.a1`/`10.4.a2`/`10.4.a3` (the milestone rules for the different jar types — the latter two live only in the chart), fed by the `EarMarkPattern`/`EarMarkEvent` history. "Which goal" is identified purely by `finance_id` — see [Finance ID](01-glossary-of-terms.md#domain-vocabulary) in the glossary.
 
 ### Q4 — If I buy X anyway, how do I readjust my goals?
 
@@ -42,7 +42,7 @@ Governing assumptions: `3.13.5.4.a1` (milestone calculation), `10.4.a1` and the 
 
 The only concrete mechanism sketched anywhere is in `planning.txt`'s "Unsorted Notes": *replanning* an earmark pattern gives the user a choice between starting a goal's savings over from zero, or keeping the existing fund jar balance and wiping/regenerating the future repeated earmarks around it. That's a real design idea, but it never got turned into numbered assumptions the way, say, deallocation days did (`3.13c.a6` through `3.13c.a10` — see [03-assumptions-glossary.md, Chapter 11](03-assumptions-glossary.md#chapter-11-balance-record)).
 
-**Practical implication:** when the dependency graph work in [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md) is done, don't expect to find a rich cluster of assumptions answering Q4 the way there's a rich cluster for Q1/Q3. If you want the program to actually answer "how do I readjust," that's likely new design work — not buried documentation waiting to be found — probably starting from the deallocation-day mechanism, since deallocation is really the *forced, automatic* version of the same problem (money got taken out of a jar unexpectedly; the difference is Q4 is asking the user to make the same call deallocation makes automatically).
+**Practical implication:** there is no rich cluster of assumptions answering Q4 the way there is for Q1/Q3. Making the program actually answer "how do I readjust" is new design work, not buried documentation — most likely starting from the deallocation-day mechanism, since deallocation is the *forced, automatic* version of the same problem (money got taken out of a jar unexpectedly; Q4 asks the user to make the same call deallocation makes automatically).
 
 ## The secondary goal: tracking regular expenses & upcoming bills
 
@@ -52,11 +52,4 @@ You described this as separate from the planning questions above but still impor
 - *"Which bills have already come through, which haven't?"* → the `ExpectedTransaction` ↔ `ActualTransaction` pairing/fulfillment mechanism (see [Pairing / Fulfillment](01-glossary-of-terms.md#domain-vocabulary)), surfaced as a checkmark, or a warning icon when the pairing reveals a deviation.
 - *"What should I expect to come in soon that hasn't yet?"* → `current_unpaid_expected`, plus the deviation-warning logic once an expected transaction's `amount_tolerance`/`date_tolerance` window has passed (`7.7.a1`, `7.8.a1`).
 
-This maps most directly onto [03-assumptions-glossary.md, Chapters 14-15](03-assumptions-glossary.md#chapter-14-actual-transactions) (Actual/Expected Transactions) and the "transactions are paired" process region identified in the chart (see [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md#process-regions)).
-
-## How this grounds the graph work
-
-Two things this reorientation changes about how [05-assumption-dependency-graph.md](05-assumption-dependency-graph.md) is organized:
-
-1. Where a cluster of assumptions clearly serves one of these questions, that's called out, so the graph reads as "this machinery exists *because* it answers Q1/Q3/bill-tracking" rather than as dependency bookkeeping for its own sake.
-2. The Q4 gap is **not** something the graph reconstruction can fix — it's a gap in the underlying assumption set itself, from before the graph was even drawn. Flagging it here so it doesn't get mistaken for a chart-reading error later.
+This maps most directly onto [03-assumptions-glossary.md, Chapters 14-15](03-assumptions-glossary.md#chapter-14-actual-transactions) (Actual/Expected Transactions) and the "transactions are paired" cascade step in [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md#process-regions--the-cascade-steps).
