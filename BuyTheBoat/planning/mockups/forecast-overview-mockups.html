@@ -1,0 +1,354 @@
+<style>
+  :root {
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    /* light (default) */
+    --bg:#e9edf3; --surface:#ffffff; --surface-2:#f4f6fa; --surface-3:#eaeef4;
+    --ink:#151c29; --ink-2:#4b566a; --ink-3:#7b8698;
+    --line:#d8dfe9; --line-2:#c4cedd;
+    --accent:#2f5fb0; --accent-2:#e9f0fb; --accent-ink:#254e93; --accent-line:#a9c2ec;
+    --good:#1c7a52; --good-2:#e1f0e9;
+    --warn:#8a6300; --warn-2:#f8edcd;
+    --bad:#b3271f; --bad-2:#f6e0de;
+    --shadow:0 1px 2px rgba(20,30,50,.06),0 6px 20px rgba(20,30,50,.07);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d121c; --surface:#151d2b; --surface-2:#1b2433; --surface-3:#212c3e;
+      --ink:#e8edf5; --ink-2:#aab5c9; --ink-3:#7d889e;
+      --line:#293446; --line-2:#3a4760;
+      --accent:#7aa4ef; --accent-2:#1d2942; --accent-ink:#b3c8f4; --accent-line:#375285;
+      --good:#4dc08b; --good-2:#15291f;
+      --warn:#d6a940; --warn-2:#2c2413;
+      --bad:#e46a60; --bad-2:#331a19;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d121c; --surface:#151d2b; --surface-2:#1b2433; --surface-3:#212c3e;
+    --ink:#e8edf5; --ink-2:#aab5c9; --ink-3:#7d889e;
+    --line:#293446; --line-2:#3a4760;
+    --accent:#7aa4ef; --accent-2:#1d2942; --accent-ink:#b3c8f4; --accent-line:#375285;
+    --good:#4dc08b; --good-2:#15291f;
+    --warn:#d6a940; --warn-2:#2c2413;
+    --bad:#e46a60; --bad-2:#331a19;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .wrap{
+    font-family:var(--sans); background:var(--bg); color:var(--ink);
+    line-height:1.55; padding:32px 20px 80px; -webkit-font-smoothing:antialiased;
+  }
+  .col{max-width:1040px; margin:0 auto}
+  .mono{font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+  .lbl{font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3)}
+
+  .page-head{margin-bottom:20px}
+  .eyebrow{font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-ink)}
+  h1{font-size:30px; line-height:1.15; margin:.25em 0 .1em; text-wrap:balance; letter-spacing:-.02em}
+  .lede{color:var(--ink-2); max-width:70ch; margin:0}
+
+  .scenario{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin:18px 0 10px; box-shadow:var(--shadow); display:flex; gap:18px; flex-wrap:wrap; align-items:center;
+  }
+  .scenario .lbl{margin-right:2px}
+  .facts{display:flex; gap:8px 14px; flex-wrap:wrap; font-size:13px; color:var(--ink-2)}
+  .facts b{color:var(--ink); font-weight:600}
+
+  .legend{display:flex; gap:16px 20px; flex-wrap:wrap; align-items:center; margin:6px 0 26px; font-size:12.5px; color:var(--ink-2)}
+  .key{display:inline-flex; align-items:center; gap:7px}
+  .dot{width:11px; height:11px; border-radius:50%; flex:none}
+  .swatch{width:22px; height:14px; border-radius:4px; flex:none; border:1px solid rgba(0,0,0,.06)}
+  .k-good{background:var(--good)} .k-warn{background:var(--warn)} .k-bad{background:var(--bad)}
+  .today-key{width:22px;height:16px;border-radius:5px;background:var(--accent-2);border:2px solid var(--accent); box-shadow:0 0 0 2px var(--accent-2)}
+
+  .variant{margin-top:34px}
+  .vhead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding-bottom:10px; border-bottom:2px solid var(--line-2); margin-bottom:16px}
+  .vnum{font-family:var(--mono); font-size:13px; color:var(--accent-ink); font-weight:700}
+  .vhead h2{font-size:20px; margin:0; letter-spacing:-.01em}
+  .vhead .intent{color:var(--ink-2); font-size:14px}
+  .proscons{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 18px}
+  .tag{font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--line-2); display:inline-flex; gap:6px; align-items:center}
+  .tag.pro{color:var(--good); border-color:color-mix(in srgb,var(--good) 35%,var(--line))}
+  .tag.con{color:var(--ink-2)}
+  .tag .s{font-weight:700}
+
+  .stage{background:var(--surface-2); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); overflow-x:auto}
+
+  /* chips shared */
+  .chip{font-size:11.5px; padding:2px 8px; border-radius:6px; white-space:nowrap; border:1px solid transparent; display:inline-flex; gap:5px; align-items:center}
+  .chip .amt{font-family:var(--mono); font-variant-numeric:tabular-nums}
+  .c-pay{background:var(--good-2); color:var(--good); border-color:color-mix(in srgb,var(--good) 22%,transparent)}
+  .c-bill{background:var(--surface-3); color:var(--ink-2)}
+  .c-save{background:var(--accent-2); color:var(--accent-ink)}
+  .c-expense{background:var(--surface-3); color:var(--ink)}
+  .c-dealloc{background:var(--bad-2); color:var(--bad); border-color:color-mix(in srgb,var(--bad) 25%,transparent)}
+  .c-soon{background:var(--warn-2); color:var(--warn)}
+  .c-seed{background:var(--surface-3); color:var(--ink-3)}
+
+  .pos{color:var(--good)} .neg{color:var(--bad)} .zero{color:var(--ink-3)}
+
+  .flag-pill{font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:2px 7px; border-radius:5px}
+  .flag-dealloc{background:var(--bad-2); color:var(--bad)}
+  .flag-watch{background:var(--warn-2); color:var(--warn)}
+  .today-pill{font-size:10px; font-weight:800; letter-spacing:.08em; padding:2px 7px; border-radius:5px; background:var(--accent); color:#fff}
+  :root[data-theme="dark"] .today-pill{color:#0d121c}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .today-pill{color:#0d121c}}
+
+  /* ---- V1 table ---- */
+  table.tl{border-collapse:collapse; width:100%; min-width:760px; font-size:13.5px}
+  table.tl thead th{font:600 11px/1 var(--sans); letter-spacing:.07em; text-transform:uppercase; color:var(--ink-3); text-align:left; padding:0 12px 9px; border-bottom:1px solid var(--line-2)}
+  table.tl th.num, table.tl td.num{text-align:right}
+  table.tl tbody{}
+  table.tl td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:middle}
+  table.tl tr:last-child td{border-bottom:none}
+  table.tl td.money{font-family:var(--mono); font-variant-numeric:tabular-nums}
+  table.tl tr.r-dealloc{background:color-mix(in srgb,var(--bad-2) 55%,transparent)}
+  table.tl tr.r-watch{background:color-mix(in srgb,var(--warn-2) 45%,transparent)}
+  table.tl tr.r-today td{background:var(--accent-2)}
+  table.tl tr.r-today td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+  .datecell{display:flex; align-items:center; gap:8px}
+  .datecell .dow{color:var(--ink-3); font-weight:400}
+  .flowcue{display:inline-flex; gap:2px; font-family:var(--mono); font-size:12px}
+  .evwrap{display:flex; gap:5px; flex-wrap:wrap}
+  .alloc-bar{height:5px; border-radius:3px; background:var(--surface-3); position:relative; margin-top:4px; overflow:hidden}
+  .alloc-bar > i{position:absolute; left:0; top:0; bottom:0; background:var(--accent); opacity:.55; border-radius:3px}
+
+  /* ---- V2 calendar ---- */
+  .cal-nav{display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:12px; font-size:14px}
+  .cal-nav b{font-size:16px}
+  .cal-nav span{color:var(--ink-3)}
+  .cal{display:grid; grid-template-columns:repeat(7,1fr); gap:6px; min-width:720px}
+  .cal .dow-h{font:600 10px/1 var(--sans); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); text-align:center; padding:2px 0 4px}
+  .cell{background:var(--surface); border:1px solid var(--line); border-radius:9px; min-height:76px; padding:6px 7px; display:flex; flex-direction:column; gap:3px}
+  .cell.empty{background:transparent; border-style:dashed; border-color:var(--line); opacity:.5}
+  .cell .n{font-size:12px; color:var(--ink-3); font-weight:600}
+  .cell.today{border:2px solid var(--accent); box-shadow:0 0 0 3px var(--accent-2); background:var(--surface)}
+  .cell.today .n{color:var(--accent-ink)}
+  .cell.f-dealloc{border-color:color-mix(in srgb,var(--bad) 45%,var(--line)); background:var(--bad-2)}
+  .cell.f-watch{border-color:color-mix(in srgb,var(--warn) 45%,var(--line)); background:var(--warn-2)}
+  .cell .free{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:13px; font-weight:600; margin-top:auto}
+  .cell .sub{font-size:10px; color:var(--ink-3); font-family:var(--mono)}
+  .evdots{display:flex; gap:3px; flex-wrap:wrap}
+  .evdot{width:7px; height:7px; border-radius:2px}
+  .ed-pay{background:var(--good)} .ed-bill{background:var(--ink-3)} .ed-save{background:var(--accent)} .ed-expense{background:var(--ink-2)} .ed-dealloc{background:var(--bad)} .ed-soon{background:var(--warn)} .ed-seed{background:var(--line-2)}
+
+  /* ---- V3 river ---- */
+  .river{display:flex; align-items:flex-end; gap:0; min-width:820px; height:230px; position:relative; padding:0 4px}
+  .grid-line{position:absolute; left:0; right:0; border-top:1px dashed var(--line); font-size:10px; color:var(--ink-3)}
+  .grid-line span{position:absolute; left:0; top:-8px; background:var(--surface-2); padding-right:6px; font-family:var(--mono)}
+  .rcol{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:0; position:relative; height:100%; padding:0 3px; z-index:1}
+  .rcol .flowmark{height:16px; font-size:10px; font-family:var(--mono); display:flex; align-items:center}
+  .bar{width:80%; max-width:34px; display:flex; flex-direction:column-reverse; border-radius:4px 4px 0 0; overflow:hidden; position:relative}
+  .bar .b-alloc{background:var(--accent); opacity:.42}
+  .bar .b-free{background:var(--good); opacity:.85}
+  .bar .b-free.z{background:var(--bad)}
+  .rcol .rdate{font-size:9.5px; color:var(--ink-3); margin-top:6px; font-family:var(--mono); white-space:nowrap; transform:rotate(-32deg); transform-origin:top center; height:26px}
+  .rcol.today{background:linear-gradient(var(--accent-2),transparent); border-radius:8px}
+  .rcol.today .rdate{color:var(--accent-ink); font-weight:700}
+  .todaymark{position:absolute; top:-2px; font-size:9px; font-weight:800; letter-spacing:.06em; color:var(--accent-ink); text-transform:uppercase}
+  .rcol .attn{position:absolute; top:2px; width:9px; height:9px; border-radius:50%}
+  .attn.a-dealloc{background:var(--bad)} .attn.a-watch{background:var(--warn)}
+  .river-legend{display:flex; gap:16px; margin-top:14px; font-size:12px; color:var(--ink-2); align-items:center; min-width:400px}
+
+  /* ---- V4 cards ---- */
+  .cards{display:flex; flex-direction:column; gap:9px; min-width:560px}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:12px 14px; display:grid; grid-template-columns:150px 1fr auto; gap:14px; align-items:center; position:relative; box-shadow:var(--shadow)}
+  .card::before{content:""; position:absolute; left:0; top:8px; bottom:8px; width:4px; border-radius:0 3px 3px 0; background:transparent}
+  .card.c-today{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-2), var(--shadow)}
+  .card.cf-dealloc::before{background:var(--bad)}
+  .card.cf-watch::before{background:var(--warn)}
+  .card .cdate{font-weight:600; font-size:14px; display:flex; flex-direction:column; gap:3px}
+  .card .cdate .dow{color:var(--ink-3); font-size:12px; font-weight:400}
+  .card .figs{display:flex; gap:20px}
+  .fig{display:flex; flex-direction:column; gap:1px}
+  .fig .v{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:15px; font-weight:600}
+  .card .cev{display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; max-width:320px}
+
+  .note{font-size:12.5px; color:var(--ink-3); margin-top:10px; font-style:italic}
+  footer{margin-top:48px; padding-top:18px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-3)}
+</style>
+
+<div class="wrap">
+  <div class="col">
+    <header class="page-head">
+      <div class="eyebrow">MyMoneyForecast · design exploration</div>
+      <h1>Forecast overview — four ways to show the same range</h1>
+      <p class="lede">The overview's job (per the design philosophy, §2): show many days at once — balance, <b>total allocated</b>, and <b>free</b> per day, with a sense of money in/out, days worth a closer look flagged, and <b>today</b> unmistakable — without a per-jar breakdown, an every-transaction dump, or a decorative chart. Same data below, four layouts. Pick one, or a hybrid.</p>
+    </header>
+
+    <div class="scenario">
+      <span class="lbl">The scenario</span>
+      <div class="facts">
+        <span><b>$2,400</b> as of Jun 30</span><span><b>$1,700</b> paycheck (biweekly)</span>
+        <span>Rent <b>$1,200</b>/mo</span><span>Electric <b>$140</b>/mo</span>
+        <span><b>$500</b> safety cushion</span><span>Japan trip <b>$3,000</b> (behind)</span>
+        <span>surprise <b>$1,900</b> car repair, Jul 16</span>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="lbl">Legend</span>
+      <span class="key"><span class="today-key"></span> Today</span>
+      <span class="key"><span class="dot k-bad"></span> Deallocation — jars raided</span>
+      <span class="key"><span class="dot k-warn"></span> Watch — free running thin</span>
+      <span class="key"><span class="swatch" style="background:color-mix(in srgb,var(--accent) 45%,transparent)"></span> Allocated (all jars)</span>
+      <span class="key"><span class="swatch k-good"></span> Free to spend</span>
+    </div>
+
+    <div id="variants"></div>
+
+    <footer>
+      Mockups only — hand-built with representative data to compare layouts, not a live forecast. Money figures use a monospace ledger face; colors carry meaning (green good · amber watch · red short), separate from the indigo interactive/today accent. Renders in light and dark.
+    </footer>
+  </div>
+</div>
+
+<script>
+const money = (n,{sign=false}={})=>{
+  const s = n<0?'-':(sign&&n>0?'+':'');
+  return s+'$'+Math.abs(n).toLocaleString('en-US');
+};
+const DAYS = [
+ {dow:"Mon", md:"Jun 30", mon:"Jun", dom:30, today:false, bal:2400, alloc:1000, free:1400, in:0, out:0, flag:"", ev:[{t:"Starting balance",k:"seed",a:2400}]},
+ {dow:"Tue", md:"Jul 1",  mon:"Jul", dom:1,  today:false, bal:1200, alloc:620,  free:580,  in:0, out:1200, flag:"", ev:[{t:"Rent",k:"bill",a:-1200}]},
+ {dow:"Fri", md:"Jul 4",  mon:"Jul", dom:4,  today:false, bal:2900, alloc:1120, free:1780, in:1700, out:0, flag:"", ev:[{t:"Paycheck",k:"pay",a:1700},{t:"Japan trip",k:"save",a:150},{t:"Rent reserve",k:"save",a:350}]},
+ {dow:"Wed", md:"Jul 9",  mon:"Jul", dom:9,  today:false, bal:2900, alloc:1270, free:1630, in:0, out:0, flag:"", ev:[{t:"Reserves stepping up",k:"save",a:150}]},
+ {dow:"Fri", md:"Jul 11", mon:"Jul", dom:11, today:true,  bal:2900, alloc:1320, free:1580, in:0, out:0, flag:"", ev:[]},
+ {dow:"Tue", md:"Jul 15", mon:"Jul", dom:15, today:false, bal:2760, alloc:1320, free:1440, in:0, out:140, flag:"", ev:[{t:"Electric",k:"bill",a:-140}]},
+ {dow:"Wed", md:"Jul 16", mon:"Jul", dom:16, today:false, bal:860,  alloc:860,  free:0,    in:0, out:1900, flag:"dealloc", ev:[{t:"Car repair",k:"expense",a:-1900},{t:"Pulled from jars",k:"dealloc",a:-460}]},
+ {dow:"Fri", md:"Jul 18", mon:"Jul", dom:18, today:false, bal:2560, alloc:1160, free:1400, in:1700, out:0, flag:"", ev:[{t:"Paycheck",k:"pay",a:1700},{t:"Japan trip",k:"save",a:150}]},
+ {dow:"Mon", md:"Jul 21", mon:"Jul", dom:21, today:false, bal:2560, alloc:1310, free:1250, in:0, out:0, flag:"watch", ev:[{t:"Rent due in 3 days",k:"soon",a:-1200}]},
+ {dow:"Fri", md:"Aug 1",  mon:"Aug", dom:1,  today:false, bal:3060, alloc:1260, free:1800, in:1700, out:1200, flag:"", ev:[{t:"Paycheck",k:"pay",a:1700},{t:"Rent",k:"bill",a:-1200},{t:"Japan trip",k:"save",a:150}]},
+ {dow:"Fri", md:"Aug 15", mon:"Aug", dom:15, today:false, bal:2920, alloc:1410, free:1510, in:0, out:140, flag:"", ev:[{t:"Electric",k:"bill",a:-140}]},
+];
+const freeClass = f => f<0?'neg':(f===0?'zero':'');
+const evChip = e => `<span class="chip c-${e.k}">${e.t}${e.k==='seed'?'':` <span class="amt">${money(e.a,{sign:true})}</span>`}</span>`;
+const flowCue = d => {
+  let p=[];
+  if(d.in>0) p.push(`<span class="pos">▲ ${money(d.in)}</span>`);
+  if(d.out>0) p.push(`<span class="neg">▼ ${money(d.out)}</span>`);
+  return p.length? `<span class="flowcue">${p.join(' ')}</span>` : `<span class="zero mono">—</span>`;
+};
+
+/* V1 — evolved table */
+function renderTable(){
+  const rows = DAYS.map(d=>{
+    const cls = [d.today?'r-today':'', d.flag==='dealloc'?'r-dealloc':'', d.flag==='watch'?'r-watch':''].filter(Boolean).join(' ');
+    const flag = d.today?`<span class="today-pill">Today</span>`:
+      d.flag==='dealloc'?`<span class="flag-pill flag-dealloc">Raided</span>`:
+      d.flag==='watch'?`<span class="flag-pill flag-watch">Watch</span>`:'';
+    const allocPct = Math.round(d.alloc/d.bal*100)||0;
+    return `<tr class="${cls}">
+      <td><div class="datecell"><span>${d.md}</span><span class="dow">${d.dow}</span> ${flag}</div></td>
+      <td class="num money">${money(d.bal)}</td>
+      <td class="num money">${money(d.alloc)}<div class="alloc-bar"><i style="width:${allocPct}%"></i></div></td>
+      <td class="num money ${freeClass(d.free)}">${money(d.free)}</td>
+      <td class="num">${flowCue(d)}</td>
+      <td><div class="evwrap">${d.ev.map(evChip).join('')||'<span class="zero">—</span>'}</div></td>
+    </tr>`;
+  }).join('');
+  return `<table class="tl"><thead><tr>
+    <th>Day</th><th class="num">Balance</th><th class="num">Allocated</th><th class="num">Free</th><th class="num">In / out</th><th>Scheduled</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* V2 — calendar (July) */
+function renderCalendar(){
+  const byDom = {}; DAYS.filter(d=>d.mon==='Jul').forEach(d=>byDom[d.dom]=d);
+  const dows=['Su','Mo','Tu','We','Th','Fr','Sa'];
+  // July starts on a Wednesday (offset 3) for this mockup
+  const offset=3, days=31;
+  let cells = dows.map(x=>`<div class="dow-h">${x}</div>`).join('');
+  for(let i=0;i<offset;i++) cells+=`<div class="cell empty"></div>`;
+  for(let n=1;n<=days;n++){
+    const d=byDom[n];
+    if(!d){ cells+=`<div class="cell empty"><span class="n">${n}</span></div>`; continue; }
+    const cls=['cell', d.today?'today':'', d.flag?`f-${d.flag}`:''].filter(Boolean).join(' ');
+    const dots=d.ev.map(e=>`<span class="evdot ed-${e.k}"></span>`).join('');
+    cells+=`<div class="${cls}">
+      <span class="n">${n}${d.today?' · Today':''}</span>
+      <span class="evdots">${dots}</span>
+      <span class="free ${freeClass(d.free)}">${money(d.free)}</span>
+      <span class="sub">free · ${money(d.alloc)} set aside</span>
+    </div>`;
+  }
+  return `<div class="cal-nav"><span>‹ June</span><b>July</b><span>August ›</span></div><div class="cal">${cells}</div>
+    <p class="note">Amounts are the day's <b>free</b> balance; the smaller line is total set aside. Non-event days sit faint but present. Months paginate; here July, the busy one.</p>`;
+}
+
+/* V3 — river */
+function renderRiver(){
+  const maxBal=Math.max(...DAYS.map(d=>d.bal));
+  const H=150;
+  const cols=DAYS.map(d=>{
+    const bh=Math.round(d.bal/maxBal*H);
+    const ah=Math.round(d.alloc/d.bal*bh);
+    const fh=Math.max(bh-ah, d.free===0?3:0);
+    const flow = d.in>0?`<span class="pos">▲</span>`:d.out>0?`<span class="neg">▼</span>`:'';
+    const attn=d.flag?`<span class="attn a-${d.flag}"></span>`:'';
+    const tmark=d.today?`<span class="todaymark">▼ today</span>`:'';
+    return `<div class="rcol ${d.today?'today':''}">
+      ${tmark}${attn}
+      <span class="flowmark">${flow}</span>
+      <div class="bar" style="height:${bh}px">
+        <div class="b-free ${d.free===0?'z':''}" style="height:${fh}px"></div>
+        <div class="b-alloc" style="height:${ah}px"></div>
+      </div>
+      <span class="rdate">${d.md}</span>
+    </div>`;
+  }).join('');
+  const gl = [maxBal, Math.round(maxBal/2)].map(v=>`<div class="grid-line" style="bottom:${Math.round(v/maxBal*H)+42}px"><span>${money(v)}</span></div>`).join('');
+  return `<div class="river">${gl}${cols}</div>
+    <div class="river-legend">
+      <span class="key"><span class="swatch b-free" style="background:var(--good);opacity:.85"></span> free (green cap)</span>
+      <span class="key"><span class="swatch" style="background:var(--accent);opacity:.42"></span> allocated</span>
+      <span class="key">▲/▼ money in / out</span>
+      <span class="key"><span class="dot k-bad"></span> a red cap = free hit $0</span>
+    </div>
+    <p class="note">Bar height = balance, split allocated (base) + free (cap). The trend — building, then the Jul 16 raid, then recovery — reads without a line chart.</p>`;
+}
+
+/* V4 — day cards */
+function renderCards(){
+  return `<div class="cards">`+DAYS.map(d=>{
+    const cls=['card', d.today?'c-today':'', d.flag?`cf-${d.flag}`:''].filter(Boolean).join(' ');
+    const badge = d.today?`<span class="today-pill">Today</span>`:
+      d.flag==='dealloc'?`<span class="flag-pill flag-dealloc">Raided</span>`:
+      d.flag==='watch'?`<span class="flag-pill flag-watch">Watch</span>`:'';
+    return `<div class="${cls}">
+      <div class="cdate">${d.md} ${badge}<span class="dow">${d.dow} · ${flowCue(d)}</span></div>
+      <div class="figs">
+        <div class="fig"><span class="lbl">Balance</span><span class="v">${money(d.bal)}</span></div>
+        <div class="fig"><span class="lbl">Allocated</span><span class="v" style="color:var(--accent-ink)">${money(d.alloc)}</span></div>
+        <div class="fig"><span class="lbl">Free</span><span class="v ${freeClass(d.free)}">${money(d.free)}</span></div>
+      </div>
+      <div class="cev">${d.ev.map(evChip).join('')||'<span class="zero">quiet day</span>'}</div>
+    </div>`;
+  }).join('')+`</div>`;
+}
+
+const VARIANTS = [
+  {n:'A', title:'Evolved table', intent:'The current grid, refined — a total “Allocated” column, in/out cues, an attention flag, and a distinct today row.',
+   pros:['Dense — every day, precise figures','Familiar, scannable columns'], cons:['Trends read weakly down rows','Can feel spreadsheet-y'], render:renderTable},
+  {n:'B', title:'Calendar / month grid', intent:'Days as calendar cells, color-coded by free-balance health, today framed, event dots, attention tints.',
+   pros:['Spatial rhythm — spot clusters fast','“When” is instantly legible'], cons:['Empty days spend space','Amounts are cramped; weak for long ranges'], render:renderCalendar},
+  {n:'C', title:'Horizontal river', intent:'A time strip: each day a bar of allocated (base) + free (cap), with in/out ticks and a today line. Trend-forward.',
+   pros:['Health & trend jump out','Compact across long ranges'], cons:['Precise numbers need a tap/hover','Closest to a “chart” — watch §2'], render:renderRiver},
+  {n:'D', title:'Day-card stream', intent:'A vertical stream of per-day cards — three figures, event chips, a left attention stripe, today outlined.',
+   pros:['Roomy, readable, touch-friendly','Events breathe'], cons:['Fewer days on screen at once','More scrolling'], render:renderCards},
+];
+
+document.getElementById('variants').innerHTML = VARIANTS.map(v=>`
+  <section class="variant">
+    <div class="vhead"><span class="vnum">${v.n}</span><h2>${v.title}</h2><span class="intent">${v.intent}</span></div>
+    <div class="proscons">
+      ${v.pros.map(p=>`<span class="tag pro"><span class="s">+</span>${p}</span>`).join('')}
+      ${v.cons.map(c=>`<span class="tag con"><span class="s">−</span>${c}</span>`).join('')}
+    </div>
+    <div class="stage">${v.render()}</div>
+  </section>`).join('');
+</script>

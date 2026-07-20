@@ -1,0 +1,290 @@
+<style>
+  :root {
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    --bg:#e9edf3; --surface:#ffffff; --surface-2:#f4f6fa; --surface-3:#eaeef4;
+    --ink:#151c29; --ink-2:#4b566a; --ink-3:#7b8698;
+    --line:#d8dfe9; --line-2:#c4cedd;
+    --accent:#2f5fb0; --accent-2:#e9f0fb; --accent-ink:#254e93; --accent-line:#a9c2ec;
+    --good:#1c7a52; --good-2:#e1f0e9; --good-solid:#1c7a52;
+    --warn:#8a6300; --warn-2:#f8edcd;
+    --bad:#b3271f; --bad-2:#f6e0de;
+    --shadow:0 1px 2px rgba(20,30,50,.06),0 6px 20px rgba(20,30,50,.07);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d121c; --surface:#151d2b; --surface-2:#1b2433; --surface-3:#212c3e;
+      --ink:#e8edf5; --ink-2:#aab5c9; --ink-3:#7d889e;
+      --line:#293446; --line-2:#3a4760;
+      --accent:#7aa4ef; --accent-2:#1d2942; --accent-ink:#b3c8f4; --accent-line:#375285;
+      --good:#4dc08b; --good-2:#15291f; --good-solid:#2f8f63;
+      --warn:#d6a940; --warn-2:#2c2413;
+      --bad:#e46a60; --bad-2:#331a19;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+      --bg:#0d121c; --surface:#151d2b; --surface-2:#1b2433; --surface-3:#212c3e;
+      --ink:#e8edf5; --ink-2:#aab5c9; --ink-3:#7d889e;
+      --line:#293446; --line-2:#3a4760;
+      --accent:#7aa4ef; --accent-2:#1d2942; --accent-ink:#b3c8f4; --accent-line:#375285;
+      --good:#4dc08b; --good-2:#15291f; --good-solid:#2f8f63;
+      --warn:#d6a940; --warn-2:#2c2413;
+      --bad:#e46a60; --bad-2:#331a19;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box} body{margin:0}
+  .wrap{font-family:var(--sans); background:var(--bg); color:var(--ink); line-height:1.55; padding:32px 20px 80px; -webkit-font-smoothing:antialiased}
+  .col{max-width:1040px; margin:0 auto}
+  .mono{font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+  .lbl{font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3)}
+  .eyebrow{font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-ink)}
+  h1{font-size:30px; line-height:1.15; margin:.25em 0 .1em; text-wrap:balance; letter-spacing:-.02em}
+  .lede{color:var(--ink-2); max-width:72ch; margin:0}
+  .pos{color:var(--good)} .neg{color:var(--bad)} .zero{color:var(--warn)}
+
+  .variant{margin-top:36px}
+  .vhead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding-bottom:10px; border-bottom:2px solid var(--line-2); margin-bottom:14px}
+  .vnum{font-family:var(--mono); font-size:13px; color:var(--accent-ink); font-weight:700}
+  .vhead h2{font-size:20px; margin:0; letter-spacing:-.01em}
+  .vhead .intent{color:var(--ink-2); font-size:14px}
+  .proscons{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px}
+  .tag{font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--line-2); color:var(--ink-2)}
+  .tag.pro{color:var(--good); border-color:color-mix(in srgb,var(--good) 35%,var(--line))}
+  .tag .s{font-weight:700; margin-right:4px}
+
+  .stage{background:var(--surface-2); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:var(--shadow)}
+
+  /* transaction/allocation rows */
+  .txn{display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px}
+  .txn .t{flex:1} .txn .m{font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600}
+  .kindpill{font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:2px 7px; border-radius:5px}
+  .kp-pay{background:var(--good-2); color:var(--good)}
+  .kp-bill{background:var(--surface-3); color:var(--ink-2)}
+  .kp-expense{background:var(--surface-3); color:var(--ink)}
+  .kp-raid{background:var(--bad-2); color:var(--bad)}
+  .txn.pay{background:var(--good-2)}
+  .txn.raid{background:var(--bad-2)}
+  .nested{margin:2px 0 6px 22px; padding-left:14px; border-left:2px dashed var(--good); display:flex; flex-direction:column; gap:2px}
+  .nested .sub{display:flex; gap:8px; align-items:center; font-size:13px; color:var(--ink-2); padding:3px 0}
+  .nested .sub .m{font-family:var(--mono); margin-left:auto; color:var(--accent-ink)}
+
+  .grouphead{display:flex; align-items:center; gap:8px; margin:16px 0 6px; font-size:12px}
+  .grouphead .lbl{margin:0}
+  .grouphead .rule{flex:1; height:1px; background:var(--line)}
+
+  /* jar cards (per-type) */
+  .jar{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; position:relative; overflow:hidden}
+  .jar.drained{border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+  .jar.drained::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--bad)}
+  .jar-top{display:flex; align-items:baseline; gap:10px}
+  .jar-name{font-weight:600; font-size:14.5px}
+  .jar-type{font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); font-weight:600}
+  .jar-saved{margin-left:auto; font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:15px; font-weight:700}
+  .statpill{font-size:11px; font-weight:600; padding:2px 8px; border-radius:6px; white-space:nowrap}
+  .st-covered{background:var(--good-solid); color:#fff}
+  .st-ontrack{background:var(--good-2); color:var(--good)}
+  .st-funded{background:var(--good-2); color:var(--good)}
+  .st-below{background:var(--warn-2); color:var(--warn)}
+  .st-behind{background:var(--bad-2); color:var(--bad)}
+  .bar{height:7px; border-radius:4px; background:var(--surface-3); position:relative; overflow:visible}
+  .bar > i{position:absolute; left:0; top:0; bottom:0; border-radius:4px; background:var(--accent); opacity:.6}
+  .bar > i.full{background:var(--good); opacity:.85}
+  .bar > .tick{position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink-3)}
+  .jar-meta{display:flex; justify-content:space-between; font-size:12px; color:var(--ink-3)}
+  .jar-meta .due{color:var(--ink-2)}
+  .nudge{font-size:11.5px; color:var(--accent-ink); background:none; border:1px solid var(--accent-line); border-radius:6px; padding:3px 8px; cursor:pointer; align-self:flex-start; font-family:inherit}
+  .nudge:hover{background:var(--accent-2)}
+
+  .freebox{display:flex; align-items:baseline; gap:12px}
+  .freebox .big{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:34px; font-weight:700; letter-spacing:-.02em}
+
+  /* V1 sections */
+  .daycard{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:var(--shadow)}
+  .dayhead{display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:6px}
+  .dayhead h3{margin:0; font-size:19px}
+  .badge-dealloc{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--bad); background:var(--bad-2); padding:3px 9px; border-radius:6px}
+  .jargrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+
+  /* V2 two-pane */
+  .twopane{display:grid; grid-template-columns:1.05fr 1fr; gap:16px}
+  .pane{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px}
+  .pane h4{margin:0 0 10px; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-3)}
+  .jrow{display:grid; grid-template-columns:1fr auto; gap:3px 10px; padding:9px 0; border-bottom:1px solid var(--line)}
+  .jrow:last-child{border-bottom:none}
+  .jrow .n{font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px}
+  .jrow .s{font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:700; text-align:right}
+  .jrow .bar{grid-column:1/2; align-self:center}
+  .jrow .meta{grid-column:2/3; text-align:right; font-size:11px; color:var(--ink-3); align-self:center}
+  .jrow.drained{padding-left:8px; border-left:3px solid var(--bad); border-radius:2px}
+
+  /* V3 summary */
+  .summary{background:var(--accent-2); border:1px solid var(--accent-line); border-radius:14px; padding:18px 20px; margin-bottom:14px}
+  .summary .lead{font-size:17px; line-height:1.5; margin:0; color:var(--ink); text-wrap:pretty}
+  .summary .lead b{font-weight:700}
+  .summary .lead .g{color:var(--good)} .summary .lead .w{color:var(--warn)} .summary .lead .r{color:var(--bad)}
+  .compact{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .clist{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px}
+  .clist h4{margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-3)}
+  .cjar{display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13.5px; border-bottom:1px solid var(--line)}
+  .cjar:last-child{border-bottom:none}
+  .cjar .n{flex:1} .cjar .s{font-family:var(--mono); font-weight:600}
+  .cdot{width:9px;height:9px;border-radius:50%;flex:none}
+
+  .note{font-size:12.5px; color:var(--ink-3); margin-top:12px; font-style:italic}
+  footer{margin-top:48px; padding-top:18px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-3)}
+</style>
+
+<div class="wrap"><div class="col">
+  <header>
+    <div class="eyebrow">MyMoneyForecast · design exploration</div>
+    <h1>Selected day — three ways to answer “what happened, and am I okay?”</h1>
+    <p class="lede">When a day is selected, this region uses the full snapshot (§3): <b>every transaction</b>, <b>every fund jar</b>, the <b>free amount</b>, and Q3 “am I on track?” answered <em>per expense type</em> — a goal shows its milestone and a relative due (“8 months away”); a bill shows whether it's <em>on track</em> vs. <em>fully covered now</em>; a paycheck sits above the allocations it funded. Same sample day below — a tight deallocation day — three ways.</p>
+  </header>
+
+  <div id="variants"></div>
+
+  <footer>Mockups only — representative data. Ledger-mono figures; semantic color (green good · amber watch · red short/raided) held separate from the indigo accent. Light + dark.</footer>
+</div></div>
+
+<script>
+const money=(n,{sign=false}={})=>{const s=n<0?'-':(sign&&n>0?'+':'');return s+'$'+Math.abs(n).toLocaleString('en-US');};
+const DAY={date:"Friday, August 1", free:0};
+const PAY={t:"Paycheck", amt:1700, funded:[{t:"Japan trip",amt:150},{t:"Rent reserve",amt:350}]};
+const OUT=[{t:"Rent",kind:"bill",amt:-1200},{t:"Car repair",kind:"expense",amt:-1400}];
+const RAIDS=[{t:"Car fund",amt:-300},{t:"Safety cushion",amt:-120}];
+const JARS=[
+ {name:"Rent reserve", type:"bill", saved:1200, amountDue:1200, milestone:1200, due:"due today", state:"covered", label:"Fully covered"},
+ {name:"Electric reserve", type:"bill", saved:110, amountDue:140, milestone:110, due:"due Aug 15", state:"ontrack", label:"On track"},
+ {name:"Japan trip", type:"goal", saved:1150, milestone:1600, target:3000, dueRel:"~8 months away · next April", behind:450, state:"behind", label:"Behind $450"},
+ {name:"Car fund", type:"goal", saved:300, milestone:600, target:600, dueRel:"6 months away", behind:300, state:"behind", label:"Behind $300", drained:true},
+ {name:"Safety cushion", type:"cushion", saved:380, target:500, due:"target $500", state:"below", label:"Below target", drained:true},
+];
+const stateDot={covered:'var(--good)',ontrack:'var(--good)',funded:'var(--good)',below:'var(--warn)',behind:'var(--bad)'};
+
+/* a full per-type jar card (used by V1) */
+function jarCard(j){
+  const denom = j.type==='goal'? j.milestone : (j.type==='bill'? j.amountDue : j.target);
+  const pct = Math.min(100, Math.round(j.saved/denom*100));
+  const full = (j.type==='bill' && j.saved>=j.amountDue) || (j.type==='cushion' && j.saved>=j.target);
+  const tick = (j.type==='bill' && j.milestone<j.amountDue)? `<span class="tick" style="left:${Math.round(j.milestone/j.amountDue*100)}%"></span>`:'';
+  const meta = j.type==='goal'
+      ? `<span>milestone ${money(j.milestone)} · goal ${money(j.target)}</span><span class="due">${j.dueRel}</span>`
+      : j.type==='bill'
+      ? `<span>amount due ${money(j.amountDue)}</span><span class="due">${j.due}</span>`
+      : `<span>${j.due}</span>`;
+  return `<div class="jar ${j.drained?'drained':''}">
+    <div class="jar-top">
+      <span class="jar-name">${j.name}</span><span class="jar-type">${j.type}</span>
+      <span class="jar-saved">${money(j.saved)}</span>
+    </div>
+    <div class="bar"><i class="${full?'full':''}" style="width:${pct}%"></i>${tick}</div>
+    <div class="jar-meta">${meta}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="statpill st-${j.state}">${j.label}${j.drained?' · raided today':''}</span>
+      ${j.state==='behind'?`<button class="nudge">Adjust the plan →</button>`:''}
+    </div>
+  </div>`;
+}
+
+/* V1 — type-grouped sections */
+function renderSections(){
+  const bills=JARS.filter(j=>j.type==='bill'), goals=JARS.filter(j=>j.type==='goal'), cush=JARS.filter(j=>j.type==='cushion');
+  return `<div class="daycard">
+    <div class="dayhead">
+      <h3>${DAY.date}</h3><span class="badge-dealloc">Deallocation day</span>
+      <div class="freebox" style="margin-left:auto"><span class="lbl">Free to spend</span><span class="big zero">${money(DAY.free)}</span></div>
+    </div>
+
+    <div class="grouphead"><span class="lbl">Money in</span><span class="rule"></span></div>
+    <div class="txn pay"><span class="kindpill kp-pay">Paycheck</span><span class="t">${PAY.t}</span><span class="m pos">${money(PAY.amt,{sign:true})}</span></div>
+    <div class="nested">${PAY.funded.map(f=>`<div class="sub">↳ set aside · ${f.t}<span class="m">${money(-f.amt,{sign:true})}</span></div>`).join('')}</div>
+
+    <div class="grouphead"><span class="lbl">Money out</span><span class="rule"></span></div>
+    ${OUT.map(o=>`<div class="txn"><span class="kindpill kp-${o.kind}">${o.kind}</span><span class="t">${o.t}</span><span class="m neg">${money(o.amt,{sign:true})}</span></div>`).join('')}
+
+    <div class="grouphead"><span class="lbl" style="color:var(--bad)">Jars raided to cover the shortfall</span><span class="rule"></span></div>
+    ${RAIDS.map(r=>`<div class="txn raid"><span class="kindpill kp-raid">Pulled</span><span class="t">${r.t}</span><span class="m neg">${money(r.amt,{sign:true})}</span></div>`).join('')}
+
+    <div class="grouphead"><span class="lbl">Where your money sits — bills</span><span class="rule"></span></div>
+    <div class="jargrid">${bills.map(jarCard).join('')}</div>
+    <div class="grouphead"><span class="lbl">Goals</span><span class="rule"></span></div>
+    <div class="jargrid">${goals.map(jarCard).join('')}</div>
+    <div class="grouphead"><span class="lbl">Safety cushion</span><span class="rule"></span></div>
+    <div class="jargrid">${cush.map(jarCard).join('')}</div>
+  </div>`;
+}
+
+/* V2 — two pane */
+function renderTwoPane(){
+  const jrow=j=>{
+    const denom=j.type==='goal'?j.milestone:(j.type==='bill'?j.amountDue:j.target);
+    const pct=Math.min(100,Math.round(j.saved/denom*100));
+    const full=(j.type==='bill'&&j.saved>=j.amountDue)||(j.type==='cushion'&&j.saved>=j.target);
+    const meta=j.type==='goal'?j.dueRel.split('·')[0]:(j.type==='bill'?j.due:'target '+money(j.target));
+    return `<div class="jrow ${j.drained?'drained':''}">
+      <div class="n"><span class="cdot" style="background:${stateDot[j.state]}"></span>${j.name}
+        <span class="statpill st-${j.state}" style="font-size:10px">${j.label}</span></div>
+      <div class="s">${money(j.saved)}</div>
+      <div class="bar"><i class="${full?'full':''}" style="width:${pct}%"></i></div>
+      <div class="meta">${meta}</div>
+    </div>`;
+  };
+  return `<div style="display:flex;align-items:baseline;gap:14px;margin-bottom:12px">
+      <h3 style="margin:0;font-size:18px">${DAY.date}</h3><span class="badge-dealloc">Deallocation day</span>
+      <div class="freebox" style="margin-left:auto"><span class="lbl">Free</span><span class="big zero" style="font-size:26px">${money(DAY.free)}</span></div>
+    </div>
+    <div class="twopane">
+      <div class="pane">
+        <h4>Fund jars — where it all sits</h4>
+        ${JARS.map(jrow).join('')}
+      </div>
+      <div class="pane">
+        <h4>What happened today</h4>
+        <div class="txn pay" style="margin-bottom:2px"><span class="kindpill kp-pay">In</span><span class="t">${PAY.t}</span><span class="m pos">${money(PAY.amt,{sign:true})}</span></div>
+        <div class="nested">${PAY.funded.map(f=>`<div class="sub">↳ ${f.t}<span class="m">${money(-f.amt,{sign:true})}</span></div>`).join('')}</div>
+        ${OUT.map(o=>`<div class="txn"><span class="kindpill kp-${o.kind}">${o.kind}</span><span class="t">${o.t}</span><span class="m neg">${money(o.amt,{sign:true})}</span></div>`).join('')}
+        ${RAIDS.map(r=>`<div class="txn raid"><span class="kindpill kp-raid">Pulled</span><span class="t">${r.t}</span><span class="m neg">${money(r.amt,{sign:true})}</span></div>`).join('')}
+      </div>
+    </div>
+    <p class="note">Left: every jar, per-type — a bill's bar turns green when fully covered; a goal shows progress to its milestone; raided jars get a red rail. Right: every transaction, paycheck first with its allocations nested beneath.</p>`;
+}
+
+/* V3 — summary led */
+function renderSummary(){
+  const cjar=j=>`<div class="cjar"><span class="cdot" style="background:${stateDot[j.state]}"></span><span class="n">${j.name}</span><span class="statpill st-${j.state}" style="font-size:10px">${j.label}</span><span class="s">${money(j.saved)}</span></div>`;
+  const txnline=(t,cls,amt)=>`<div class="cjar"><span class="n">${t}</span><span class="s ${cls}">${money(amt,{sign:true})}</span></div>`;
+  return `<div class="summary">
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px"><span class="lbl">${DAY.date}</span><span class="badge-dealloc">Deallocation day</span></div>
+      <p class="lead">A tight day: <b class="w">${money(DAY.free)} free</b> after a <b>$1,400 car repair</b>. To cover it the app <b class="r">pulled $420</b> from your Car fund and safety cushion. Your <b class="g">rent is fully set aside</b>. But the <b>Japan trip is $450 behind</b> (due ~8 months out) — <b>consider adjusting its plan</b>.</p>
+      <button class="nudge">Review goals to adjust →</button>
+    </div>
+    <div class="compact">
+      <div class="clist"><h4>Where your money sits</h4>${JARS.map(cjar).join('')}</div>
+      <div class="clist"><h4>Every transaction today</h4>
+        ${txnline(PAY.t,'pos',PAY.amt)}
+        ${OUT.map(o=>txnline(o.t,'neg',o.amt)).join('')}
+        ${RAIDS.map(r=>txnline('Pulled from '+r.t,'neg',r.amt)).join('')}
+      </div>
+    </div>
+    <p class="note">Leads with a plain-language health read (answering Q1 + Q3 in a sentence), then the full detail beneath for anyone who wants the numbers.</p>`;
+}
+
+const VARIANTS=[
+  {n:'A', title:'Type-grouped sections', intent:'Money in / out / raided, then jars grouped by kind — each rendered for its type (goal milestone bar; bill coverage; cushion target).',
+   pros:['Each expense type gets its natural treatment','Paycheck → its allocations reads clearly'], cons:['Tall — lots of vertical space','Many section headers'], render:renderSections},
+  {n:'B', title:'Two-pane: jars + the day', intent:'Left rail = every jar with per-type status; right = the day’s transactions, paycheck heading its allocations.',
+   pros:['Compact — jars and events side by side','Closest to today’s two-grid layout'], cons:['Per-type nuance is squeezed into rows','Narrow on small screens'], render:renderTwoPane},
+  {n:'C', title:'Summary-led', intent:'A plain-language health sentence up top (free today, what got raided, which goal is behind), then compact detail.',
+   pros:['Answers “am I okay?” in one read','Q4 “adjust the plan” nudge is prominent'], cons:['Summary must be generated carefully','Detail is secondary / terse'], render:renderSummary},
+];
+document.getElementById('variants').innerHTML = VARIANTS.map(v=>`
+  <section class="variant">
+    <div class="vhead"><span class="vnum">${v.n}</span><h2>${v.title}</h2><span class="intent">${v.intent}</span></div>
+    <div class="proscons">
+      ${v.pros.map(p=>`<span class="tag pro"><span class="s">+</span>${p}</span>`).join('')}
+      ${v.cons.map(c=>`<span class="tag"><span class="s">−</span>${c}</span>`).join('')}
+    </div>
+    <div class="stage">${v.render()}</div>
+  </section>`).join('');
+</script>
