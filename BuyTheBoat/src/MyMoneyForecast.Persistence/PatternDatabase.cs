@@ -109,6 +109,13 @@ public sealed class PatternDatabase
                 Amount TEXT NOT NULL,
                 PRIMARY KEY (FinanceId, EarmarkDate)
             );
+
+            CREATE TABLE IF NOT EXISTS Accounts (
+                Id INTEGER PRIMARY KEY,
+                Name TEXT NOT NULL UNIQUE,
+                Balance TEXT NOT NULL,
+                IdealSafetyCushion TEXT NOT NULL DEFAULT '0'
+            );
             """;
         command.ExecuteNonQuery();
 
