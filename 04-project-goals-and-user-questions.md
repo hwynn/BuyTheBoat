@@ -2,6 +2,8 @@
 
 *Why* the system needs to be this complicated — the questions the program exists to answer, which the class model and assumptions all serve. Source material: the four core questions, plus `project goals.txt.txt`, `planning.txt`, and `planning2simple.txt`'s "Show / Warn / Maintain / Plan" framing (see [01-glossary-of-terms.md](01-glossary-of-terms.md#domain-vocabulary) for that framing's short definition).
 
+> **See also [design-philosophies.md](design-philosophies.md)** — the standing principles for *how* the app should behave while answering these questions (inform, don't automate; speak the user's language; the old docs inform the design but don't dictate it).
+
 ## The four core "Plan"-side questions
 
 These are the questions you described as the heart of the program:

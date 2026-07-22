@@ -46,3 +46,40 @@ a raided goal + cushion, and a behind long-term goal.
 
 Once a direction is picked (one per surface, or a hybrid), implementation
 proceeds per the plan's Phase I; these files stay as the design record.
+
+## Multiple-accounts round (2026-07-22)
+
+New explorations of the overview and selected day once multiple accounts exist
+(see [`../10-multiple-accounts.md`](../10-multiple-accounts.md), item 5). Same
+design system as above; the shared multi-account scenario is Checking / Bills /
+Savings, with a car repair on Jul 16 that leaves **Checking short** while the
+household total stays positive.
+
+| File | What it is |
+|---|---|
+| `forecast-overview-multiaccount-mockups.html` | Overview, round 1 — 4 options (A household calendar · B calendar + account dots · C swimlanes · D calendar + filter). |
+| `forecast-overview-multiaccount-mockups-2.html` | Overview, round 2 — 3 options (E rich month calendar · F agenda list · G compact free-forward), folding in the author's round-1 notes. |
+| `forecast-selectedday-multiaccount-mockups.html` | Selected day, round 1 — 4 options (A stacked sections · B columns · C header + cards · D grouped two-pane). **Chosen: D.** |
+
+**CHOSEN — overview (author, 2026-07-22): E · Rich month calendar** (from
+`forecast-overview-multiaccount-mockups-2.html`). Its settled parts, all present
+in every cell:
+
+- the **account filter** (All / Checking / Bills / Savings), re-scoping every number;
+- two **labeled numbers** — **Total** (money that day) and **Free**;
+- the day's **top event by name** ("Paycheck", "Electric bill") — *not* an unlabeled "set aside" figure;
+- a per-account **flow strip** — account letter + **↑** money in / **↓** money out / **•** no change;
+- a colorblind-safe **warning** — ⚠ symbol **+ words** ("an account is short / thin"), never color alone;
+- an explicit **event count** ("3 events" / "No events") kept **top-right**, not dots.
+
+**CHOSEN — selected day (author, 2026-07-22): D · Grouped two-pane** (from
+`forecast-selectedday-multiaccount-mockups.html`). Keeps the single-account
+two-pane — **what happened today** (left) | **fund jars** (right) — but **groups
+both panes by account**; a short account's "Cover from another account →" lever
+sits in its group. **Why:** the other options (stacked sections, columns, cards)
+gave every account equal space, but in practice one or two accounts carry most of
+a day's activity — grouping the two-pane by account gives each account exactly the
+space it needs, and stays closest to the two-pane already chosen for one account.
+
+Full write-up of both chosen directions and the refinement reasoning:
+[`../11-ui-design-and-decisions.md`](../11-ui-design-and-decisions.md).
