@@ -35,8 +35,13 @@ public sealed record ForecastResult
     // household numbers and its "any account short" flag from here.
     public required HouseholdSummary Household { get; init; }
 
+    // Falls back to the first account when there is no "Primary" (a multi-account
+    // run), so the single-account spreadsheet export still finds a page rather
+    // than throwing. The exporter's own multi-account form is deferred (doc 11).
     public AccountTransactionPage PrimaryAccountPage =>
-        Book.LogPages[0].AccountPages[TransactionLogBookFactory.PrimaryAccountName];
+        Book.LogPages[0].AccountPages.TryGetValue(TransactionLogBookFactory.PrimaryAccountName, out var primary)
+            ? primary
+            : Book.LogPages[0].AccountPages.Values.First();
 
     // The page rendered as rows: the initial snapshot as the as-of row,
     // followed by every dated snapshot. If events land ON the as-of date, a

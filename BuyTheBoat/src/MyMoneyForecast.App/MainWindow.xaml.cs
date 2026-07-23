@@ -38,6 +38,12 @@ public partial class MainWindow : Window
     private DayCellRow? _selectedDayCell;
     private Dictionary<DateOnly, DayCellRow> _dayCellsByDate = [];
 
+    // Which account the overview is scoped to; null = the household roll-up
+    // (planning/11 §C.3). Filtering re-renders the calendar only — the forecast
+    // itself is unchanged, so there is nothing to recompute.
+    private int? _accountFilter;
+    private bool _updatingAccountFilter;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -78,10 +84,9 @@ public partial class MainWindow : Window
         AsOfDatePicker.SelectedDate = saved.AsOfDate.ToDateTime(TimeOnly.MinValue);
         HorizonEndDatePicker.SelectedDate = saved.HorizonEndDate.ToDateTime(TimeOnly.MinValue);
 
-        // Balance and cushion come from the accounts themselves now, not from
-        // the single saved figure.
-        var (balance, cushion) = AccountTotals();
-        RefreshForecast(balance, saved.AsOfDate, saved.HorizonEndDate, cushion);
+        // Balance and cushion come from the accounts themselves now (the engine
+        // reads them per account), so nothing else to pass here.
+        RefreshForecast(saved.AsOfDate, saved.HorizonEndDate);
     }
 
     // Until the engine partitions per account (item 4), the forecast still runs
@@ -103,7 +108,25 @@ public partial class MainWindow : Window
             .ToList();
     }
 
-    private void OnAddTransferClick(object sender, RoutedEventArgs e)
+    private void OnAddTransferClick(object sender, RoutedEventArgs e) => ShowTransferDialog();
+
+    // The selected day's lever for a short account (planning/11 §B): opens the
+    // transfer form already pointed at that account for what it is short. The
+    // user still confirms — we surface the problem and make the fix easy, we
+    // don't move their money for them (philosophy 1).
+    private void OnCoverShortfallClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: System.Windows.Data.CollectionViewGroup group }
+            && group.Name is AccountGroupKey key)
+        {
+            ShowTransferDialog(key.AccountId, key.Shortfall, _selectedDayCell?.Date);
+        }
+    }
+
+    private void ShowTransferDialog(
+        int? preselectToAccountId = null,
+        decimal? preselectAmount = null,
+        DateOnly? preselectDate = null)
     {
         var accounts = _accounts.GetAll();
         if (accounts.Count < 2)
@@ -112,7 +135,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new CreateTransferWindow(accounts) { Owner = this };
+        var window = new CreateTransferWindow(accounts, preselectToAccountId, preselectAmount, preselectDate) { Owner = this };
         if (window.ShowDialog() != true || window.DatePattern is not { } schedule)
         {
             return;
@@ -139,6 +162,10 @@ public partial class MainWindow : Window
 
         _transfers.Save(result);
         RefreshGrids();
+
+        // The transfer's legs change the cascade, so re-run the forecast — that
+        // is what actually clears the shortfall the lever was offered for.
+        RefreshShownForecast();
     }
 
     private void OnDeleteTransferClick(object sender, RoutedEventArgs e)
@@ -305,44 +332,126 @@ public partial class MainWindow : Window
         // cushion columns are kept in step only so the row stays coherent, and
         // retire when it becomes the TransactionLogBook settings row (item 6).
         _currentBalance.Save(balance, asOfDate, horizonEndDate, idealSafetyCushion);
-        RefreshForecast(balance, asOfDate, horizonEndDate, idealSafetyCushion);
+        RefreshForecast(asOfDate, horizonEndDate);
     }
 
     // No upper bound on the horizon by design — years out is a legitimate
     // request (long-term goals, mortgage-length planning), so this is left to
     // whatever the user picks rather than an app-imposed ceiling. The calendar
     // stays cheap at that scale because the outer ListBox virtualizes months.
-    private void RefreshForecast(decimal balance, DateOnly asOfDate, DateOnly horizonEndDate, decimal idealSafetyCushion)
+    // One AccountForecastInput per account: its own balance/cushion, and the
+    // patterns/earmarks/manuals filed under it (an earmark or manual reaches its
+    // account through its finance id — item 2-A). Transfer legs are patterns
+    // filed under an account too, so they ride along and feed its cascade.
+    private IReadOnlyList<AccountForecastInput> BuildAccountInputs()
+    {
+        var patternsByAccount = _financialPatterns.GetAllByAccount();
+        var allEarmarks = _earMarkPatterns.GetAll();
+        var allManuals = _manualEarmarks.GetAll();
+
+        var inputs = new List<AccountForecastInput>();
+        foreach (var account in _accounts.GetAll())
+        {
+            var patterns = patternsByAccount.GetValueOrDefault(account.Id) ?? [];
+            var financeIds = patterns.Select(pattern => pattern.FinanceId).ToHashSet();
+
+            inputs.Add(new AccountForecastInput
+            {
+                AccountId = account.Id,
+                Name = account.Name,
+                StartingBalance = account.Balance,
+                IdealSafetyCushion = account.IdealSafetyCushion,
+                FinancialPatterns = patterns,
+                EarMarkPatterns = allEarmarks.Where(earmark => financeIds.Contains(earmark.FinanceId)).ToList(),
+                ManualEarmarks = allManuals.Where(manual => financeIds.Contains(manual.FinanceId)).ToList(),
+            });
+        }
+
+        return inputs;
+    }
+
+    private void RefreshForecast(DateOnly asOfDate, DateOnly horizonEndDate)
     {
         var forecast = TransactionLogBookFactory.CreateForecast(new ForecastOptions
         {
-            FinancialPatterns = _financialPatterns.GetAll(),
-            EarMarkPatterns = _earMarkPatterns.GetAll(),
-            ManualEarmarks = _manualEarmarks.GetAll(),
-            StartingBalance = balance,
+            // Ignored when Accounts is set (there is always at least one account),
+            // but still required by the record.
+            FinancialPatterns = [],
+            EarMarkPatterns = [],
+            StartingBalance = 0m,
             AsOfDate = asOfDate,
             HorizonEndDate = horizonEndDate,
-            IdealSafetyCushion = idealSafetyCushion,
+            Accounts = BuildAccountInputs(),
         });
 
         _lastForecast = forecast;
+        var (balance, cushion) = AccountTotals();
         _shownBalance = balance;
-        _shownCushion = idealSafetyCushion;
+        _shownCushion = cushion;
 
-        var months = BuildCalendarMonths(forecast);
+        PopulateAccountFilter(forecast);
+        RenderCalendar(forecast, selectDate: forecast.AsOfDate);
+        ExportForecastSpreadsheetButton.IsEnabled = true;
+
+        UpdateForecastButtonState();
+    }
+
+    // Every calendar day from the as-of month's first day through the horizon
+    // month's last: days with a BalanceSnapshot are live cells; event-less and
+    // out-of-range days render faint (every day stays visible — §2.I.d).
+    // GetTimeline() already folds the dateless initial snapshot in under the
+    // as-of date, so keying by date is collision-free.
+    // "All accounts" plus one entry per account. Kept in step with the forecast
+    // so a renamed or deleted account can't linger in the filter.
+    private void PopulateAccountFilter(ForecastResult forecast)
+    {
+        var options = new List<AccountFilterOption> { new(null, "All accounts") };
+        options.AddRange(forecast.Accounts.Select(account => new AccountFilterOption(account.AccountId, account.Name)));
+
+        if (options.All(option => option.AccountId != _accountFilter))
+        {
+            _accountFilter = null; // the filtered account is gone — fall back to the household
+        }
+
+        _updatingAccountFilter = true;
+        AccountFilterComboBox.ItemsSource = options;
+        AccountFilterComboBox.SelectedItem = options.First(option => option.AccountId == _accountFilter);
+        _updatingAccountFilter = false;
+    }
+
+    private void OnAccountFilterChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_updatingAccountFilter || AccountFilterComboBox.SelectedItem is not AccountFilterOption option)
+        {
+            return;
+        }
+
+        _accountFilter = option.AccountId;
+        if (_lastForecast is { } forecast)
+        {
+            // Keep the user on the day they were looking at, if it still exists.
+            RenderCalendar(forecast, selectDate: _selectedDayCell?.Date ?? forecast.AsOfDate);
+        }
+    }
+
+    // Rebuilds the calendar from the forecast already in hand (no recompute) and
+    // restores the selected day.
+    private void RenderCalendar(ForecastResult forecast, DateOnly selectDate)
+    {
+        var months = BuildCalendarMonths(forecast, _accountFilter);
         _dayCellsByDate = months
             .SelectMany(month => month.Cells)
             .Where(cell => cell.HasSnapshot)
             .ToDictionary(cell => cell.Date!.Value);
         _selectedDayCell = null;
         TimelineCalendar.ItemsSource = months;
-        ExportForecastSpreadsheetButton.IsEnabled = true;
 
-        // Pre-select the as-of cell so the detail pane is never blank after a
-        // forecast — it's the "what's my situation right now" view.
-        if (_dayCellsByDate.TryGetValue(forecast.AsOfDate, out var asOfCell))
+        // Never leave the detail pane blank: fall back to the as-of day if the
+        // day that was selected has no cell under the current filter.
+        if (_dayCellsByDate.TryGetValue(selectDate, out var cell)
+            || _dayCellsByDate.TryGetValue(forecast.AsOfDate, out cell))
         {
-            SelectDay(asOfCell);
+            SelectDay(cell);
         }
 
         // Land the viewport on today's month when today is in range (§2.g);
@@ -353,22 +462,35 @@ public partial class MainWindow : Window
             ? months.FirstOrDefault(month => month.MonthAutomationId == $"Month_{today:yyyy-MM}") ?? months[0]
             : months[0];
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => TimelineCalendar.ScrollIntoView(targetMonth));
-
-        UpdateForecastButtonState();
     }
 
-    // Every calendar day from the as-of month's first day through the horizon
-    // month's last: days with a BalanceSnapshot are live cells; event-less and
-    // out-of-range days render faint (every day stays visible — §2.I.d).
-    // GetTimeline() already folds the dateless initial snapshot in under the
-    // as-of date, so keying by date is collision-free.
-    private static List<MonthRow> BuildCalendarMonths(ForecastResult forecast)
+    // The rich month calendar (planning/11 §B). Each active day shows two
+    // LABELED numbers (Total + Free), the day's top event by name, an explicit
+    // event count, a per-account flow strip, and a ⚠ + words warning when an
+    // account is short. `accountFilter` re-scopes every number to one account
+    // (null = the household roll-up).
+    private static List<MonthRow> BuildCalendarMonths(ForecastResult forecast, int? accountFilter)
     {
-        var snapshotsByDate = forecast.GetTimeline()
-            .ToDictionary(entry => entry.Date, entry => entry.Snapshot);
-        var flooredDates = forecast.FlooredManualEarmarks
-            .Select(floored => floored.Date)
-            .ToHashSet();
+        var scope = accountFilter is { } id
+            ? forecast.Accounts.Where(account => account.AccountId == id).ToList()
+            : forecast.Accounts.ToList();
+
+        var flooredDates = forecast.FlooredManualEarmarks.Select(floored => floored.Date).ToHashSet();
+
+        // finance id -> (priority, display name), for picking the day's top event.
+        var patternInfo = forecast.Accounts
+            .SelectMany(account => account.Page.FinancePatterns)
+            .GroupBy(pattern => pattern.FinanceId)
+            .ToDictionary(group => group.Key, group => (group.First().Priority, Name: group.First().Description ?? group.First().Source));
+
+        // An event the USER would count: a transaction, a scheduled allocation,
+        // or a manual adjustment. System-generated reservation steps (auto-bill
+        // accrual, cushion fills, deallocation give-backs) are mechanism, not
+        // events, so they are not counted.
+        static int CountEvents(BalanceSnapshot snapshot) =>
+            snapshot.ExpectedTransactions.Count(transaction => !transaction.Cancelled)
+            + snapshot.EarMarkEvents.Count(earmark =>
+                earmark.RepeatedEarmark || (earmark.ExplicitAmount is { } explicitAmount && explicitAmount != 0m));
 
         var months = new List<MonthRow>();
         var firstOfMonth = new DateOnly(forecast.AsOfDate.Year, forecast.AsOfDate.Month, 1);
@@ -384,7 +506,85 @@ public partial class MainWindow : Window
             for (var day = 1; day <= daysInMonth; day++)
             {
                 var date = new DateOnly(firstOfMonth.Year, firstOfMonth.Month, day);
-                cells.Add(new DayCellRow(date, snapshotsByDate.GetValueOrDefault(date), flooredDates.Contains(date)));
+                var isAsOf = date == forecast.AsOfDate;
+                var hasEvents = scope.Any(account => account.Page.BalanceRecord.ContainsKey(date));
+
+                if (!isAsOf && !hasEvents)
+                {
+                    cells.Add(new DayCellRow(date));
+                    continue;
+                }
+
+                var total = 0m;
+                var free = 0m;
+                var eventCount = 0;
+                var shortNames = new List<string>();
+                var flows = new List<AccountFlowCell>();
+                var todaysTransactions = new List<ExpectedTransaction>();
+                var deallocated = false;
+
+                foreach (var account in scope)
+                {
+                    // On the as-of day every account reports its settled seed;
+                    // otherwise carry forward its latest snapshot.
+                    var sampled = isAsOf ? account.Page.InitialSnapshot : SnapshotAsOf(account.Page, date);
+                    total += sampled.ExpectedAmount ?? 0m;
+                    var accountFree = sampled.ExpectedFreeAmount ?? 0m;
+                    free += accountFree;
+                    if (accountFree < 0m)
+                    {
+                        shortNames.Add(account.Name);
+                    }
+
+                    // Events (and therefore flow) only exist on the account's own
+                    // event dates — never on the settled as-of day.
+                    var onThisDay = isAsOf ? null : account.Page.BalanceRecord.GetValueOrDefault(date);
+                    var net = 0m;
+                    if (onThisDay is not null)
+                    {
+                        eventCount += CountEvents(onThisDay);
+                        todaysTransactions.AddRange(onThisDay.ExpectedTransactions.Where(transaction => !transaction.Cancelled));
+                        net = onThisDay.ExpectedTransactions.Where(transaction => !transaction.Cancelled).Sum(transaction => transaction.ExpectedAmount);
+                        deallocated |= onThisDay.IsDeallocationDay;
+                    }
+
+                    flows.Add(new AccountFlowCell
+                    {
+                        Letter = account.Name.Length > 0 ? account.Name[..1].ToUpperInvariant() : "?",
+                        Glyph = net > 0m ? "↑" : net < 0m ? "↓" : "•",
+                        Kind = net > 0m ? "In" : net < 0m ? "Out" : "None",
+                    });
+                }
+
+                // The day's highest-priority expected transaction, by name (§C.5).
+                var topEvent = todaysTransactions
+                    .Select(transaction => patternInfo.TryGetValue(transaction.FinanceId, out var info)
+                        ? (info.Priority, info.Name, Magnitude: Math.Abs(transaction.ExpectedAmount))
+                        : (Priority: 0, Name: forecast.JarLabels.GetValueOrDefault(transaction.FinanceId, string.Empty), Magnitude: Math.Abs(transaction.ExpectedAmount)))
+                    .OrderByDescending(candidate => candidate.Priority)
+                    .ThenByDescending(candidate => candidate.Magnitude)
+                    .Select(candidate => candidate.Name)
+                    .FirstOrDefault() ?? string.Empty;
+
+                // ⚠ + words, never color alone (§C.1). "Thin" has no defined
+                // threshold yet, so only the definite "short" case is worded.
+                var warning = shortNames.Count switch
+                {
+                    0 => string.Empty,
+                    _ when accountFilter is not null => "this account is short",
+                    1 => "an account is short",
+                    _ => $"{shortNames.Count} accounts are short",
+                };
+
+                cells.Add(new DayCellRow(
+                    date,
+                    total,
+                    free,
+                    topEvent,
+                    eventCount,
+                    flows,
+                    warning,
+                    needsAttention: shortNames.Count > 0 || deallocated || flooredDates.Contains(date)));
             }
 
             months.Add(new MonthRow
@@ -416,49 +616,120 @@ public partial class MainWindow : Window
 
         _selectedDayCell = cell;
         cell.IsSelected = true;
-        ShowDayDetail(cell);
+        ShowDayDetail(cell.Date!.Value);
     }
 
     // The detail pane is the inner layer of the display onion (§3): the cell
     // IS a BalanceSnapshot, and selecting it shows everything the day holds —
     // every event ("what happened today", left) and every fund jar with its
     // per-type health (right), plus the day's free amount.
-    private void ShowDayDetail(DayCellRow cell)
+    // Account-first (planning/11, grouped two-pane): both panes group by account
+    // so each account's story — its events (left) and its jars (right) — stays
+    // together. The header shows the household free to spend and names any short
+    // account, so a positive total never hides a locally-short one.
+    private void ShowDayDetail(DateOnly date)
     {
-        if (_lastForecast is not { } forecast || cell.Snapshot is not { } snapshot || cell.Date is not { } date)
+        if (_lastForecast is not { } forecast)
         {
             return;
         }
 
-        var page = forecast.PrimaryAccountPage;
-        var context = new DayDetailContext
-        {
-            Date = date,
-            JarLabels = forecast.JarLabels,
-            ShortfallsByFinanceId = forecast.GoalShortfalls.ToDictionary(shortfall => shortfall.FinanceId),
-            PatternsById = page.FinancePatterns.ToDictionary(pattern => pattern.FinanceId),
-            EarmarkedIds = page.EarmarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet(),
-            CushionTarget = page.IdealSafetyCushion,
-            FlooredFinanceIds = forecast.FlooredManualEarmarks
-                .Where(floored => floored.Date == date)
-                .Select(floored => floored.FinanceId)
-                .ToHashSet(),
-        };
+        var householdDay = forecast.Household.Days.FirstOrDefault(day => day.Date == date);
+        var householdFree = householdDay?.Free
+            ?? (date == forecast.AsOfDate
+                ? forecast.Household.AsOfFree
+                : forecast.Accounts.Sum(account => SnapshotAsOf(account.Page, date).ExpectedFreeAmount ?? 0m));
+        var shortAccounts = householdDay?.ShortAccounts ?? [];
+        var anyDeallocation = forecast.Accounts.Any(account => account.Page.BalanceRecord.GetValueOrDefault(date)?.IsDeallocationDay == true);
 
-        AdjustFundsButton.IsEnabled = page.EarmarkPatterns.Count > 0;
-        DayDetailHeader.Text = $"Selected day — {date:D}";
-        DeallocationDayChip.Visibility = snapshot.IsDeallocationDay ? Visibility.Visible : Visibility.Collapsed;
+        DeallocationDayChip.Visibility = anyDeallocation ? Visibility.Visible : Visibility.Collapsed;
+        DayDetailHeader.Text = shortAccounts.Count > 0
+            ? $"Selected day — {date:D}  ·  {string.Join(", ", shortAccounts)} short"
+            : $"Selected day — {date:D}";
 
-        var free = snapshot.ExpectedFreeAmount ?? 0m;
-        FreeToSpendText.Text = free.ToString("C");
-        FreeToSpendText.Foreground = free < 0m
+        FreeToSpendText.Text = householdFree.ToString("C");
+        FreeToSpendText.Foreground = householdFree < 0m
             ? (Brush)FindResource("RedTextBrush")
             : Brushes.Black;
 
-        DayEventsList.ItemsSource = DayEventRow.From(snapshot, context);
-        JarDetailList.ItemsSource = snapshot.FundJars
-            .Select(jar => JarDetailRow.From(jar, snapshot, context))
-            .ToList();
+        var eventRows = new List<DayEventRow>();
+        var jarRows = new List<JarDetailRow>();
+        var anyEarmarks = false;
+
+        foreach (var account in forecast.Accounts)
+        {
+            var page = account.Page;
+            var snapshot = page.BalanceRecord.GetValueOrDefault(date) ?? SnapshotAsOf(page, date);
+            anyEarmarks |= page.EarmarkPatterns.Count > 0;
+
+            // How short this account is on this day — drives the group header's
+            // "Cover from another account" lever.
+            var accountFree = snapshot.ExpectedFreeAmount ?? 0m;
+            var groupKey = new AccountGroupKey(account.AccountId, account.Name, accountFree < 0m ? -accountFree : 0m);
+
+            var context = new DayDetailContext
+            {
+                Date = date,
+                JarLabels = forecast.JarLabels,
+                ShortfallsByFinanceId = forecast.GoalShortfalls.ToDictionary(shortfall => shortfall.FinanceId),
+                PatternsById = page.FinancePatterns.ToDictionary(pattern => pattern.FinanceId),
+                EarmarkedIds = page.EarmarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet(),
+                CushionTarget = page.IdealSafetyCushion,
+                FlooredFinanceIds = forecast.FlooredManualEarmarks
+                    .Where(floored => floored.Date == date)
+                    .Select(floored => floored.FinanceId)
+                    .ToHashSet(),
+            };
+
+            // Events land only on an account's own event dates; jars carry
+            // forward, so every account shows its current jars on any selected day.
+            if (page.BalanceRecord.ContainsKey(date))
+            {
+                foreach (var eventRow in DayEventRow.From(snapshot, context))
+                {
+                    eventRow.Account = groupKey;
+                    eventRows.Add(eventRow);
+                }
+            }
+
+            foreach (var jar in snapshot.FundJars)
+            {
+                var jarRow = JarDetailRow.From(jar, snapshot, context);
+                jarRow.Account = groupKey;
+                jarRows.Add(jarRow);
+            }
+        }
+
+        AdjustFundsButton.IsEnabled = anyEarmarks;
+        DayEventsList.ItemsSource = GroupByAccount(eventRows);
+        JarDetailList.ItemsSource = GroupByAccount(jarRows);
+    }
+
+    // Both selected-day panes group their rows under an account header. The rows
+    // expose an Account property the group description reads.
+    private static System.ComponentModel.ICollectionView GroupByAccount(System.Collections.IList rows)
+    {
+        var view = new System.Windows.Data.ListCollectionView(rows);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription("Account"));
+        return view;
+    }
+
+    // An account's snapshot as of a date: the latest dated snapshot on or before
+    // it, else its dateless initial snapshot — so a day that is another account's
+    // event date still shows this account's carried-forward jars.
+    private static BalanceSnapshot SnapshotAsOf(AccountTransactionPage page, DateOnly date)
+    {
+        var snapshot = page.InitialSnapshot;
+        foreach (var (snapshotDate, dated) in page.BalanceRecord)
+        {
+            if (snapshotDate > date)
+            {
+                break;
+            }
+            snapshot = dated;
+        }
+
+        return snapshot;
     }
 
     // Philosophy §1: the Forecast button reads as actionable only while an
@@ -495,13 +766,13 @@ public partial class MainWindow : Window
     // keeping the same selected day when it still exists.
     private void RefreshShownForecast()
     {
-        if (_lastForecast is not { } shown || _shownBalance is not { } balance || _shownCushion is not { } cushion)
+        if (_lastForecast is not { } shown)
         {
             return;
         }
 
         var selectedDate = _selectedDayCell?.Date;
-        RefreshForecast(balance, shown.AsOfDate, shown.HorizonEndDate, cushion);
+        RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
         if (selectedDate is { } date && _dayCellsByDate.TryGetValue(date, out var cell))
         {
             SelectDay(cell);

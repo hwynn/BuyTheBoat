@@ -130,8 +130,22 @@ public sealed class MonthRow
     public required IReadOnlyList<DayCellRow> Cells { get; init; }
 }
 
-// One calendar day cell. Everything a trigger reads is precomputed at
-// construction so recycled containers rebind cheaply during scroll.
+// One account's money-flow marker in a day cell: the account's first letter
+// plus an arrow — ↑ money in, ↓ money out, • no change (planning/11 §C.2,
+// which replaced an unreadable "status square"). The letter and glyph carry
+// the meaning, so it reads without relying on color (§C.1).
+public sealed class AccountFlowCell
+{
+    public required string Letter { get; init; }
+    public required string Glyph { get; init; }
+    public required string Kind { get; init; } // "In" | "Out" | "None"
+}
+
+// One calendar day cell — the "rich month calendar" (planning/11 §B): two
+// LABELED numbers (Total + Free), the day's top event by name, an explicit
+// event count top-right, a per-account flow strip, and a ⚠ + words warning.
+// Everything a trigger reads is precomputed at construction so recycled
+// containers rebind cheaply during scroll.
 //
 // Deliberate deviation from this file's otherwise-immutable rows: selection
 // changes AFTER creation (clicking day B must un-highlight day A), and the
@@ -141,25 +155,34 @@ public sealed class MonthRow
 public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
 {
     public DateOnly? Date { get; }
-    public BalanceSnapshot? Snapshot { get; }
 
     public bool IsPadding => Date is null;
-    public string DayNumber { get; }
-    public bool HasSnapshot => Snapshot is not null;
+    public string DayNumber { get; } = string.Empty;
 
-    public string FreeText { get; }
+    // "Active": the day has something to show, so it can be selected.
+    public bool HasSnapshot { get; }
+
+    public string TotalText { get; } = string.Empty;
+    public string FreeText { get; } = string.Empty;
     public bool FreeNegative { get; }
-    public string AllocatedText { get; }
 
-    public bool HasIncome { get; }
-    public bool HasExpense { get; }
-    public bool HasAllocation { get; }
+    // The day's highest-priority expected transaction, by name — replaces the
+    // old "set aside" figure, which was internal jargon (§C.5).
+    public string TopEventText { get; } = string.Empty;
+
+    // Spelled out rather than dots — there is room to just say it (§C.6).
+    public string EventCountText { get; } = string.Empty;
+
+    public IReadOnlyList<AccountFlowCell> Flows { get; } = [];
+
+    public bool ShowWarning { get; }
+    public string WarningText { get; } = string.Empty;
 
     public bool IsToday { get; }
     public bool NeedsAttention { get; }
 
-    public string AutomationId { get; }
-    public string AutomationName { get; }
+    public string AutomationId { get; } = string.Empty;
+    public string AutomationName { get; } = string.Empty;
 
     private bool _isSelected;
     public bool IsSelected
@@ -179,39 +202,58 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
-    public static DayCellRow Padding() => new(null, null);
+    // A leading grid slot before day 1 — renders as nothing.
+    public static DayCellRow Padding() => new();
 
-    // `flagged` marks a day worth attention for reasons the snapshot itself
-    // doesn't carry — today: a floored manual earmark (planning/09).
-    public DayCellRow(DateOnly? date, BalanceSnapshot? snapshot, bool flagged = false)
+    private DayCellRow()
+    {
+    }
+
+    // An event-less day: present but faint, with nothing to report (§2.I.d).
+    public DayCellRow(DateOnly date)
     {
         Date = date;
-        Snapshot = snapshot;
-        DayNumber = date is { } d ? d.Day.ToString() : string.Empty;
+        DayNumber = date.Day.ToString();
         IsToday = date == DateOnly.FromDateTime(DateTime.Today);
-        AutomationId = date is { } id ? $"Day_{id:yyyy-MM-dd}" : string.Empty;
+        AutomationId = $"Day_{date:yyyy-MM-dd}";
+        AutomationName = date.ToString("MMMM d, yyyy");
+    }
 
-        if (snapshot is null)
-        {
-            FreeText = string.Empty;
-            AllocatedText = string.Empty;
-            AutomationName = date?.ToString("MMMM d, yyyy") ?? string.Empty;
-            return;
-        }
+    public DayCellRow(
+        DateOnly date,
+        decimal total,
+        decimal free,
+        string topEvent,
+        int eventCount,
+        IReadOnlyList<AccountFlowCell> flows,
+        string warningText,
+        bool needsAttention)
+    {
+        Date = date;
+        DayNumber = date.Day.ToString();
+        IsToday = date == DateOnly.FromDateTime(DateTime.Today);
+        AutomationId = $"Day_{date:yyyy-MM-dd}";
+        HasSnapshot = true;
 
-        var free = snapshot.ExpectedFreeAmount ?? 0m;
+        TotalText = total.ToString("C0");
         FreeText = free.ToString("C0");
         FreeNegative = free < 0m;
 
-        var allocated = snapshot.FundJars.Sum(jar => jar.ExpectedAmount);
-        AllocatedText = allocated > 0m ? $"{allocated:C0} set aside" : string.Empty;
+        TopEventText = topEvent;
+        EventCountText = eventCount switch
+        {
+            <= 0 => "No events",
+            1 => "1 event",
+            _ => $"{eventCount} events",
+        };
+        Flows = flows;
 
-        HasIncome = snapshot.ExpectedTransactions.Any(t => !t.Cancelled && t.ExpectedAmount > 0m);
-        HasExpense = snapshot.ExpectedTransactions.Any(t => !t.Cancelled && t.ExpectedAmount < 0m);
-        HasAllocation = snapshot.EarMarkEvents.Any(e => e.RepeatedEarmark || e.ExpectedAmount > 0m);
+        WarningText = warningText;
+        ShowWarning = warningText.Length > 0;
+        NeedsAttention = needsAttention;
 
-        NeedsAttention = snapshot.IsDeallocationDay || FreeNegative || flagged;
-        AutomationName = $"{date:MMMM d, yyyy} — free {FreeText}";
+        AutomationName = $"{date:MMMM d, yyyy} — total {TotalText}, free {FreeText}"
+            + (ShowWarning ? $", {warningText}" : string.Empty);
     }
 }
 
@@ -245,6 +287,10 @@ public sealed class DayDetailContext
 // (strongest green) / "OnTrack" (green) / "Behind" (amber) / "Neutral".
 public sealed class JarDetailRow
 {
+    // Which account this jar belongs to — the selected-day panes group by it so
+    // each account's story stays together (grouped two-pane, planning/11).
+    public AccountGroupKey? Account { get; set; }
+
     public required string Jar { get; init; }
     public required string AmountText { get; init; }
     public required string StatusKind { get; init; }
@@ -453,8 +499,22 @@ internal static class DueDateText
 // and earmark event the day holds (§3.I), ordered so a paycheck sits directly
 // above the allocations it funds (§3.III.d), with deallocation pulls last.
 // ChipKind drives chip colors in XAML: "In" / "Out" / "Aside" / "Release" / "Pull".
+// The grouping key for the selected-day panes: the account, plus how short it
+// is on the day being shown. Grouping by this record (records give value
+// equality, so grouping still works) rather than a bare name lets the group
+// header carry the "Cover from another account" lever for a short account —
+// philosophy 1: a problem the app surfaces comes with a lever to fix it.
+public sealed record AccountGroupKey(int AccountId, string Name, decimal Shortfall)
+{
+    public bool IsShort => Shortfall > 0m;
+    public string CoverText => $"Cover {Shortfall:C0} from another account →";
+}
+
 public sealed class DayEventRow
 {
+    // Which account this event happened in — the panes group by it.
+    public AccountGroupKey? Account { get; set; }
+
     public required string Event { get; init; }
     public required string Chip { get; init; }
     public required string ChipKind { get; init; }
@@ -606,3 +666,7 @@ public sealed class TransferRow(Transfer transfer, string fromName, string toNam
     public decimal Amount => Transfer.Amount;
     public string Repeats => Transfer.DatePattern.ToRruleString();
 }
+
+// One entry in the overview's account filter (planning/11 §C.3). A null
+// AccountId is the "All accounts" household roll-up.
+public sealed record AccountFilterOption(int? AccountId, string Name);

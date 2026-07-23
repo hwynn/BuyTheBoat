@@ -65,6 +65,13 @@ Captured while fresh, per the author's request, so a rework keeps the reasoning.
 7. **Overview form = the rich month calendar.** *Why:* it keeps the spatial calendar chosen originally, with everything visible on one screen.
 8. **Selected-day form = grouped two-pane.** *Why:* see section B — give each account the space its activity warrants, not a fixed equal share.
 
+### Added during implementation (2026-07-23)
+
+9. **The "Cover from another account →" lever is pre-filled all the way, but never pressed for the user.** It opens the transfer form with the destination, source, amount, *and* a one-time schedule on the short day already set; the user presses Create. *Why:* philosophy 1 — inform and equip, don't automate away agency. Pre-filling is help; submitting would be deciding for them.
+10. **The lever states the amount in its own label** ("Cover $800 from another account →"), not a bare "Cover shortfall". *Why:* principle — prefer a plain number over something the user has to go work out.
+11. **The lever lives on the fund-jars pane's account header, not the events pane's.** *Why:* every account always appears in the jars pane, while the events pane only lists accounts with activity that day — a short account could otherwise have no header to hang the fix on.
+12. **A pre-filled schedule must be as narrow as the problem it fixes.** Covering one short day pre-loads a *single* occurrence, overriding the form's standing monthly default. *Why:* inheriting the default would have committed the user to a recurring monthly transfer to solve a one-day gap — a pre-fill that quietly does more than asked is worse than no pre-fill.
+
 ### Standing UI principles distilled from the above
 Apply these to future forecast-tab work:
 
@@ -72,3 +79,4 @@ Apply these to future forecast-tab work:
 - **Prefer a plain human word or number** over an internal figure or a code the user has to decode (philosophy 2).
 - **Give each account the space its activity warrants**, not a fixed equal share.
 - **A problem the app surfaces should come with an easy, explicit lever to fix it** (philosophy 1 — e.g. the "Cover from another account" transfer on a short day).
+- **Pre-fill a form as far as it can honestly go, then stop at the confirm.** And keep the pre-fill scoped to the problem — never let it inherit a default that commits the user to more than they asked for.

@@ -16,7 +16,15 @@ public partial class CreateTransferWindow : Window
 
     // Assumes at least two accounts exist — the caller checks that before
     // opening, since a transfer needs two different accounts.
-    public CreateTransferWindow(IReadOnlyList<Account> accounts)
+    //
+    // The preselect arguments back the selected day's "Cover from another
+    // account" lever: it opens this already pointed at the short account for
+    // exactly the amount it is short, so the fix is one confirmation away.
+    public CreateTransferWindow(
+        IReadOnlyList<Account> accounts,
+        int? preselectToAccountId = null,
+        decimal? preselectAmount = null,
+        DateOnly? preselectDate = null)
     {
         InitializeComponent();
 
@@ -24,8 +32,27 @@ public partial class CreateTransferWindow : Window
         ToAccountComboBox.ItemsSource = accounts;
 
         // Default to two different accounts so the form is valid on open.
-        FromAccountComboBox.SelectedValue = accounts[0].Id;
-        ToAccountComboBox.SelectedValue = accounts.Count > 1 ? accounts[1].Id : accounts[0].Id;
+        var toId = preselectToAccountId ?? (accounts.Count > 1 ? accounts[1].Id : accounts[0].Id);
+        ToAccountComboBox.SelectedValue = toId;
+        FromAccountComboBox.SelectedValue = accounts.FirstOrDefault(account => account.Id != toId)?.Id ?? accounts[0].Id;
+
+        if (preselectAmount is { } amount)
+        {
+            AmountTextBox.Text = amount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        // Covering one short day is a one-off move, so start the schedule on
+        // that day and stop there. Leaving the form's standing monthly default
+        // would quietly commit the user to repeating the transfer forever.
+        if (preselectDate is { } date)
+        {
+            RuleEditor.LoadFrom(RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = date,
+                Count = 1,
+            }));
+        }
     }
 
     private void OnCreateClick(object sender, RoutedEventArgs e)
