@@ -16,14 +16,24 @@ public partial class CreateOneTimeGoalWindow : Window
     public FinancialPattern? CreatedGoal { get; private set; }
     public EarMarkPattern? CreatedEarMarkPattern { get; private set; }
 
-    public CreateOneTimeGoalWindow(IReadOnlyList<FinancialPattern> existingPatterns)
+    public CreateOneTimeGoalWindow(IReadOnlyList<FinancialPattern> existingPatterns, IReadOnlyList<Account> accounts)
     {
         InitializeComponent();
         _existingPatterns = existingPatterns;
 
+        AccountComboBox.ItemsSource = accounts;
+        AccountComboBox.SelectedValue = accounts.FirstOrDefault()?.Id;
+        if (AccountComboBox.SelectedItem is null && accounts.Count > 0)
+        {
+            AccountComboBox.SelectedIndex = 0;
+        }
+
         DueDatePicker.SelectedDate = DateTime.Today.AddMonths(6);
         StartDatePicker.SelectedDate = DateTime.Today;
     }
+
+    // Which account this goal's savings sit in — always a real selection.
+    public int SelectedAccountId => (int)AccountComboBox.SelectedValue;
 
     private void OnStartTodayChanged(object sender, RoutedEventArgs e)
     {

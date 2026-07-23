@@ -49,7 +49,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
             },
             goal);
 
-        _financialPatterns.Save(goal);
+        _financialPatterns.Save(goal, accountId: 1);
         _earMarkPatterns.Save(_pattern);
     }
 

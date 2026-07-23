@@ -25,6 +25,16 @@ public sealed record ForecastResult
     // happen, so the UI flags these in place (planning/09, validation policy).
     public IReadOnlyList<(DateOnly Date, int FinanceId)> FlooredManualEarmarks { get; init; } = [];
 
+    // One entry per account this forecast covers, in input order. For the
+    // single-account path this is just the "Primary" account. The forecast
+    // views (planning/10 item 5) render per-account detail from these.
+    public required IReadOnlyList<AccountForecast> Accounts { get; init; }
+
+    // The household roll-up across all accounts: per day, the summed free +
+    // set-aside and which accounts are short (item 4-C). The overview reads its
+    // household numbers and its "any account short" flag from here.
+    public required HouseholdSummary Household { get; init; }
+
     public AccountTransactionPage PrimaryAccountPage =>
         Book.LogPages[0].AccountPages[TransactionLogBookFactory.PrimaryAccountName];
 
@@ -57,4 +67,38 @@ public sealed record TimelineEntry
 {
     public required DateOnly Date { get; init; }
     public required BalanceSnapshot Snapshot { get; init; }
+}
+
+// One account's forecast: its identity plus its own page in the book. The page
+// carries the full per-account cascade (its balance record, jars, events).
+public sealed record AccountForecast
+{
+    public required int AccountId { get; init; }
+    public required string Name { get; init; }
+    public required AccountTransactionPage Page { get; init; }
+    public required DateOnly? FirstNegativeFreeBalanceDate { get; init; }
+}
+
+// The household roll-up. Free/SetAside on a given day are the sums across every
+// account of that account's value as of that day (its latest snapshot on or
+// before it). ShortAccounts names the accounts whose own free went negative —
+// the "enough in the right account" signal that a positive household Free can
+// still hide.
+public sealed record HouseholdDay
+{
+    public required DateOnly Date { get; init; }
+    public required decimal Free { get; init; }
+    public required decimal SetAside { get; init; }
+    public required IReadOnlyList<string> ShortAccounts { get; init; }
+
+    public bool AnyAccountShort => ShortAccounts.Count > 0;
+}
+
+public sealed record HouseholdSummary
+{
+    // Free to spend across all accounts as of the forecast date.
+    public required decimal AsOfFree { get; init; }
+
+    // Every date any account has an event, with the household roll-up there.
+    public required IReadOnlyList<HouseholdDay> Days { get; init; }
 }

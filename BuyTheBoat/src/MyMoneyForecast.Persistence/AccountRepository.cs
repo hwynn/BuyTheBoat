@@ -81,6 +81,31 @@ public sealed class AccountRepository(PatternDatabase database)
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
+    // Startup migration (item 6): every install must have at least one account.
+    // On the first run after multi-account lands, the single legacy balance and
+    // cushion become the "primary" account (Id 1 — which the later AccountId
+    // backfill defaults to); a brand-new install just gets an empty one.
+    // Idempotent: does nothing once any account exists.
+    public Account EnsureDefaultAccount(decimal seedBalance, decimal seedCushion)
+    {
+        var existing = GetAll();
+        if (existing.Count > 0)
+        {
+            return existing[0];
+        }
+
+        var primary = Account.Create(new AccountOptions
+        {
+            Id = 1,
+            Name = "primary",
+            Balance = seedBalance,
+            IdealSafetyCushion = seedCushion,
+        });
+
+        Save(primary);
+        return primary;
+    }
+
     // No reference guard yet: nothing points at an account until patterns gain
     // AccountId (item 2) and transfers exist (item 3). The block-if-referenced
     // guard lands with those, alongside the App-level delete flow.

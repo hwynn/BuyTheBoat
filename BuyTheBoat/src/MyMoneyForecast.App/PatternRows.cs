@@ -5,12 +5,15 @@ namespace MyMoneyForecast.App;
 // Flattened, display-only shapes for the grids in MainWindow — kept out of
 // MyMoneyForecast.Domain deliberately, since "how a goal's description should
 // read in a list" is a UI concern, not a domain one.
-public sealed class FinancialPatternRow(FinancialPattern pattern)
+public sealed class FinancialPatternRow(FinancialPattern pattern, string accountName)
 {
     public FinancialPattern Pattern { get; } = pattern;
     public int FinanceId => Pattern.FinanceId;
     public string Source => Pattern.Source;
     public string? Description => Pattern.Description;
+    // The account this pattern is filed under — a display value looked up from
+    // storage, not a property of the domain pattern (planning/10 item 2-A).
+    public string Account { get; } = accountName;
     public decimal Amount => Pattern.Amount;
     public bool Mandatory => Pattern.Mandatory;
     public int Priority => Pattern.Priority;
@@ -577,4 +580,29 @@ public sealed class GoalStatusRow(GoalShortfall status)
     internal static string FormatStatus(GoalShortfall status) => status.ShortfallAmount > 0m
         ? $"Short by {status.ShortfallAmount:C}"
         : "On track";
+}
+
+// One row of the Accounts tab. Cushion is shown blank rather than "$0.00" when
+// the user hasn't given the account one — philosophy 2: don't surface an
+// internal zero as if it were a setting they chose.
+public sealed class AccountRow(Account account)
+{
+    public Account Account { get; } = account;
+    public string Name => Account.Name;
+    public decimal Balance => Account.Balance;
+    public string Cushion => Account.IdealSafetyCushion == 0m
+        ? "—"
+        : Account.IdealSafetyCushion.ToString("C");
+}
+
+// One row of the Transfers tab. From/To are account names (resolved by the
+// caller); the two underlying legs never appear here — a transfer reads as one
+// thing (planning/10 item 3).
+public sealed class TransferRow(Transfer transfer, string fromName, string toName)
+{
+    public Transfer Transfer { get; } = transfer;
+    public string From { get; } = fromName;
+    public string To { get; } = toName;
+    public decimal Amount => Transfer.Amount;
+    public string Repeats => Transfer.DatePattern.ToRruleString();
 }

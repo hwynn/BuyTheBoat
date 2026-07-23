@@ -5,6 +5,12 @@ namespace MyMoneyForecast.Domain;
 // BalanceSnapshot -> FundJar/EarMarkEvent/ExpectedTransaction) computed as a
 // stateless, in-memory pass, replacing the old flat ForecastCalculator.
 //
+// Multi-account (planning/10 item 4): each account is its own silo. CreateForecast
+// runs the per-account cascade (BuildAccountPage) once per account, then rolls the
+// results up into a household summary. The single-account path (no ForecastOptions
+// .Accounts) synthesizes one "Primary" account from the flat fields, so its output
+// — and every existing test's numbers — is unchanged.
+//
 // The internal steps carry the documented cascade's names:
 // - AdjustSnapshots role: materialize events and decide which dates get a
 //   BalanceSnapshot (exactly the dates with >= 1 event — 3.13.a3).
@@ -25,15 +31,170 @@ public static class TransactionLogBookFactory
 
     public static ForecastResult CreateForecast(ForecastOptions options)
     {
-        var patternsById = options.FinancialPatterns.ToDictionary(pattern => pattern.FinanceId);
-        var earmarkedIds = options.EarMarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
+        var accountInputs = ResolveAccountInputs(options);
+
+        // One page per account, each its own independent cascade (item 4-A).
+        var pages = new Dictionary<string, AccountTransactionPage>();
+        var accountForecasts = new List<AccountForecast>();
+        DateOnly? firstNegative = null;
+        var floored = new List<(DateOnly Date, int FinanceId)>();
+
+        foreach (var input in accountInputs)
+        {
+            var built = BuildAccountPage(input, options.AsOfDate, options.HorizonEndDate);
+            pages[input.Name] = built.Page;
+            accountForecasts.Add(new AccountForecast
+            {
+                AccountId = input.AccountId,
+                Name = input.Name,
+                Page = built.Page,
+                FirstNegativeFreeBalanceDate = built.FirstNegativeDate,
+            });
+            if (built.FirstNegativeDate is { } negativeDate && (firstNegative is null || negativeDate < firstNegative))
+            {
+                firstNegative = negativeDate;
+            }
+            floored.AddRange(built.Floored);
+        }
+
+        // Global roll-ups (jar labels, goal shortfalls) span every account —
+        // finance ids are unique across the whole book, so the union is safe.
+        var allPatterns = accountInputs.SelectMany(account => account.FinancialPatterns).ToList();
+        var allEarmarks = accountInputs.SelectMany(account => account.EarMarkPatterns).ToList();
+        var patternsById = allPatterns.ToDictionary(pattern => pattern.FinanceId);
+
+        var book = new TransactionLogBook
+        {
+            PageLength = null, // DIVERGENCE(page-length): one window-sized page
+            LogPages =
+            [
+                new TransactionLogPage
+                {
+                    StartDate = options.AsOfDate,
+                    EndDate = options.HorizonEndDate,
+                    AccountPages = pages,
+                },
+            ],
+        };
+
+        return new ForecastResult
+        {
+            AsOfDate = options.AsOfDate,
+            HorizonEndDate = options.HorizonEndDate,
+            Book = book,
+            GoalShortfalls = CalculateGoalShortfalls(allEarmarks, patternsById),
+            JarLabels = patternsById.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.Description ?? pair.Value.Source),
+            HasNegativeFreeBalance = firstNegative is not null,
+            FirstNegativeFreeBalanceDate = firstNegative,
+            FlooredManualEarmarks = floored,
+            Accounts = accountForecasts,
+            Household = BuildHouseholdSummary(accountForecasts),
+        };
+    }
+
+    // The per-account breakdown when given; otherwise one "Primary" account from
+    // the flat fields — the pre-multi-account behaviour, byte-for-byte.
+    private static IReadOnlyList<AccountForecastInput> ResolveAccountInputs(ForecastOptions options)
+    {
+        if (options.Accounts is { Count: > 0 } accounts)
+        {
+            return accounts;
+        }
+
+        return
+        [
+            new AccountForecastInput
+            {
+                AccountId = 0,
+                Name = PrimaryAccountName,
+                StartingBalance = options.StartingBalance,
+                IdealSafetyCushion = options.IdealSafetyCushion,
+                FinancialPatterns = options.FinancialPatterns,
+                EarMarkPatterns = options.EarMarkPatterns,
+                ManualEarmarks = options.ManualEarmarks,
+            },
+        ];
+    }
+
+    // The household roll-up (item 4-C). On each date any account has an event,
+    // sample every account's free/set-aside as of that date (its latest snapshot
+    // on or before it) and sum — flagging any account whose own free went
+    // negative, since a positive household total can hide a locally-short account.
+    private static HouseholdSummary BuildHouseholdSummary(IReadOnlyList<AccountForecast> accounts)
+    {
+        var asOfFree = accounts.Sum(account => account.Page.InitialSnapshot.ExpectedFreeAmount ?? 0m);
+
+        var dates = new SortedSet<DateOnly>();
+        foreach (var account in accounts)
+        {
+            dates.UnionWith(account.Page.BalanceRecord.Keys);
+        }
+
+        var days = new List<HouseholdDay>(dates.Count);
+        foreach (var date in dates)
+        {
+            var free = 0m;
+            var setAside = 0m;
+            var shortAccounts = new List<string>();
+            foreach (var account in accounts)
+            {
+                var (accountFree, accountSetAside) = SampleAsOf(account.Page, date);
+                free += accountFree;
+                setAside += accountSetAside;
+                if (accountFree < 0m)
+                {
+                    shortAccounts.Add(account.Name);
+                }
+            }
+
+            days.Add(new HouseholdDay { Date = date, Free = free, SetAside = setAside, ShortAccounts = shortAccounts });
+        }
+
+        return new HouseholdSummary { AsOfFree = asOfFree, Days = days };
+    }
+
+    // An account's (free, set-aside) as of `date`: the latest snapshot on or
+    // before it, else the initial snapshot. Set-aside is the reserved portion
+    // (expected minus free). BalanceRecord is sorted, so we stop at the first
+    // later date.
+    private static (decimal Free, decimal SetAside) SampleAsOf(AccountTransactionPage page, DateOnly date)
+    {
+        var snapshot = page.InitialSnapshot;
+        foreach (var (snapshotDate, dated) in page.BalanceRecord)
+        {
+            if (snapshotDate > date)
+            {
+                break;
+            }
+            snapshot = dated;
+        }
+
+        var free = snapshot.ExpectedFreeAmount ?? 0m;
+        var expected = snapshot.ExpectedAmount ?? 0m;
+        return (free, expected - free);
+    }
+
+    private sealed record AccountPageBuild(
+        AccountTransactionPage Page,
+        DateOnly? FirstNegativeDate,
+        IReadOnlyList<(DateOnly Date, int FinanceId)> Floored);
+
+    // Builds ONE account's page — the per-account silo cascade. This is the body
+    // the single-account engine used to be; everything here is scoped to this
+    // account's own patterns, balance and cushion.
+    private static AccountPageBuild BuildAccountPage(AccountForecastInput input, DateOnly asOfDate, DateOnly horizonEndDate)
+    {
+        var patternsById = input.FinancialPatterns.ToDictionary(pattern => pattern.FinanceId);
+        var earmarkedIds = input.EarMarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
 
         // ~1.2.3.5.a1's "money_in_fund_jars_ready_for_unpaid_bills" carve-out:
         // a mandatory bill implicitly earmarks toward itself even without a
         // user-created EarMarkPattern — but only if one doesn't already
         // exist, so a bill the user chose to earmark explicitly isn't
         // double-counted.
-        var autoBills = GetAutomaticallyEarmarkedBills(options.FinancialPatterns, options.EarMarkPatterns);
+        var autoBills = GetAutomaticallyEarmarkedBills(input.FinancialPatterns, input.EarMarkPatterns);
 
         // Occurrences over each bill's own full lifetime (not clipped to the
         // window): accrual toward a due date past the horizon still needs to
@@ -46,7 +207,7 @@ public static class TransactionLogBookFactory
         // Every income date across each pattern's full lifetime — feeds
         // BillAccrualAt's "is anything still arriving before this bill is
         // due" check (see that method).
-        var incomeOccurrences = options.FinancialPatterns
+        var incomeOccurrences = input.FinancialPatterns
             .Where(pattern => pattern.Amount > 0)
             .SelectMany(pattern => pattern.DatePattern.GetOccurrences(pattern.DatePattern.Start, pattern.DatePattern.Until))
             .Distinct()
@@ -59,9 +220,9 @@ public static class TransactionLogBookFactory
         // window. These, not raw occurrence counts, now drive the balance
         // math — restoring the documented model's event layer.
         var expectedByDate = new Dictionary<DateOnly, List<ExpectedTransaction>>();
-        foreach (var pattern in options.FinancialPatterns)
+        foreach (var pattern in input.FinancialPatterns)
         {
-            foreach (var date in pattern.DatePattern.GetOccurrences(options.AsOfDate, options.HorizonEndDate))
+            foreach (var date in pattern.DatePattern.GetOccurrences(asOfDate, horizonEndDate))
             {
                 GetOrAdd(expectedByDate, date).Add(new ExpectedTransaction
                 {
@@ -78,9 +239,9 @@ public static class TransactionLogBookFactory
         // stored pattern amount is negative (its sign convention is "effect
         // on free balance"); an event's ExpectedAmount is positive-into-jar,
         // so the sign flips here.
-        foreach (var earmark in options.EarMarkPatterns)
+        foreach (var earmark in input.EarMarkPatterns)
         {
-            foreach (var date in earmark.DatePattern.GetOccurrences(options.AsOfDate, options.HorizonEndDate))
+            foreach (var date in earmark.DatePattern.GetOccurrences(asOfDate, horizonEndDate))
             {
                 GetOrAdd(earmarkEventsByDate, date).Add(new EarMarkEvent
                 {
@@ -100,9 +261,9 @@ public static class TransactionLogBookFactory
         // is already folded into the seed above; it's attached here too so the
         // day DISPLAYS it, and the seed-day rule (no deltas) prevents double
         // counting.
-        foreach (var manual in options.ManualEarmarks)
+        foreach (var manual in input.ManualEarmarks)
         {
-            if (manual.Date >= options.AsOfDate && manual.Date <= options.HorizonEndDate)
+            if (manual.Date >= asOfDate && manual.Date <= horizonEndDate)
             {
                 GetOrAdd(earmarkEventsByDate, manual.Date).Add(new EarMarkEvent
                 {
@@ -144,31 +305,31 @@ public static class TransactionLogBookFactory
         // already partway through its schedule shows a non-zero jar today).
         var jarValues = new Dictionary<int, decimal>();
         var milestones = new Dictionary<int, decimal>();
-        foreach (var earmark in options.EarMarkPatterns)
+        foreach (var earmark in input.EarMarkPatterns)
         {
             var goal = patternsById[earmark.FinanceId];
             var contributed = earmark.StartingAllocation
-                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, options.AsOfDate).Count
+                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count
                 // Manual adjustments already made on/before the as-of date are
                 // part of the jar's settled history (planning/09) — dated
                 // StartingAllocation, effectively.
-                + options.ManualEarmarks
-                    .Where(manual => manual.FinanceId == earmark.FinanceId && manual.Date <= options.AsOfDate)
+                + input.ManualEarmarks
+                    .Where(manual => manual.FinanceId == earmark.FinanceId && manual.Date <= asOfDate)
                     .Sum(manual => manual.Amount);
-            var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.Start, options.AsOfDate).Count;
+            var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.Start, asOfDate).Count;
             jarValues[earmark.FinanceId] = Math.Max(0m, contributed - withdrawn);
 
             // 3.13.5.4.a1: milestone counts scheduled contributions only —
             // StartingAllocation is money already saved, not target.
             milestones[earmark.FinanceId] =
-                -earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, options.AsOfDate).Count;
+                -earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count;
         }
 
         // Auto-reserved bills seed at their as-of accrual target.
         var autoBillTargets = new Dictionary<int, decimal>();
         foreach (var bill in autoBills)
         {
-            var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, options.AsOfDate, options.AsOfDate);
+            var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, asOfDate, asOfDate);
             jarValues[bill.FinanceId] = target;
             autoBillTargets[bill.FinanceId] = target;
         }
@@ -178,7 +339,7 @@ public static class TransactionLogBookFactory
         // running value. Firm target: seeded to the full amount and refilled to
         // it each day; deallocation drains it first. 0 (the default) keeps the
         // pre-cushion behaviour exactly.
-        var cushionTarget = options.IdealSafetyCushion;
+        var cushionTarget = input.IdealSafetyCushion;
         var cushionValue = cushionTarget;
 
         var initialSnapshot = new BalanceSnapshot
@@ -187,9 +348,9 @@ public static class TransactionLogBookFactory
             // The one manually-entered number: the user's real balance as of
             // the as-of date, assumed to already reflect everything that
             // happened up to and including that day.
-            FullAmount = options.StartingBalance,
-            ExpectedAmount = options.StartingBalance,
-            ExpectedFreeAmount = options.StartingBalance - jarValues.Values.Sum() - cushionValue,
+            FullAmount = input.StartingBalance,
+            ExpectedAmount = input.StartingBalance,
+            ExpectedFreeAmount = input.StartingBalance - jarValues.Values.Sum() - cushionValue,
             FundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: true),
             ActualTransactions = [],
             ExpectedTransactions = [],
@@ -200,7 +361,7 @@ public static class TransactionLogBookFactory
 
         var balanceRecord = new SortedDictionary<DateOnly, BalanceSnapshot>();
         var previousExpected = initialSnapshot.ExpectedAmount!.Value;
-        DateOnly? firstNegativeDate = initialSnapshot.ExpectedFreeAmount < 0m ? options.AsOfDate : null;
+        DateOnly? firstNegativeDate = initialSnapshot.ExpectedFreeAmount < 0m ? asOfDate : null;
         var flooredManualEarmarks = new List<(DateOnly Date, int FinanceId)>();
 
         foreach (var date in snapshotDates)
@@ -215,7 +376,7 @@ public static class TransactionLogBookFactory
             // snapshot dates, so stepping between them loses nothing.
             foreach (var bill in autoBills)
             {
-                var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, options.AsOfDate, date);
+                var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, asOfDate, date);
                 var delta = target - autoBillTargets[bill.FinanceId];
                 autoBillTargets[bill.FinanceId] = target;
                 if (delta != 0m)
@@ -236,7 +397,7 @@ public static class TransactionLogBookFactory
             // date, so a snapshot dated exactly there attaches its events
             // for display but contributes no deltas — its values equal the
             // initial snapshot's. (Same convention the flat engine used.)
-            var isSeedDay = date == options.AsOfDate;
+            var isSeedDay = date == asOfDate;
 
             // 10.3: previous snapshot's amount + today's expected
             // transactions.
@@ -336,18 +497,18 @@ public static class TransactionLogBookFactory
             firstNegativeDate ??= expectedFree < 0m ? date : null;
         }
 
-        // === Assemble the onion ===
+        // === Assemble this account's page ===
 
         var accountPage = new AccountTransactionPage
         {
-            Account = PrimaryAccountName,
-            StartDate = options.AsOfDate,
-            EndDate = options.HorizonEndDate,
+            Account = input.Name,
+            StartDate = asOfDate,
+            EndDate = horizonEndDate,
             Expired = false,
-            IdealSafetyCushion = options.IdealSafetyCushion,
+            IdealSafetyCushion = input.IdealSafetyCushion,
             SafetyPriority = 0, // fixed at 0 — the cushion is always drained first
-            FinancePatterns = options.FinancialPatterns,
-            EarmarkPatterns = options.EarMarkPatterns,
+            FinancePatterns = input.FinancialPatterns,
+            EarmarkPatterns = input.EarMarkPatterns,
             InitialSnapshot = initialSnapshot,
             BalanceRecord = balanceRecord,
             // ASSUMED-PAIRING(unpaid-expected): see AccountTransactionPage.
@@ -355,36 +516,7 @@ public static class TransactionLogBookFactory
             CurrentFreeAmount = initialSnapshot.ExpectedFreeAmount,
         };
 
-        var book = new TransactionLogBook
-        {
-            PageLength = null, // DIVERGENCE(page-length): one window-sized page
-            LogPages =
-            [
-                new TransactionLogPage
-                {
-                    StartDate = options.AsOfDate,
-                    EndDate = options.HorizonEndDate,
-                    AccountPages = new Dictionary<string, AccountTransactionPage>
-                    {
-                        [PrimaryAccountName] = accountPage,
-                    },
-                },
-            ],
-        };
-
-        return new ForecastResult
-        {
-            AsOfDate = options.AsOfDate,
-            HorizonEndDate = options.HorizonEndDate,
-            Book = book,
-            GoalShortfalls = CalculateGoalShortfalls(options.EarMarkPatterns, patternsById),
-            JarLabels = patternsById.ToDictionary(
-                pair => pair.Key,
-                pair => pair.Value.Description ?? pair.Value.Source),
-            HasNegativeFreeBalance = firstNegativeDate is not null,
-            FirstNegativeFreeBalanceDate = firstNegativeDate,
-            FlooredManualEarmarks = flooredManualEarmarks,
-        };
+        return new AccountPageBuild(accountPage, firstNegativeDate, flooredManualEarmarks);
     }
 
     // Exposed so UI layers can identify which bills get the automatic

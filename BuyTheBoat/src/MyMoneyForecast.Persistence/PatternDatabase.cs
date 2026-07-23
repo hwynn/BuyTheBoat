@@ -116,6 +116,19 @@ public sealed class PatternDatabase
                 Balance TEXT NOT NULL,
                 IdealSafetyCushion TEXT NOT NULL DEFAULT '0'
             );
+
+            CREATE TABLE IF NOT EXISTS Transfers (
+                Id INTEGER PRIMARY KEY,
+                FromAccountId INTEGER NOT NULL,
+                ToAccountId INTEGER NOT NULL,
+                Amount TEXT NOT NULL,
+                Frequency TEXT NOT NULL,
+                IntervalValue INTEGER NOT NULL,
+                ByDay TEXT NULL,
+                ByMonthDay TEXT NULL,
+                StartDate TEXT NOT NULL,
+                UntilDate TEXT NOT NULL
+            );
             """;
         command.ExecuteNonQuery();
 
@@ -126,6 +139,21 @@ public sealed class PatternDatabase
         EnsureColumn(connection, "CurrentBalance", "HorizonEndDate", "TEXT NULL");
         EnsureColumn(connection, "CurrentBalance", "IdealSafetyCushion", "TEXT NULL");
         EnsureColumn(connection, "EarMarkPatterns", "StartingAllocation", "TEXT NOT NULL DEFAULT '0'");
+
+        // Which account each pattern is FILED UNDER. This is storage only — the
+        // domain FinancialPattern has no account property (see planning/10 item
+        // 2-A); a pattern belongs to an account by living in that account's
+        // page. Pages are never persisted, so this column is the only place
+        // that containment can be recorded and rebuilt from on load. The
+        // DEFAULT 1 *is* the migration: every pre-existing pattern files under
+        // the seeded "primary" account.
+        EnsureColumn(connection, "FinancialPatterns", "AccountId", "INTEGER NOT NULL DEFAULT 1");
+
+        // Which transfer a pattern is a leg of, if any (planning/10 item 3).
+        // NULL for ordinary user-created patterns; set for a transfer's two
+        // legs, which are hidden from the pattern list and shown as one transfer
+        // instead. The engine still reads every pattern, legs included.
+        EnsureColumn(connection, "FinancialPatterns", "TransferId", "INTEGER NULL");
     }
 
     private static void EnsureColumn(SqliteConnection connection, string table, string column, string columnDefinition)

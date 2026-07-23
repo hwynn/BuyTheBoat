@@ -38,7 +38,7 @@ public class PatternRepositoryTests : IDisposable
             Description = "Biweekly paycheck",
         });
 
-        _financialPatterns.Save(paycheck);
+        _financialPatterns.Save(paycheck, accountId: 1);
         var all = _financialPatterns.GetAll();
 
         all.Count.ShouldBe(1);
@@ -67,7 +67,7 @@ public class PatternRepositoryTests : IDisposable
             }),
             Amount = -70m,
         });
-        _financialPatterns.Save(original);
+        _financialPatterns.Save(original, accountId: 1);
 
         var rateWentUp = FinancialPattern.Create(new FinancialPatternOptions
         {
@@ -76,7 +76,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = original.DatePattern,
             Amount = -80m,
         });
-        _financialPatterns.Save(rateWentUp);
+        _financialPatterns.Save(rateWentUp, accountId: 1);
 
         var all = _financialPatterns.GetAll();
         all.Count.ShouldBe(1);
@@ -99,7 +99,7 @@ public class PatternRepositoryTests : IDisposable
             }),
             Amount = -5000m,
         });
-        _financialPatterns.Save(goal);
+        _financialPatterns.Save(goal, accountId: 1);
 
         var earmark = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -139,7 +139,7 @@ public class PatternRepositoryTests : IDisposable
             Amount = -10000m,
             Mandatory = false,
         });
-        _financialPatterns.Save(goal);
+        _financialPatterns.Save(goal, accountId: 1);
 
         var earmark = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -179,7 +179,7 @@ public class PatternRepositoryTests : IDisposable
             }),
             Amount = -15m,
         });
-        _financialPatterns.Save(bill);
+        _financialPatterns.Save(bill, accountId: 1);
 
         _financialPatterns.HasLinkedEarMarkPattern(bill.FinanceId).ShouldBeFalse();
 
@@ -203,7 +203,7 @@ public class PatternRepositoryTests : IDisposable
             }),
             Amount = -5000m,
         });
-        _financialPatterns.Save(goal);
+        _financialPatterns.Save(goal, accountId: 1);
 
         var earmark = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -225,6 +225,70 @@ public class PatternRepositoryTests : IDisposable
 
         _earMarkPatterns.Delete(earmark.FinanceId);
         _financialPatterns.HasLinkedEarMarkPattern(goal.FinanceId).ShouldBeFalse();
+    }
+
+    private static FinancialPattern Bill(int financeId, string source) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = financeId,
+            Source = source,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                Start = new DateOnly(2025, 1, 1),
+                ByMonthDay = [1],
+                Until = new DateOnly(2027, 1, 1),
+            }),
+            Amount = -100m,
+        });
+
+    // The account a pattern is filed under is storage-only — these cover that
+    // the filing round-trips and regroups into per-account lists, which is what
+    // rebuilds each page's finance_patterns (planning/10 item 2-A).
+    [Fact]
+    public void Patterns_regroup_into_the_account_they_were_filed_under()
+    {
+        _financialPatterns.Save(Bill(1, "Rent"), accountId: 7);
+        _financialPatterns.Save(Bill(2, "Electric"), accountId: 7);
+        _financialPatterns.Save(Bill(3, "Boat fund"), accountId: 9);
+
+        var byAccount = _financialPatterns.GetAllByAccount();
+
+        byAccount.Keys.OrderBy(key => key).ToArray().ShouldBe(new[] { 7, 9 });
+        byAccount[7].Select(pattern => pattern.Source).ToArray().ShouldBe(new[] { "Rent", "Electric" });
+        byAccount[9].Single().Source.ShouldBe("Boat fund");
+    }
+
+    [Fact]
+    public void The_filed_account_can_be_looked_up_and_re_filed_without_duplicating()
+    {
+        var bill = Bill(1, "Rent");
+        _financialPatterns.Save(bill, accountId: 4);
+        _financialPatterns.GetAccountId(1).ShouldBe(4);
+
+        _financialPatterns.Save(bill, accountId: 5);
+
+        _financialPatterns.GetAccountId(1).ShouldBe(5);
+        _financialPatterns.GetAll().Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void An_unknown_pattern_has_no_filed_account()
+    {
+        _financialPatterns.GetAccountId(404).ShouldBeNull();
+    }
+
+    [Fact]
+    public void An_account_knows_whether_it_still_holds_patterns()
+    {
+        _financialPatterns.Save(Bill(1, "Rent"), accountId: 3);
+
+        _financialPatterns.HasPatternsInAccount(3).ShouldBeTrue();
+        _financialPatterns.HasPatternsInAccount(4).ShouldBeFalse();
+
+        _financialPatterns.Delete(1);
+
+        _financialPatterns.HasPatternsInAccount(3).ShouldBeFalse();
     }
 
     public void Dispose()

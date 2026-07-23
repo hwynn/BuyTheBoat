@@ -34,11 +34,12 @@ public partial class CreateFinancialPatternWindow : Window
     // Expense/Income question entirely and fixes both — used by the "Create
     // Bill..." shortcut, where both answers are always the same and asking is
     // just friction.
-    public CreateFinancialPatternWindow(IReadOnlyList<FinancialPattern> existingPatterns, bool? forcedMandatory = null)
+    public CreateFinancialPatternWindow(IReadOnlyList<FinancialPattern> existingPatterns, IReadOnlyList<Account> accounts, bool? forcedMandatory = null)
     {
         InitializeComponent();
 
         _financeId = existingPatterns.Count == 0 ? 1 : existingPatterns.Max(pattern => pattern.FinanceId) + 1;
+        PopulateAccounts(accounts, null);
 
         if (forcedMandatory is { } mandatory)
         {
@@ -62,9 +63,10 @@ public partial class CreateFinancialPatternWindow : Window
     // is treated as an explicit choice, same as if the user just typed it —
     // opening the edit window and adjusting the amount shouldn't silently
     // flip it back to the direction-based suggestion.
-    public CreateFinancialPatternWindow(FinancialPattern existing)
+    public CreateFinancialPatternWindow(FinancialPattern existing, IReadOnlyList<Account> accounts, int selectedAccountId)
     {
         InitializeComponent();
+        PopulateAccounts(accounts, selectedAccountId);
 
         Title = "Edit Bill / Paycheck";
         CreateButton.Content = "Save";
@@ -83,6 +85,20 @@ public partial class CreateFinancialPatternWindow : Window
 
         _initialized = true;
     }
+
+    // Always populated and defaulted (never a blank/silent default) — item 2-B.
+    private void PopulateAccounts(IReadOnlyList<Account> accounts, int? selectedAccountId)
+    {
+        AccountComboBox.ItemsSource = accounts;
+        AccountComboBox.SelectedValue = selectedAccountId ?? accounts.FirstOrDefault()?.Id;
+        if (AccountComboBox.SelectedItem is null && accounts.Count > 0)
+        {
+            AccountComboBox.SelectedIndex = 0;
+        }
+    }
+
+    // Which account the pattern is filed under — always a real selection.
+    public int SelectedAccountId => (int)AccountComboBox.SelectedValue;
 
     private void OnDirectionChanged(object sender, RoutedEventArgs e)
     {

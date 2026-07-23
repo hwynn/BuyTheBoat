@@ -89,6 +89,30 @@ public class AccountRepositoryTests : IDisposable
         _repository.GetById(1).ShouldBeNull();
     }
 
+    [Fact]
+    public void The_first_run_seeds_a_primary_account_from_the_legacy_balance()
+    {
+        var seeded = _repository.EnsureDefaultAccount(2400m, 500m);
+
+        seeded.Id.ShouldBe(1);
+        seeded.Name.ShouldBe("primary");
+        seeded.Balance.ShouldBe(2400m);
+        seeded.IdealSafetyCushion.ShouldBe(500m);
+        _repository.GetAll().Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Seeding_is_idempotent_and_never_overwrites_a_real_account()
+    {
+        _repository.Save(Acct(1, "Checking", 100m));
+
+        var result = _repository.EnsureDefaultAccount(9999m, 9999m);
+
+        result.Name.ShouldBe("Checking");
+        _repository.GetAll().Count.ShouldBe(1);
+        _repository.GetById(1)!.Balance.ShouldBe(100m);
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();

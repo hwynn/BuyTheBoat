@@ -59,16 +59,17 @@
                             <DatePicker x:Name="AsOfDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged"/>
                         </StackPanel>
                         <StackPanel Margin="0,0,16,0">
-                            <TextBlock Text="Current balance" FontSize="11" Foreground="Gray"/>
-                            <TextBox x:Name="CurrentBalanceTextBox" Width="120" VerticalAlignment="Bottom" Height="23" TextChanged="OnForecastInputChanged"/>
-                        </StackPanel>
-                        <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="Show forecast through" FontSize="11" Foreground="Gray"/>
                             <DatePicker x:Name="HorizonEndDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged"/>
                         </StackPanel>
+                        <!-- Balances and cushions are per account now and live on the
+                             Accounts tab; the forecast reads them from there. This is a
+                             read-only summary of exactly what it will use. -->
                         <StackPanel Margin="0,0,16,0">
-                            <TextBlock Text="Safety cushion" FontSize="11" Foreground="Gray"/>
-                            <TextBox x:Name="SafetyCushionTextBox" Width="110" VerticalAlignment="Bottom" Height="23" TextChanged="OnForecastInputChanged"/>
+                            <TextBlock Text="Across all accounts" FontSize="11" Foreground="Gray"/>
+                            <TextBlock x:Name="AccountsSummaryText" Text="—" FontWeight="SemiBold" VerticalAlignment="Bottom"
+                                       Height="23" Padding="0,4,0,0" MinWidth="230"
+                                       AutomationProperties.AutomationId="AccountsSummaryText"/>
                         </StackPanel>
                         <!-- Pending-state affordance (philosophy §1): looks active only
                              while an input differs from the forecast on screen. -->
@@ -364,6 +365,56 @@
                 </DockPanel>
             </TabItem>
 
+            <!-- ACCOUNTS (planning/10 item 1): each account is its own silo with
+                 its own balance and its own optional cushion. Editing happens in a
+                 popup, matching every other entity in this app. -->
+            <TabItem Header="Accounts">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Add Account..." Padding="12,5" Click="OnAddAccountClick"
+                                AutomationProperties.AutomationId="AddAccountButton"/>
+                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditAccountClick"
+                                AutomationProperties.AutomationId="EditAccountButton"/>
+                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteAccountClick"
+                                AutomationProperties.AutomationId="DeleteAccountButton"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Your real accounts, each with its own balance and its own optional safety cushion. Enter what each one holds right now — the forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
+                    <DataGrid x:Name="AccountsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                              AutomationProperties.AutomationId="AccountsGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
+                            <DataGridTextColumn Header="Current balance" Binding="{Binding Balance, StringFormat={}{0:C}}" Width="170"/>
+                            <DataGridTextColumn Header="Safety cushion" Binding="{Binding Cushion}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- TRANSFERS (planning/10 item 3): moving money between accounts,
+                 shown as one thing but stored as two paired legs. -->
+            <TabItem Header="Transfers">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Schedule Transfer..." Padding="12,5" Click="OnAddTransferClick"
+                                AutomationProperties.AutomationId="AddTransferButton"/>
+                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteTransferClick"
+                                AutomationProperties.AutomationId="DeleteTransferButton"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Money you move between your own accounts, once or on a schedule. Each transfer takes from one account and adds the same amount to another — it never changes your household total, only which account the money sits in."/>
+                    <DataGrid x:Name="TransfersGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                              AutomationProperties.AutomationId="TransfersGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="From" Binding="{Binding From}" Width="220"/>
+                            <DataGridTextColumn Header="To" Binding="{Binding To}" Width="220"/>
+                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="130"/>
+                            <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
             <TabItem Header="Bills &amp; Paychecks">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
@@ -379,6 +430,7 @@
                             <DataGridTextColumn Header="Finance ID" Binding="{Binding FinanceId}" Width="80"/>
                             <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160"/>
                             <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="200"/>
+                            <DataGridTextColumn Header="Account" Binding="{Binding Account}" Width="120"/>
                             <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="110"/>
                             <DataGridTextColumn Header="Mandatory" Binding="{Binding Mandatory}" Width="80"/>
                             <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="70"/>

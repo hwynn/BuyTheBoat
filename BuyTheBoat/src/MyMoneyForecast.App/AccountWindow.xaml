@@ -1,0 +1,34 @@
+<Window x:Class="MyMoneyForecast.App.AccountWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Account" Height="360" Width="460"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <DockPanel Margin="14">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="230"
+                       VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <Button Content="Cancel" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnCancelClick"/>
+            <Button x:Name="SaveButton" Content="Save" Width="90" Padding="0,5" Click="OnSaveClick" IsDefault="True"
+                    AutomationProperties.AutomationId="SaveAccountButton"/>
+        </StackPanel>
+
+        <GroupBox DockPanel.Dock="Top" Header="Account details" Padding="10">
+            <StackPanel>
+                <TextBlock Text="Account name"/>
+                <TextBox x:Name="NameTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AccountNameTextBox"/>
+                <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Whatever you call it — Checking, Savings, Bills. Each account needs its own name."/>
+
+                <TextBlock Text="Current balance" Margin="0,10,0,0"/>
+                <TextBox x:Name="BalanceTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AccountBalanceTextBox"/>
+                <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="What this account holds right now. It can be negative if the account is overdrawn."/>
+
+                <TextBlock Text="Safety cushion (optional)" Margin="0,10,0,0"/>
+                <TextBox x:Name="CushionTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AccountCushionTextBox"/>
+                <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Money to hold back in this account so it isn't counted as free to spend. Leave blank for none."/>
+            </StackPanel>
+        </GroupBox>
+    </DockPanel>
+</Window>

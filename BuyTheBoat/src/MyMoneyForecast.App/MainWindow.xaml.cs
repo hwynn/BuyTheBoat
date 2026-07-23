@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     private readonly FinancialPatternRepository _financialPatterns;
     private readonly EarMarkPatternRepository _earMarkPatterns;
     private readonly CurrentBalanceRepository _currentBalance;
+    private readonly AccountRepository _accounts;
+    private readonly TransferRepository _transfers;
     private readonly ManualEarmarkRepository _manualEarmarks;
 
     // Backs the spreadsheet export button and the selected-day detail pane —
@@ -44,9 +46,18 @@ public partial class MainWindow : Window
         _financialPatterns = new FinancialPatternRepository(database);
         _earMarkPatterns = new EarMarkPatternRepository(database, _financialPatterns);
         _currentBalance = new CurrentBalanceRepository(database);
+        _accounts = new AccountRepository(database);
+        _transfers = new TransferRepository(database, _financialPatterns);
         _manualEarmarks = new ManualEarmarkRepository(database, _earMarkPatterns);
 
+        // Item 6 migration: there is always at least one account. On the first
+        // run after accounts landed, the old single balance/cushion becomes the
+        // "primary" account, so nothing the user already entered is lost.
+        var legacy = _currentBalance.GetCurrent();
+        _accounts.EnsureDefaultAccount(legacy?.Balance ?? 0m, legacy?.IdealSafetyCushion ?? 0m);
+
         RefreshGrids();
+        RefreshAccountsGrid();
         LoadSavedBalance();
     }
 
@@ -64,21 +75,205 @@ public partial class MainWindow : Window
             return;
         }
 
-        CurrentBalanceTextBox.Text = saved.Balance.ToString(CultureInfo.InvariantCulture);
         AsOfDatePicker.SelectedDate = saved.AsOfDate.ToDateTime(TimeOnly.MinValue);
         HorizonEndDatePicker.SelectedDate = saved.HorizonEndDate.ToDateTime(TimeOnly.MinValue);
-        SafetyCushionTextBox.Text = saved.IdealSafetyCushion.ToString(CultureInfo.InvariantCulture);
-        RefreshForecast(saved.Balance, saved.AsOfDate, saved.HorizonEndDate, saved.IdealSafetyCushion);
+
+        // Balance and cushion come from the accounts themselves now, not from
+        // the single saved figure.
+        var (balance, cushion) = AccountTotals();
+        RefreshForecast(balance, saved.AsOfDate, saved.HorizonEndDate, cushion);
+    }
+
+    // Until the engine partitions per account (item 4), the forecast still runs
+    // on one combined figure — the household total across every account, which
+    // is exactly what the old single balance meant.
+    // Which account a newly created pattern is filed under. The account picker
+    // (item 2-B) replaces this with the user's explicit choice; until then new
+    // patterns file under the first account, matching today's behaviour.
+    private int DefaultAccountId() => _accounts.GetAll().FirstOrDefault()?.Id ?? 1;
+
+    private void RefreshTransfersGrid()
+    {
+        var namesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
+        TransfersGrid.ItemsSource = _transfers.GetAll()
+            .Select(transfer => new TransferRow(
+                transfer,
+                namesById.GetValueOrDefault(transfer.FromAccountId, "(unknown)"),
+                namesById.GetValueOrDefault(transfer.ToAccountId, "(unknown)")))
+            .ToList();
+    }
+
+    private void OnAddTransferClick(object sender, RoutedEventArgs e)
+    {
+        var accounts = _accounts.GetAll();
+        if (accounts.Count < 2)
+        {
+            MessageBox.Show(this, "You need at least two accounts to transfer between. Add another on the Accounts tab first.", "Not enough accounts", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var window = new CreateTransferWindow(accounts) { Owner = this };
+        if (window.ShowDialog() != true || window.DatePattern is not { } schedule)
+        {
+            return;
+        }
+
+        var namesById = accounts.ToDictionary(account => account.Id, account => account.Name);
+
+        // Two fresh finance ids for the legs (they are real patterns, so they
+        // must not collide with any existing pattern's id — legs included).
+        var maxFinanceId = _financialPatterns.GetAll().Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max();
+
+        var result = TransferFactory.Create(new TransferRequest
+        {
+            TransferId = _transfers.NextId(),
+            OutLegFinanceId = maxFinanceId + 1,
+            InLegFinanceId = maxFinanceId + 2,
+            FromAccountId = window.FromAccountId,
+            ToAccountId = window.ToAccountId,
+            FromAccountName = namesById[window.FromAccountId],
+            ToAccountName = namesById[window.ToAccountId],
+            Amount = window.Amount,
+            DatePattern = schedule,
+        });
+
+        _transfers.Save(result);
+        RefreshGrids();
+    }
+
+    private void OnDeleteTransferClick(object sender, RoutedEventArgs e)
+    {
+        if (TransfersGrid.SelectedItem is not TransferRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        var confirm = MessageBox.Show(this, $"Delete the transfer of {row.Amount:C} from \"{row.From}\" to \"{row.To}\"?", "Delete transfer", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _transfers.Delete(row.Transfer.Id);
+        RefreshGrids();
+    }
+
+    private (decimal Balance, decimal Cushion) AccountTotals()
+    {
+        var accounts = _accounts.GetAll();
+        return (accounts.Sum(account => account.Balance), accounts.Sum(account => account.IdealSafetyCushion));
+    }
+
+    private void RefreshAccountsGrid()
+    {
+        var accounts = _accounts.GetAll();
+        AccountsGrid.ItemsSource = accounts.Select(account => new AccountRow(account)).ToList();
+
+        var total = accounts.Sum(account => account.Balance);
+        var cushion = accounts.Sum(account => account.IdealSafetyCushion);
+        AccountsSummaryText.Text = accounts.Count == 0
+            ? "—"
+            : $"{total:C} in {accounts.Count} account{(accounts.Count == 1 ? string.Empty : "s")}"
+                + (cushion > 0m ? $" · {cushion:C} cushion" : string.Empty);
+
+        UpdateForecastButtonState();
+    }
+
+    private void OnAddAccountClick(object sender, RoutedEventArgs e)
+    {
+        var window = new AccountWindow(_accounts.NextId()) { Owner = this };
+        if (window.ShowDialog() != true || window.Result is not { } account)
+        {
+            return;
+        }
+
+        if (_accounts.GetByName(account.Name) is not null)
+        {
+            MessageBox.Show(this, $"There's already an account called \"{account.Name}\".", "Name already used", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _accounts.Save(account);
+        RefreshAccountsGrid();
+    }
+
+    private void OnEditAccountClick(object sender, RoutedEventArgs e)
+    {
+        if (AccountsGrid.SelectedItem is not AccountRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        var window = new AccountWindow(row.Account.Id, row.Account) { Owner = this };
+        if (window.ShowDialog() != true || window.Result is not { } account)
+        {
+            return;
+        }
+
+        // A rename must not collide with a different account's name.
+        if (_accounts.GetByName(account.Name) is { } clash && clash.Id != account.Id)
+        {
+            MessageBox.Show(this, $"There's already an account called \"{account.Name}\".", "Name already used", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _accounts.Save(account);
+        RefreshAccountsGrid();
+    }
+
+    // Blocked while it's the only account, and blocked while anything is still
+    // filed under it — we never delete the user's bills out from under them
+    // (philosophy 1). The transfers half of that guard arrives with item 3.
+    private void OnDeleteAccountClick(object sender, RoutedEventArgs e)
+    {
+        if (AccountsGrid.SelectedItem is not AccountRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        if (_accounts.GetAll().Count <= 1)
+        {
+            MessageBox.Show(this, "There has to be at least one account.", "Can't delete", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_transfers.IsAccountReferenced(row.Account.Id))
+        {
+            MessageBox.Show(
+                this,
+                $"\"{row.Name}\" is still part of a transfer. Delete that transfer first (Transfers tab).",
+                "Can't delete yet",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_financialPatterns.HasPatternsInAccount(row.Account.Id))
+        {
+            MessageBox.Show(
+                this,
+                $"\"{row.Name}\" still has bills, paychecks or goals filed under it. Move or delete those first.",
+                "Can't delete yet",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var confirm = MessageBox.Show(this, $"Delete the account \"{row.Name}\"?", "Delete account", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _accounts.Delete(row.Account.Id);
+        RefreshAccountsGrid();
     }
 
     private void OnForecastClick(object sender, RoutedEventArgs e)
     {
-        if (!decimal.TryParse(CurrentBalanceTextBox.Text, out var balance))
-        {
-            MessageBox.Show(this, "Enter a valid balance.", "Invalid balance", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
         if (AsOfDatePicker.SelectedDate is not { } asOfDateTime)
         {
             MessageBox.Show(this, "Pick a date.", "Invalid date", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -100,22 +295,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Blank cushion = 0 (off); a non-empty, unparseable, or negative value
-        // is a mistake worth flagging rather than silently zeroing.
-        var idealSafetyCushion = 0m;
-        if (!string.IsNullOrWhiteSpace(SafetyCushionTextBox.Text)
-            && !decimal.TryParse(SafetyCushionTextBox.Text, out idealSafetyCushion))
-        {
-            MessageBox.Show(this, "Enter a valid safety cushion, or leave it blank.", "Invalid cushion", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
+        // Balance and cushion are per account now, and each one is validated as
+        // its account is saved — so there is nothing to parse here. The forecast
+        // runs on the household totals until the engine partitions per account
+        // (item 4).
+        var (balance, idealSafetyCushion) = AccountTotals();
 
-        if (idealSafetyCushion < 0m)
-        {
-            MessageBox.Show(this, "Safety cushion can't be negative.", "Invalid cushion", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
+        // The legacy row still carries the global as-of/horizon; its balance and
+        // cushion columns are kept in step only so the row stays coherent, and
+        // retire when it becomes the TransactionLogBook settings row (item 6).
         _currentBalance.Save(balance, asOfDate, horizonEndDate, idealSafetyCushion);
         RefreshForecast(balance, asOfDate, horizonEndDate, idealSafetyCushion);
     }
@@ -296,15 +484,10 @@ public partial class MainWindow : Window
             AsOfDatePicker.SelectedDate is { } asOf && DateOnly.FromDateTime(asOf) == shown.AsOfDate
             && HorizonEndDatePicker.SelectedDate is { } horizon && DateOnly.FromDateTime(horizon) == shown.HorizonEndDate;
 
-        var balanceMatches = decimal.TryParse(CurrentBalanceTextBox.Text, out var balance)
-            && balance == _shownBalance;
-
-        var cushionText = SafetyCushionTextBox.Text;
-        var cushionMatches = string.IsNullOrWhiteSpace(cushionText)
-            ? _shownCushion == 0m
-            : decimal.TryParse(cushionText, out var cushion) && cushion == _shownCushion;
-
-        ForecastButton.IsEnabled = !(datesMatch && balanceMatches && cushionMatches);
+        // Editing an account changes the totals the shown forecast was built
+        // from, so the button lights up exactly as a changed date does.
+        var (balance, cushion) = AccountTotals();
+        ForecastButton.IsEnabled = !(datesMatch && balance == _shownBalance && cushion == _shownCushion);
     }
 
     // Re-runs the forecast with the inputs it's already showing — for when
@@ -439,9 +622,21 @@ public partial class MainWindow : Window
         var financialPatterns = _financialPatterns.GetAll();
         var earMarkPatterns = _earMarkPatterns.GetAll();
 
-        FinancialPatternsGrid.ItemsSource = financialPatterns
-            .Select(pattern => new FinancialPatternRow(pattern))
+        // financeId -> the name of the account it's filed under, so the grid can
+        // show where each bill/paycheck/goal lives (item 2-B: never a mystery).
+        var accountNamesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
+        var accountNameByFinanceId = _financialPatterns.GetAllByAccount()
+            .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
+            .ToDictionary(pair => pair.FinanceId, pair => accountNamesById.GetValueOrDefault(pair.AccountId, "(unknown)"));
+
+        // Transfer legs are hidden from this list — a transfer shows on its own
+        // tab as one thing, not as its two underlying patterns (item 3). The
+        // engine still reads every pattern (legs included) when forecasting.
+        FinancialPatternsGrid.ItemsSource = _financialPatterns.GetAllExcludingTransferLegs()
+            .Select(pattern => new FinancialPatternRow(pattern, accountNameByFinanceId.GetValueOrDefault(pattern.FinanceId, "(unknown)")))
             .ToList();
+
+        RefreshTransfersGrid();
 
         var explicitRows = earMarkPatterns
             .Select(pattern => new EarMarkPatternRow(
@@ -576,20 +771,20 @@ public partial class MainWindow : Window
 
     private void OnAddFinancialPatternClick(object sender, RoutedEventArgs e)
     {
-        var window = new CreateFinancialPatternWindow(_financialPatterns.GetAll()) { Owner = this };
+        var window = new CreateFinancialPatternWindow(_financialPatterns.GetAll(), _accounts.GetAll()) { Owner = this };
         if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
         {
-            _financialPatterns.Save(pattern);
+            _financialPatterns.Save(pattern, window.SelectedAccountId);
             RefreshGrids();
         }
     }
 
     private void OnCreateBillClick(object sender, RoutedEventArgs e)
     {
-        var window = new CreateFinancialPatternWindow(_financialPatterns.GetAll(), forcedMandatory: true) { Owner = this };
+        var window = new CreateFinancialPatternWindow(_financialPatterns.GetAll(), _accounts.GetAll(), forcedMandatory: true) { Owner = this };
         if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
         {
-            _financialPatterns.Save(pattern);
+            _financialPatterns.Save(pattern, window.SelectedAccountId);
             RefreshGrids();
         }
     }
@@ -602,10 +797,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new CreateFinancialPatternWindow(row.Pattern) { Owner = this };
+        // The picker opens on whichever account the pattern is already filed
+        // under, so an unchanged pick preserves the filing and a changed one
+        // deliberately moves it.
+        var currentAccountId = _financialPatterns.GetAccountId(row.FinanceId) ?? DefaultAccountId();
+        var window = new CreateFinancialPatternWindow(row.Pattern, _accounts.GetAll(), currentAccountId) { Owner = this };
         if (window.ShowDialog() == true && window.CreatedPattern is { } updated)
         {
-            _financialPatterns.Save(updated);
+            _financialPatterns.Save(updated, window.SelectedAccountId);
             RefreshGrids();
         }
     }
@@ -719,10 +918,12 @@ public partial class MainWindow : Window
 
     private void OnCreateOneTimeGoalClick(object sender, RoutedEventArgs e)
     {
-        var window = new CreateOneTimeGoalWindow(_financialPatterns.GetAll()) { Owner = this };
+        var window = new CreateOneTimeGoalWindow(_financialPatterns.GetAll(), _accounts.GetAll()) { Owner = this };
         if (window.ShowDialog() == true && window.CreatedGoal is { } goal && window.CreatedEarMarkPattern is { } earmark)
         {
-            _financialPatterns.Save(goal);
+            // The goal (a finance pattern) is filed under the chosen account; its
+            // earmark reaches the same account through finance_id (item 2-A).
+            _financialPatterns.Save(goal, window.SelectedAccountId);
             _earMarkPatterns.Save(earmark);
             RefreshGrids();
         }

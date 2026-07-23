@@ -18,6 +18,10 @@
             <TextBlock Text="What are you saving for?"/>
             <TextBox x:Name="DescriptionTextBox" Margin="0,2,0,10"/>
 
+            <TextBlock Text="Which account holds this goal's savings?"/>
+            <ComboBox x:Name="AccountComboBox" Margin="0,2,0,10" DisplayMemberPath="Name" SelectedValuePath="Id"
+                      AutomationProperties.AutomationId="GoalAccountComboBox"/>
+
             <TextBlock Text="How much do you need?"/>
             <TextBox x:Name="AmountNeededTextBox" Margin="0,2,0,10"/>
 

@@ -23,7 +23,12 @@
                         <TextBlock Text="Description (optional)"/>
                         <TextBox x:Name="DescriptionTextBox" Margin="0,2,0,0"/>
                     </StackPanel>
-                    <StackPanel/>
+                    <StackPanel Margin="0,0,10,8">
+                        <TextBlock Text="Account"/>
+                        <ComboBox x:Name="AccountComboBox" Margin="0,2,0,0" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                  AutomationProperties.AutomationId="AccountComboBox"/>
+                        <TextBlock Text="Paid from / into this account." FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
                     <StackPanel Margin="0,0,10,0">
                         <StackPanel x:Name="DirectionPanel">
                             <TextBlock Text="Direction"/>
