@@ -128,6 +128,33 @@ public class AllocationPlanProposerTests
     }
 
     [Fact]
+    public void A_one_off_outflow_with_no_income_reserves_the_full_amount_once_up_front()
+    {
+        // A single-occurrence outflow must not generate one full contribution per
+        // frequency cycle between the as-of date and its due date — it reserves
+        // once, up front.
+        var oneOff = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 5,
+            Source = "Car repair",
+            Amount = -800m,
+            Mandatory = false,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly, // 8 months of cycles from the as-of date
+                Start = new DateOnly(2025, 9, 1),
+                Count = 1,
+            }),
+        });
+
+        var result = AllocationPlanProposer.Propose(oneOff, [oneOff], AsOf);
+
+        result.Plan.Amount.ShouldBe(-800m);
+        result.Plan.DatePattern.GetOccurrences(AsOf, result.Plan.DatePattern.Until).Count.ShouldBe(1);
+        result.StartingEarmark.ShouldBeNull();
+    }
+
+    [Fact]
     public void More_than_one_income_stream_falls_back_to_the_front_loaded_shape()
     {
         var income1 = MonthlyIncome(2000m, 15, new DateOnly(2024, 1, 15), new DateOnly(2027, 1, 1), id: 100);

@@ -127,13 +127,32 @@ public static class AllocationPlanProposer
         DateOnly billUntil,
         DateOnly asOfDate)
     {
-        var planPattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-        {
-            Frequency = outflow.DatePattern.Frequency,
-            Interval = outflow.DatePattern.Interval,
-            Start = asOfDate,
-            Until = billUntil,
-        });
+        // A single-occurrence outflow (a one-time expense, a one-off transfer)
+        // reserves its whole amount once, up front — one contribution at the
+        // as-of date. Generating on the outflow's frequency would instead emit
+        // one full contribution per cycle between now and the due date,
+        // over-reserving many times over. A genuinely recurring outflow with no
+        // usable income does reserve the full amount per cycle (each contribution
+        // funds the next occurrence).
+        var isSingleOccurrence =
+            outflow.DatePattern.GetOccurrences(outflow.DatePattern.Start, billUntil).Count <= 1;
+
+        var planPattern = isSingleOccurrence
+            ? RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                // Guard a past-dated one-off: the plan can't end after the
+                // outflow it funds (EarMarkPattern.Create / 3.11.2.a2).
+                Start = asOfDate <= billUntil ? asOfDate : billUntil,
+                Count = 1,
+            })
+            : RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = outflow.DatePattern.Frequency,
+                Interval = outflow.DatePattern.Interval,
+                Start = asOfDate,
+                Until = billUntil,
+            });
 
         var plan = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -144,8 +163,8 @@ public static class AllocationPlanProposer
             },
             outflow);
 
-        // The first contribution is at asOfDate (front-loaded), so nothing lands
-        // before it — no starting earmark needed.
+        // The first contribution is at the as-of date (front-loaded), so nothing
+        // lands before it — no starting earmark needed.
         return new ProposedAllocationPlan(plan, null);
     }
 

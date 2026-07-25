@@ -420,6 +420,101 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void A_repeating_bills_plan_that_underfunds_the_stream_is_flagged_short()
+    {
+        // F21: the need is the whole stream (100 x 12 = 1200), not one
+        // occurrence. A plan contributing only 50/month reaches 600 across the
+        // 12 months, so it is short by 600.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 1),
+            }),
+        });
+        var underfundingPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -50m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [bill],
+            earMarkPatterns: [underfundingPlan]));
+
+        var shortfall = result.GoalShortfalls.ShouldHaveSingleItem();
+        shortfall.AmountNeeded.ShouldBe(1200m);            // 100 x 12 occurrences
+        shortfall.AmountAllocatedByDueDate.ShouldBe(600m); // 50 x 12
+        shortfall.ShortfallAmount.ShouldBe(600m);
+    }
+
+    [Fact]
+    public void An_isolated_earmark_counts_toward_the_amount_allocated_by_the_due_date()
+    {
+        // F21: manual earmarks (and the starting earmark) count toward what the
+        // plan will have put in by the due date, not just the pattern's own
+        // contributions.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 3, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -50m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 3, 1),
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [bill],
+            earMarkPatterns: [plan],
+            manualEarmarks: [Manual(plan, new DateOnly(2025, 2, 1), 100m)]));
+
+        // 3 plan contributions of 50 (= 150) + the 100 manual earmark = 250.
+        var shortfall = result.GoalShortfalls.ShouldHaveSingleItem();
+        shortfall.AmountNeeded.ShouldBe(300m); // 100 x 3
+        shortfall.AmountAllocatedByDueDate.ShouldBe(250m);
+    }
+
+    [Fact]
     public void JarLabels_covers_both_a_planned_bill_and_an_explicit_goal()
     {
         var rent = FinancialPattern.Create(new FinancialPatternOptions

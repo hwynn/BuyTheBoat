@@ -61,6 +61,7 @@ public static class TransactionLogBookFactory
         // finance ids are unique across the whole book, so the union is safe.
         var allPatterns = accountInputs.SelectMany(account => account.FinancialPatterns).ToList();
         var allEarmarks = accountInputs.SelectMany(account => account.EarMarkPatterns).ToList();
+        var allManualEarmarks = accountInputs.SelectMany(account => account.ManualEarmarks).ToList();
         var patternsById = allPatterns.ToDictionary(pattern => pattern.FinanceId);
 
         var book = new TransactionLogBook
@@ -82,7 +83,7 @@ public static class TransactionLogBookFactory
             AsOfDate = options.AsOfDate,
             HorizonEndDate = options.HorizonEndDate,
             Book = book,
-            GoalShortfalls = CalculateGoalShortfalls(allEarmarks, patternsById),
+            GoalShortfalls = CalculateGoalShortfalls(allEarmarks, patternsById, allManualEarmarks),
             JarLabels = patternsById.ToDictionary(
                 pair => pair.Key,
                 pair => pair.Value.Description ?? pair.Value.Source),
@@ -710,15 +711,24 @@ public static class TransactionLogBookFactory
     }
 
     // ~3.13.5.4.a1: milestone vs. saved — but "saved" and "milestone" are
-    // structurally identical without real transactions, so the only way a
-    // goal can look short is if the savings schedule itself doesn't reach
-    // the goal amount by its own due date. Evaluated independently of any
-    // display horizon, and always includes every goal that has a savings
-    // plan (ShortfallAmount is 0 when fully on track) so a UI can render one
-    // row per goal without a separate lookup.
+    // structurally identical without real transactions, so the only way an
+    // outflow can look short is if its Allocation Plan doesn't put in enough by
+    // its due date. Evaluated independently of any display horizon, and always
+    // includes every outflow that has a plan (ShortfallAmount is 0 when fully on
+    // track) so a UI can render one row per plan without a separate lookup.
+    //
+    // F21 (planning/14 revision): the SAME formula serves a one-time goal and a
+    // repeating bill. The need scales by occurrence count — a repeating bill
+    // must have its whole stream covered, not one occurrence (a one-time goal
+    // has exactly one, so it is unchanged there). And "allocated" now counts
+    // isolated earmarks (manual adjustments and the starting earmark) as well as
+    // the plan's own contributions. Gross-vs-gross: it can't see a plan that
+    // back-loads its contributions within the span; the proposer never produces
+    // that shape.
     private static IReadOnlyList<GoalShortfall> CalculateGoalShortfalls(
         IReadOnlyList<EarMarkPattern> earMarkPatterns,
-        IReadOnlyDictionary<int, FinancialPattern> goalsByFinanceId)
+        IReadOnlyDictionary<int, FinancialPattern> goalsByFinanceId,
+        IReadOnlyList<ManualEarmark> manualEarmarks)
     {
         var shortfalls = new List<GoalShortfall>();
 
@@ -726,15 +736,26 @@ public static class TransactionLogBookFactory
         {
             var goal = goalsByFinanceId[earmark.FinanceId];
             var dueDate = goal.DatePattern.Until;
+
+            var occurrenceCount = goal.DatePattern
+                .GetOccurrences(goal.DatePattern.Start, goal.DatePattern.Until).Count;
+            var amountNeeded = Math.Abs(goal.Amount) * occurrenceCount;
+
+            // StartingAllocation (the entered opening balance) + the plan's
+            // repeated contributions to date + any isolated earmarks dated on or
+            // before the due date. The three don't overlap, so no double count.
             var allocated = earmark.StartingAllocation
-                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, dueDate).Count;
+                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, dueDate).Count
+                + manualEarmarks
+                    .Where(manual => manual.FinanceId == earmark.FinanceId && manual.Date <= dueDate)
+                    .Sum(manual => manual.Amount);
 
             shortfalls.Add(new GoalShortfall
             {
                 FinanceId = goal.FinanceId,
                 Label = goal.Description ?? goal.Source,
                 DueDate = dueDate,
-                AmountNeeded = Math.Abs(goal.Amount),
+                AmountNeeded = amountNeeded,
                 AmountAllocatedByDueDate = allocated,
             });
         }

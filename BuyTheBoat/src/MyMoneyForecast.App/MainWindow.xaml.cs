@@ -161,6 +161,15 @@ public partial class MainWindow : Window
         });
 
         _transfers.Save(result);
+
+        // Stage-1 revision (planning/14): the transfer reserves in the account it
+        // leaves, through a front-loaded Allocation Plan on the withdrawal — no
+        // income pacing (a transfer isn't a recurring bill), so the no-income
+        // shape reserves the full amount from the as-of date. The withdrawal is
+        // already persisted above, so its plan's finance id resolves.
+        var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate());
+        _earMarkPatterns.Save(withdrawalPlan.Plan);
+
         RefreshGrids();
 
         // The transfer's patterns change the cascade, so re-run the forecast — that
@@ -1044,6 +1053,7 @@ public partial class MainWindow : Window
         if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
         {
             _financialPatterns.Save(pattern, window.SelectedAccountId);
+            AutoCreateAllocationPlan(pattern);
             RefreshGrids();
         }
     }
@@ -1054,9 +1064,38 @@ public partial class MainWindow : Window
         if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
         {
             _financialPatterns.Save(pattern, window.SelectedAccountId);
+            AutoCreateAllocationPlan(pattern);
             RefreshGrids();
         }
     }
+
+    // Stage-1 revision (planning/14): every scheduled outflow reserves through
+    // its own Allocation Plan, proposed at creation from the current as-of date
+    // and the user's income. Income never gets one (A-1). The plan (and any
+    // starting earmark, for a bill due before its first paycheck) is persisted
+    // like a savings plan and appears in the earmark grid, where it can be
+    // edited or removed. Transfer patterns are excluded from the income scan so
+    // a deposit isn't mistaken for a paycheck.
+    private void AutoCreateAllocationPlan(FinancialPattern pattern)
+    {
+        if (pattern.Amount >= 0m)
+        {
+            return;
+        }
+
+        var proposal = AllocationPlanProposer.Propose(
+            pattern, _financialPatterns.GetAllExcludingTransferPatterns(), CurrentAsOfDate());
+        _earMarkPatterns.Save(proposal.Plan);
+        if (proposal.StartingEarmark is { } starting)
+        {
+            _manualEarmarks.Save(starting);
+        }
+    }
+
+    private DateOnly CurrentAsOfDate() =>
+        AsOfDatePicker.SelectedDate is { } asOf
+            ? DateOnly.FromDateTime(asOf)
+            : DateOnly.FromDateTime(DateTime.Today);
 
     private void OnEditFinancialPatternClick(object sender, RoutedEventArgs e)
     {
