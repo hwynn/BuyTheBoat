@@ -5,7 +5,7 @@ namespace MyMoneyForecast.App;
 
 // Schedules a transfer between two of the user's accounts. Presented as one
 // action; MyMoneyForecast turns it into a Transfer record plus two paired
-// FinancialPattern legs (planning/10 item 3) — the window just collects the
+// withdrawal and deposit patterns (planning/10 item 3) — the window just collects the
 // from/to/amount/schedule and hands them back.
 public partial class CreateTransferWindow : Window
 {

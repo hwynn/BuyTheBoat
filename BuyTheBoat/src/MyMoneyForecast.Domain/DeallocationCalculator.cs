@@ -88,12 +88,18 @@ public static class DeallocationCalculator
             }
         }
 
-        // Step B drains lowest priority first (cushion at 0). Stable on the
-        // original position so equal priorities — which the domain forbids but
-        // the pure function shouldn't assume away — stay deterministic.
+        // Step B drains in three groups — cushion, then everything the user
+        // said they could skip, then everything they said they must pay
+        // (planning/14 item B-2, "absolute"). Priority orders WITHIN a group,
+        // lowest first, so an unskippable bill is never raided while a
+        // skippable goal still holds money, whatever their priority numbers say.
+        // Stable on the original position so equal priorities — which the domain
+        // forbids but the pure function shouldn't assume away — stay
+        // deterministic.
         var ordered = jars
             .Select((jar, index) => (jar, index))
-            .OrderBy(item => item.jar.Priority)
+            .OrderBy(item => DrainGroup(item.jar))
+            .ThenBy(item => item.jar.Priority)
             .ThenBy(item => item.index)
             .Select(item => item.jar)
             .ToList();
@@ -167,6 +173,16 @@ public static class DeallocationCalculator
         };
     }
 
+    // Which of the three drain groups a jar falls in (see the sort above).
+    // The cushion goes first by identity, not by its priority number, so it
+    // stays first no matter what the surrounding priorities are.
+    private static int DrainGroup(DeallocationJar jar) => jar switch
+    {
+        { FinanceId: null } => 0, // the safety cushion — always drained first
+        { Skippable: true } => 1, // the user said they could skip or delay this
+        _ => 2,                   // the user said they have to pay this
+    };
+
     // Cushion jars share the null finance id, so they can't key a dictionary
     // by finance id. There is only ever one cushion per snapshot (9.5.a1), so
     // a single sentinel is enough to distinguish it from the numbered jars.
@@ -186,7 +202,14 @@ public sealed record DeallocationJar(
     decimal Balance,
     // er + ei: the repeated + isolated earmarks already scheduled for this jar
     // today, summed. Any sign.
-    decimal ExistingEarmark);
+    decimal ExistingEarmark,
+    // Whether the user said they could skip or delay what this jar is for —
+    // the meaning FinancialPattern.Mandatory took on in planning/14 item B.
+    // Skippable jars are drained before any unskippable one, whatever their
+    // priorities. Defaults to false ("I have to pay this"), matching both the
+    // documented default for an expense and the pre-item-B behaviour, where
+    // every jar sorted by priority alone.
+    bool Skippable = false);
 
 // A paired transaction (ap): a goal's own purchase, pulling from its jar.
 // Negative = we bought what we saved for; positive = the goal was adding.

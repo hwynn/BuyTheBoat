@@ -25,8 +25,8 @@ public class TransferTests
     private static TransferRequest Request() => new()
     {
         TransferId = 1,
-        OutLegFinanceId = 10,
-        InLegFinanceId = 11,
+        WithdrawalFinanceId = 10,
+        DepositFinanceId = 11,
         FromAccountId = 1,
         ToAccountId = 2,
         FromAccountName = "Checking",
@@ -50,33 +50,33 @@ public class TransferTests
     }
 
     [Fact]
-    public void Create_produces_a_withdrawal_leg_and_a_matching_deposit_leg()
+    public void Create_produces_a_withdrawal_and_a_matching_deposit()
     {
         var result = TransferFactory.Create(Request());
 
         result.Transfer.Amount.ShouldBe(500m);
-        result.OutLeg.Amount.ShouldBe(-500m);
-        result.InLeg.Amount.ShouldBe(500m);
-        result.OutLeg.Description.ShouldBe("Transfer to Savings");
-        result.InLeg.Description.ShouldBe("Transfer from Checking");
+        result.Withdrawal.Amount.ShouldBe(-500m);
+        result.Deposit.Amount.ShouldBe(500m);
+        result.Withdrawal.Description.ShouldBe("Transfer to Savings");
+        result.Deposit.Description.ShouldBe("Transfer from Checking");
     }
 
     [Fact]
-    public void Both_legs_are_non_mandatory_so_a_transfer_never_auto_reserves()
+    public void Both_patterns_are_non_mandatory_so_a_transfer_never_auto_reserves()
     {
         var result = TransferFactory.Create(Request());
 
-        result.OutLeg.Mandatory.ShouldBeFalse();
-        result.InLeg.Mandatory.ShouldBeFalse();
+        result.Withdrawal.Mandatory.ShouldBeFalse();
+        result.Deposit.Mandatory.ShouldBeFalse();
     }
 
     [Fact]
-    public void Both_legs_share_the_transfers_schedule()
+    public void Both_patterns_share_the_transfers_schedule()
     {
         var result = TransferFactory.Create(Request());
 
         var schedule = result.Transfer.DatePattern.ToRruleString();
-        result.OutLeg.DatePattern.ToRruleString().ShouldBe(schedule);
-        result.InLeg.DatePattern.ToRruleString().ShouldBe(schedule);
+        result.Withdrawal.DatePattern.ToRruleString().ShouldBe(schedule);
+        result.Deposit.DatePattern.ToRruleString().ShouldBe(schedule);
     }
 }

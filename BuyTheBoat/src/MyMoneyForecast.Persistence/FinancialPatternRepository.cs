@@ -8,7 +8,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
     // accountId is which account this pattern is FILED UNDER — deliberately a
     // separate argument rather than a property of the pattern, because the
     // documented model gives FinancialPattern no account (planning/10 item 2-A).
-    // transferId, when set, marks this pattern as one leg of a transfer (item 3).
+    // transferId, when set, marks this pattern as one pattern of a transfer (item 3).
     public void Save(FinancialPattern pattern, int accountId, int? transferId = null)
     {
         using var connection = database.OpenConnection();
@@ -102,10 +102,10 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
     }
 
     // The pattern-list UI shows only patterns the user created directly — a
-    // transfer's two legs are hidden here and surfaced as the single transfer
+    // transfer's two patterns are hidden here and surfaced as the single transfer
     // instead (planning/10 item 3). GetAll (and GetAllByAccount) still return
-    // the legs, because they are what actually move money in the cascade.
-    public IReadOnlyList<FinancialPattern> GetAllExcludingTransferLegs()
+    // the patterns, because they are what actually move money in the cascade.
+    public IReadOnlyList<FinancialPattern> GetAllExcludingTransferPatterns()
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
@@ -121,7 +121,37 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return patterns;
     }
 
-    // Removes both legs of a transfer — used when the transfer itself is deleted.
+    // The finance ids of every transfer's WITHDRAWAL — the negative pattern, in
+    // the account the money leaves. The engine needs these for planning/14 item
+    // A-1: a transfer reserves in the account it leaves, but the household view
+    // must not count that as set aside, since the household is not down a cent.
+    //
+    // The domain FinancialPattern deliberately carries no TransferId (that is a
+    // storage concern, planning/10 item 2-A), so the engine is handed the set
+    // rather than working it out. Amounts are stored as invariant-culture TEXT,
+    // so the sign test is done in C# rather than in SQL, where comparing a text
+    // column numerically is not dependable.
+    public IReadOnlySet<int> GetTransferWithdrawalFinanceIds()
+    {
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT FinanceId, Amount FROM FinancialPatterns WHERE TransferId IS NOT NULL;";
+
+        using var reader = command.ExecuteReader();
+        var ids = new HashSet<int>();
+        while (reader.Read())
+        {
+            var amount = decimal.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
+            if (amount < 0m)
+            {
+                ids.Add(reader.GetInt32(0));
+            }
+        }
+
+        return ids;
+    }
+
+    // Removes both patterns of a transfer — used when the transfer itself is deleted.
     public void DeleteByTransferId(int transferId)
     {
         using var connection = database.OpenConnection();

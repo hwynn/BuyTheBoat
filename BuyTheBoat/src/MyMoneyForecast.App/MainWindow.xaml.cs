@@ -143,15 +143,15 @@ public partial class MainWindow : Window
 
         var namesById = accounts.ToDictionary(account => account.Id, account => account.Name);
 
-        // Two fresh finance ids for the legs (they are real patterns, so they
-        // must not collide with any existing pattern's id — legs included).
+        // Two fresh finance ids for the patterns (they are real patterns, so they
+        // must not collide with any existing pattern's id — patterns included).
         var maxFinanceId = _financialPatterns.GetAll().Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max();
 
         var result = TransferFactory.Create(new TransferRequest
         {
             TransferId = _transfers.NextId(),
-            OutLegFinanceId = maxFinanceId + 1,
-            InLegFinanceId = maxFinanceId + 2,
+            WithdrawalFinanceId = maxFinanceId + 1,
+            DepositFinanceId = maxFinanceId + 2,
             FromAccountId = window.FromAccountId,
             ToAccountId = window.ToAccountId,
             FromAccountName = namesById[window.FromAccountId],
@@ -163,7 +163,7 @@ public partial class MainWindow : Window
         _transfers.Save(result);
         RefreshGrids();
 
-        // The transfer's legs change the cascade, so re-run the forecast — that
+        // The transfer's patterns change the cascade, so re-run the forecast — that
         // is what actually clears the shortfall the lever was offered for.
         RefreshShownForecast();
     }
@@ -341,7 +341,7 @@ public partial class MainWindow : Window
     // stays cheap at that scale because the outer ListBox virtualizes months.
     // One AccountForecastInput per account: its own balance/cushion, and the
     // patterns/earmarks/manuals filed under it (an earmark or manual reaches its
-    // account through its finance id — item 2-A). Transfer legs are patterns
+    // account through its finance id — item 2-A). A transfer's two patterns are patterns
     // filed under an account too, so they ride along and feed its cascade.
     private IReadOnlyList<AccountForecastInput> BuildAccountInputs()
     {
@@ -382,6 +382,10 @@ public partial class MainWindow : Window
             AsOfDate = asOfDate,
             HorizonEndDate = horizonEndDate,
             Accounts = BuildAccountInputs(),
+            // planning/14 item A-1: lets the household roll-up add a transfer's
+            // reservation back into free, so moving your own money never reads
+            // as household spending.
+            TransferWithdrawalFinanceIds = _financialPatterns.GetTransferWithdrawalFinanceIds(),
         });
 
         _lastForecast = forecast;
@@ -484,7 +488,7 @@ public partial class MainWindow : Window
             .ToDictionary(group => group.Key, group => (group.First().Priority, Name: group.First().Description ?? group.First().Source));
 
         // An event the USER would count: a transaction, a scheduled allocation,
-        // or a manual adjustment. System-generated reservation steps (auto-bill
+        // or a manual adjustment. System-generated reservation steps (automatically funded expense
         // accrual, cushion fills, deallocation give-backs) are mechanism, not
         // events, so they are not counted.
         static int CountEvents(BalanceSnapshot snapshot) =>
@@ -900,30 +904,24 @@ public partial class MainWindow : Window
             .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
             .ToDictionary(pair => pair.FinanceId, pair => accountNamesById.GetValueOrDefault(pair.AccountId, "(unknown)"));
 
-        // Transfer legs are hidden from this list — a transfer shows on its own
+        // A transfer's two patterns are hidden from this list — a transfer shows on its own
         // tab as one thing, not as its two underlying patterns (item 3). The
-        // engine still reads every pattern (legs included) when forecasting.
-        FinancialPatternsGrid.ItemsSource = _financialPatterns.GetAllExcludingTransferLegs()
+        // engine still reads every pattern (patterns included) when forecasting.
+        FinancialPatternsGrid.ItemsSource = _financialPatterns.GetAllExcludingTransferPatterns()
             .Select(pattern => new FinancialPatternRow(pattern, accountNameByFinanceId.GetValueOrDefault(pattern.FinanceId, "(unknown)")))
             .ToList();
 
         RefreshTransfersGrid();
 
-        var explicitRows = earMarkPatterns
+        // Stage-1 revision (planning/14): the computed A/B ramp is retired, so
+        // there are no longer "automatic" rows without a real pattern behind
+        // them — every outflow that reserves has its own Allocation Plan
+        // (an EarMarkPattern), so the grid just shows those.
+        EarMarkPatternsGrid.ItemsSource = earMarkPatterns
             .Select(pattern => new EarMarkPatternRow(
                 pattern,
                 financialPatterns.FirstOrDefault(goal => goal.FinanceId == pattern.FinanceId)))
-            .Cast<object>();
-
-        // Every mandatory bill without an explicit earmark already gets an
-        // automatic reservation baked into the forecast's numbers (see
-        // TransactionLogBookFactory) — surfaced here too, read-only, so that
-        // mechanism isn't invisible. Appended after the real rows.
-        var automaticRows = TransactionLogBookFactory.GetAutomaticallyEarmarkedBills(financialPatterns, earMarkPatterns)
-            .Select(bill => new AutomaticBillEarmarkRow(bill))
-            .Cast<object>();
-
-        EarMarkPatternsGrid.ItemsSource = explicitRows.Concat(automaticRows).ToList();
+            .ToList();
 
         ManualEarmarksGrid.ItemsSource = _manualEarmarks.GetAll()
             .Select(earmark => new ManualEarmarkRow(
@@ -1088,24 +1086,109 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_financialPatterns.HasLinkedEarMarkPattern(row.FinanceId))
+        var label = row.Description is { Length: > 0 } description ? description : row.Source;
+
+        // planning/14 item D-2: this used to be BLOCKED, sending the user to
+        // another tab to delete the savings plan first — which made trying out a
+        // speculative purchase a two-step chore across two tabs (charter item
+        // 13). A savings plan whose goal no longer exists is invalid by 3.10.a3,
+        // not merely untidy, so removing both is the more correct outcome. We
+        // still say what is about to happen rather than doing it silently.
+        var hasSavingsPlan = _financialPatterns.HasLinkedEarMarkPattern(row.FinanceId);
+        if (hasSavingsPlan)
         {
-            MessageBox.Show(
+            var answer = MessageBox.Show(
                 this,
-                "This has a linked savings goal (earmark pattern). Delete that first, on the Savings Goals tab.",
-                "Can't delete yet",
-                MessageBoxButton.OK,
+                $"Deleting \"{label}\" will also remove its savings plan.\n\nContinue?",
+                "Delete this and its savings plan?",
+                MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning);
+            if (answer != MessageBoxResult.OK)
+            {
+                return;
+            }
+        }
+        else if (!ConfirmDelete(label))
+        {
             return;
         }
 
-        if (!ConfirmDelete(row.Description is { Length: > 0 } description ? description : row.Source))
+        if (hasSavingsPlan)
         {
-            return;
+            _earMarkPatterns.Delete(row.FinanceId);
         }
 
         _financialPatterns.Delete(row.FinanceId);
         RefreshGrids();
+    }
+
+    // planning/14 item D-1. An outflow with no savings plan has its jar filled
+    // by the standing automatic rule; this hands that jar over to a plan the
+    // user owns. Seeded from what the jar already holds, so pressing it moves
+    // no money — it only changes what governs the jar from here on.
+    private void OnSetUpSavingsPlanClick(object sender, RoutedEventArgs e)
+    {
+        if (FinancialPatternsGrid.SelectedItem is not FinancialPatternRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        if (row.Amount >= 0m)
+        {
+            MessageBox.Show(
+                this,
+                "Money coming in doesn't need a savings plan — there's nothing to set aside for it.",
+                "Nothing to save toward",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        if (_financialPatterns.HasLinkedEarMarkPattern(row.FinanceId))
+        {
+            MessageBox.Show(
+                this,
+                "This already has a savings plan. Edit it on the Allocations tab.",
+                "Already has a plan",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var window = new CreateEarMarkPatternWindow(row.Pattern, CurrentJarAmount(row.FinanceId)) { Owner = this };
+        if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
+        {
+            _earMarkPatterns.Save(pattern);
+            RefreshGrids();
+            if (_lastForecast is { } shown)
+            {
+                RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
+            }
+        }
+    }
+
+    // What this jar holds as of the forecast's own start date, so a new savings
+    // plan can pick up exactly where the automatic filling left off. Zero when
+    // there is no forecast on screen yet, or the jar doesn't exist in it.
+    private decimal CurrentJarAmount(int financeId)
+    {
+        if (_lastForecast is not { } forecast)
+        {
+            return 0m;
+        }
+
+        foreach (var account in forecast.Accounts)
+        {
+            var jar = account.Page.InitialSnapshot.FundJars
+                .FirstOrDefault(candidate => candidate.FinanceId == financeId);
+            if (jar is not null)
+            {
+                return jar.ExpectedAmount;
+            }
+        }
+
+        return 0m;
     }
 
     private void OnAddEarMarkPatternClick(object sender, RoutedEventArgs e)
@@ -1205,7 +1288,7 @@ public partial class MainWindow : Window
 
     private void ShowAutomaticRowIsNotManageable() => MessageBox.Show(
         this,
-        "This is an automatic reservation for a mandatory bill, not a real earmark pattern — there's nothing to edit or delete here. " +
+        "This is an automatic funding for a mandatory bill, not a real earmark pattern — there's nothing to edit or delete here. " +
         "It disappears on its own if you delete the bill or give it a real earmark, on the Bills & Paychecks tab.",
         "Automatic — nothing to manage",
         MessageBoxButton.OK,

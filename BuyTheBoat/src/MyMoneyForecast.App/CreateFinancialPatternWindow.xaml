@@ -48,10 +48,21 @@
                     <StackPanel/>
                 </UniformGrid>
 
+                <!-- planning/14 item B-3: two named options rather than a
+                     checkbox, following the same reasoning that made
+                     Expense/Income a radio pair — a checkbox's meaning depends
+                     on reading its caption, two named options don't. Hidden for
+                     income (B-4): money coming in is never something you skip
+                     paying. -->
                 <StackPanel x:Name="MandatoryPanel" Margin="0,10,0,0">
-                    <CheckBox x:Name="MandatoryCheckBox" Content="Mandatory" Checked="OnMandatoryToggledByUser" Unchecked="OnMandatoryToggledByUser"/>
-                    <TextBlock TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" FontSize="11" Margin="20,4,0,0"
-                               Text="Checked: a bill you're obligated to pay (rent, utilities, debt) — outranks non-mandatory patterns when money is short. Unchecked: discretionary — a paycheck, or an expense that's nice to have but skippable if needed (a subscription, a planned purchase, a savings goal). Suggested automatically from Expense/Income above (Expense → checked) until you set it yourself."/>
+                    <TextBlock Text="If money got tight, could you skip this?"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <RadioButton x:Name="UnskippableRadioButton" Content="I have to pay this" GroupName="Skippable"
+                                     IsChecked="True" Margin="0,0,18,0"/>
+                        <RadioButton x:Name="SkippableRadioButton" Content="I could skip or delay it" GroupName="Skippable"/>
+                    </StackPanel>
+                    <TextBlock TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" FontSize="11" Margin="0,4,0,0"
+                               Text="If your plan ever needs more money than you have, anything you could skip gives its money back first — what you have to pay is protected until everything skippable is empty. Both still get money set aside for them; this only decides what gives way when something has to."/>
                 </StackPanel>
             </StackPanel>
         </GroupBox>

@@ -221,13 +221,12 @@ public class TransactionLogBookFactoryTests
 
         result.HasNegativeFreeBalance.ShouldBeTrue();
 
-        // The car repair is a mandatory bill due Feb 1 with no income before
-        // it, so its full amount is reserved immediately (behaviour B). The
-        // shortfall therefore shows from the as-of day (Jan 1) — you can't
-        // afford the upcoming repair *now*, not merely when it finally hits.
-        result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 1, 1));
-        SnapshotOn(result, new DateOnly(2025, 1, 1)).ExpectedFreeAmount.ShouldBe(-400m); // 100 - 500 reserved
-        SnapshotOn(result, new DateOnly(2025, 2, 1)).ExpectedFreeAmount.ShouldBe(-400m); // still short once paid
+        // Stage-1 revision: the car repair has no Allocation Plan, so it is not
+        // reserved ahead of time — it only reduces free funds when it lands on
+        // Feb 1. So the shortfall first shows on Feb 1, not on the as-of day.
+        result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 2, 1));
+        SnapshotOn(result, new DateOnly(2025, 1, 1)).ExpectedFreeAmount.ShouldBe(100m); // not reserved ahead
+        SnapshotOn(result, new DateOnly(2025, 2, 1)).ExpectedFreeAmount.ShouldBe(-400m); // 100 - 500 when it hits
     }
 
     [Fact]
@@ -289,203 +288,7 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
-    public void A_recurring_mandatory_bill_accrues_linearly_and_resets_after_each_payment()
-    {
-        var rent = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 30,
-            Source = "Rent",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
-                Until = new DateOnly(2025, 12, 1),
-            }),
-            Amount = -300m,
-        });
-        rent.Mandatory.ShouldBeTrue(); // sanity check this test relies on the amount-sign default
-
-        // A paycheck landing before every rent due date — needed for the ramp
-        // itself to apply (accrual snaps to full once nothing more arrives
-        // before the due date; see the dedicated test below).
-        var paycheck = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 31,
-            Source = "Employer",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [25],
-                Start = new DateOnly(2025, 1, 25),
-                Until = new DateOnly(2025, 12, 25),
-            }),
-            Amount = 2000m,
-        });
-
-        // A zero-effect probe on Jan 16 purely to force that date into the
-        // timeline — snapshots exist only on event dates, and bill accrual
-        // has no discrete occurrence of its own to probe mid-cycle.
-        var midCycleProbe = OneOffPattern("Probe", 0m, new DateOnly(2025, 1, 16));
-
-        var result = TransactionLogBookFactory.CreateForecast(Options(
-            startingBalance: 1000m,
-            asOfDate: new DateOnly(2025, 1, 1),
-            horizonEndDate: new DateOnly(2025, 3, 1),
-            financialPatterns: [rent, paycheck, midCycleProbe]));
-
-        Jar(SnapshotOn(result, new DateOnly(2025, 1, 1)), 30).ShouldBe(0m);
-
-        var midCycle = SnapshotOn(result, new DateOnly(2025, 1, 16));
-        Jar(midCycle, 30).ShouldBe(145.16m); // 15/31 of $300, already reserved out of free balance
-        midCycle.ExpectedFreeAmount.ShouldBe(854.84m); // 1000 - 145.16
-
-        var paymentDay = SnapshotOn(result, new DateOnly(2025, 2, 1));
-        Jar(paymentDay, 30).ShouldBe(0m); // released the moment it's paid, not double-counted
-        paymentDay.ExpectedAmount.ShouldBe(2700m); // 1000 - 300 (rent) + 2000 (Jan 25 paycheck)
-        paymentDay.ExpectedFreeAmount.ShouldBe(2700m);
-    }
-
-    [Fact]
-    public void A_recurring_mandatory_bill_is_fully_reserved_once_no_more_income_arrives_before_its_due_date()
-    {
-        var rent = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 30,
-            Source = "Rent",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
-                Until = new DateOnly(2025, 12, 1),
-            }),
-            Amount = -310m, // divides evenly by the 31 days in this cycle, to keep the math readable
-        });
-
-        var paycheck = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 31,
-            Source = "Employer",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [15],
-                Start = new DateOnly(2025, 1, 15),
-                Until = new DateOnly(2025, 12, 15),
-            }),
-            Amount = 2000m,
-        });
-
-        var beforePaycheckProbe = OneOffPattern("Probe before payday", 0m, new DateOnly(2025, 1, 10));
-        var afterPaycheckProbe = OneOffPattern("Probe after payday", 0m, new DateOnly(2025, 1, 20));
-
-        var result = TransactionLogBookFactory.CreateForecast(Options(
-            startingBalance: 1000m,
-            asOfDate: new DateOnly(2025, 1, 1),
-            horizonEndDate: new DateOnly(2025, 2, 1),
-            financialPatterns: [rent, paycheck, beforePaycheckProbe, afterPaycheckProbe]));
-
-        // Jan 10 — the Jan 15 payday still lands before Feb 1's rent, so the
-        // ordinary ramp applies: 9/31 of $310.
-        Jar(SnapshotOn(result, new DateOnly(2025, 1, 10)), 30).ShouldBe(90.00m);
-
-        // Jan 20 — the Jan 15 payday has already happened, and the *next*
-        // one (Feb 15) is after rent is due, so nothing more is expected to
-        // arrive before Feb 1. The full $310 is reserved now, not the
-        // linear-ramp fraction (19/31 of $310 = $190.00) — proving the
-        // snap-to-full branch fired, not a coincidence.
-        Jar(SnapshotOn(result, new DateOnly(2025, 1, 20)), 30).ShouldBe(310.00m);
-    }
-
-    [Fact]
-    public void A_brand_new_bills_first_occurrence_before_any_income_is_fully_reserved_from_the_as_of_day()
-    {
-        // A mandatory bill whose first-ever occurrence is in the future (no
-        // prior cycle) and lands before any paycheck. The money must already
-        // be in hand, so it should be fully reserved on the current (as-of)
-        // day — the gap that previously left a brand-new upcoming bill
-        // looking unfunded until it hit.
-        var registration = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 100,
-            Source = "Registration",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [20],
-                Start = new DateOnly(2025, 1, 20),
-                Until = new DateOnly(2025, 12, 20),
-            }),
-            Amount = -300m,
-        });
-        registration.Mandatory.ShouldBeTrue();
-
-        // No income at all -> nothing arrives before the Jan 20 due date -> B.
-        var result = TransactionLogBookFactory.CreateForecast(Options(
-            startingBalance: 1000m,
-            asOfDate: new DateOnly(2025, 1, 1),
-            horizonEndDate: new DateOnly(2025, 2, 1),
-            financialPatterns: [registration]));
-
-        var asOfDay = SnapshotOn(result, new DateOnly(2025, 1, 1));
-        Jar(asOfDay, 100).ShouldBe(300m); // fully reserved from day one
-        asOfDay.ExpectedFreeAmount.ShouldBe(700m); // 1000 - 300, not a misleading 1000
-    }
-
-    [Fact]
-    public void A_brand_new_bills_first_occurrence_after_a_paycheck_paces_from_the_forecast_start()
-    {
-        // Paycheck Jan 15 lands before the bill's first occurrence (Feb 15),
-        // so a future paycheck helps fund it -> behaviour A. With no prior
-        // cycle to anchor to, the ramp paces from the as-of date (Jan 1)
-        // rather than reserving nothing.
-        var paycheck = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 101,
-            Source = "Employer",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [15],
-                Start = new DateOnly(2025, 1, 15),
-                Until = new DateOnly(2025, 12, 15),
-            }),
-            Amount = 2000m,
-        });
-
-        var tuition = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 102,
-            Source = "Tuition",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [15],
-                Start = new DateOnly(2025, 2, 15),
-                Until = new DateOnly(2025, 12, 15),
-            }),
-            Amount = -450m,
-        });
-        tuition.Mandatory.ShouldBeTrue();
-
-        var result = TransactionLogBookFactory.CreateForecast(Options(
-            startingBalance: 5000m,
-            asOfDate: new DateOnly(2025, 1, 1),
-            horizonEndDate: new DateOnly(2025, 3, 1),
-            financialPatterns: [paycheck, tuition]));
-
-        // Jan 1 (as-of): pacing has just begun -> nothing reserved yet.
-        Jar(SnapshotOn(result, new DateOnly(2025, 1, 1)), 102).ShouldBe(0m);
-
-        // Jan 15 (paycheck snapshot): 14 of the 45 days from Jan 1 to the
-        // Feb 15 due date have elapsed -> 14/45 * $450 = $140, proving the
-        // first-cycle ramp is anchored to the forecast start, not stuck at 0.
-        Jar(SnapshotOn(result, new DateOnly(2025, 1, 15)), 102).ShouldBe(140m);
-    }
-
-    [Fact]
-    public void A_mandatory_bill_with_an_explicit_earmark_pattern_is_not_also_auto_accrued()
+    public void A_bill_with_an_earmark_pattern_reserves_through_that_plan()
     {
         var bill = FinancialPattern.Create(new FinancialPatternOptions
         {
@@ -531,8 +334,13 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
-    public void A_non_mandatory_pattern_without_an_earmark_gets_no_implicit_jar()
+    public void An_outflow_without_an_allocation_plan_does_not_reserve()
     {
+        // Stage-1 revision (planning/14 "Revision 2026-07-24"): the computed
+        // ramp is retired. An outflow with no Allocation Plan of its own gets
+        // NO jar — it simply reduces free funds on its due date. (In the app
+        // every outflow is given a plan at creation; the engine reserves only
+        // what has one.)
         var subscription = FinancialPattern.Create(new FinancialPatternOptions
         {
             FinanceId = 50,
@@ -554,8 +362,13 @@ public class TransactionLogBookFactoryTests
             horizonEndDate: new DateOnly(2025, 3, 1),
             financialPatterns: [subscription]));
 
+        // No jar for the subscription — nothing reserves it ahead of time.
         SnapshotOn(result, new DateOnly(2025, 2, 1)).FundJars
             .ShouldNotContain(jar => jar.FinanceId == 50);
+
+        // It still lands as an expected transaction on its due date, reducing
+        // free funds then (500 - 15 for the Feb 1 occurrence).
+        SnapshotOn(result, new DateOnly(2025, 2, 1)).ExpectedFreeAmount.ShouldBe(485m);
     }
 
     [Fact]
@@ -607,75 +420,7 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
-    public void GetAutomaticallyEarmarkedBills_excludes_non_mandatory_patterns_and_bills_with_an_explicit_earmark()
-    {
-        var rent = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 80,
-            Source = "Rent",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
-                Until = new DateOnly(2025, 12, 1),
-            }),
-            Amount = -1200m,
-        });
-
-        var insurance = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 81,
-            Source = "Insurance",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 6, 1),
-                Count = 1,
-            }),
-            Amount = -1200m,
-        });
-
-        var subscription = FinancialPattern.Create(new FinancialPatternOptions
-        {
-            FinanceId = 82,
-            Source = "Streaming service",
-            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Monthly,
-                ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
-                Until = new DateOnly(2025, 12, 1),
-            }),
-            Amount = -15m,
-            Mandatory = false,
-        });
-
-        var insuranceEarmark = EarMarkPattern.Create(
-            new EarMarkPatternOptions
-            {
-                FinanceId = 81,
-                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-                {
-                    Frequency = RecurrenceFrequency.Monthly,
-                    ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
-                    Until = new DateOnly(2025, 5, 1),
-                }),
-                Amount = -240m,
-            },
-            insurance);
-
-        var automatic = TransactionLogBookFactory.GetAutomaticallyEarmarkedBills(
-            [rent, insurance, subscription],
-            [insuranceEarmark]);
-
-        var automaticIds = automatic.Select(pattern => pattern.FinanceId).ToList();
-        automaticIds.ShouldBe([80]); // insurance is explicitly earmarked; the subscription isn't mandatory
-    }
-
-    [Fact]
-    public void JarLabels_covers_both_automatically_earmarked_bills_and_explicit_goals()
+    public void JarLabels_covers_both_a_planned_bill_and_an_explicit_goal()
     {
         var rent = FinancialPattern.Create(new FinancialPatternOptions
         {
@@ -692,6 +437,24 @@ public class TransactionLogBookFactoryTests
             Amount = -1000m,
         });
 
+        // Stage-1 revision: a bill reserves through its own Allocation Plan (an
+        // EarMarkPattern), exactly like a goal — so it gets a jar and a label
+        // the same way.
+        var rentPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 90,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [15],
+                    Start = new DateOnly(2025, 1, 15),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+                Amount = -1000m,
+            },
+            rent);
+
         var goal = OneTimeGoalFactory.Create(new OneTimeGoalRequest
         {
             FinanceId = 91,
@@ -706,9 +469,9 @@ public class TransactionLogBookFactoryTests
             asOfDate: new DateOnly(2025, 1, 1),
             horizonEndDate: new DateOnly(2025, 2, 1),
             financialPatterns: [rent, goal.Goal],
-            earMarkPatterns: [goal.SavingsPlan]));
+            earMarkPatterns: [rentPlan, goal.SavingsPlan]));
 
-        result.JarLabels[90].ShouldBe("Rent"); // automatically-earmarked bill, no explicit EarMarkPattern
+        result.JarLabels[90].ShouldBe("Rent"); // a bill with an Allocation Plan
         result.JarLabels[91].ShouldBe("Trip to Japan"); // explicit goal
     }
 
@@ -769,9 +532,10 @@ public class TransactionLogBookFactoryTests
         SnapshotOn(result, new DateOnly(2025, 1, 15)).ExpectedAmount.ShouldBe(7000m); // + paycheck
         SnapshotOn(result, new DateOnly(2025, 2, 1)).ExpectedAmount.ShouldBe(5800m); // - rent
 
-        // Rent's automatic reservation jar resets every month, so it must
-        // never grow unbounded across 180 cycles.
-        timeline.ShouldAllBe(entry => entry.Snapshot.FundJars.Single(j => j.FinanceId == 61).ExpectedAmount <= 1200m);
+        // Stage-1 revision: rent has no Allocation Plan, so it no longer gets a
+        // jar (the ramp's monthly-resetting auto-funding jar is gone). The
+        // performance guard and the expected-amount arithmetic above are what
+        // this test protects.
     }
 
     [Fact]
@@ -916,10 +680,9 @@ public class TransactionLogBookFactoryTests
             cushion.MilestoneAmount.ShouldBeNull();
         }
 
-        // An auto-reserved bill has no savings plan, so nothing to be
-        // "behind" on — its jar carries no milestone either.
-        var billJar = result.GetTimeline()[^1].Snapshot.FundJars.Single(jar => jar.FinanceId == 30);
-        billJar.MilestoneAmount.ShouldBeNull();
+        // Stage-1 revision: the rent bill has no Allocation Plan of its own, so
+        // it gets no jar at all — nothing to carry a milestone.
+        result.GetTimeline()[^1].Snapshot.FundJars.ShouldNotContain(jar => jar.FinanceId == 30);
     }
 
     [Fact]
@@ -1006,7 +769,7 @@ public class TransactionLogBookFactoryTests
     }
 
     // A one-off NON-mandatory expense: has an ExpectedTransaction but no
-    // auto-reservation jar, so it lands as pure unpaired spending (`au`).
+    // automatic funding jar, so it lands as pure unpaired spending (`au`).
     private static FinancialPattern Discretionary(int financeId, decimal amount, DateOnly date, string label) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
@@ -1046,6 +809,11 @@ public class TransactionLogBookFactoryTests
         var purchaseDay = SnapshotOn(result, new DateOnly(2025, 6, 1));
         Jar(purchaseDay, 1).ShouldBe(100m);
         purchaseDay.ExpectedFreeAmount.ShouldBe(0m);
+
+        // Stage-1 revision: the couch has no Allocation Plan, so it is not
+        // reserved ahead — the $500 balance is exactly committed to Vacation,
+        // free reads $0 throughout, and the deallocation on the purchase day
+        // rebalances without ever driving free negative.
         result.HasNegativeFreeBalance.ShouldBeFalse();
     }
 
@@ -1090,7 +858,14 @@ public class TransactionLogBookFactoryTests
             financialPatterns: [goal, p1, p2, p3],
             earMarkPatterns: [earmark]));
 
-        foreach (var entry in result.GetTimeline())
+        // Dated snapshots only. The as-of row is deliberately allowed to be
+        // over-allocated: deallocation is skipped on the page's starting date,
+        // because a
+        // plan that commits more than the balance covers is the honest "you are
+        // short right now" signal rather than something to quietly drain away.
+        // Item A makes that common — every planned outflow reserves — so what
+        // used to be a rare case is now the normal opening position.
+        foreach (var entry in result.GetTimeline().Where(row => row.Date != result.AsOfDate))
         {
             var expected = entry.Snapshot.ExpectedAmount!.Value;
             var allocated = entry.Snapshot.FundJars.Sum(jar => jar.ExpectedAmount);
@@ -1126,6 +901,9 @@ public class TransactionLogBookFactoryTests
         Jar(day, 1).ShouldBe(0m);
         day.ExpectedFreeAmount.ShouldBe(-200m); // c + au = 100 - 300
         result.HasNegativeFreeBalance.ShouldBeTrue();
+        // The purchase day, not the as-of day: the emergency has no Allocation
+        // Plan, so it isn't reserved ahead — free only goes negative when it
+        // lands on Jun 1.
         result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 6, 1));
     }
 
@@ -1180,43 +958,6 @@ public class TransactionLogBookFactoryTests
         // contribution is undone and $50 drained, leaving 150.
         Jar(day, 1).ShouldBe(150m);
         day.ExpectedFreeAmount.ShouldBe(0m);
-    }
-
-    [Fact]
-    public void A_drained_auto_bill_jar_keeps_a_single_isolated_earmark_for_the_day()
-    {
-        // A mandatory bill mid-ramp plus a parked goal; a purchase deallocates
-        // on a day the bill is still accruing. The bill jar carries an isolated
-        // reservation delta AND a deallocation give-back — they must MERGE into
-        // one isolated earmark, never two (EarMarkEvent's one-isolated-per-jar
-        // rule), or the detail pane double-counts.
-        var (goal, earmark) = ParkedGoal(1, priority: 5, alreadySaved: 350m, label: "Goal");
-        var bill = OneOffPattern("Rent", -300m, new DateOnly(2025, 6, 1)); // mandatory → auto-reserved
-        var paycheck = OneOffPattern("Paycheck", 100m, new DateOnly(2025, 5, 1)); // income before due → bill ramps
-        var purchase = Discretionary(2, -100m, new DateOnly(2025, 4, 1), "Purchase");
-
-        var result = TransactionLogBookFactory.CreateForecast(Options(
-            startingBalance: 350m,
-            asOfDate: new DateOnly(2025, 1, 1),
-            horizonEndDate: new DateOnly(2025, 12, 31),
-            financialPatterns: [goal, bill, paycheck, purchase],
-            earMarkPatterns: [earmark]));
-
-        // No jar ever carries more than one isolated earmark on any day.
-        foreach (var entry in result.GetTimeline())
-        {
-            entry.Snapshot.EarMarkEvents
-                .Where(e => !e.RepeatedEarmark)
-                .GroupBy(e => e.FinanceId)
-                .ShouldAllBe(group => group.Count() == 1);
-        }
-
-        // On the deallocation day the goal drains and the bill's reservation is
-        // cancelled, but the bill still shows exactly one (merged) earmark.
-        var day = SnapshotOn(result, new DateOnly(2025, 4, 1));
-        Jar(day, 1).ShouldBe(250m);
-        Jar(day, bill.FinanceId).ShouldBe(0m);
-        day.EarMarkEvents.Count(e => e.FinanceId == bill.FinanceId).ShouldBe(1);
     }
 
     // ===== Step 3: safety cushion =====
@@ -1276,7 +1017,11 @@ public class TransactionLogBookFactoryTests
             financialPatterns: [purchase, paycheck],
             idealSafetyCushion: 100m));
 
-        CushionJar(SnapshotOn(result, new DateOnly(2025, 3, 1))).ShouldBe(50m);  // drained
+        // F20 DISSOLVED by the stage-1 revision (planning/14): the purchase has
+        // no Allocation Plan, so it has no jar to strand money in — the $50 comes
+        // straight out of the cushion on the purchase day, leaving $50 (the
+        // correct answer this asserted before stage 1). The paycheck refills it.
+        CushionJar(SnapshotOn(result, new DateOnly(2025, 3, 1))).ShouldBe(50m);
         CushionJar(SnapshotOn(result, new DateOnly(2025, 6, 1))).ShouldBe(100m); // refilled
     }
 
@@ -1314,6 +1059,11 @@ public class TransactionLogBookFactoryTests
             financialPatterns: [goal, small, big],
             earMarkPatterns: [earmark]));
 
+        // Stage-1 revision: outflows no longer reserve ahead, so this is back to
+        // the pre-item-A behaviour the test name describes. The small $10 expense
+        // is covered by free funds ($200 free after the $300 goal jar), so its
+        // day is NOT a deallocation day. The later $250 expense exceeds free and
+        // raids the goal jar, so it is.
         SnapshotOn(result, new DateOnly(2025, 3, 1)).IsDeallocationDay.ShouldBeFalse();
         SnapshotOn(result, new DateOnly(2025, 6, 1)).IsDeallocationDay.ShouldBeTrue();
     }
@@ -1485,16 +1235,22 @@ public class TransactionLogBookFactoryTests
             earMarkPatterns: [earmark],
             manualEarmarks: [Manual(earmark, new DateOnly(2025, 6, 15), 50m)]));
 
-        // Free before the day is 4300 (jar 700); the −4800 spend deallocates.
-        // The give-back merges INTO the user's isolated event (3.13c.8.4.a2):
-        // expected = explicit (+50) + implicit (−550) = −500; ExplicitAmount
-        // stays the user's 50.
+        // The property under test is the MERGE (3.13c.8.4.a2): a give-back folds
+        // into the user's own isolated event, and ExplicitAmount keeps their
+        // number no matter how large the give-back is.
+        //
+        // Stage-1 revision: the $4,800 emergency has no Allocation Plan, so it
+        // isn't reserved ahead — there are no deallocation days before Jun 15, so
+        // the goal's $100 monthly contributions all land and its jar reaches $700
+        // by June ($100 start + 6 months). On Jun 15 the emergency forces a
+        // deallocation that must pull $500 from jars: the give-back is −550
+        // against the user's +50, netting −500.
         var day = SnapshotOn(result, new DateOnly(2025, 6, 15));
         day.IsDeallocationDay.ShouldBeTrue();
 
         var manualEvent = day.EarMarkEvents.Single(e => e.FinanceId == 1 && !e.RepeatedEarmark);
-        manualEvent.ExplicitAmount.ShouldBe(50m);
-        manualEvent.ExpectedAmount.ShouldBe(-500m);
+        manualEvent.ExplicitAmount.ShouldBe(50m);   // the user's intent, preserved
+        manualEvent.ExpectedAmount.ShouldBe(-500m); // explicit (+50) + implicit (−550)
 
         Jar(day, 1).ShouldBe(200m); // 700 + (−500)
         day.ExpectedFreeAmount.ShouldBe(0m);

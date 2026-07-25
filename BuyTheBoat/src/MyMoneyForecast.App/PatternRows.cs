@@ -31,8 +31,8 @@ public sealed class EarMarkPatternRow(EarMarkPattern pattern, FinancialPattern? 
     public string Repeats => Pattern.DatePattern.ToRruleString();
 }
 
-// A synthesized stand-in for a mandatory bill's automatic reservation
-// (TransactionLogBookFactory's auto-bill earmarking) — deliberately not
+// A synthesized stand-in for a mandatory bill's automatic funding
+// (TransactionLogBookFactory's automatically funded expense earmarking) — deliberately not
 // backed by any persisted row. Exposes the same property names
 // EarMarkPatternsGrid's columns already bind to so it can sit in the same
 // DataGrid alongside real EarMarkPatternRows; WPF's binding resolves
@@ -85,7 +85,7 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
     // The at-a-glance column shows the day's scheduled events (expected
     // transactions and planned allocation installments) — the same set the
     // pre-restructure grid showed. System-generated implicit events (bill
-    // auto-reserve steps, goal releases) appear in the selected-day detail
+    // automatically fund steps, goal releases) appear in the selected-day detail
     // pane instead, where there's room to label what they are.
     internal static string FormatEvents(BalanceSnapshot snapshot, IReadOnlyDictionary<int, string> jarLabels)
     {
@@ -656,7 +656,7 @@ public sealed class AccountRow(Account account)
 }
 
 // One row of the Transfers tab. From/To are account names (resolved by the
-// caller); the two underlying legs never appear here — a transfer reads as one
+// caller); the two underlying patterns never appear here — a transfer reads as one
 // thing (planning/10 item 3).
 public sealed class TransferRow(Transfer transfer, string fromName, string toName)
 {

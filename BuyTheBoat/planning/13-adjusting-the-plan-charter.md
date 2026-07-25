@@ -1,0 +1,326 @@
+# 13 — "Adjusting the Plan": phase charter
+
+**Status: PROPOSED (2026-07-23) — awaiting the author's sign-off on the stage order. Nothing here is a design answer.**
+
+This is the charter for the phase that follows multiple accounts. It exists because the phase is
+too large to hold in one head, one context window, or one sitting: it is ~24 separate design
+questions, most of which would be a full session on their own. This document is the **map and the
+tracker** — what the phase contains, what order it gets worked in, and how a cold session picks up
+where the last one stopped.
+
+**It deliberately answers none of the design questions it lists.** Every "?" below is live.
+
+---
+
+## Naming, so the vocabulary stays straight
+
+The project already uses "phase" at the top level (the multiple-accounts phase, the deallocation
+phase). Nesting phases inside phases would be unreadable, so:
+
+| Level | Term | Granularity |
+|---|---|---|
+| 1 | **Phase** | This whole body of work: "Adjusting the Plan." |
+| 2 | **Stage** | One numbered planning doc (14, 15, …), one or two sessions. |
+| 3 | **Item** | A lettered decision inside a stage — the same convention [10-multiple-accounts.md](10-multiple-accounts.md) uses (item 1-A, item 2-D, …). |
+
+### Term rulings (author, 2026-07-24)
+
+- **"The jar of a paired transaction"** — or **"the jar of an assumed-paired transaction"** while the
+  assumed-pairing paradigm holds — is how deallocation's Step A input is referred to. **Not renamed
+  away from "paired":** the word is the author's own, from `DeallocationProof.ods`, and it is used
+  *only* in deallocation, where being verbose is fine and being reminded of the math is a feature.
+  The `PairedTransaction` type keeps its name; the qualification does the disambiguating work.
+  *(Background: "paired" and "has a jar" picked out the same transactions in the original design,
+  because only earmarked goals had jars. Automatic funding broke that equivalence — which is where
+  [F20](14-stage1-allocation-model.md) lives.)*
+- **"Pre-funded" is RESERVED — do not use it for anything else.** The author is holding it for a
+  distinct concept to be worked in a later stage: *an earmark pattern that has a non-repeated
+  (implicit or manual) earmark created for it on the very first day it exists.* Most likely stage 4
+  territory (items 22–24). It was proposed here as a rename for the above and deliberately declined.
+
+**Phase name — "Adjusting the Plan."** Every stage is some form of *the user changed their mind (or
+reality did), and the plan has to change with them* — which is [core question
+Q4](../../04-project-goals-and-user-questions.md#q4--if-i-buy-x-anyway-how-do-i-readjust-my-goals),
+the one the original documentation never resolved. The earlier working name for this phase was
+"cascade-tweaking," which undersold it: almost none of this is cascade math, and most of it is
+allocation semantics and user-facing adjustment machinery.
+
+---
+
+## Standing rule — design in the class documentation's own terms
+
+**Author, at the phase's opening and re-stated 2026-07-24:** design around concepts from the **class
+documentation** rather than abstractions over it, wherever possible, and especially throughout this
+phase. The required knowledge was named up front: *"the entirety of the project goals, project
+philosophies, class documentation, all of the assumptions, directed graph that links them, the fact
+that satisfying enough assumptions keeps our calculations in balance, and what 'state' or process
+we're in by satisfying certain assumptions."*
+
+This is not about wording — it is about **where answers come from**. The class model and the
+assumption set already encode most of the design, *including the order operations must happen in*.
+
+- Frame a problem in `FinancialPattern` / `EarMarkPattern` / `EarMarkEvent` / `FundJar` /
+  `BalanceSnapshot` and in assumption IDs, not in a category invented for the conversation.
+- **The dependency order is design guidance, not just validation.** If the documented cascade clears
+  X before deciding Y, an implementation that decides Y from X is wrong even when the arithmetic
+  balances.
+- New abstractions remain allowed (philosophy 3a) — as a **recorded divergence on top of** the model,
+  never as the language the design is thought in.
+- **Read [03](../../03-assumptions-glossary.md) and [06](../../06-assumption-dependency-graph.md);
+  do not grep them.** Grep-only working is exactly how the drift happened.
+
+**Cost, demonstrated:** [F20](14-stage1-allocation-model.md) was diagnosed twice in invented
+vocabulary before reading 03 showed the documented cascade already prevents it
+(`3.13c.8.a4` → `3.13c.8.a5` → `3.13c.a6`). Full memory entry: `memory/feedback_design_in_class_documentation_terms.md`.
+
+## The two standing constraints this whole phase designs against
+
+Both are stated by the author. They are not open questions — they are the walls.
+
+### Constraint 1 — patterns are linear, gapless, and single-valued
+
+A `FinancialPattern` or `EarMarkPattern` carries **one** `Amount` and **one** `RecurrenceRule`
+(one frequency, one interval, one start, one until). There is no curve, no step, no gap, no
+per-occurrence override. Confirmed in code: `FinancialPattern.Amount` / `EarMarkPattern.Amount` are
+scalars, and `RecurrenceRule` exposes exactly `Frequency` / `Interval` / `ByDay` / `ByMonthDay` /
+`Start` / `Until`. **Any change to what a pattern does means its occurrences are regenerated
+wholesale.** That is not going to change, so every feature in this phase has to be composed out of:
+splitting patterns, adding patterns, one-off manual earmarks, or values computed rather than stored.
+
+This is where [design philosophies](../../design-philosophies.md) **2** (speak the user's language)
+and **3(a)** (build features by abstracting over the original tools) do the heavy lifting: the user
+should be shown "change my electric bill starting in March," not "your rrule was truncated and a
+second pattern was created."
+
+A companion registry of the sanctioned workarounds — one entry per trick, with what it costs — is a
+**Stage 0** deliverable, and grows as later stages invent more.
+
+### Constraint 2 — every rrule must terminate
+
+`RecurrenceRule` accepts `Count` only as entry sugar and resolves it to an `Until` at construction;
+`Until` is the only bound that exists on a constructed rule (this structurally enforces the
+chart-only "must use until, not count" rule, and mirrors `mini_fund_project`'s
+`count_to_until_rrule`). So there is **no representable "forever."** This is the mechanical root of
+item 10 below — asking a user when their electricity should stop.
+
+---
+
+## The item inventory
+
+Everything the author raised, itemized so nothing gets lost across context resets. The author's own
+framing is preserved; the stage column is this document's proposal.
+
+| # | Item | Stage |
+|---|---|---|
+| 1 | **Redefine free funds** — every expected transaction should have a fund jar that counts against free funds (from talking to potential users). Implies changes we have to trace. | 1 |
+| 2 | **Review what "Mandatory" means** — possibly less useful after item 1; if kept, its help to the user must be legible. The author has been confused by it in their own use. | 1 |
+| 3 | **The linearity constraint** (Constraint 1 above) — write it down once, as the wall everything else designs against. | 0 |
+| 4 | **"Break off" a finance pattern at a date** — raises, a bill's amount or schedule changing. Cut the rrule at the change point, continue as a new pattern, hand the existing jar balance across (implicit earmark), split the earmark pattern to match, and show the user the whole plan to confirm before doing it. Paychecks are the easy case (no jar), but may disturb coinciding earmark patterns → optional prompt. | 3 |
+| 5 | **Break off for an identity-only change** — the biller's description/source string changes, so nothing pairs. Needs a contextual "we found this new transaction, is this your electric bill?" offer. **Actuals-dependent → register only.** | 3 (→ [12](12-actual-transactions-deferred-design.md)) |
+| 6 | **Which *other* changes deserve the same treatment** — the author's list of use cases is explicitly not comprehensive. | 3 |
+| 7 | **The systematic action review** — every action a user can take, what we do implicitly in response, what explicit choice that leaves them. | 0 (skeleton) → 5 (audit) |
+| 8 | **Break off an *earmark* alone**, without touching its finance pattern — e.g. start allocating more toward an unchanged one-time goal halfway through. | 4 |
+| 9 | **Two earmark patterns for one finance pattern** — a household partner's paycheck starts funding the same bill at a different amount. Currently forbidden. | 4 |
+| 10 | **Determinate vs. indeterminate bills** — "how long do you want electricity for?" is not a question. Wants: a classification, simpler per-kind forms, a payoff-date helper for loans (rough — interest and fees), internal auto-renewal for open-ended bills (likely a new boolean), and the full form retained as an "advanced" option. *Better terms than determinate/indeterminate are wanted.* | 2 |
+| 11 | **Do we auto-create an earmark pattern when a user makes a bill?** What choices does the user get? | 1 |
+| 12 | **Do we auto-create one for a one-time expected transaction** ("buy a new television")? What choices? | 1 |
+| 13 | **Speculative expenses must stay cheap** — creating "buy a TV" to see what it does to the forecast, then deleting it, has to be practical. This is how the program answers Q4. | 1 |
+| 14 | **Keep the "no paycheck first ⇒ reserve it now" trick** — already built (see below); remember it when designing similar cases. | 1 |
+| 15 | **Catalog every place the system makes an implicit earmark** — beyond deallocation days and the break-off hand-off. | 1 |
+| 16 | **"I'm cancelling Netflix next month"** — editing the rrule's end date stays valid but is clunky; wants an explicit "end this at a date" action near the break-off action. | 3 |
+| 17 | **The user cancelled a bill in the past and never told us** — should be recoverable, most likely as an option on the unpaired-transaction warning. **Actuals-dependent → register only.** | 3 (→ [12](12-actual-transactions-deferred-design.md)) |
+| 18 | **Deleting a bill terminates its earmark pattern** and frees the funds — any implications not already covered? | 3 |
+| 19 | **What states should concern the user**, and what contextual actions do we offer for each? Shortcuts to things possible elsewhere but fiddly (up to and including "open this pattern's editor with a suggested change"). The author wants *more* suggestions here than the ones listed. Control stays with the user; the effect must be legible. | 6 |
+| 20 | **What's clunky when the user is *not* worried** and just wants to edit — more "Create Bill…"-shaped shortcuts, without turning a screen into button soup. | 6 |
+| 21 | **Where does a user make an explicit earmark?** Allowed on any day, including future days with no balance snapshot yet ("set half this paycheck aside for the credit card"; "take some grocery money for an Xbox"). | 5 |
+| 22 | **A goal met early** — a big manual earmark fills a 3-year vacation jar ahead of schedule, and contributions keep piling in past what's needed. Notify? Stop contributing early *while keeping the money allocated* until the transaction happens? What about a loan, which is a repeated expected transaction? | 4 |
+| 23 | **Allocating toward something that doesn't exist yet** — a $7,000 bonus set aside for a healthcare plan that hasn't started. No jar without a finance pattern; no finance pattern without scheduled occurrences. Is this feasible at all, or is "move it to another account" the honest answer? | 4 |
+| 24 | **Deferring allocations** — the same healthcare case, one step later: a naive auto-generated earmark pattern would run $7,000 ahead forever. The system should notice a jar that is (or starts) over-funded and offer to defer contributions until they're needed. Useful well beyond this one case. | 4 |
+
+**Also folded in, already parked elsewhere:**
+
+- The three open sub-questions on "a jar for every upcoming expected transaction," parked in
+  [10-multiple-accounts.md § Parked](10-multiple-accounts.md#parked-for-the-cascade-tweaking-phase)
+  — outflows only? does a jar reserve real money for non-mandatory expenses, or is it a *visible
+  allocation* while mandatory/priority still governs reserving? is an auto-created bill's accrual a
+  real editable earmark pattern or a computed jar? → **Stage 1**, where they are the same question
+  as items 1/2/11.
+- **Cross-account funding interactions** (also parked in 10): a manual earmark that pre-allocated a
+  specific account's anticipated income when the bill moves accounts, and the standing implicit
+  assumption that a bill's funding paychecks land in the same account. → **Stage 4**.
+- **The "thin" warning state** — mockup E showed it, no threshold was ever defined, and 10 deferred
+  it here on the grounds that defining "thin" is an allocation question, not a rendering one. →
+  definition in **Stage 1**, presentation in **Stage 6**.
+
+---
+
+## What already exists that these items build on
+
+Confirmed against the code and docs, so no stage re-derives it:
+
+- **Item 14 is already built.** It is the `B` branch of `BillAccrualAt` in
+  `TransactionLogBookFactory.cs`, tagged `DIVERGENCE(positive-implicit)`: if no income lands between
+  tomorrow and a bill's next due date, the whole amount is reserved immediately; otherwise the jar
+  ramps linearly through the cycle (`A`). Registry entry in
+  [05 § Divergence registry](05-original-structure-restructure.md#divergence-registry).
+- **Jars without an earmark pattern already exist.** `GetAutomaticallyEarmarkedBills` gives every
+  mandatory pattern with no `EarMarkPattern` an auto-reserving jar with a null milestone. So item 1
+  is an *extension* of an existing divergence, not a brand-new one.
+- **Manual (explicit) earmarks are built** — Add / Withdraw / Move, with the rulings in
+  [09-manual-earmarks.md](09-manual-earmarks.md) (do not re-litigate them; items 8/22/23/24 press on
+  ruling 1 in particular, which ties a jar's lifetime to its earmark pattern's span).
+- **Two precedents for "one user action, several linked patterns"** — `OneTimeGoalFactory` (goal +
+  savings plan) and `TransferFactory` (a withdrawal + a deposit + a `Transfer` record). Item 4's break-off is the
+  third of that family, and should be designed knowing it.
+- **The standing UI principles** distilled in
+  [11 § C](11-ui-design-and-decisions.md#standing-ui-principles-distilled-from-the-above) — meaning
+  is never colour-only; prefer a plain word or number; a surfaced problem comes with a lever;
+  pre-fill a form as far as it honestly goes, then stop at the confirm, scoped no wider than the
+  problem. Items 19/20 are governed by these.
+
+## Where this phase puts pressure on the original assumptions
+
+The author's request was explicit that this work be done knowing the assumption set and its
+dependency graph. This is the map of *which* assumptions each stage is likely to bend or break —
+useful because [06's dependency graph](../../06-assumption-dependency-graph.md) tells you what else
+moves when one does. **Listing them is not a decision to break them**; philosophy 3(b) requires a
+planning pass first, which is what the stages are.
+
+| Assumption | What it says | Which item presses on it |
+|---|---|---|
+| `3.13.5.a2` | A fund jar can only exist on days inside its earmark pattern's rrule | 1, 11, 12 (already bent by automatically funded expense jar) |
+| `3.13.8.a1` | An earmark can't exist on a page with no earmark pattern for it | 1, 23 |
+| `3.11.1.a1` | Earmark patterns have unique finance_ids — one per goal | **9** (breaks it head-on) |
+| `3.11.2.a2` | An earmark pattern can't extend beyond its finance pattern's rrule | 4, 8, 23 |
+| `8.1.a1`, `3.13.8.1.a3` | An earmark's finance_id is its expected transaction's | 23 |
+| `1.2.3.5.a1`, `3.5.a1` | The `current_free_amount` formula | **1** (this is Q1's headline number) |
+| `10.4.a2`, `10.4.a3` | Milestone rules for a jar tied to a repeated expected transaction | 1, 22 |
+| `3.13.7.a2` | An expected transaction can't exist on a day its pattern doesn't specify | 4, 16 |
+| `1.2.3.10.a3` | Two pages sharing a finance_id must have the *exact same* rrule | 4 (once multi-page books are real) |
+| `4.2.a1` + source uniqueness | `source` cannot be None; no two patterns share one | 5 |
+| chart-only | An rrule must use `until`, not `count` | 10 |
+| ODS | "We will **never implicitly add** to a fund jar's expected amount" | 1 (already diverged: `positive-implicit`) |
+
+Cascade steps most affected (from [06 § Process regions](../../06-assumption-dependency-graph.md#process-regions--the-cascade-steps)):
+*new events created / old removed*, *all earmarks created on this page*, *if this is a deallocation
+day the implicit earmarks are made*, and the final *consciously-applied calculations* pass.
+
+---
+
+## The stages, in order
+
+The ordering rule: **settle what a jar is and what free funds mean before designing anything that
+manipulates them.** Two-thirds of the items are levers over the allocation model; building a lever
+before the thing it moves is defined guarantees a redo.
+
+### Stage 0 — Charter, constraints, and the action-catalog skeleton  ·  *small*  ·  **DONE 2026-07-23**
+**Items 3, 7 (skeleton).** This document, plus two artifacts every later stage writes into:
+
+- **[13a — Linearity workaround registry](13a-linearity-workaround-registry.md)** — Constraint 1's
+  sanctioned tricks, W1–W9, each with how it evades the constraint, **what it costs**, and what it
+  still can't do. Seven are already in use; two are proposed by stages 2 and 3.
+- **[13b — User action catalog](13b-user-action-catalog.md)** — every action a user can take (read
+  off the real UI surface, plus the actions stages 2–4 propose), as **rows only**, with the
+  analysis columns blank. Plus a second table, **S1–S7**, for the actions the *system* takes that no
+  user triggers — which is where item 15 gets closed out.
+
+Stages fill cells in as they land; Stage 5 audits, at which point every remaining blank is either a
+gap to design or an explicit deferral. This is what makes item 7 possible without one heroic sitting.
+
+### Stage 1 — The allocation model: a jar for everything  ·  *large, split into two sittings*
+**Items 1, 2, 11, 12, 13, 14, 15** + planning/10's three parked sub-questions + the "thin"
+definition.
+- **1a — semantics:** what gets a jar (outflows only? the two patterns behind a transfer? non-mandatory? paychecks?),
+  what "free funds" means afterward, whether a jar reserves real money or is a visible allocation,
+  and what survives of **Mandatory**.
+- **1b — machinery and defaults:** auto-created earmark patterns (real editable pattern vs. computed
+  jar), what the user is asked when creating a bill or a one-time expense, keeping speculative
+  create-then-delete cheap, and the **implicit-earmark registry** (every place the system earmarks
+  on the user's behalf, item 15 — a written list, not prose).
+
+> **Recommendation: implement Stage 1 before designing Stage 3 onward.** It changes the headline
+> number and the meaning of every jar, 147 tests pin the current behaviour, and every later stage
+> reasons about jars. Designing 3–6 against numbers we have actually seen beats designing them
+> against numbers we imagine. Stages 2 and 6 are the only ones that could safely be designed
+> before that implementation lands.
+
+### Stage 2 — Pattern lifetime and the form family  ·  *medium*
+**Item 10.** Deliberately *before* the break-off stage: "where does this pattern end" has to be
+answered before "how do we cut one in half," and an open-ended bill directly challenges the
+jar-lifetime ruling Stage 1 settles. Covers the classification and its user-facing names, the
+auto-renewal mechanism for open-ended bills, the loan payoff-date helper and how its roughness is
+communicated, and how the simple forms relate to the existing advanced one.
+
+### Stage 3 — Changing a pattern at a point in time  ·  *large*
+**Items 4, 6, 16, 18** (+ 5 and 17 recorded into [12](12-actual-transactions-deferred-design.md),
+not designed). The break-off mechanism end to end: identity across the cut, the jar hand-off, the
+earmark pattern's parallel split, the paycheck case, the preview-and-confirm flow, ending a pattern
+early, deleting one outright, and **the taxonomy** — which kinds of change need a split, which are a
+plain edit, and which need something else again (item 6). A better user-facing name than "break off"
+gets chosen here.
+
+### Stage 4 — Changing an allocation without changing the bill  ·  *large*
+**Items 8, 9, 22, 23, 24** + planning/10's cross-account funding interactions. The earmark-side
+counterpart to Stage 3, and the closest thing to a direct answer to Q4. Items 22/23/24 are one
+family — *the jar's fill schedule doesn't match the naive linear plan* — and are likely to share a
+mechanism. Item 9 is the one assumption break big enough to deserve its own decision record.
+
+### Stage 5 — The action catalog, audited  ·  *medium*
+**Items 7, 21.** Fill in and close out the Stage 0 skeleton against everything stages 1–4 decided.
+Its value is as a **completeness check**: every blank cell is either a gap to design now or an
+explicit deferral. Item 21 (where explicit earmarks get made, on which days, and whether that's
+discoverable) is answered here because it is an entry-point question, not a mechanism question.
+
+### Stage 6 — Warnings, levers, and the shortcut surface  ·  *medium*
+**Items 19, 20** + the "thin" presentation. Last on purpose: it is the user-facing consumer of
+everything above.
+
+**How much UI change each tab will tolerate (author, 2026-07-24):** the **Forecast tab is settled** —
+the author is happy with it, so changes there need a strong reason. **Every other tab is open**, and
+is expected to get a UI rework once this phase is finished anyway, so adding a control there (for
+instance stage 1's "Set Up Savings Plan…" button) is cheap. Useful when weighing charter item 20's
+button-soup warning: the warning bites hardest on the Forecast tab. The catalog of states worth flagging, the contextual lever for each, and the
+manual-editing shortcuts — governed by the standing UI principles, and by a rule (to be decided
+here) for keeping the number of buttons on a screen sane.
+
+### Then: implementation of stages 2–6
+Design-first for these, because they interlock — a single "change this thing starting on a date"
+flow plausibly serves stages 2, 3, 4 and 6, and that only becomes visible once all four are on
+paper.
+
+---
+
+## How a session picks this up cold
+
+Each stage gets its own numbered doc, following [10-multiple-accounts.md](10-multiple-accounts.md)'s
+conventions exactly, because they work: a **status line** at the top, **items lettered A, B, C…**,
+each marked `SETTLED <date>` as it lands, superseded wording struck and labelled rather than
+deleted, and a **Parked** section at the bottom for anything punted.
+
+Every stage doc opens with a **Reading list** naming the 3–5 documents needed to work it — never
+"read everything." The baseline for any stage is:
+[GUIDE.md](../../GUIDE.md) tiers 1–2 → this charter → the stage's own doc → its named prerequisites.
+
+**Standing instructions for this phase:**
+- Anything actuals-dependent gets appended to
+  [12-actual-transactions-deferred-design.md](12-actual-transactions-deferred-design.md) and is
+  **not** designed here (items 5 and 17 especially).
+- Any new departure from the original design gets a `DIVERGENCE(<topic>)` tag at the code site and a
+  row in [05's registry](05-original-structure-restructure.md#divergence-registry).
+- Any new workaround for Constraint 1 gets an entry in
+  [13a](13a-linearity-workaround-registry.md), with its cost stated.
+- Every stage fills the [13b](13b-user-action-catalog.md) rows it decided — **only** those; a
+  guessed cell defeats the audit.
+- Every stage updates this document's status table before it ends.
+
+## Status
+
+| Stage | State |
+|---|---|
+| 0 — Charter, constraints, catalog skeleton | **DONE 2026-07-23** — charter + [13a](13a-linearity-workaround-registry.md) (W1–W9) + [13b](13b-user-action-catalog.md) (43 rows, cells blank) |
+| 1 — The allocation model | **DESIGN COMPLETE 2026-07-23** — [14](14-stage1-allocation-model.md), items A–D all settled. Every outflow reserves along the standing fill rule; income never does; transfers reserve per-account but not household-wide; `Mandatory` becomes skippability and protects a jar from deallocation; the middle warning state means the safety cushion is not whole; no savings plan is ever created automatically, and deleting a goal removes its plan after confirming. **IMPLEMENTED 2026-07-24** — 155 tests green (was 147), 0 warnings. One defect found and deliberately left for the author: **F20** in [14](14-stage1-allocation-model.md). **REVISED 2026-07-24 (design settled, re-implementation pending)** — items A and D reopened under philosophy 3(b): every outflow funds via a pre-filled, removable **Allocation Plan** (a real `EarMarkPattern`), the computed A/B ramp is **retired**, `10.4.a2` is discarded, and **F20 dissolves** (a jar always has a plan behind it, so "has a jar" = "has an earmark pattern" again). See the [14 Revision](14-stage1-allocation-model.md#revision-2026-07-24--allocation-plans-replace-the-ramp). |
+| 2 — Pattern lifetime & form family | **DESIGN COMPLETE 2026-07-24** — [15](15-stage2-pattern-lifetime.md). One plain question, *"when does this stop?"*, with three answers (keeps going / ends on a known date / ends when paid off) and no category names shown; applies to income too; ongoing keeps a hidden end date extended to the horizon plus a cycle; the payoff helper is owed ÷ payment, stated as a floor; the question lives in the existing bill form. **Implementation pending** |
+| 3 — Changing a pattern at a point | not started |
+| 4 — Changing an allocation alone | not started |
+| 5 — Action catalog audit | not started |
+| 6 — Warnings, levers, shortcuts | not started |

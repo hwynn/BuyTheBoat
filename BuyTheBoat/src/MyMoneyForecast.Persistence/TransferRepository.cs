@@ -5,12 +5,13 @@ using MyMoneyForecast.Domain;
 namespace MyMoneyForecast.Persistence;
 
 // A transfer is stored as its canonical Transfers row PLUS two ordinary
-// FinancialPattern legs (saved through FinancialPatternRepository, tagged with
-// this transfer's id). The row is the definition; the legs are what the cascade
+// FinancialPatterns — a withdrawal and a deposit (saved through
+// FinancialPatternRepository, tagged with this transfer's id). The row is the
+// definition; the patterns are what the cascade
 // actually consumes. See planning/10 items 3 and 6.
 public sealed class TransferRepository(PatternDatabase database, FinancialPatternRepository financialPatterns)
 {
-    // Saves the Transfers row and both legs. Not wrapped in one transaction —
+    // Saves the Transfers row and both patterns. Not wrapped in one transaction —
     // matching the rest of this single-user layer; a torn write leaves the pair
     // inconsistent, which the validation sweep is there to catch.
     public void Save(TransferResult result)
@@ -44,10 +45,10 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
             command.ExecuteNonQuery();
         }
 
-        // Out-leg files under the source account, in-leg under the destination;
-        // both carry this transfer's id so they read back as its legs.
-        financialPatterns.Save(result.OutLeg, transfer.FromAccountId, transfer.Id);
-        financialPatterns.Save(result.InLeg, transfer.ToAccountId, transfer.Id);
+        // The withdrawal files under the source account, the deposit under the destination;
+        // both carry this transfer's id so they read back as its patterns.
+        financialPatterns.Save(result.Withdrawal, transfer.FromAccountId, transfer.Id);
+        financialPatterns.Save(result.Deposit, transfer.ToAccountId, transfer.Id);
     }
 
     public IReadOnlyList<Transfer> GetAll()
@@ -74,8 +75,8 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
-    // Deleting a transfer removes both of its legs too — the pair is managed
-    // through the transfer, never a leg on its own.
+    // Deleting a transfer removes both of its patterns too — the pair is managed
+    // through the transfer, never a pattern on its own.
     public void Delete(int id)
     {
         financialPatterns.DeleteByTransferId(id);
@@ -88,7 +89,7 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
     }
 
     // An account can't be deleted while a transfer moves money in or out of it.
-    // (Its legs are patterns filed under it too, so the pattern guard catches
+    // (Its patterns are patterns filed under it too, so the pattern guard catches
     // this as well — this gives the clearer, transfer-specific message.)
     public bool IsAccountReferenced(int accountId)
     {

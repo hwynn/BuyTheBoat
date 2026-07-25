@@ -25,6 +25,18 @@ public sealed record ForecastOptions
     // bill).
     public decimal IdealSafetyCushion { get; init; }
 
+    // The finance ids of patterns that are one half of a transfer. Storage
+    // knows this (a TransferId column); the domain FinancialPattern
+    // deliberately does not carry it (planning/10 item 2-A keeps storage
+    // concerns off the type), so the caller passes the set in.
+    //
+    // Used for one thing (planning/14 item A-1): a transfer's withdrawal
+    // reserves in the account it leaves, because per-account solvency is the
+    // point of accounts — but the household view must not count it as set
+    // aside, since the household is not down a cent. Empty means "no transfers",
+    // which is the correct behaviour for every caller that doesn't have any.
+    public IReadOnlySet<int> TransferWithdrawalFinanceIds { get; init; } = new HashSet<int>();
+
     // The per-account breakdown (planning/10 item 4). When provided, the engine
     // builds one AccountTransactionPage per entry — each its own silo with its
     // own balance, cushion, and patterns — instead of a single "Primary" page.

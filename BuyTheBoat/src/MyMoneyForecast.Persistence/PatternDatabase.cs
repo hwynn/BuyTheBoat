@@ -149,10 +149,10 @@ public sealed class PatternDatabase
         // the seeded "primary" account.
         EnsureColumn(connection, "FinancialPatterns", "AccountId", "INTEGER NOT NULL DEFAULT 1");
 
-        // Which transfer a pattern is a leg of, if any (planning/10 item 3).
+        // Which transfer a pattern is a pattern of, if any (planning/10 item 3).
         // NULL for ordinary user-created patterns; set for a transfer's two
-        // legs, which are hidden from the pattern list and shown as one transfer
-        // instead. The engine still reads every pattern, legs included.
+        // patterns, which are hidden from the pattern list and shown as one transfer
+        // instead. The engine still reads every pattern, patterns included.
         EnsureColumn(connection, "FinancialPatterns", "TransferId", "INTEGER NULL");
     }
 

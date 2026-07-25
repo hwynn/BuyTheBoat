@@ -269,6 +269,61 @@ public class DeallocationCalculatorTests
     }
 
     // Auto-extracted from DeallocationProof.ods sheet DeallTest_2 (columns where
+    // planning/14 item B: skippability outranks the priority number outright.
+    // Everything the user said they could skip is emptied before anything they
+    // said they have to pay is touched.
+    [Fact]
+    public void Skippable_jars_drain_before_unskippable_ones_whatever_their_priorities()
+    {
+        // The UNSKIPPABLE jar carries the lower priority number, which before
+        // item B would have made it drain first. $100 has to come back.
+        var jars = new List<DeallocationJar>
+        {
+            new(FinanceId: 1, Priority: 1, Balance: 300m, ExistingEarmark: 0m, Skippable: false),
+            new(FinanceId: 2, Priority: 9, Balance: 300m, ExistingEarmark: 0m, Skippable: true),
+        };
+
+        var result = DeallocationCalculator.Deallocate(
+            currentFunds: 500m, jars, pairedTransactions: [], unpairedTransaction: 0m);
+
+        result.Jars.Single(jar => jar.FinanceId == 1).RemainingBalance.ShouldBe(300m); // protected
+        result.Jars.Single(jar => jar.FinanceId == 2).RemainingBalance.ShouldBe(200m); // gave the 100 back
+    }
+
+    [Fact]
+    public void The_cushion_still_drains_before_everything_including_skippable_jars()
+    {
+        var jars = new List<DeallocationJar>
+        {
+            new(FinanceId: 2, Priority: 9, Balance: 300m, ExistingEarmark: 0m, Skippable: true),
+            new(FinanceId: null, Priority: 0, Balance: 100m, ExistingEarmark: 0m),
+        };
+
+        var result = DeallocationCalculator.Deallocate(
+            currentFunds: 350m, jars, pairedTransactions: [], unpairedTransaction: 0m);
+
+        // $50 needed: the cushion covers it alone and the skippable jar is left
+        // whole. The cushion goes first by identity, not by its priority number.
+        result.Jars.Single(jar => jar.FinanceId is null).RemainingBalance.ShouldBe(50m);
+        result.Jars.Single(jar => jar.FinanceId == 2).RemainingBalance.ShouldBe(300m);
+    }
+
+    [Fact]
+    public void Priority_still_orders_jars_within_the_same_skippability()
+    {
+        var jars = new List<DeallocationJar>
+        {
+            new(FinanceId: 1, Priority: 5, Balance: 300m, ExistingEarmark: 0m, Skippable: true),
+            new(FinanceId: 2, Priority: 1, Balance: 300m, ExistingEarmark: 0m, Skippable: true),
+        };
+
+        var result = DeallocationCalculator.Deallocate(
+            currentFunds: 500m, jars, pairedTransactions: [], unpairedTransaction: 0m);
+
+        result.Jars.Single(jar => jar.FinanceId == 2).RemainingBalance.ShouldBe(200m); // lower priority first
+        result.Jars.Single(jar => jar.FinanceId == 1).RemainingBalance.ShouldBe(300m);
+    }
+
     // sensible allocation == 1 AND Deallocation == 1). Regenerate with
     // redesign/extract_deallocation_vectors.py if the workbook changes.
     private static readonly ProofVector[] MinedVectors =

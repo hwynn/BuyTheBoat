@@ -7,17 +7,15 @@ namespace MyMoneyForecast.App;
 
 public partial class CreateFinancialPatternWindow : Window
 {
-    // Tracks whether Mandatory reflects a deliberate choice (typed by the
-    // user, or loaded from an existing pattern in edit mode) rather than the
-    // live suggestion from the Expense/Income selection — once true, changing
-    // direction stops touching the checkbox.
-    private bool _mandatoryIsExplicit;
-    private bool _updatingMandatoryProgrammatically;
+    // (The old _mandatoryIsExplicit / _updatingMandatoryProgrammatically pair
+    // is gone with planning/14 item B-4: nothing auto-suggests an answer from
+    // the amount's sign any more, so there is no suggestion to stop overriding.
+    // The question is simply hidden when it doesn't apply.)
 
     // Guards OnDirectionChanged against firing while still under construction:
     // ExpenseRadioButton's IsChecked="True" raises Checked synchronously
     // during InitializeComponent(), before later-declared fields (AmountLabel,
-    // MandatoryCheckBox) are assigned. Same convention as RecurrenceRuleEditor's
+    // MandatoryPanel) are assigned. Same convention as RecurrenceRuleEditor's
     // _initialized guard.
     private bool _initialized;
 
@@ -45,8 +43,8 @@ public partial class CreateFinancialPatternWindow : Window
         {
             Title = mandatory ? "Create Bill" : "Create Pattern";
             MandatoryPanel.Visibility = Visibility.Collapsed;
-            MandatoryCheckBox.IsChecked = mandatory;
-            _mandatoryIsExplicit = true;
+            UnskippableRadioButton.IsChecked = mandatory;
+            SkippableRadioButton.IsChecked = !mandatory;
 
             // A bill is unambiguously an expense — asking would just be
             // friction for an answer that's never anything else.
@@ -79,8 +77,9 @@ public partial class CreateFinancialPatternWindow : Window
         AmountLabel.Text = existing.Amount < 0 ? "Amount owed" : "Amount received";
         AmountTextBox.Text = Math.Abs(existing.Amount).ToString(CultureInfo.InvariantCulture);
         PriorityTextBox.Text = existing.Priority.ToString();
-        MandatoryCheckBox.IsChecked = existing.Mandatory;
-        _mandatoryIsExplicit = true;
+        UnskippableRadioButton.IsChecked = existing.Mandatory;
+        SkippableRadioButton.IsChecked = !existing.Mandatory;
+        UpdateSkippableVisibility();
         RuleEditor.LoadFrom(existing.DatePattern);
 
         _initialized = true;
@@ -108,24 +107,18 @@ public partial class CreateFinancialPatternWindow : Window
         }
 
         AmountLabel.Text = ExpenseRadioButton.IsChecked == true ? "Amount owed" : "Amount received";
-
-        if (_mandatoryIsExplicit)
-        {
-            return;
-        }
-
-        _updatingMandatoryProgrammatically = true;
-        MandatoryCheckBox.IsChecked = ExpenseRadioButton.IsChecked == true;
-        _updatingMandatoryProgrammatically = false;
+        UpdateSkippableVisibility();
     }
 
-    private void OnMandatoryToggledByUser(object sender, RoutedEventArgs e)
-    {
-        if (!_updatingMandatoryProgrammatically)
-        {
-            _mandatoryIsExplicit = true;
-        }
-    }
+    // planning/14 item B-4: the skippable question only means something for
+    // money going OUT, so it disappears for income entirely. This replaces the
+    // old behaviour where a Mandatory checkbox re-ticked itself as the
+    // direction changed — a question that doesn't apply is better hidden than
+    // silently answered.
+    private void UpdateSkippableVisibility() =>
+        MandatoryPanel.Visibility = ExpenseRadioButton.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     private void OnCreateClick(object sender, RoutedEventArgs e)
     {
@@ -159,7 +152,9 @@ public partial class CreateFinancialPatternWindow : Window
                 DatePattern = rule,
                 Amount = amount,
                 Priority = priority,
-                Mandatory = MandatoryCheckBox.IsChecked == true,
+                // Income is never "unskippable" — the question is hidden for it,
+                // so don't let a stale radio state leak into the saved pattern.
+                Mandatory = ExpenseRadioButton.IsChecked == true && UnskippableRadioButton.IsChecked == true,
                 Description = string.IsNullOrWhiteSpace(DescriptionTextBox.Text) ? null : DescriptionTextBox.Text,
             });
 

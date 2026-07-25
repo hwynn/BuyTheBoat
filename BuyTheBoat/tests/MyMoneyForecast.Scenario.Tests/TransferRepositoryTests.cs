@@ -30,8 +30,8 @@ public class TransferRepositoryTests : IDisposable
         TransferFactory.Create(new TransferRequest
         {
             TransferId = id,
-            OutLegFinanceId = outId,
-            InLegFinanceId = inId,
+            WithdrawalFinanceId = outId,
+            DepositFinanceId = inId,
             FromAccountId = from,
             ToAccountId = to,
             FromAccountName = "Checking",
@@ -41,17 +41,17 @@ public class TransferRepositoryTests : IDisposable
         });
 
     [Fact]
-    public void Saving_a_transfer_stores_the_record_and_both_legs()
+    public void Saving_a_transfer_stores_the_record_and_both_patterns()
     {
         _transfers.Save(Transfer());
 
         _transfers.GetAll().Count.ShouldBe(1);
-        _financialPatterns.GetAll().Count.ShouldBe(2);                 // the two legs are real patterns
-        _financialPatterns.GetAllExcludingTransferLegs().ShouldBeEmpty(); // but hidden from the pattern list
+        _financialPatterns.GetAll().Count.ShouldBe(2);                 // the two patterns are real patterns
+        _financialPatterns.GetAllExcludingTransferPatterns().ShouldBeEmpty(); // but hidden from the pattern list
     }
 
     [Fact]
-    public void The_legs_file_under_the_from_and_to_accounts()
+    public void The_withdrawal_and_deposit_file_under_the_from_and_to_accounts()
     {
         _transfers.Save(Transfer(from: 1, to: 2));
 
@@ -71,8 +71,44 @@ public class TransferRepositoryTests : IDisposable
         transfer.Amount.ShouldBe(750m);
     }
 
+    // planning/14 item A-1 / finding F10: the engine needs to know which
+    // patterns are a transfer's WITHDRAWAL so the household roll-up can add
+    // that reservation back into free. Only the outgoing half counts — the
+    // deposit never reserves anything.
     [Fact]
-    public void Deleting_a_transfer_removes_both_legs()
+    public void Only_the_withdrawal_half_of_a_transfer_is_reported_as_reserving()
+    {
+        _transfers.Save(Transfer(from: 1, to: 2, amount: 500m));
+
+        var withdrawalIds = _financialPatterns.GetTransferWithdrawalFinanceIds();
+
+        var withdrawal = _financialPatterns.GetAllByAccount()[1].Single();
+        var deposit = _financialPatterns.GetAllByAccount()[2].Single();
+
+        withdrawalIds.ShouldBe(new[] { withdrawal.FinanceId });
+        withdrawalIds.ShouldNotContain(deposit.FinanceId);
+    }
+
+    [Fact]
+    public void An_ordinary_bill_is_never_reported_as_a_transfer_withdrawal()
+    {
+        // Ordinary patterns carry no TransferId, so a plain bill — negative
+        // like a withdrawal — must not be mistaken for one.
+        _financialPatterns.Save(
+            FinancialPattern.Create(new FinancialPatternOptions
+            {
+                FinanceId = 90,
+                Source = "Rent",
+                Amount = -1200m,
+                DatePattern = Monthly(),
+            }),
+            accountId: 1);
+
+        _financialPatterns.GetTransferWithdrawalFinanceIds().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Deleting_a_transfer_removes_both_patterns()
     {
         _transfers.Save(Transfer());
 

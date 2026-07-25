@@ -90,7 +90,7 @@ public static class TransactionLogBookFactory
             FirstNegativeFreeBalanceDate = firstNegative,
             FlooredManualEarmarks = floored,
             Accounts = accountForecasts,
-            Household = BuildHouseholdSummary(accountForecasts),
+            Household = BuildHouseholdSummary(accountForecasts, options.TransferWithdrawalFinanceIds),
         };
     }
 
@@ -122,9 +122,15 @@ public static class TransactionLogBookFactory
     // sample every account's free/set-aside as of that date (its latest snapshot
     // on or before it) and sum — flagging any account whose own free went
     // negative, since a positive household total can hide a locally-short account.
-    private static HouseholdSummary BuildHouseholdSummary(IReadOnlyList<AccountForecast> accounts)
+    private static HouseholdSummary BuildHouseholdSummary(
+        IReadOnlyList<AccountForecast> accounts,
+        IReadOnlySet<int> transferWithdrawalFinanceIds)
     {
-        var asOfFree = accounts.Sum(account => account.Page.InitialSnapshot.ExpectedFreeAmount ?? 0m);
+        var asOfFree = accounts.Sum(account =>
+        {
+            var sample = SampleAsOf(account.Page, account.Page.StartDate, transferWithdrawalFinanceIds);
+            return sample.Free + sample.TransferReserved;
+        });
 
         var dates = new SortedSet<DateOnly>();
         foreach (var account in accounts)
@@ -138,28 +144,59 @@ public static class TransactionLogBookFactory
             var free = 0m;
             var setAside = 0m;
             var shortAccounts = new List<string>();
+            var cushionDipped = new List<string>();
             foreach (var account in accounts)
             {
-                var (accountFree, accountSetAside) = SampleAsOf(account.Page, date);
-                free += accountFree;
-                setAside += accountSetAside;
-                if (accountFree < 0m)
+                var sample = SampleAsOf(account.Page, date, transferWithdrawalFinanceIds);
+
+                // planning/14 item A-1: a transfer's withdrawal reserves in the
+                // account it leaves, so that account's own free reflects money
+                // already committed to going. Household-wide it is not spending
+                // — the money is still in the household — so it is moved back
+                // out of set-aside and into free here. Total is untouched
+                // either way, which is why this is a reclassification and the
+                // free + set-aside = total identity still holds.
+                free += sample.Free + sample.TransferReserved;
+                setAside += sample.SetAside - sample.TransferReserved;
+
+                // "Short" stays a per-account test on the account's OWN free —
+                // a transfer it cannot fund is a real problem for it, so the
+                // household add-back deliberately does not soften this.
+                if (sample.Free < 0m)
                 {
                     shortAccounts.Add(account.Name);
                 }
+
+                // planning/14 item C: the buffer is not whole. Never fires for
+                // an account with no cushion, since 0 can't sit below 0.
+                if (sample.Cushion < account.Page.IdealSafetyCushion)
+                {
+                    cushionDipped.Add(account.Name);
+                }
             }
 
-            days.Add(new HouseholdDay { Date = date, Free = free, SetAside = setAside, ShortAccounts = shortAccounts });
+            days.Add(new HouseholdDay
+            {
+                Date = date,
+                Free = free,
+                SetAside = setAside,
+                ShortAccounts = shortAccounts,
+                CushionDippedAccounts = cushionDipped,
+            });
         }
 
         return new HouseholdSummary { AsOfFree = asOfFree, Days = days };
     }
 
-    // An account's (free, set-aside) as of `date`: the latest snapshot on or
-    // before it, else the initial snapshot. Set-aside is the reserved portion
-    // (expected minus free). BalanceRecord is sorted, so we stop at the first
-    // later date.
-    private static (decimal Free, decimal SetAside) SampleAsOf(AccountTransactionPage page, DateOnly date)
+    // An account's state as of `date`: the latest snapshot on or before it, else
+    // the initial snapshot. Set-aside is the reserved portion (expected minus
+    // free); TransferReserved is the part of that sitting in transfer-withdrawal
+    // jars; Cushion is the null-id jar's amount. BalanceRecord is sorted, so we
+    // stop at the first later date.
+    private static (decimal Free, decimal SetAside, decimal TransferReserved, decimal Cushion) SampleAsOf(
+        AccountTransactionPage page,
+        DateOnly date,
+        IReadOnlySet<int> transferWithdrawalFinanceIds)
     {
         var snapshot = page.InitialSnapshot;
         foreach (var (snapshotDate, dated) in page.BalanceRecord)
@@ -173,7 +210,22 @@ public static class TransactionLogBookFactory
 
         var free = snapshot.ExpectedFreeAmount ?? 0m;
         var expected = snapshot.ExpectedAmount ?? 0m;
-        return (free, expected - free);
+
+        var transferReserved = 0m;
+        var cushion = 0m;
+        foreach (var jar in snapshot.FundJars)
+        {
+            if (jar.FinanceId is not { } financeId)
+            {
+                cushion = jar.ExpectedAmount;
+            }
+            else if (transferWithdrawalFinanceIds.Contains(financeId))
+            {
+                transferReserved += jar.ExpectedAmount;
+            }
+        }
+
+        return (free, expected - free, transferReserved, cushion);
     }
 
     private sealed record AccountPageBuild(
@@ -189,30 +241,13 @@ public static class TransactionLogBookFactory
         var patternsById = input.FinancialPatterns.ToDictionary(pattern => pattern.FinanceId);
         var earmarkedIds = input.EarMarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
 
-        // ~1.2.3.5.a1's "money_in_fund_jars_ready_for_unpaid_bills" carve-out:
-        // a mandatory bill implicitly earmarks toward itself even without a
-        // user-created EarMarkPattern — but only if one doesn't already
-        // exist, so a bill the user chose to earmark explicitly isn't
-        // double-counted.
-        var autoBills = GetAutomaticallyEarmarkedBills(input.FinancialPatterns, input.EarMarkPatterns);
-
-        // Occurrences over each bill's own full lifetime (not clipped to the
-        // window): accrual toward a due date past the horizon still needs to
-        // know that due date. Binary-searched per day — a linear rescan is
-        // O(dates x occurrences), noticeable once a forecast spans years.
-        var billOccurrences = autoBills.ToDictionary(
-            bill => bill.FinanceId,
-            bill => bill.DatePattern.GetOccurrences(bill.DatePattern.Start, bill.DatePattern.Until).ToList());
-
-        // Every income date across each pattern's full lifetime — feeds
-        // BillAccrualAt's "is anything still arriving before this bill is
-        // due" check (see that method).
-        var incomeOccurrences = input.FinancialPatterns
-            .Where(pattern => pattern.Amount > 0)
-            .SelectMany(pattern => pattern.DatePattern.GetOccurrences(pattern.DatePattern.Start, pattern.DatePattern.Until))
-            .Distinct()
-            .OrderBy(occurrence => occurrence)
-            .ToList();
+        // Stage-1 revision (planning/14 "Revision 2026-07-24"): the computed
+        // A/B ramp is RETIRED. Every outflow that reserves against free funds
+        // now does so through a real EarMarkPattern (its Allocation Plan),
+        // created at pattern-creation time by AllocationPlanProposer and passed
+        // in via input.EarMarkPatterns — so the engine treats a bill's plan
+        // exactly like a goal's savings plan, and an outflow with no plan
+        // simply reduces free funds on its due date (and reads short).
 
         // === AdjustSnapshots role: materialize the window's events ===
 
@@ -325,15 +360,6 @@ public static class TransactionLogBookFactory
                 -earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count;
         }
 
-        // Auto-reserved bills seed at their as-of accrual target.
-        var autoBillTargets = new Dictionary<int, decimal>();
-        foreach (var bill in autoBills)
-        {
-            var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, asOfDate, asOfDate);
-            jarValues[bill.FinanceId] = target;
-            autoBillTargets[bill.FinanceId] = target;
-        }
-
         // The safety cushion (finance_id = null jar, priority 0) can't live in
         // jarValues (its key is a non-nullable int), so it rides alongside as a
         // running value. Firm target: seeded to the full amount and refilled to
@@ -369,46 +395,23 @@ public static class TransactionLogBookFactory
             var expectedTransactions = expectedByDate.GetValueOrDefault(date) ?? [];
             var earMarkEvents = earmarkEventsByDate.GetValueOrDefault(date) ?? [];
 
-            // Auto-bill reservation events: implicit isolated earmarks
-            // stepping each auto-reserved bill's jar to its accrual target
-            // for this date (DIVERGENCE(positive-implicit) — see
-            // EarMarkEvent). The accrual curve only ever mattered on
-            // snapshot dates, so stepping between them loses nothing.
-            foreach (var bill in autoBills)
-            {
-                var target = BillAccrualAt(bill, billOccurrences[bill.FinanceId], incomeOccurrences, asOfDate, date);
-                var delta = target - autoBillTargets[bill.FinanceId];
-                autoBillTargets[bill.FinanceId] = target;
-                if (delta != 0m)
-                {
-                    earMarkEvents.Add(new EarMarkEvent
-                    {
-                        FinanceId = bill.FinanceId,
-                        EarmarkDate = date,
-                        RepeatedEarmark = false,
-                        ExpectedAmount = delta,
-                        ExplicitAmount = 0m,
-                    });
-                }
-            }
-
             // ASSUMED-PAIRING(as-of-day-settled): the entered balance is
             // assumed to already include anything happening ON the as-of
             // date, so a snapshot dated exactly there attaches its events
             // for display but contributes no deltas — its values equal the
             // initial snapshot's. (Same convention the flat engine used.)
-            var isSeedDay = date == asOfDate;
+            var isPageStartDate = date == asOfDate;
 
             // 10.3: previous snapshot's amount + today's expected
             // transactions.
             var expected = previousExpected
-                + (isSeedDay ? 0m : expectedTransactions.Where(t => !t.Cancelled).Sum(t => t.ExpectedAmount));
+                + (isPageStartDate ? 0m : expectedTransactions.Where(t => !t.Cancelled).Sum(t => t.ExpectedAmount));
 
             var isDeallocationDay = false;
-            if (!isSeedDay)
+            if (!isPageStartDate)
             {
                 // The safety cushion refills toward its standing target each day
-                // via a positive isolated null-id earmark — the auto-bill
+                // via a positive isolated null-id earmark — the automatically funded expense
                 // reservation pattern above, but toward a fixed target with no
                 // due date and no reset (delta is 0 once at target). After a
                 // deallocation drained it, this steps it back up.
@@ -426,12 +429,12 @@ public static class TransactionLogBookFactory
                 }
 
                 // At this point earMarkEvents holds exactly the day's SCHEDULED
-                // earmarks (er + ei): repeated goal contributions + auto-bill and
+                // earmarks (er + ei): repeated goal contributions + automatically funded expense and
                 // cushion reservation deltas. jarValues + cushionValue still hold
                 // the PREVIOUS day's balances (f) — the floor loop below applies
                 // today's events. Deallocation runs first and appends its
                 // give-backs (the cushion, priority 0, is drained before any real
-                // jar); the seed day is skipped on purpose (its over-allocation
+                // jar); the page.s starting date is skipped on purpose (its over-allocation
                 // is the correct Q2 "short right now" signal, not a thing to
                 // drain away).
                 isDeallocationDay = AppendDeallocationOrGoalReleases(
@@ -519,20 +522,6 @@ public static class TransactionLogBookFactory
         return new AccountPageBuild(accountPage, firstNegativeDate, flooredManualEarmarks);
     }
 
-    // Exposed so UI layers can identify which bills get the automatic
-    // reservation treatment (e.g. the "(Automatic)" rows on the Allocations
-    // tab) without duplicating — and risking drift from — the exact rule the
-    // engine is driven by.
-    public static IReadOnlyList<FinancialPattern> GetAutomaticallyEarmarkedBills(
-        IReadOnlyList<FinancialPattern> financialPatterns,
-        IReadOnlyList<EarMarkPattern> earMarkPatterns)
-    {
-        var earmarkedFinanceIds = earMarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
-        return financialPatterns
-            .Where(pattern => pattern.Mandatory && !earmarkedFinanceIds.Contains(pattern.FinanceId))
-            .ToList();
-    }
-
     private static List<T> GetOrAdd<T>(Dictionary<DateOnly, List<T>> map, DateOnly date)
     {
         if (!map.TryGetValue(date, out var list))
@@ -617,7 +606,11 @@ public static class TransactionLogBookFactory
                 FinanceId: financeId,
                 Priority: patternsById[financeId].Priority,
                 Balance: balance,
-                ExistingEarmark: existingByJar.GetValueOrDefault(financeId)));
+                ExistingEarmark: existingByJar.GetValueOrDefault(financeId),
+                // planning/14 item B: Mandatory now means "the user has to pay
+                // this", and its only job is protecting the jar — everything
+                // skippable is drained before anything unskippable is touched.
+                Skippable: !patternsById[financeId].Mandatory));
         }
 
         var isDeallocationDay =
@@ -654,7 +647,7 @@ public static class TransactionLogBookFactory
     }
 
     // A deallocation give-back merges into any ISOLATED earmark the jar already
-    // carries that day (an auto-bill reservation delta), preserving "one
+    // carries that day (an automatic funding delta), preserving "one
     // isolated earmark per finance id per day" and avoiding a duplicate
     // detail-pane row; otherwise it is appended. Repeated earmarks are left
     // alone — an isolated and a repeated earmark for the same jar/day coexist.
@@ -700,7 +693,7 @@ public static class TransactionLogBookFactory
                 CurrentAmount = currentIsKnown ? value : null,
                 ExpectedAmount = value,
                 // null milestone = no savings plan drives this jar (an
-                // auto-reserved bill) — nothing to be "behind" on.
+                // automatically funded expense) — nothing to be "behind" on.
                 MilestoneAmount = milestones.TryGetValue(financeId, out var milestone) ? milestone : null,
             });
         }
@@ -714,91 +707,6 @@ public static class TransactionLogBookFactory
         });
 
         return jars;
-    }
-
-    // How much of a bill is reserved on `date`, deciding per day between two
-    // behaviours the user wants BOTH of (2026-07-10):
-    //
-    //   A (pace) — if a paycheck arrives before the bill's next due date, a
-    //     future paycheck will help fund it, so reserve only a linear
-    //     fraction of the way through the current cycle. Avoids being overly
-    //     cautious for distant bills.
-    //   B (reserve in full) — if the bill's next occurrence lands before any
-    //     further income, the money must already be in hand, so reserve the
-    //     whole amount immediately. Keeps short-term free balance honest.
-    //
-    // The A/B choice is exactly "is there income between tomorrow and the
-    // bill's next due date." Walking forward, a bill ramps (A) until the last
-    // paycheck before its due date passes, then snaps to full (B).
-    //
-    // Anchoring A's ramp to the most recent occurrence *at or before* `date`
-    // matters: the bill's own due-date ExpectedTransaction already reduces
-    // the balance that day, so the jar must read 0 that day too, or the
-    // amount would be subtracted twice. For the bill's very FIRST occurrence
-    // there is no prior cycle to anchor to, so A paces from the forecast's
-    // own start (`asOfDate`) instead — without this, a brand-new bill's first
-    // instance reserved nothing at all until it hit, which is the gap that
-    // made an upcoming bill look unfunded on the current day.
-    //
-    // This only affects the automatic bill mechanism — a user's own
-    // EarMarkPattern is a deliberate, hand-chosen schedule the engine leaves
-    // alone even if it runs out of runway (that shows up as a GoalShortfall
-    // instead).
-    private static decimal BillAccrualAt(
-        FinancialPattern bill,
-        List<DateOnly> occurrences,
-        List<DateOnly> incomeOccurrences,
-        DateOnly asOfDate,
-        DateOnly date)
-    {
-        if (occurrences.Count == 0)
-        {
-            return 0m;
-        }
-
-        var searchResult = occurrences.BinarySearch(date);
-        var paidThroughIndex = searchResult >= 0 ? searchResult : ~searchResult - 1;
-
-        // At or after the bill's last occurrence ever — no upcoming due date
-        // left to reserve toward.
-        if (paidThroughIndex >= occurrences.Count - 1)
-        {
-            return 0m;
-        }
-
-        var amount = Math.Abs(bill.Amount);
-        var next = occurrences[paidThroughIndex + 1];
-
-        // B: nothing more arrives before the bill is due — reserve it all now.
-        if (!HasOccurrenceInRange(incomeOccurrences, date.AddDays(1), next))
-        {
-            return amount;
-        }
-
-        // A: pace toward the due date. Anchor to the previous occurrence when
-        // one exists; for the first-ever occurrence (paidThroughIndex < 0),
-        // pace from the forecast start instead.
-        var anchor = paidThroughIndex >= 0 ? occurrences[paidThroughIndex] : asOfDate;
-        var cycleDays = next.DayNumber - anchor.DayNumber;
-        var elapsedDays = date.DayNumber - anchor.DayNumber;
-
-        var fraction = (decimal)elapsedDays / cycleDays;
-        return Math.Round(amount * fraction, 2);
-    }
-
-    // `sortedDates` is ascending and pre-deduplicated (built once in
-    // CreateForecast) — binary search for the same O(log n)-per-day reason
-    // BillAccrualAt's own occurrence lookup is.
-    private static bool HasOccurrenceInRange(List<DateOnly> sortedDates, DateOnly start, DateOnly end)
-    {
-        if (start > end)
-        {
-            return false;
-        }
-
-        var searchResult = sortedDates.BinarySearch(start);
-        var firstAtOrAfterStart = searchResult >= 0 ? searchResult : ~searchResult;
-        return firstAtOrAfterStart < sortedDates.Count && sortedDates[firstAtOrAfterStart] <= end;
     }
 
     // ~3.13.5.4.a1: milestone vs. saved — but "saved" and "milestone" are

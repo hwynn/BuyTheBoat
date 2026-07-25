@@ -22,12 +22,12 @@ clean context. **Read first:** [`06-deallocation-math.md`](06-deallocation-math.
   `redesign/extract_deallocation_vectors.py`). Full suite green at 82 (68 domain + 14
   scenario), 0 warnings. No cascade integration yet — that's Step 2.
 - **Step 2 — DONE (2026-07-11).** Deallocation is wired into
-  `TransactionLogBookFactory`'s cascade. Per non-seed day it classifies today's
+  `TransactionLogBookFactory`'s cascade. Per day after the page.s starting date it classifies today's
   expected transactions into paired (`ap`, finance id has an EarMarkPattern) vs.
   unpaired (`au`), builds `DeallocationJar`s from the previous day's balances +
   the day's scheduled earmarks (cushion first at priority 0), and on a
   deallocation day appends the give-backs — MERGING into an existing isolated
-  earmark (auto-bill reservation delta) so a jar never carries two. The
+  earmark (automatic funding delta) so a jar never carries two. The
   normal-day goal release (`3.13c.a10`) and Step A's paired earmark are mutually
   exclusive (the pre-added release loop was removed; it's now a per-day branch).
   The seed/initial snapshot is deliberately NOT deallocated (its negative free
@@ -166,7 +166,7 @@ per the normal cascade, re-deallocating if a later day is again short.
 
 **Ordering within a day** (the deallocation function runs LAST, taking the
 others as fixed `er`/`ei`/`p` inputs): scheduled repeated/isolated
-contributions → goal-release (`3.13c.a10`) → bill auto-reservation (ramp/snap)
+contributions → goal-release (`3.13c.a10`) → bill automatic funding (ramp/snap)
 → **then** deallocation balancing (Step B).
 
 **Design decisions for this step (resolved with author 2026-07-10 unless noted):**

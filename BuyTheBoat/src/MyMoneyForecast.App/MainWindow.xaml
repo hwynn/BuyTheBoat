@@ -479,7 +479,7 @@
             </TabItem>
 
             <!-- TRANSFERS (planning/10 item 3): moving money between accounts,
-                 shown as one thing but stored as two paired legs. -->
+                 shown as one thing but stored as a paired withdrawal and deposit. -->
             <TabItem Header="Transfers">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
@@ -509,6 +509,13 @@
                         <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddFinancialPatternClick"/>
                         <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditFinancialPatternClick"/>
                         <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteFinancialPatternClick"/>
+                        <!-- planning/14 item D-1: the lever that turns an
+                             automatically-filled jar into a savings plan the
+                             user controls. Lives on the pattern, not in the
+                             create form (item D-3). -->
+                        <Button Content="Set Up Savings Plan..." Padding="12,5" Margin="20,0,0,0"
+                                Click="OnSetUpSavingsPlanClick"
+                                AutomationProperties.AutomationId="SetUpSavingsPlanButton"/>
                     </StackPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                Text="A bill and a paycheck are the same kind of thing here — just a negative vs. positive amount. &quot;Create Bill&quot; is the simple path for a recurring expense you're obligated to pay; &quot;Add New (advanced)&quot; also covers paychecks, one-time goals, and anything discretionary."/>

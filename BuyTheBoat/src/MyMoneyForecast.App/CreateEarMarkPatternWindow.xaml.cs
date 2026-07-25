@@ -17,6 +17,26 @@ public partial class CreateEarMarkPatternWindow : Window
         GoalComboBox.SelectedIndex = 0;
     }
 
+    // Materialize mode (planning/14 item D-1): the user pressed "set up a
+    // savings plan" on an outflow whose jar has been filling automatically. The
+    // goal is fixed, and the already-saved figure is pre-filled with what that
+    // jar currently holds — so taking control never MOVES money, it only
+    // changes what governs the jar from here on. Once this pattern exists the
+    // outflow stops filling automatically, by the rule that already excludes
+    // anything with a savings plan.
+    public CreateEarMarkPatternWindow(FinancialPattern goal, decimal alreadySaved)
+    {
+        InitializeComponent();
+
+        Title = "Set Up Savings Plan";
+
+        GoalComboBox.ItemsSource = new[] { new GoalOption(goal) };
+        GoalComboBox.SelectedIndex = 0;
+        GoalComboBox.IsEnabled = false;
+
+        StartingAllocationTextBox.Text = alreadySaved.ToString(CultureInfo.InvariantCulture);
+    }
+
     // Edit mode: the goal it's linked to can't change (FinanceId is the link,
     // and FinanceId is fixed once created) — only amount/timing can.
     public CreateEarMarkPatternWindow(EarMarkPattern existing, FinancialPattern goal)

@@ -3,9 +3,9 @@ namespace MyMoneyForecast.Domain;
 // A user-scheduled movement of money between two of their own accounts. There
 // is no "transfer" in the documented class model (planning/10 item 3): a
 // transfer is a philosophy-3 abstraction built from a PAIR of ordinary
-// FinancialPattern legs — a withdrawal from the source account and a matching
+// FinancialPatterns — a withdrawal from the source account and a matching
 // deposit into the destination. This record is the canonical definition those
-// two legs are generated from and validated against. It is owned by the book,
+// two patterns are generated from and validated against. It is owned by the book,
 // not by any single account, because a transfer spans two.
 public sealed record TransferOptions
 {

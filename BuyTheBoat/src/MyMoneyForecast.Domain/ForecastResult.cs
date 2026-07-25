@@ -96,7 +96,18 @@ public sealed record HouseholdDay
     public required decimal SetAside { get; init; }
     public required IReadOnlyList<string> ShortAccounts { get; init; }
 
+    // Accounts whose safety cushion is not whole on this day — it sits below
+    // the target they set. This is the middle warning state (planning/14 item
+    // C): not over-committed, but the buffer took the hit. Surfaced more
+    // quietly than being short, and empty for anyone whose cushion is 0, since
+    // there is then nothing to dip into.
+    public IReadOnlyList<string> CushionDippedAccounts { get; init; } = [];
+
     public bool AnyAccountShort => ShortAccounts.Count > 0;
+
+    // "Short" outranks it: a day that is both over-committed and cushion-dipped
+    // reads as short, so this only reports the lesser state on its own.
+    public bool AnyCushionDipped => ShortAccounts.Count == 0 && CushionDippedAccounts.Count > 0;
 }
 
 public sealed record HouseholdSummary
