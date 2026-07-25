@@ -151,12 +151,24 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return ids;
     }
 
-    // Removes both patterns of a transfer — used when the transfer itself is deleted.
+    // Removes both patterns of a transfer — used when the transfer itself is
+    // deleted. Also removes any Allocation Plan (EarMarkPattern) and its manual
+    // earmarks on those patterns: stage-1 gives a transfer's withdrawal a plan
+    // so it reserves (planning/14), and a plan whose goal pattern is gone is
+    // invalid by 3.10.a3 — leaving it would orphan a jar and make the next
+    // forecast's plan read-back throw. Children are deleted before the patterns
+    // they reference.
     public void DeleteByTransferId(int transferId)
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM FinancialPatterns WHERE TransferId = $TransferId;";
+        command.CommandText = """
+            DELETE FROM ManualEarmarks WHERE FinanceId IN
+                (SELECT FinanceId FROM FinancialPatterns WHERE TransferId = $TransferId);
+            DELETE FROM EarMarkPatterns WHERE FinanceId IN
+                (SELECT FinanceId FROM FinancialPatterns WHERE TransferId = $TransferId);
+            DELETE FROM FinancialPatterns WHERE TransferId = $TransferId;
+            """;
         command.Parameters.AddWithValue("$TransferId", transferId);
         command.ExecuteNonQuery();
     }

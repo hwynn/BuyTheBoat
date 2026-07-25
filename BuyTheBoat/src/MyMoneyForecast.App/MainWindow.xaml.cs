@@ -925,8 +925,13 @@ public partial class MainWindow : Window
         // Stage-1 revision (planning/14): the computed A/B ramp is retired, so
         // there are no longer "automatic" rows without a real pattern behind
         // them — every outflow that reserves has its own Allocation Plan
-        // (an EarMarkPattern), so the grid just shows those.
+        // (an EarMarkPattern), so the grid just shows those. A transfer's
+        // withdrawal reserves through a plan too, but it's hidden here for the
+        // same reason its patterns are: a transfer is shown as one thing on its
+        // own tab, not as its underlying reservation machinery.
+        var transferWithdrawalIds = _financialPatterns.GetTransferWithdrawalFinanceIds();
         EarMarkPatternsGrid.ItemsSource = earMarkPatterns
+            .Where(pattern => !transferWithdrawalIds.Contains(pattern.FinanceId))
             .Select(pattern => new EarMarkPatternRow(
                 pattern,
                 financialPatterns.FirstOrDefault(goal => goal.FinanceId == pattern.FinanceId)))
