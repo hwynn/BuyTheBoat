@@ -15,9 +15,9 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO FinancialPatterns
-                (FinanceId, Source, Amount, Priority, Mandatory, Description, AccountId, TransferId, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate)
+                (FinanceId, Source, Amount, Priority, Mandatory, Description, AccountId, TransferId, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom)
             VALUES
-                ($FinanceId, $Source, $Amount, $Priority, $Mandatory, $Description, $AccountId, $TransferId, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate)
+                ($FinanceId, $Source, $Amount, $Priority, $Mandatory, $Description, $AccountId, $TransferId, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom)
             ON CONFLICT(FinanceId) DO UPDATE SET
                 Source = excluded.Source,
                 Amount = excluded.Amount,
@@ -31,7 +31,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
                 ByDay = excluded.ByDay,
                 ByMonthDay = excluded.ByMonthDay,
                 StartDate = excluded.StartDate,
-                UntilDate = excluded.UntilDate;
+                UntilDate = excluded.UntilDate,
+                ActiveFrom = excluded.ActiveFrom;
             """;
 
         command.Parameters.AddWithValue("$AccountId", accountId);

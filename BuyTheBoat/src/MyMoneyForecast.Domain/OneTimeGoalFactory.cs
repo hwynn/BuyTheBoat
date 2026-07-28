@@ -58,6 +58,11 @@ public static class OneTimeGoalFactory
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = request.DueDate,
                 Count = 1,
+                // The goal's only occurrence is its due date, but saving starts
+                // earlier — ActiveFrom stretches the goal's active span back to the
+                // save-start day so its savings plan (and jar) legitimately begin
+                // before the due date (planning/15, ActiveFrom).
+                ActiveFrom = request.StartSavingDate,
             }),
             Amount = -request.AmountNeeded,
             Priority = request.Priority,

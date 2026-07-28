@@ -82,7 +82,11 @@ relevance (it no longer even decides whether something gets a jar).
 **2 · The plan is pre-filled and removable (bills).** Creating a bill defaults to an Allocation Plan
 pre-filled with `amount ÷ paychecks in the cycle`, one click to keep, editable in place, and
 removable. Remove it and the bill reserves nothing and shows short. Charter items 11/12 are answered:
-a plan is now *offered and pre-filled*, still never forced — you can finalize with none.
+a plan is now *offered and pre-filled*, still never forced — you can finalize with none. **(Refined
+2026-07-28:** "with none" means an *empty* plan — no contributions — plus a jar, with the finance
+pattern's `ActiveFrom` stretched to the present, **not** literally no plan at all; that empty plan is
+what makes the shortfall computable and the jar top-up-able. Opting out of reaching the present is
+available only by explicit user choice. See [15 § the ActiveFrom resolution](15-stage2-pattern-lifetime.md).**)**
 
 **3 · The default is chosen by a proposer — the retired ramp's brain, relocated.** A function scans
 income occurrences between now and the due date and picks the default:

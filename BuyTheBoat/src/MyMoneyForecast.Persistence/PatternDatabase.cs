@@ -80,7 +80,8 @@ public sealed class PatternDatabase
                 ByDay TEXT NULL,
                 ByMonthDay TEXT NULL,
                 StartDate TEXT NOT NULL,
-                UntilDate TEXT NOT NULL
+                UntilDate TEXT NOT NULL,
+                ActiveFrom TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS EarMarkPatterns (
@@ -92,6 +93,7 @@ public sealed class PatternDatabase
                 ByMonthDay TEXT NULL,
                 StartDate TEXT NOT NULL,
                 UntilDate TEXT NOT NULL,
+                ActiveFrom TEXT NULL,
                 StartingAllocation TEXT NOT NULL DEFAULT '0'
             );
 
@@ -127,7 +129,8 @@ public sealed class PatternDatabase
                 ByDay TEXT NULL,
                 ByMonthDay TEXT NULL,
                 StartDate TEXT NOT NULL,
-                UntilDate TEXT NOT NULL
+                UntilDate TEXT NOT NULL,
+                ActiveFrom TEXT NULL
             );
             """;
         command.ExecuteNonQuery();
@@ -154,6 +157,14 @@ public sealed class PatternDatabase
         // patterns, which are hidden from the pattern list and shown as one transfer
         // instead. The engine still reads every pattern, patterns included.
         EnsureColumn(connection, "FinancialPatterns", "TransferId", "INTEGER NULL");
+
+        // The ActiveFrom lead-in (planning/15): a nullable date on a pattern's
+        // rrule, earlier than its first occurrence, so a jar can exist before the
+        // pattern's occurrences begin. NULL for every pre-existing pattern — the
+        // migration is simply the absence of a value (no lead-in).
+        EnsureColumn(connection, "FinancialPatterns", "ActiveFrom", "TEXT NULL");
+        EnsureColumn(connection, "EarMarkPatterns", "ActiveFrom", "TEXT NULL");
+        EnsureColumn(connection, "Transfers", "ActiveFrom", "TEXT NULL");
     }
 
     private static void EnsureColumn(SqliteConnection connection, string table, string column, string columnDefinition)

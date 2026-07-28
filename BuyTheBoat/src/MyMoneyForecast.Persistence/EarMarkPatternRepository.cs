@@ -11,9 +11,9 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
         using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO EarMarkPatterns
-                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, StartingAllocation)
+                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation)
             VALUES
-                ($FinanceId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $StartingAllocation)
+                ($FinanceId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $StartingAllocation)
             ON CONFLICT(FinanceId) DO UPDATE SET
                 Amount = excluded.Amount,
                 Frequency = excluded.Frequency,
@@ -22,6 +22,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
                 ByMonthDay = excluded.ByMonthDay,
                 StartDate = excluded.StartDate,
                 UntilDate = excluded.UntilDate,
+                ActiveFrom = excluded.ActiveFrom,
                 StartingAllocation = excluded.StartingAllocation;
             """;
 

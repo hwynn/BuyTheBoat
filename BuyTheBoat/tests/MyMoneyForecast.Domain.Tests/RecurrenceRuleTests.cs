@@ -158,4 +158,73 @@ public class RecurrenceRuleTests
             Count = 3,
         }));
     }
+
+    [Fact]
+    public void Active_from_defaults_to_null_and_active_start_falls_back_to_start()
+    {
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            Start = new DateOnly(2025, 3, 1),
+            ByMonthDay = [1],
+            Until = new DateOnly(2025, 6, 1),
+        });
+
+        rule.ActiveFrom.ShouldBeNull();
+        rule.ActiveStart.ShouldBe(new DateOnly(2025, 3, 1));
+    }
+
+    [Fact]
+    public void Active_from_stretches_the_span_earlier_without_adding_occurrences()
+    {
+        // A future-starting bill whose jar should exist from earlier: ActiveFrom
+        // reaches back before the first occurrence, but the occurrences are
+        // untouched — GetOccurrences never reads it.
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            Start = new DateOnly(2025, 3, 1),
+            ByMonthDay = [1],
+            Until = new DateOnly(2025, 5, 1),
+            ActiveFrom = new DateOnly(2025, 1, 15),
+        });
+
+        rule.ActiveStart.ShouldBe(new DateOnly(2025, 1, 15));
+        rule.ActiveSpanContains(new DateOnly(2025, 1, 20)).ShouldBeTrue(); // in the lead-in, not an occurrence
+        rule.GetOccurrences().ShouldBe([
+            new DateOnly(2025, 3, 1),
+            new DateOnly(2025, 4, 1),
+            new DateOnly(2025, 5, 1),
+        ]);
+    }
+
+    [Fact]
+    public void Active_span_is_bounded_by_active_start_and_until()
+    {
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            Start = new DateOnly(2025, 3, 1),
+            ByMonthDay = [1],
+            Until = new DateOnly(2025, 5, 1),
+            ActiveFrom = new DateOnly(2025, 1, 15),
+        });
+
+        rule.ActiveSpanContains(new DateOnly(2025, 1, 14)).ShouldBeFalse(); // before the lead-in
+        rule.ActiveSpanContains(new DateOnly(2025, 1, 15)).ShouldBeTrue();  // the lead-in day
+        rule.ActiveSpanContains(new DateOnly(2025, 5, 1)).ShouldBeTrue();   // the last day
+        rule.ActiveSpanContains(new DateOnly(2025, 5, 2)).ShouldBeFalse();  // past Until
+    }
+
+    [Fact]
+    public void Create_throws_when_active_from_is_after_start()
+    {
+        Should.Throw<ArgumentException>(() => RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            Start = new DateOnly(2025, 3, 1),
+            Until = new DateOnly(2025, 6, 1),
+            ActiveFrom = new DateOnly(2025, 4, 1),
+        }));
+    }
 }

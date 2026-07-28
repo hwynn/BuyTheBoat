@@ -28,6 +28,12 @@ public sealed record RecurrenceRuleOptions
     // see RecurrenceRule.Until for why it never survives construction.
     public DateOnly? Until { get; init; }
     public int? Count { get; init; }
+
+    // A "lead-in" date the pattern counts as active FROM — earlier than its first
+    // occurrence — so a fund jar for it can exist before the pattern starts
+    // producing occurrences (planning/15, ActiveFrom). Null = no lead-in. Never
+    // affects occurrence generation; used only for span/containment checks.
+    public DateOnly? ActiveFrom { get; init; }
 }
 
 // The chart-only rule found in redesign/05-assumption-dependency-graph.md
@@ -45,6 +51,13 @@ public sealed class RecurrenceRule
     public IReadOnlyList<DayOfWeek> ByDay { get; }
     public IReadOnlyList<int> ByMonthDay { get; }
     public DateOnly Until { get; }
+    public DateOnly? ActiveFrom { get; }
+
+    /// <summary>[CALC] The date this pattern counts as active from — its ActiveFrom lead-in if one is set, otherwise its own Start.</summary>
+    public DateOnly ActiveStart => ActiveFrom ?? Start;
+
+    /// <summary>[CALC] Whether a date falls inside the pattern's active span (ActiveStart..Until) — the range a fund jar for it may exist in, wider than its occurrences when there is a lead-in.</summary>
+    public bool ActiveSpanContains(DateOnly date) => date >= ActiveStart && date <= Until;
 
     private RecurrenceRule(RecurrenceRuleOptions options, DateOnly resolvedUntil)
     {
@@ -54,6 +67,7 @@ public sealed class RecurrenceRule
         ByDay = options.ByDay;
         ByMonthDay = options.ByMonthDay;
         Until = resolvedUntil;
+        ActiveFrom = options.ActiveFrom;
         _pattern = BuildPattern(options with { Until = resolvedUntil, Count = null });
     }
 
@@ -62,6 +76,13 @@ public sealed class RecurrenceRule
         if (options.Interval < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Interval must be at least 1.");
+        }
+
+        if (options.ActiveFrom is { } activeFrom && activeFrom > options.Start)
+        {
+            throw new ArgumentException(
+                "ActiveFrom cannot be after Start — it is a lead-in before the first occurrence.",
+                nameof(options));
         }
 
         switch (options.Until, options.Count)

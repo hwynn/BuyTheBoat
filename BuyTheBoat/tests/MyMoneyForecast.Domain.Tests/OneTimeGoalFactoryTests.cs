@@ -133,4 +133,25 @@ public class OneTimeGoalFactoryTests
         result.SavingsPlan.DatePattern.GetOccurrences().ShouldBe([new DateOnly(2025, 1, 1)]);
         result.SavingsPlan.Amount.ShouldBe(-100m);
     }
+
+    [Fact]
+    public void The_goal_is_active_from_the_save_start_date_so_its_plan_can_begin_before_the_due_date()
+    {
+        // The goal's only occurrence is its due date, but the savings plan starts
+        // earlier — ActiveFrom stretches the goal's active span back to the
+        // save-start day so the plan (and jar) legitimately live before the due
+        // date (planning/15). The due-date occurrence itself is unchanged.
+        var result = OneTimeGoalFactory.Create(new OneTimeGoalRequest
+        {
+            FinanceId = 1,
+            Description = "Trip to Japan",
+            AmountNeeded = 1000m,
+            DueDate = new DateOnly(2025, 6, 1),
+            StartSavingDate = new DateOnly(2025, 1, 19),
+        });
+
+        result.Goal.DatePattern.ActiveFrom.ShouldBe(new DateOnly(2025, 1, 19));
+        result.Goal.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 19));
+        result.Goal.DatePattern.GetOccurrences().ShouldBe([new DateOnly(2025, 6, 1)]);
+    }
 }

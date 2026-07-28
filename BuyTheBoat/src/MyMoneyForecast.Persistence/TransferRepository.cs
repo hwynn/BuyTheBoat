@@ -23,9 +23,9 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         {
             command.CommandText = """
                 INSERT INTO Transfers
-                    (Id, FromAccountId, ToAccountId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate)
+                    (Id, FromAccountId, ToAccountId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom)
                 VALUES
-                    ($Id, $FromAccountId, $ToAccountId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate)
+                    ($Id, $FromAccountId, $ToAccountId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom)
                 ON CONFLICT(Id) DO UPDATE SET
                     FromAccountId = excluded.FromAccountId,
                     ToAccountId = excluded.ToAccountId,
@@ -35,7 +35,8 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
                     ByDay = excluded.ByDay,
                     ByMonthDay = excluded.ByMonthDay,
                     StartDate = excluded.StartDate,
-                    UntilDate = excluded.UntilDate;
+                    UntilDate = excluded.UntilDate,
+                    ActiveFrom = excluded.ActiveFrom;
                 """;
             command.Parameters.AddWithValue("$Id", transfer.Id);
             command.Parameters.AddWithValue("$FromAccountId", transfer.FromAccountId);

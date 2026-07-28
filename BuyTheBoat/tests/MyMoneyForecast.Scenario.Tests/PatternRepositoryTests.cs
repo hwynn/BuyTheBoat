@@ -227,6 +227,36 @@ public class PatternRepositoryTests : IDisposable
         _financialPatterns.HasLinkedEarMarkPattern(goal.FinanceId).ShouldBeFalse();
     }
 
+    [Fact]
+    public void Financial_pattern_active_from_round_trips_through_sqlite()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 42,
+            Source = "Trip to Japan",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2027, 1, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 6, 1),
+            }),
+            Amount = -3000m,
+            Mandatory = false,
+        });
+        _financialPatterns.Save(goal, accountId: 1);
+
+        _financialPatterns.GetAll().Single().DatePattern.ActiveFrom.ShouldBe(new DateOnly(2025, 6, 1));
+    }
+
+    [Fact]
+    public void A_pattern_with_no_active_from_round_trips_as_null()
+    {
+        _financialPatterns.Save(Bill(1, "Rent"), accountId: 1);
+
+        _financialPatterns.GetAll().Single().DatePattern.ActiveFrom.ShouldBeNull();
+    }
+
     private static FinancialPattern Bill(int financeId, string source) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

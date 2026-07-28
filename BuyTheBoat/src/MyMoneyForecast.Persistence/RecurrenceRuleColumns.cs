@@ -20,6 +20,11 @@ internal static class RecurrenceRuleColumns
             "$ByMonthDay", rule.ByMonthDay.Count > 0 ? string.Join(',', rule.ByMonthDay) : DBNull.Value);
         command.Parameters.AddWithValue("$StartDate", rule.Start.ToString(DateFormat, CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$UntilDate", rule.Until.ToString(DateFormat, CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue(
+            "$ActiveFrom",
+            rule.ActiveFrom is { } activeFrom
+                ? activeFrom.ToString(DateFormat, CultureInfo.InvariantCulture)
+                : DBNull.Value);
     }
 
     public static RecurrenceRule Read(SqliteDataReader reader)
@@ -40,6 +45,11 @@ internal static class RecurrenceRuleColumns
         var start = DateOnly.ParseExact(ReadString(reader, "StartDate"), DateFormat, CultureInfo.InvariantCulture);
         var until = DateOnly.ParseExact(ReadString(reader, "UntilDate"), DateFormat, CultureInfo.InvariantCulture);
 
+        var activeFromText = ReadNullableString(reader, "ActiveFrom");
+        var activeFrom = activeFromText is null
+            ? (DateOnly?)null
+            : DateOnly.ParseExact(activeFromText, DateFormat, CultureInfo.InvariantCulture);
+
         return RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = frequency,
@@ -48,6 +58,7 @@ internal static class RecurrenceRuleColumns
             ByDay = byDay,
             ByMonthDay = byMonthDay,
             Until = until,
+            ActiveFrom = activeFrom,
         });
     }
 

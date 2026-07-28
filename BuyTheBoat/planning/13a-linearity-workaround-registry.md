@@ -152,6 +152,8 @@ accumulates patterns.
 
 ## W9 · Internal auto-renewal of an open-ended rule  ·  DESIGNED (stage 2, 2026-07-24)
 
+> **DEFERRED & REOPENED 2026-07-28.** The author deferred the open-ended-pattern mechanism and reconsidered this approach: rolling `Until` to the horizon accumulates *hundreds of past occurrences* over years, so **periodic break-off / renewal ([W8](#w8--split-and-continue-break-off)) is now the leading alternative.** `ActiveFrom` (early-allocation span, no new occurrences) is a *different* mechanism and is **not** this one. See [planning/15 — Ongoing: deferred and reframed](15-stage2-pattern-lifetime.md). The description below is kept as the original proposal.
+
 **How:** a pattern flagged *ongoing* keeps a real `Until` — Constraint 2 gives no choice — but that
 date is an implementation detail, extended to **the forecast horizon plus at least one full cycle**
 and recomputed per run. The user is never asked "how long do you want electricity for?" and never
