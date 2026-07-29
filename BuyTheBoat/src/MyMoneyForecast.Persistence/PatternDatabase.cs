@@ -165,6 +165,27 @@ public sealed class PatternDatabase
         EnsureColumn(connection, "FinancialPatterns", "ActiveFrom", "TEXT NULL");
         EnsureColumn(connection, "EarMarkPatterns", "ActiveFrom", "TEXT NULL");
         EnsureColumn(connection, "Transfers", "ActiveFrom", "TEXT NULL");
+
+        // One-time backfill for the restored 3.11.2.a2 front-half check
+        // (planning/15): a pre-existing goal whose savings plan starts before the
+        // goal's own Start had no ActiveFrom, which the restored check rejects on
+        // load. Give each such goal an ActiveFrom equal to its plan's Start —
+        // matching what creation now sets. Dates are stored as yyyy-MM-dd TEXT, so
+        // the string comparison sorts chronologically. Idempotent: only touches
+        // rows still NULL, so re-running does nothing.
+        using var backfill = connection.CreateCommand();
+        backfill.CommandText = """
+            UPDATE FinancialPatterns
+            SET ActiveFrom = (
+                SELECT e.StartDate FROM EarMarkPatterns e
+                WHERE e.FinanceId = FinancialPatterns.FinanceId)
+            WHERE ActiveFrom IS NULL
+              AND EXISTS (
+                SELECT 1 FROM EarMarkPatterns e
+                WHERE e.FinanceId = FinancialPatterns.FinanceId
+                  AND e.StartDate < FinancialPatterns.StartDate);
+            """;
+        backfill.ExecuteNonQuery();
     }
 
     private static void EnsureColumn(SqliteConnection connection, string table, string column, string columnDefinition)

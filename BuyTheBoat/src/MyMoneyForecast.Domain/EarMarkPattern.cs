@@ -36,22 +36,28 @@ public sealed class EarMarkPattern
 
     // `goal` is the FinancialPattern this earmark pattern is saving toward.
     //
-    // Enforces only the back half of 3.11.2.a2 — an earmark can't still be
-    // allocating funds after the goal's own date range ends. The front half
-    // ("can't start before the goal's own start") turned out not to hold in
-    // practice: saving in advance for a single-occurrence goal (the whole
-    // point of an earmark pattern) means the earmark's Start is *supposed* to
-    // be well before the goal's, since a one-time goal's own DatePattern is
-    // just its single due date. Confirmed with the user (2026-07-07) that
-    // earmark patterns aren't meant to be tied to a specific triggering
-    // event's timing at all — this is the one piece of that coupling that
-    // was left, and it didn't survive contact with the real use case.
+    // DIVERGENCE(active-from): enforces 3.11.2.a2 in BOTH directions, against the
+    // goal's ACTIVE span (planning/15). An earmark can't still be allocating after
+    // the goal's range ends (Until), and can't begin before the goal's active span
+    // starts (ActiveStart = the goal's ActiveFrom lead-in if set, else its Start).
+    // Saving in advance for a single-occurrence goal is exactly why the goal
+    // carries an ActiveFrom reaching back to the save-start day, so the earmark
+    // legitimately begins before the due-date occurrence and this check holds
+    // literally. (The front half was relaxed 2026-07-07 when no ActiveFrom
+    // existed; ActiveFrom restores it rather than breaking the assumption.)
     public static EarMarkPattern Create(EarMarkPatternOptions options, FinancialPattern goal)
     {
         if (options.FinanceId != goal.FinanceId)
         {
             throw new ArgumentException(
                 $"FinanceId {options.FinanceId} does not match the goal pattern's FinanceId {goal.FinanceId}.",
+                nameof(options));
+        }
+
+        if (options.DatePattern.ActiveStart < goal.DatePattern.ActiveStart)
+        {
+            throw new ArgumentException(
+                "An earmark pattern can't begin allocating before its goal's active span starts.",
                 nameof(options));
         }
 

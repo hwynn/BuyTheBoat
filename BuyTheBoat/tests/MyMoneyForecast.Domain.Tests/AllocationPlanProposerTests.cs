@@ -219,4 +219,30 @@ public class AllocationPlanProposerTests
         result.Plan.FinanceId.ShouldBe(7);
         result.Plan.Amount.ShouldBeLessThan(0m);
     }
+
+    [Fact]
+    public void A_future_dated_outflow_is_returned_stretched_back_to_the_as_of_date()
+    {
+        // The bill's first occurrence (Feb 1) is after the as-of date, so its plan
+        // begins accumulating before it — the returned outflow carries an ActiveFrom
+        // at the as-of date so the plan fits (planning/15). Occurrences are untouched.
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill], AsOf);
+
+        result.Outflow.DatePattern.ActiveFrom.ShouldBe(AsOf);
+        result.Outflow.DatePattern.GetOccurrences().ShouldBe(bill.DatePattern.GetOccurrences());
+    }
+
+    [Fact]
+    public void An_outflow_already_covering_the_as_of_date_keeps_a_null_active_from()
+    {
+        // Its first occurrence is on the as-of date, so nothing accumulates before
+        // it — the sparing rule leaves ActiveFrom null.
+        var bill = MonthlyBill(-300m, 1, AsOf, new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill], AsOf);
+
+        result.Outflow.DatePattern.ActiveFrom.ShouldBeNull();
+    }
 }

@@ -1,9 +1,11 @@
 namespace MyMoneyForecast.Domain;
 
-// The default Allocation Plan proposed for a newly-created outflow, plus an
-// optional one-off starting earmark to cover a first occurrence the plan
-// can't accumulate for in time.
-public sealed record ProposedAllocationPlan(EarMarkPattern Plan, ManualEarmark? StartingEarmark);
+// The default Allocation Plan proposed for a newly-created outflow, the outflow
+// itself with its active span prepared (ActiveFrom set when it starts in the
+// future, so the plan fits inside it — persist THIS, not the original), plus an
+// optional one-off starting earmark to cover a first occurrence the plan can't
+// accumulate for in time.
+public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPattern Plan, ManualEarmark? StartingEarmark);
 
 // Proposes a default Allocation Plan (an EarMarkPattern) for a newly-created
 // outflow — a bill, a one-time goal, or any expected transaction with a
@@ -58,8 +60,17 @@ public static class AllocationPlanProposer
                 nameof(outflow));
         }
 
-        var billAmount = Math.Abs(outflow.Amount);
-        var billUntil = outflow.DatePattern.Until;
+        // Stretch the outflow's active span back to the as-of date when it starts
+        // in the future, so a plan that begins accumulating today fits inside it
+        // (planning/15, ActiveFrom + the sparing rule — an outflow already covering
+        // today keeps a null ActiveFrom). The prepared outflow is returned so the
+        // caller persists it, not the original; occurrences are untouched.
+        var preparedOutflow = outflow.DatePattern.Start > asOfDate
+            ? outflow.WithActiveFrom(asOfDate)
+            : outflow;
+
+        var billAmount = Math.Abs(preparedOutflow.Amount);
+        var billUntil = preparedOutflow.DatePattern.Until;
 
         var incomePatterns = allPatterns.Where(pattern => pattern.Amount > 0m).ToList();
 
@@ -68,15 +79,15 @@ public static class AllocationPlanProposer
             var income = incomePatterns[0];
             var planUntil = income.DatePattern.Until < billUntil ? income.DatePattern.Until : billUntil;
             var paydayCount = income.DatePattern.GetOccurrences(asOfDate, planUntil).Count;
-            var billOccurrenceCount = outflow.DatePattern.GetOccurrences(asOfDate, planUntil).Count;
+            var billOccurrenceCount = preparedOutflow.DatePattern.GetOccurrences(asOfDate, planUntil).Count;
 
             if (paydayCount > 0 && billOccurrenceCount > 0)
             {
-                return ProposePaced(outflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate);
+                return ProposePaced(preparedOutflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate);
             }
         }
 
-        return ProposeFrontLoaded(outflow, billAmount, billUntil, asOfDate);
+        return ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate);
     }
 
     // Shape A: one contribution per payday, sized so the window's contributions
@@ -113,7 +124,7 @@ public static class AllocationPlanProposer
             },
             outflow);
 
-        return new ProposedAllocationPlan(plan, MaybeStartingEarmark(outflow, plan, billAmount, asOfDate));
+        return new ProposedAllocationPlan(outflow, plan, MaybeStartingEarmark(outflow, plan, billAmount, asOfDate));
     }
 
     // Shape C: the full amount every bill cycle, offset from the bill's own
@@ -165,7 +176,7 @@ public static class AllocationPlanProposer
 
         // The first contribution is at the as-of date (front-loaded), so nothing
         // lands before it — no starting earmark needed.
-        return new ProposedAllocationPlan(plan, null);
+        return new ProposedAllocationPlan(outflow, plan, null);
     }
 
     // A starting earmark is needed only when the first bill occurrence falls

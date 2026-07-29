@@ -214,7 +214,7 @@ Grounding F18 against the model raised two assumptions that must be **preserved 
 
 **Deferred — the multi-page tension.** `1.2.3.10.a3` / `1.2.3c.11.a3` require a pattern to carry an identical rrule across every page it spans, which a per-run, horizon-extended `Until` (W9 / F17) would challenge. Per the author (2026-07-28) this **waits until cross-page / page-jumping work resumes** — currently on hold — and is not a stage-2 blocker while books are single-page.
 
-### Implementation plan — `ActiveFrom` (Step 1 DONE 2026-07-28; Steps 2–3 pending)
+### Implementation plan — `ActiveFrom` (Steps 1–2 DONE 2026-07-28; Step 3 pending)
 
 The build sequence, ordered so the tree stays green until the one enforcement flip. **"Step" here is a build increment — *not* a charter Phase or Stage** (that reuse caused confusion 2026-07-28 and was renamed).
 
@@ -232,6 +232,8 @@ The build sequence, ordered so the tree stays green until the one enforcement fl
 - **Test churn:** the ~9 `AllocationPlanProposer` tests and the `OneTimeGoalFactory` tests construct future-dated outflows directly, so they must set `ActiveFrom` on those outflows or fail the restored check — the bulk of the diff.
 - **Migration (correctness gate):** existing persisted goals with save-in-advance earmarks are earmark-before-goal with no `ActiveFrom`. First check whether `EarMarkPatternRepository` re-validates via `Create` on load; either way, backfill `goal.ActiveFrom = its earmark's Start` for those rows (dev-data volume, but required).
 - Steps 1 and 2 can be one commit, but keeping the flip isolated makes it reviewable.
+
+**DONE 2026-07-28 — 174 tests green (129 domain + 45 scenario), App 0 warnings.** The check is restored in `EarMarkPattern.Create` (both directions, against the active span; `DIVERGENCE(active-from)` tagged, [05 registry](05-original-structure-restructure.md) row added, [03](03-data-entry-uis.md) relaxation note reverted). **Design choice made here:** rather than set `ActiveFrom` in untestable App code, the **proposer prepares the outflow** (sparing rule) and **returns it** on `ProposedAllocationPlan.Outflow`; the App (bill + transfer paths) and the wiring tests persist that prepared outflow, so the sparing logic is unit-tested and the existing proposer tests passed unchanged. Migration confirmed **mandatory** — `EarMarkPatternRepository.GetAll` re-validates via `Create` on load — and lands as an idempotent `UPDATE` in `PatternDatabase.Initialize` backfilling `ActiveFrom = the plan's Start`. **Test churn was broader than the plan guessed:** not the proposer tests but ~14 engine/repo tests that hand-build a goal + save-in-advance earmark — fixed at the two shared helpers (`LiveGoal`, the `ManualEarmarkRepositoryTests` ctor) and the inline goals, plus new coverage (proposer prep, the restored-check rejection, the migration backfill). New rebuild helpers `FinancialPattern.WithActiveFrom` / `RecurrenceRule.WithActiveFrom` support the proposer and the transfer tests.
 
 **Step 3 — The empty (declined) plan.**
 - Domain (landable now): a factory that builds the empty plan — `Count = 1` rrule at `outflow.Until`, `Amount = 0`, `ActiveFrom = asOfDate` — plus setting the outflow's `ActiveFrom`. Unit-testable on its own; emits the single `$0` earmark event at `Until`.

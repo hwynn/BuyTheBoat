@@ -18,6 +18,7 @@ public class ManualEarmarkTests
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = new DateOnly(2026, 6, 1),
                 Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
         });
         var pattern = EarMarkPattern.Create(

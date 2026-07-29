@@ -173,6 +173,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = new DateOnly(2025, 6, 1),
                 Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
             Amount = -1000m,
             Mandatory = false,
@@ -299,6 +300,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = new DateOnly(2025, 6, 1),
                 Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
             Amount = -1200m,
         });
@@ -383,6 +385,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = new DateOnly(2030, 1, 1),
                 Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
             Amount = -10000m,
             Mandatory = false,
@@ -1022,6 +1025,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = farFuture,
                 Count = 1,
+                ActiveFrom = new DateOnly(2025, 2, 1), // saving starts before the due date (planning/15)
             }),
         });
         var earmark = EarMarkPattern.Create(
@@ -1182,6 +1186,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = new DateOnly(2026, 6, 1),
                 Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
         });
         var earmark = EarMarkPattern.Create(

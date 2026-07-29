@@ -16,6 +16,9 @@ public class EarMarkPatternTests
             Frequency = RecurrenceFrequency.Yearly,
             Start = new DateOnly(2025, 1, 1),
             Count = 1,
+            // Saving started three years before the due date, so the goal's
+            // active span reaches back that far (planning/15, ActiveFrom).
+            ActiveFrom = new DateOnly(2022, 1, 1),
         }),
         Amount = -5000m,
     });
@@ -43,10 +46,11 @@ public class EarMarkPatternTests
     [Fact]
     public void Saving_can_start_well_before_the_goals_own_date_range()
     {
-        // This is the whole point of an earmark pattern — saving in advance
-        // for a single-occurrence goal. Confirmed with the user (2026-07-07)
-        // that this must be allowed: earmark patterns aren't tied to the
-        // timing of any specific triggering event, including their own goal.
+        // The whole point of an earmark pattern — saving in advance for a
+        // single-occurrence goal. It is allowed because the goal carries an
+        // ActiveFrom reaching back to the save-start day (planning/15), so the
+        // earmark stays within the goal's active span even though it begins
+        // before the goal's own single occurrence.
         var goal = BoatGoal(); // single occurrence on 2025-01-01
 
         var earmark = EarMarkPattern.Create(
@@ -128,6 +132,30 @@ public class EarMarkPatternTests
                 }),
                 Amount = -100m,
                 StartingAllocation = -1m,
+            },
+            goal));
+    }
+
+    [Fact]
+    public void Saving_cannot_start_before_the_goals_active_span()
+    {
+        // The restored front half of 3.11.2.a2: an earmark reaching back before
+        // the goal's active span (its ActiveFrom lead-in) is rejected. BoatGoal's
+        // ActiveFrom is 2022-01-01, so an earmark starting in 2021 is too early.
+        var goal = BoatGoal();
+
+        Should.Throw<ArgumentException>(() => EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    Start = new DateOnly(2021, 1, 1), // before the goal's ActiveFrom (2022-01-01)
+                    ByMonthDay = [1],
+                    Until = new DateOnly(2025, 1, 1),
+                }),
+                Amount = -100m,
             },
             goal));
     }

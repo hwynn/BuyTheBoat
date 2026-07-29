@@ -66,6 +66,7 @@ public class AllocationPlanWiringTests : IDisposable
         // the user's income, then persist the plan (and any starting earmark).
         var proposal = AllocationPlanProposer.Propose(
             bill, _financialPatterns.GetAllExcludingTransferPatterns(), asOf);
+        _financialPatterns.Save(proposal.Outflow, accountId: 1); // the prepared bill (ActiveFrom set)
         _earMarkPatterns.Save(proposal.Plan);
         if (proposal.StartingEarmark is { } starting)
         {
@@ -116,10 +117,10 @@ public class AllocationPlanWiringTests : IDisposable
                 Count = 1,
             }),
         });
-        _transfers.Save(transfer);
-
-        // The wiring gives the withdrawal a front-loaded plan.
+        // The wiring gives the withdrawal a front-loaded plan and persists the
+        // prepared withdrawal (with ActiveFrom) via the transfer, so its plan fits.
         var plan = AllocationPlanProposer.Propose(transfer.Withdrawal, [], new DateOnly(2025, 1, 1));
+        _transfers.Save(transfer with { Withdrawal = plan.Outflow });
         _earMarkPatterns.Save(plan.Plan);
         _earMarkPatterns.GetAll().ShouldHaveSingleItem();
 

@@ -101,7 +101,7 @@ public class MultiAccountForecastTests
         // Allocation Plan (what TransferFactory creates at transfer time) — here
         // a single up-front contribution of the full amount, the front-loaded
         // shape for a one-off with no income.
-        var withdrawal = OneOffExpense(20, -300m);
+        var withdrawal = OneOffExpense(20, -300m).WithActiveFrom(AsOf);
         var withdrawalPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions
             {

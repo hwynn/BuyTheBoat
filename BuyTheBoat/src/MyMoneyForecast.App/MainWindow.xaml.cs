@@ -160,14 +160,15 @@ public partial class MainWindow : Window
             DatePattern = schedule,
         });
 
-        _transfers.Save(result);
-
         // Stage-1 revision (planning/14): the transfer reserves in the account it
         // leaves, through a front-loaded Allocation Plan on the withdrawal — no
         // income pacing (a transfer isn't a recurring bill), so the no-income
-        // shape reserves the full amount from the as-of date. The withdrawal is
-        // already persisted above, so its plan's finance id resolves.
+        // shape reserves the full amount from the as-of date. Propose first: the
+        // proposer may stretch the withdrawal's active span back to the as-of date
+        // (planning/15, ActiveFrom) so its plan fits, and that prepared withdrawal
+        // is what must be persisted (via the transfer) for the plan to resolve.
         var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate());
+        _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
         _earMarkPatterns.Save(withdrawalPlan.Plan);
 
         RefreshGrids();
@@ -1058,7 +1059,7 @@ public partial class MainWindow : Window
         if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
         {
             _financialPatterns.Save(pattern, window.SelectedAccountId);
-            AutoCreateAllocationPlan(pattern);
+            AutoCreateAllocationPlan(pattern, window.SelectedAccountId);
             RefreshGrids();
         }
     }
@@ -1069,7 +1070,7 @@ public partial class MainWindow : Window
         if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
         {
             _financialPatterns.Save(pattern, window.SelectedAccountId);
-            AutoCreateAllocationPlan(pattern);
+            AutoCreateAllocationPlan(pattern, window.SelectedAccountId);
             RefreshGrids();
         }
     }
@@ -1081,7 +1082,7 @@ public partial class MainWindow : Window
     // like a savings plan and appears in the earmark grid, where it can be
     // edited or removed. Transfer patterns are excluded from the income scan so
     // a deposit isn't mistaken for a paycheck.
-    private void AutoCreateAllocationPlan(FinancialPattern pattern)
+    private void AutoCreateAllocationPlan(FinancialPattern pattern, int accountId)
     {
         if (pattern.Amount >= 0m)
         {
@@ -1090,6 +1091,11 @@ public partial class MainWindow : Window
 
         var proposal = AllocationPlanProposer.Propose(
             pattern, _financialPatterns.GetAllExcludingTransferPatterns(), CurrentAsOfDate());
+        // The proposer may stretch the outflow's active span back to the as-of
+        // date (planning/15, ActiveFrom) so its plan fits — persist that prepared
+        // outflow, not the original, or the plan reads short against a goal whose
+        // own Start is later.
+        _financialPatterns.Save(proposal.Outflow, accountId);
         _earMarkPatterns.Save(proposal.Plan);
         if (proposal.StartingEarmark is { } starting)
         {

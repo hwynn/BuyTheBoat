@@ -29,10 +29,11 @@ public sealed record RecurrenceRuleOptions
     public DateOnly? Until { get; init; }
     public int? Count { get; init; }
 
-    // A "lead-in" date the pattern counts as active FROM — earlier than its first
-    // occurrence — so a fund jar for it can exist before the pattern starts
-    // producing occurrences (planning/15, ActiveFrom). Null = no lead-in. Never
-    // affects occurrence generation; used only for span/containment checks.
+    // DIVERGENCE(active-from): a "lead-in" date the pattern counts as active FROM
+    // — earlier than its first occurrence — so a fund jar for it can exist before
+    // the pattern starts producing occurrences (planning/15). A new property not
+    // in the documented model. Null = no lead-in. Never affects occurrence
+    // generation; used only for span/containment checks.
     public DateOnly? ActiveFrom { get; init; }
 }
 
@@ -58,6 +59,18 @@ public sealed class RecurrenceRule
 
     /// <summary>[CALC] Whether a date falls inside the pattern's active span (ActiveStart..Until) — the range a fund jar for it may exist in, wider than its occurrences when there is a lead-in.</summary>
     public bool ActiveSpanContains(DateOnly date) => date >= ActiveStart && date <= Until;
+
+    /// <summary>[CALC] A copy of this rule with its ActiveFrom lead-in set to the given date — everything else, including which dates it occurs on, stays the same.</summary>
+    public RecurrenceRule WithActiveFrom(DateOnly activeFrom) => Create(new RecurrenceRuleOptions
+    {
+        Frequency = Frequency,
+        Start = Start,
+        Interval = Interval,
+        ByDay = ByDay,
+        ByMonthDay = ByMonthDay,
+        Until = Until,
+        ActiveFrom = activeFrom,
+    });
 
     private RecurrenceRule(RecurrenceRuleOptions options, DateOnly resolvedUntil)
     {

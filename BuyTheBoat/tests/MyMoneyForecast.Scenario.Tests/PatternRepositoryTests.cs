@@ -135,6 +135,7 @@ public class PatternRepositoryTests : IDisposable
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = new DateOnly(2030, 1, 1),
                 Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
             Amount = -10000m,
             Mandatory = false,
@@ -200,6 +201,7 @@ public class PatternRepositoryTests : IDisposable
                 Frequency = RecurrenceFrequency.Yearly,
                 Start = new DateOnly(2025, 1, 1),
                 Count = 1,
+                ActiveFrom = new DateOnly(2022, 1, 1), // saving starts before the due date (planning/15)
             }),
             Amount = -5000m,
         });
@@ -255,6 +257,64 @@ public class PatternRepositoryTests : IDisposable
         _financialPatterns.Save(Bill(1, "Rent"), accountId: 1);
 
         _financialPatterns.GetAll().Single().DatePattern.ActiveFrom.ShouldBeNull();
+    }
+
+    [Fact]
+    public void An_existing_goal_whose_plan_predates_it_gets_active_from_backfilled_on_load()
+    {
+        // Simulates pre-ActiveFrom data: a goal plus a save-in-advance plan that
+        // starts before it. Save them (valid — the goal has ActiveFrom), null the
+        // goal's ActiveFrom to mimic an old database, then re-open. The migration
+        // backfills ActiveFrom = the plan's Start, so the restored check passes on
+        // load (GetAll re-validates and would otherwise throw).
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 55,
+            Source = "Boat",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2027, 1, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+            Amount = -3000m,
+            Mandatory = false,
+        });
+        _financialPatterns.Save(goal, accountId: 1);
+        _earMarkPatterns.Save(EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 55,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2026, 12, 1),
+                }),
+            },
+            goal));
+
+        StripActiveFrom(financeId: 55);
+
+        // Re-open: Initialize runs the backfill. A clean GetAll proves the goal
+        // regained an ActiveFrom that satisfies the earmark's containment check.
+        var reopened = new FinancialPatternRepository(new PatternDatabase(_databasePath));
+        reopened.GetAll().Single().DatePattern.ActiveFrom.ShouldBe(new DateOnly(2025, 1, 1));
+    }
+
+    private void StripActiveFrom(int financeId)
+    {
+        SqliteConnection.ClearAllPools();
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder { DataSource = _databasePath }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE FinancialPatterns SET ActiveFrom = NULL WHERE FinanceId = $FinanceId;";
+        command.Parameters.AddWithValue("$FinanceId", financeId);
+        command.ExecuteNonQuery();
     }
 
     private static FinancialPattern Bill(int financeId, string source) =>

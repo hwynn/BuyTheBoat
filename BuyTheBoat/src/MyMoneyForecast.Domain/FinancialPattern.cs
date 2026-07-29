@@ -49,4 +49,16 @@ public sealed class FinancialPattern
         var mandatory = options.Mandatory ?? options.Amount < 0;
         return new FinancialPattern(options, mandatory);
     }
+
+    /// <summary>[CALC] A copy of this pattern whose date pattern is active from the given (earlier) date — so a plan and jar for it can begin before its first occurrence — with its occurrences and every other field unchanged.</summary>
+    public FinancialPattern WithActiveFrom(DateOnly activeFrom) => Create(new FinancialPatternOptions
+    {
+        FinanceId = FinanceId,
+        Source = Source,
+        DatePattern = DatePattern.WithActiveFrom(activeFrom),
+        Amount = Amount,
+        Priority = Priority,
+        Mandatory = Mandatory,
+        Description = Description,
+    });
 }
