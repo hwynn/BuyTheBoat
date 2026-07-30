@@ -1,0 +1,643 @@
+using MyMoneyForecast.Domain;
+using Shouldly;
+
+namespace MyMoneyForecast.Domain.Tests;
+
+public class BreakOffFactoryTests
+{
+    private static FinancialPattern MonthlyBill(decimal amount, int dayOfMonth, DateOnly start, DateOnly until, int id = 1) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = id,
+            Source = $"bill{id}",
+            Description = "Rent",
+            Amount = amount,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [dayOfMonth],
+                Start = start,
+                Until = until,
+            }),
+        });
+
+    private static FinancialPattern MonthlyIncome(decimal amount, int dayOfMonth, DateOnly start, DateOnly until, int id = 100) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = id,
+            Source = $"income{id}",
+            Amount = amount,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [dayOfMonth],
+                Start = start,
+                Until = until,
+            }),
+        });
+
+    private static RecurrenceRuleOptions MonthlyFrom(DateOnly start, int dayOfMonth, DateOnly until) => new()
+    {
+        Frequency = RecurrenceFrequency.Monthly,
+        ByMonthDay = [dayOfMonth],
+        Start = start,
+        Until = until,
+    };
+
+    [Fact]
+    public void Ends_the_predecessor_the_day_before_the_cut_and_starts_the_successor_on_it()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Predecessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30));
+        result.Successor.DatePattern.Start.ShouldBe(cutDate);
+        result.Successor.Amount.ShouldBe(-1_800m);
+        result.Successor.FinanceId.ShouldBe(2);
+    }
+
+    [Fact]
+    public void The_successor_carries_the_predecessors_source_and_description()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.Source.ShouldBe(rent.Source);
+        result.Successor.Description.ShouldBe(rent.Description);
+    }
+
+    [Fact]
+    public void With_no_income_the_successors_plan_front_loads_like_any_new_outflow()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.SuccessorPlan.ShouldNotBeNull();
+        result.SuccessorPlan!.Amount.ShouldBe(-1_800m); // full amount, front-loaded shape
+        result.SuccessorStartingEarmark.ShouldBeNull(); // front-loaded shape never needs one
+    }
+
+    [Fact]
+    public void With_a_single_income_stream_the_successors_plan_paces_against_it()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var income = MonthlyIncome(3_000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent, income],
+        });
+
+        result.SuccessorPlan.ShouldNotBeNull();
+        result.SuccessorPlan!.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Monthly);
+        result.SuccessorPlan.DatePattern.ByMonthDay.ShouldBe(income.DatePattern.ByMonthDay); // paced on the income's own day-of-month
+        result.SuccessorPlan.Amount.ShouldBeLessThan(0m); // negative = into the jar
+    }
+
+    [Fact]
+    public void The_carried_over_jar_balance_becomes_the_successors_starting_allocation()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 340m,
+            AllPatterns = [rent],
+        });
+
+        result.SuccessorPlan!.StartingAllocation.ShouldBe(340m);
+    }
+
+    [Fact]
+    public void A_predecessor_with_no_plan_still_gives_the_successor_a_fresh_one()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.PredecessorPlan.ShouldBeNull();
+        result.SuccessorPlan.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void The_predecessors_plan_is_truncated_to_match_the_cut()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = rent.FinanceId,
+                Amount = -1_600m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2026, 1, 1),
+                }),
+            },
+            rent);
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = plan,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.PredecessorPlan.ShouldNotBeNull();
+        result.PredecessorPlan!.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30));
+    }
+
+    [Fact]
+    public void Breaking_off_income_skips_the_jar_machinery_entirely()
+    {
+        var oldJob = MonthlyIncome(4_000m, 15, new DateOnly(2024, 1, 15), new DateOnly(2027, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 15);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = oldJob,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 101,
+            SuccessorAmount = 4_500m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 15, new DateOnly(2027, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [oldJob],
+        });
+
+        result.Predecessor.DatePattern.Until.ShouldBe(cutDate.AddDays(-1));
+        result.Successor.Amount.ShouldBe(4_500m);
+        result.PredecessorPlan.ShouldBeNull();
+        result.SuccessorPlan.ShouldBeNull();
+        result.SuccessorStartingEarmark.ShouldBeNull();
+    }
+
+    [Fact]
+    public void The_successors_active_from_stays_null_because_it_starts_exactly_on_the_cut_date()
+    {
+        // The proposer only stretches ActiveFrom when Start > asOfDate; here
+        // Start == CutDate == the asOfDate passed to the proposer, so no
+        // stretch happens — confirms item 4-B/F25's reasoning holds in code,
+        // not just in the design doc.
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.DatePattern.ActiveFrom.ShouldBeNull();
+    }
+
+    [Fact]
+    public void A_cut_date_in_the_past_works_the_same_way_as_one_in_the_future()
+    {
+        // F25: nothing before the as-of date is a locked ledger yet, so a past
+        // cut date ("starting three paychecks ago, my rent went up") is just
+        // as valid as a future one — no special-casing needed.
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2024, 1, 1), new DateOnly(2026, 1, 1));
+        var pastCutDate = new DateOnly(2024, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = pastCutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(pastCutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 120m,
+            AllPatterns = [rent],
+        });
+
+        result.Predecessor.DatePattern.Until.ShouldBe(new DateOnly(2024, 6, 30));
+        result.Successor.DatePattern.Start.ShouldBe(pastCutDate);
+        result.SuccessorPlan!.StartingAllocation.ShouldBe(120m);
+    }
+
+    [Fact]
+    public void A_cut_date_on_or_before_the_predecessors_start_is_rejected()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 6, 1), new DateOnly(2026, 1, 1));
+
+        Should.Throw<ArgumentException>(() => BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = new DateOnly(2025, 6, 1),
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(new DateOnly(2025, 6, 1), 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        }));
+    }
+
+    [Fact]
+    public void Reusing_the_predecessors_finance_id_for_the_successor_is_rejected()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), id: 1);
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        Should.Throw<ArgumentException>(() => BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 1, // same as the predecessor — item 4-A forbids this
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        }));
+    }
+
+    [Fact]
+    public void A_successor_schedule_not_starting_on_the_cut_date_is_rejected()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        Should.Throw<ArgumentException>(() => BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(new DateOnly(2025, 7, 15), 1, new DateOnly(2026, 1, 1)), // mismatched start
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        }));
+    }
+
+    // Renew — periodic renewal for "ongoing" patterns (planning/15, worked
+    // through with the author 2026-07-29). Distinct from BreakOff: nothing
+    // about the bill changes, only how far out it reaches.
+
+    [Fact]
+    public void Renew_keeps_the_amount_and_schedule_shape_exactly_the_same_as_the_predecessor()
+    {
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var renewalDate = new DateOnly(2026, 1, 5);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.Amount.ShouldBe(-150m);
+        result.Successor.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Monthly);
+        result.Successor.DatePattern.ByMonthDay.ShouldBe(rent.DatePattern.ByMonthDay);
+    }
+
+    [Fact]
+    public void Renew_extends_exactly_one_year_from_the_renewal_date()
+    {
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var renewalDate = new DateOnly(2026, 1, 5);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.DatePattern.Start.ShouldBe(renewalDate);
+        result.Successor.DatePattern.Until.ShouldBe(new DateOnly(2027, 1, 5));
+    }
+
+    [Fact]
+    public void Renew_reuses_the_source_verbatim()
+    {
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var renewalDate = new DateOnly(2026, 1, 5);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.Source.ShouldBe(rent.Source);
+    }
+
+    [Fact]
+    public void Renew_appends_a_renewed_marker_to_the_description()
+    {
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var renewalDate = new DateOnly(2026, 1, 5);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.Description.ShouldBe("Rent (renewed 2026-01-05)");
+    }
+
+    [Fact]
+    public void A_second_renewal_replaces_the_marker_instead_of_stacking_it()
+    {
+        // Renewing an already-once-renewed pattern must not produce
+        // "Rent (renewed 2026-01-05) (renewed 2027-01-05)" — only the latest
+        // renewal date should ever show.
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var firstRenewal = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = new DateOnly(2026, 1, 5),
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        var secondRenewal = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = firstRenewal.Successor,
+            PredecessorPlan = null,
+            RenewalDate = new DateOnly(2027, 1, 5),
+            SegmentYears = 1,
+            SuccessorFinanceId = 3,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [firstRenewal.Successor],
+        });
+
+        secondRenewal.Successor.Description.ShouldBe("Rent (renewed 2027-01-05)");
+    }
+
+    [Fact]
+    public void Renews_carried_over_balance_lands_on_the_successors_starting_allocation()
+    {
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var renewalDate = new DateOnly(2026, 1, 5);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 42m,
+            AllPatterns = [rent],
+        });
+
+        result.SuccessorPlan!.StartingAllocation.ShouldBe(42m);
+    }
+
+    [Fact]
+    public void Renewing_a_paycheck_skips_the_jar_machinery_entirely()
+    {
+        var job = MonthlyIncome(4_000m, 15, new DateOnly(2023, 1, 15), new DateOnly(2026, 1, 15));
+        var renewalDate = new DateOnly(2026, 1, 15);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = job,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 101,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [job],
+        });
+
+        result.Successor.Amount.ShouldBe(4_000m);
+        result.SuccessorPlan.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Renew_reaches_however_many_years_the_caller_asks_for()
+    {
+        // A rare, multi-year renewal cadence (author, 2026-07-29) — the
+        // segment length is the caller's choice, not a hardcoded year.
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var renewalDate = new DateOnly(2026, 1, 5);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 4,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.DatePattern.Until.ShouldBe(new DateOnly(2030, 1, 5));
+    }
+
+    [Fact]
+    public void Renew_rejects_a_segment_length_under_one_year()
+    {
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+
+        Should.Throw<ArgumentOutOfRangeException>(() => BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = new DateOnly(2026, 1, 5),
+            SegmentYears = 0,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        }));
+    }
+
+    // FindCurrentSegment — the free lookup Source-reuse already gives us
+    // (2026-07-29): finding which segment of a bill is live, so an edit
+    // started from a stale row can find the one it should actually target.
+
+    [Fact]
+    public void FindCurrentSegment_on_a_broken_off_predecessor_returns_its_successor()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+        var brokenOff = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+        var allPatterns = new[] { brokenOff.Predecessor, brokenOff.Successor };
+
+        var current = BreakOffFactory.FindCurrentSegment(brokenOff.Predecessor, allPatterns);
+
+        current.FinanceId.ShouldBe(brokenOff.Successor.FinanceId);
+    }
+
+    [Fact]
+    public void FindCurrentSegment_on_the_successor_itself_returns_itself()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+        var brokenOff = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+        var allPatterns = new[] { brokenOff.Predecessor, brokenOff.Successor };
+
+        var current = BreakOffFactory.FindCurrentSegment(brokenOff.Successor, allPatterns);
+
+        current.FinanceId.ShouldBe(brokenOff.Successor.FinanceId);
+    }
+
+    [Fact]
+    public void FindCurrentSegment_follows_a_two_hop_renewal_chain_to_the_latest_segment()
+    {
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var firstRenewal = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = new DateOnly(2026, 1, 5),
+            SegmentYears = 3,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+        var secondRenewal = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = firstRenewal.Successor,
+            PredecessorPlan = null,
+            RenewalDate = new DateOnly(2029, 1, 5),
+            SegmentYears = 3,
+            SuccessorFinanceId = 3,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [firstRenewal.Successor],
+        });
+        var allPatterns = new[] { firstRenewal.Predecessor, firstRenewal.Successor, secondRenewal.Successor };
+
+        // Starting from the OLDEST segment (the original, twice-superseded
+        // predecessor) must skip past the middle one straight to the latest.
+        var current = BreakOffFactory.FindCurrentSegment(firstRenewal.Predecessor, allPatterns);
+
+        current.FinanceId.ShouldBe(secondRenewal.Successor.FinanceId);
+    }
+
+    [Fact]
+    public void FindCurrentSegment_on_a_pattern_with_no_history_returns_itself()
+    {
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+
+        var current = BreakOffFactory.FindCurrentSegment(rent, [rent]);
+
+        current.FinanceId.ShouldBe(rent.FinanceId);
+    }
+}

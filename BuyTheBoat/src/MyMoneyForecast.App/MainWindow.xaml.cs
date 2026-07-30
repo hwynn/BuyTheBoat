@@ -1147,9 +1147,18 @@ public partial class MainWindow : Window
         var hasSavingsPlan = _financialPatterns.HasLinkedEarMarkPattern(row.FinanceId);
         if (hasSavingsPlan)
         {
+            // planning/16 item 18: nothing is actually moved by this — a jar was
+            // never a real transfer of money (FundJar's own class doc), so once
+            // its plan is gone the amount simply reads as free again on the next
+            // forecast. Naming it here says what "continue" actually does,
+            // rather than leaving the user to notice their free funds went up.
+            var freed = CurrentJarAmount(row.FinanceId);
+            var freedNote = freed > 0m
+                ? $" and free up {freed:C} currently set aside"
+                : string.Empty;
             var answer = MessageBox.Show(
                 this,
-                $"Deleting \"{label}\" will also remove its savings plan.\n\nContinue?",
+                $"Deleting \"{label}\" will also remove its savings plan{freedNote}.\n\nContinue?",
                 "Delete this and its savings plan?",
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning);

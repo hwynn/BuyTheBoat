@@ -14,6 +14,12 @@ public partial class RecurrenceRuleEditor : UserControl
     // assignment while the control is still being constructed.
     private bool _initialized;
 
+    // planning/15 item D: when a host form owns the "when does this stop?"
+    // question (the bill form), the built-in Ends controls are hidden and the
+    // end date is supplied from outside via SetHostEndDate instead of the radios.
+    private bool _hostControlsEnd;
+    private DateOnly? _hostUntil;
+
     public RecurrenceRuleEditor()
     {
         InitializeComponent();
@@ -58,6 +64,41 @@ public partial class RecurrenceRuleEditor : UserControl
 
         _initialized = true;
         Recalculate();
+    }
+
+    /// <summary>[UI] Hides the built-in "Ends" controls so the host form supplies the end date itself — used by the bill form's "when does this stop?" question.</summary>
+    public void LetHostControlEndDate()
+    {
+        _hostControlsEnd = true;
+        foreach (var element in new UIElement[]
+                 { EndsHeader, EndsOnDateRadio, UntilDatePicker, EndsAfterCountRadio, CountTextBox, ResolvedUntilText })
+        {
+            element.Visibility = Visibility.Collapsed;
+        }
+
+        Recalculate();
+    }
+
+    /// <summary>[UI] Sets the end date the host chose through its own stop question, refreshing the preview. Null leaves the rule incomplete until one is picked.</summary>
+    public void SetHostEndDate(DateOnly? until)
+    {
+        // No-op when unchanged: the host recomputes the end in response to
+        // ResultChanged, so without this guard SetHostEndDate → Recalculate →
+        // ResultChanged → SetHostEndDate would loop.
+        if (_hostUntil == until)
+        {
+            return;
+        }
+
+        _hostUntil = until;
+        Recalculate();
+    }
+
+    /// <summary>[CALC] The recurrence entered so far, minus its end date — what a loan payoff date is computed from. Throws a friendly error if the schedule fields aren't valid yet.</summary>
+    public (RecurrenceFrequency Frequency, DateOnly Start, int Interval, IReadOnlyList<DayOfWeek> ByDay, IReadOnlyList<int> ByMonthDay) ReadScheduleParts()
+    {
+        var (frequency, start, interval, byDay, byMonthDay) = ReadScheduleFields();
+        return (frequency, start, interval, byDay, byMonthDay);
     }
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) => Recalculate();
@@ -148,7 +189,8 @@ public partial class RecurrenceRuleEditor : UserControl
         return Enum.Parse<RecurrenceFrequency>(tag);
     }
 
-    private RecurrenceRuleOptions ReadOptionsFromForm()
+    /// <summary>[CALC] Reads just the repeat-schedule fields the user has entered (frequency, start, interval, days), without an end date — the shared half of the form ReadOptionsFromForm and the public ReadScheduleParts both build on.</summary>
+    private (RecurrenceFrequency Frequency, DateOnly Start, int Interval, List<DayOfWeek> ByDay, List<int> ByMonthDay) ReadScheduleFields()
     {
         if (StartDatePicker.SelectedDate is not { } start)
         {
@@ -167,9 +209,20 @@ public partial class RecurrenceRuleEditor : UserControl
 
         var byMonthDay = ParseByMonthDay(ByMonthDayTextBox.Text);
 
+        return (SelectedFrequency(), DateOnly.FromDateTime(start), interval, byDay, byMonthDay);
+    }
+
+    private RecurrenceRuleOptions ReadOptionsFromForm()
+    {
+        var (frequency, start, interval, byDay, byMonthDay) = ReadScheduleFields();
+
         DateOnly? until = null;
         int? count = null;
-        if (EndsOnDateRadio.IsChecked == true)
+        if (_hostControlsEnd)
+        {
+            until = _hostUntil ?? throw new InvalidOperationException("Choose when this stops.");
+        }
+        else if (EndsOnDateRadio.IsChecked == true)
         {
             until = UntilDatePicker.SelectedDate is { } untilDate
                 ? DateOnly.FromDateTime(untilDate)
@@ -184,8 +237,8 @@ public partial class RecurrenceRuleEditor : UserControl
 
         return new RecurrenceRuleOptions
         {
-            Frequency = SelectedFrequency(),
-            Start = DateOnly.FromDateTime(start),
+            Frequency = frequency,
+            Start = start,
             Interval = interval,
             ByDay = byDay,
             ByMonthDay = byMonthDay,

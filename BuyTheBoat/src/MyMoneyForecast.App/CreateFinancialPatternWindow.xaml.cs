@@ -19,6 +19,11 @@ public partial class CreateFinancialPatternWindow : Window
     // _initialized guard.
     private bool _initialized;
 
+    // planning/15 item D: true only for the simple "Create Bill" form, which
+    // shows the "when does this stop?" question and drives the schedule
+    // editor's end date. False for the advanced/pattern and edit forms.
+    private bool _simpleBillMode;
+
     // FinanceId is an internal identifier — never shown or typed by the user
     // (same reasoning as OneTimeGoalFactory's auto-assignment). Create mode
     // computes it once up front; edit mode carries the existing value through
@@ -50,6 +55,14 @@ public partial class CreateFinancialPatternWindow : Window
             // friction for an answer that's never anything else.
             DirectionPanel.Visibility = Visibility.Collapsed;
             AmountLabel.Text = "Amount owed";
+
+            // The simple "Create Bill" form (a mandatory expense) gets the
+            // "when does this stop?" question; the advanced/pattern form keeps
+            // the editor's raw end controls (planning/15 item D, ruling D-1).
+            if (mandatory)
+            {
+                EnableStopQuestion();
+            }
         }
 
         _initialized = true;
@@ -163,6 +176,133 @@ public partial class CreateFinancialPatternWindow : Window
         catch (Exception ex)
         {
             ErrorText.Text = ex.Message;
+        }
+    }
+
+    // planning/15 item D — the "when does this stop?" question ------------
+
+    /// <summary>[UI] Reveals the "when does this stop?" question and hands the schedule editor its end date, so the editor's own Ends controls step aside (ruling D-1).</summary>
+    private void EnableStopQuestion()
+    {
+        _simpleBillMode = true;
+        StopQuestionBox.Visibility = Visibility.Visible;
+        RuleEditor.LetHostControlEndDate();
+        RuleEditor.ResultChanged += OnRuleEditorResultChanged;
+
+        // Match the editor's previous default end so the common "ends on a
+        // date" case is unchanged from before this question existed.
+        StopEndDatePicker.SelectedDate = DateTime.Today.AddYears(3);
+        UpdateStopMode();
+    }
+
+    // These forward each relevant change to the stop-date recalculation. The
+    // payoff answer depends on the owed amount, the payment (the amount field
+    // above), and the schedule (owned by the editor), so all three feed in.
+
+    /// <summary>[UI] Switches the form between the two stop-question inputs — a date picker, or the loan's payoff fields — when the user picks a different answer.</summary>
+    private void OnStopModeChanged(object sender, RoutedEventArgs e)
+    {
+        if (_simpleBillMode)
+        {
+            UpdateStopMode();
+        }
+    }
+
+    /// <summary>[UI] Passes a newly picked end date through to the schedule editor.</summary>
+    private void OnStopEndDatePicked(object sender, SelectionChangedEventArgs e)
+    {
+        if (_simpleBillMode)
+        {
+            UpdateStopEnd();
+        }
+    }
+
+    /// <summary>[UI] Recomputes the payoff readout as the amount still owed is typed.</summary>
+    private void OnTotalOwedChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_simpleBillMode)
+        {
+            UpdateStopEnd();
+        }
+    }
+
+    /// <summary>[UI] Recomputes the payoff readout when the payment amount changes, while the "paid off" answer is selected.</summary>
+    private void OnAmountChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_simpleBillMode && StopPaidOffRadio.IsChecked == true)
+        {
+            UpdateStopEnd();
+        }
+    }
+
+    /// <summary>[UI] Recomputes the payoff readout when the bill's schedule changes, while the "paid off" answer is selected.</summary>
+    private void OnRuleEditorResultChanged(object? sender, EventArgs e)
+    {
+        if (_simpleBillMode && StopPaidOffRadio.IsChecked == true)
+        {
+            UpdateStopEnd();
+        }
+    }
+
+    /// <summary>[UI] Swaps in the inputs for the chosen answer — a date picker, or the loan's owed amount — and relabels the amount field so a loan's per-payment amount can't be mistaken for its balance.</summary>
+    private void UpdateStopMode()
+    {
+        var paidOff = StopPaidOffRadio.IsChecked == true;
+        StopOnDatePanel.Visibility = paidOff ? Visibility.Collapsed : Visibility.Visible;
+        StopPaidOffPanel.Visibility = paidOff ? Visibility.Visible : Visibility.Collapsed;
+        AmountLabel.Text = paidOff ? "Payment amount" : "Amount owed";
+        UpdateStopEnd();
+    }
+
+    /// <summary>[UI] Hands the schedule editor the end date the chosen answer implies — the picked date, or the computed loan payoff date.</summary>
+    private void UpdateStopEnd()
+    {
+        if (StopPaidOffRadio.IsChecked == true)
+        {
+            UpdatePayoffEnd();
+            return;
+        }
+
+        PayoffReadoutText.Text = string.Empty;
+        RuleEditor.SetHostEndDate(
+            StopEndDatePicker.SelectedDate is { } date ? DateOnly.FromDateTime(date) : null);
+    }
+
+    /// <summary>[UI] Works out the loan's payoff date from the owed amount, the payment, and the schedule, shows it as a floor, and hands it to the editor. The owed amount is entry-only — only the resulting date is kept (W3).</summary>
+    private void UpdatePayoffEnd()
+    {
+        try
+        {
+            if (!decimal.TryParse(TotalOwedTextBox.Text, out var owed) || owed <= 0)
+            {
+                throw new InvalidOperationException("Enter the total still owed (a positive amount).");
+            }
+
+            if (!decimal.TryParse(AmountTextBox.Text, out var payment) || Math.Abs(payment) <= 0)
+            {
+                throw new InvalidOperationException("Enter the regular payment amount above.");
+            }
+
+            var schedule = RuleEditor.ReadScheduleParts();
+            var estimate = PayoffEstimator.Estimate(new PayoffRequest
+            {
+                TotalOwed = owed,
+                Payment = Math.Abs(payment),
+                Frequency = schedule.Frequency,
+                Start = schedule.Start,
+                Interval = schedule.Interval,
+                ByDay = schedule.ByDay,
+                ByMonthDay = schedule.ByMonthDay,
+            });
+
+            PayoffReadoutText.Text =
+                $"Paid off at least by {estimate.PayoffDate:D} — {estimate.PaymentCount} payments.";
+            RuleEditor.SetHostEndDate(estimate.PayoffDate);
+        }
+        catch (Exception ex)
+        {
+            PayoffReadoutText.Text = ex.Message;
+            RuleEditor.SetHostEndDate(null);
         }
     }
 

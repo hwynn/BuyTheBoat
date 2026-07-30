@@ -61,4 +61,16 @@ public sealed class FinancialPattern
         Mandatory = Mandatory,
         Description = Description,
     });
+
+    /// <summary>[CALC] A copy of this pattern ending on the given (earlier) date instead — every other field, including occurrences up to that date, unchanged. Used to end a pattern early (planning/16, items 4 and 16).</summary>
+    public FinancialPattern WithUntil(DateOnly until) => Create(new FinancialPatternOptions
+    {
+        FinanceId = FinanceId,
+        Source = Source,
+        DatePattern = DatePattern.WithUntil(until),
+        Amount = Amount,
+        Priority = Priority,
+        Mandatory = Mandatory,
+        Description = Description,
+    });
 }

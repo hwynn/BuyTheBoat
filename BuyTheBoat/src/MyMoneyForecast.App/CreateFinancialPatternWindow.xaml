@@ -38,7 +38,7 @@
                             </StackPanel>
                         </StackPanel>
                         <TextBlock x:Name="AmountLabel" Text="Amount owed"/>
-                        <TextBox x:Name="AmountTextBox" Margin="0,2,0,0"/>
+                        <TextBox x:Name="AmountTextBox" Margin="0,2,0,0" TextChanged="OnAmountChanged"/>
                     </StackPanel>
                     <StackPanel Margin="0,0,10,0">
                         <TextBlock Text="Priority"/>
@@ -63,6 +63,37 @@
                     </StackPanel>
                     <TextBlock TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" FontSize="11" Margin="0,4,0,0"
                                Text="If your plan ever needs more money than you have, anything you could skip gives its money back first — what you have to pay is protected until everything skippable is empty. Both still get money set aside for them; this only decides what gives way when something has to."/>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- planning/15 item D: the simple bill form asks "when does this stop?"
+             and supplies the end date to the schedule editor itself, so the
+             editor's own Ends controls step aside (ruling D-1). Only two of the
+             three answers are built here — the "it just keeps going" answer
+             waits on the deferred indeterminate-length design (planning/15). -->
+        <GroupBox x:Name="StopQuestionBox" DockPanel.Dock="Top" Header="When does this stop?" Padding="10" Margin="0,0,0,10" Visibility="Collapsed">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="StopOnDateRadio" Content="On a date I know" GroupName="Stop" IsChecked="True" Checked="OnStopModeChanged" Margin="0,0,18,0"/>
+                    <RadioButton x:Name="StopPaidOffRadio" Content="When I've paid it off (a loan)" GroupName="Stop" Checked="OnStopModeChanged"/>
+                </StackPanel>
+                <TextBlock Text="(“It just keeps going”, for bills that never end, is coming in a later update.)"
+                           FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                <StackPanel x:Name="StopOnDatePanel" Margin="0,8,0,0">
+                    <TextBlock Text="End date"/>
+                    <DatePicker x:Name="StopEndDatePicker" Width="180" HorizontalAlignment="Left" Margin="0,2,0,0"
+                                SelectedDateChanged="OnStopEndDatePicked"/>
+                </StackPanel>
+
+                <StackPanel x:Name="StopPaidOffPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                    <TextBlock Text="Total still owed"/>
+                    <TextBox x:Name="TotalOwedTextBox" Width="180" HorizontalAlignment="Left" Margin="0,2,0,0"
+                             TextChanged="OnTotalOwedChanged"/>
+                    <TextBlock x:Name="PayoffReadoutText" TextWrapping="Wrap" Foreground="DimGray" FontSize="12" Margin="0,6,0,0"/>
+                    <TextBlock Text="A rough floor — interest and fees will push the real payoff date later."
+                               FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>
             </StackPanel>
         </GroupBox>

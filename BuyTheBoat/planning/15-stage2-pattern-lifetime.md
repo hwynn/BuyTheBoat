@@ -1,7 +1,7 @@
 # 15 — Stage 2: Pattern lifetime and the form family
 
 **Status: DESIGN COMPLETE 2026-07-24** — items A, C, D settled; item B's mechanism follows from
-F17/F18 without a separate decision. Implementation not started. **Update 2026-07-28:** the *ongoing / indeterminate-length* branch (item A's "keeps going" answer, item B, F17–F19, W9) is **deferred and its mechanism reopened** (see the *Ongoing: deferred and reframed* section below); the distinct `ActiveFrom` early-allocation mechanism was designed here instead, and near-term buildable scope is the payoff helper (C) and the form (D). Stage 2 of the
+F17/F18 without a separate decision. Implementation underway (per-item status below). **Update 2026-07-28:** the *ongoing / indeterminate-length* branch (item A's "keeps going" answer, item B, F17–F19, W9) is **deferred and its mechanism reopened** (see the *Ongoing: deferred and reframed* section below); the distinct `ActiveFrom` early-allocation mechanism was designed here instead, and near-term buildable scope is the payoff helper (C) and the form (D). **Update 2026-07-29: the ongoing/renewal branch is RESOLVED AND BUILT** — see *Ongoing / renewal: RESOLVED and BUILT* below (plus its same-day addendum: a caller-supplied `SegmentYears` instead of a hardcoded year, and `FindCurrentSegment` for redirecting a stale edit); `BreakOffFactory.Renew`/`FindCurrentSegment` in [16](16-stage3-break-off.md). Stage 2 of the
 ["Adjusting the Plan" phase](13-adjusting-the-plan-charter.md); covers charter **item 10** entire.
 
 **The stage in one paragraph:** a repeating pattern — bill *or* paycheck — answers one plain
@@ -99,7 +99,7 @@ interaction between stages 1 and 2 and is easy to miss.
 **Open:** what the *form* shows in place of an end date, and whether the computed occurrences are
 still previewed (the author explicitly wanted the user to be able to verify the dates look right).
 
-## Item C — The payoff-date helper  ·  **OPEN**
+## Item C — The payoff-date helper  ·  **DOMAIN BUILT 2026-07-29 (design C-1 settled; form = item D)**
 
 For "ends when I've paid it off": the user knows the **total owed** and the **regular payment**, and
 we compute the end date. The author was explicit that interest and fees make this approximate and
@@ -117,7 +117,15 @@ The fork is **how approximate**:
 re-derive. Change the payment later and the end date stays where it was. Either the inputs get
 stored so it can recompute, or the form says plainly that this is a one-time estimate.
 
-## Item D — The form family  ·  **OPEN**
+**Built 2026-07-29 — `PayoffEstimator` (domain), 6 tests.** The two-input form (ruling C-1):
+`PayoffRequest` (amount owed, the regular payment, and the payment schedule) →
+`PayoffEstimate(PaymentCount, PayoffDate)`. `N = ceil(owed ÷ payment)`, and the payoff date is the
+Nth payment via `RecurrenceRule`'s existing `Count → Until` path — stored as a plain `Until` that
+does **not** re-derive (W3). Both figures are **lower bounds** (no interest or fees), so the form
+states the date as a floor. Adds no divergence (a convenience over existing rrule mechanics, plain
+`Until`). **Form wiring is item D** (unbuilt). Suite: 180 green (135 domain + 45 scenario), 0 warnings.
+
+## Item D — The form family  ·  **BUILT (UI UNVERIFIED) 2026-07-29 — uncertainties listed below**
 
 The author wants simpler per-kind forms with the current one retained as "advanced." That shape
 already exists — "Create Bill…" beside "Add New (advanced)…" — so this is about how far to extend
@@ -128,6 +136,43 @@ button soup.** Adding a button per lifetime shape would do exactly that. The alt
 the two buttons and put the "when does this stop?" question *inside* the simple bill form, swapping
 the end-date section based on the answer — one more question on a form the user is already filling
 in, rather than a new entry point to choose between.
+
+**Built 2026-07-29 — WPF, UNVERIFIED ON SCREEN.** The simple "Create Bill" form
+(`CreateFinancialPatternWindow` in `forcedMandatory: true` mode) now shows a **"When does this
+stop?"** question with two answers — *On a date I know* (a date picker) and *When I've paid it off (a
+loan)* (a "Total still owed" field plus a live "Paid off at least by … — N payments" floor readout,
+computed by `PayoffEstimator`). The chosen answer drives the schedule editor's end date: the shared
+`RecurrenceRuleEditor` gained a host-controlled-end mode (`LetHostControlEndDate` / `SetHostEndDate` /
+`ReadScheduleParts`) that hides its own "Ends" controls and takes the end from the form, so the
+end-date section is *swapped* as ruling D-1 asks. The advanced and edit forms are untouched. Build
+clean (0 warnings), suite 180 green — but **no runtime or visual check was possible in this
+environment.** **Manual verification deferred (author, 2026-07-29):** with no transaction data there
+is little to click through, so the logic is assumed fine for now and this rides the later UI phase.
+
+**Uncertainties for the later UI phase (author to verify at the screen):**
+- **Window too tall — confirmed (author, 2026-07-29).** The window opens a little too tall for a
+  laptop screen (`Height="820"` plus the new group box). Reduce the height or wrap the content in a
+  scroll viewer. Remaining layout/spacing is still unseen.
+- **Live-recompute loop.** In loan mode the payoff date recomputes on every owed/payment/schedule
+  change, via the editor's `ResultChanged` plus a no-op guard in `SetHostEndDate` that I reasoned
+  terminates (traced: 2 cycles). Confirm at runtime there is no flicker, hang, or stale date when the
+  schedule is edited *after* the owed amount.
+- **Two money fields.** "Payment amount" (the bill's own amount) sitting next to "Total still owed"
+  may confuse; the contextual relabel is a guess and wants the same care as the Expense/Income pass.
+- **Owed amount isn't saved (W3).** Only the computed end date is stored, so reopening the loan in
+  Edit shows the raw date, not "paid off" mode with the balance. Intended per C-1/W3 — but decide
+  whether the inputs should be stored so it can re-derive.
+- **No "after N occurrences" in the simple form.** Hiding the editor's Ends section drops the
+  count-based end for the bill form; "on a date I know" is date-only there (the advanced form keeps
+  count). Deliberate simplification — confirm it's wanted.
+- **Third answer stubbed.** "It just keeps going" is a gray note, not a control, pending the deferred
+  ongoing design; the wording is a placeholder.
+- **Double error surface.** A bad owed amount shows its reason in the payoff readout *and* trips the
+  Create button's generic "Fix the recurrence rule" message — possibly redundant.
+- **Scope: simple bill form only.** Not shown in Edit, the advanced form, or for paychecks (income /
+  ongoing are deferred anyway). Decide whether Edit should offer it too.
+- **End-to-end with allocation plans unrun.** A payoff-derived bill flows into `OnCreateBillClick` →
+  `AutoCreateAllocationPlan` like any bounded bill; expected to be fine, but not exercised.
 
 ---
 
@@ -214,7 +259,7 @@ Grounding F18 against the model raised two assumptions that must be **preserved 
 
 **Deferred — the multi-page tension.** `1.2.3.10.a3` / `1.2.3c.11.a3` require a pattern to carry an identical rrule across every page it spans, which a per-run, horizon-extended `Until` (W9 / F17) would challenge. Per the author (2026-07-28) this **waits until cross-page / page-jumping work resumes** — currently on hold — and is not a stage-2 blocker while books are single-page.
 
-### Implementation plan — `ActiveFrom` (Steps 1–2 DONE 2026-07-28; Step 3 pending)
+### Implementation plan — `ActiveFrom` (Steps 1–2 DONE 2026-07-28; Step 3 domain DONE 2026-07-29, UI deferred)
 
 The build sequence, ordered so the tree stays green until the one enforcement flip. **"Step" here is a build increment — *not* a charter Phase or Stage** (that reuse caused confusion 2026-07-28 and was renamed).
 
@@ -239,6 +284,8 @@ The build sequence, ordered so the tree stays green until the one enforcement fl
 - Domain (landable now): a factory that builds the empty plan — `Count = 1` rrule at `outflow.Until`, `Amount = 0`, `ActiveFrom = asOfDate` — plus setting the outflow's `ActiveFrom`. Unit-testable on its own; emits the single `$0` earmark event at `Until`.
 - UI (deferred): the "decline the proposed plan → keep the empty plan" flow rides the unsettled non-forecast UI.
 
+**DONE 2026-07-29 (domain) — 139 domain tests green (was 135), solution builds clean.** `AllocationPlanProposer.ProposeEmpty(outflow, asOfDate)` returns the same `ProposedAllocationPlan` shape as `Propose`: the sparing-rule-prepared outflow, an `EarMarkPattern` with `Amount = 0` whose `DatePattern` is a plain `Count = 1` rrule at the outflow's `Until` with `ActiveFrom` reaching back to the as-of date (so the jar sits on today's page), and a null starting earmark. Reuses `Propose`'s sparing rule verbatim. 4 tests: the single `$0` occurrence at `Until`; both `ActiveFrom` cases (a future-dated outflow, and one already covering today where only the plan needs the lead-in); rejects a non-outflow. **UI still deferred** — the decline/remove flow rides the unsettled non-forecast UI, so nothing calls `ProposeEmpty` yet.
+
 **Cross-cutting:** a `DIVERGENCE(active-from)` tag at the `RecurrenceRule` / `EarMarkPattern.Create` sites + a [05 registry](05-original-structure-restructure.md#divergence-registry) row; update [03-data-entry](03-data-entry-uis.md)'s 2026-07-07 relaxation note to point at the restored check. The F20 regression test (pinned `50m`) should stay green — `ActiveFrom` never touches deallocation.
 
 **New / changed tests:** `RecurrenceRule` (construction, `ActiveFrom ≤ Start`, `GetOccurrences` ignores it, `ActiveSpanContains`); persistence round-trip; `EarMarkPattern.Create` (rejects earmark before the goal's active span, accepts when covered); the sparing conditional; the empty-plan factory; and the proposer / goal test updates.
@@ -253,6 +300,109 @@ The *"it just keeps going"* answer (item A) and its mechanism (item B, F17–F19
 - **Deferred because it reaches into other stages** (break-off / stage 3, and the cross-page horizon work already on hold). Until it is taken up, an open-ended bill is entered by picking a concrete end date and extending it as it approaches.
 
 **Consequence for Stage 2's scope:** the near-term buildable part of *"when does this stop?"* is the two **determinate** answers — *ends on a known date* (today's behaviour) and *ends when paid off* (item C's payoff helper) — plus the form question (item D). The third answer waits on the deferred indeterminate-length design.
+
+### Ongoing / renewal: RESOLVED and BUILT (author, 2026-07-29)
+
+Picked back up the moment Stage 3 (break-off) landed, exactly as this section anticipated. Worked
+through with the author as a sequence of questions, each with real tradeoffs — recorded here so the
+reasoning survives, not just the answers:
+
+1. **Does a superseded segment get kept or deleted on renewal? → Kept, truncated, visible** — same
+   treatment as a real break-off. **Accepted cost:** an unchanging bill renewed annually for a decade
+   leaves a growing trail of bounded `FinanceId`s in the pattern list, all reading the same thing. This
+   makes the "hide already-ended patterns" filter (noted but left optional in
+   [16, item 4-A](16-stage3-break-off.md#4-a--identity-across-the-cut--settled-2026-07-29)) considerably
+   more worth prioritizing once the UI phase does list-hygiene work — not a Stage 3 blocker, but no
+   longer purely hypothetical either.
+2. **Silent, or does it need to surface? → Silent action, visible afterward.** No confirm prompt (there
+   is nothing to decide — nothing about the bill changed); the effect must still be legible per
+   philosophy 1, so the renewed pattern carries a plain trace.
+3. **How is that trace recorded? → A text convention, not a new field or link type.** Weighed against a
+   `PatternRenewal`-style link record (mirroring `Transfer`) and a new `RenewedFromFinanceId` field on
+   `FinancialPattern` (a genuine divergence, same category as `ActiveFrom`); chosen for being the
+   lightest touch, at the cost of not being queryable — acceptable since the actual requirement was
+   "a human can find out," not "the system can trace renewal chains."
+4. **What triggers a renewal? → A fixed cadence — once a year, anchored to the pattern's original
+   `Start`** (a smaller, non-blocking default the author didn't need to weigh in on separately).
+   Reacting directly to the horizon was considered and rejected: that is functionally what the
+   rejected W9 (horizon-extension) approach already did, and reintroduces the same churn-every-run
+   problem renewal exists to avoid.
+5. **Does the renewed pattern reuse the predecessor's `Source`? → Yes, verbatim.** Correct for the real
+   world (an unchanged bill's bank-statement text doesn't change on renewal) — this has zero effect
+   today (actual-transaction matching doesn't exist yet) but **locks in that F23's eventual resolution,
+   for the renewal case specifically, is "a superseded predecessor becomes exempt from the `Source`
+   uniqueness rule once retired,"** not "the successor gets its own `Source`."
+
+**Built same day — `BreakOffFactory.Renew`** (`src/MyMoneyForecast.Domain/BreakOffFactory.cs`, alongside
+`BreakOff` — see [16](16-stage3-break-off.md) for the full mechanism, since it's a thin wrapper: calls
+`BreakOff` internally with the amount/schedule *derived* from the predecessor rather than caller-supplied
+(`RenewalRequest` has no `Amount`/`Schedule` field at all — structurally, not just by convention,
+renewal cannot change either), then appends the "(renewed *date*)" marker to `Description` — stripping
+any prior marker first, so a decade of renewals never stacks into "(renewed 2024-...) (renewed
+2025-...) (renewed 2026-...)...". 7 tests. 218 total (173 domain + 45 scenario), 0 warnings, no
+divergence (no new field, no new type — `Renew` is pure composition over `BreakOff` + `PatternTruncation`,
+same as everything else in Stage 3). **Not wired into anything that actually triggers it on a schedule**
+— that scheduling/trigger logic (checking "has a year passed since this pattern's Start or last
+renewal" and calling `Renew` accordingly) is a separate, not-yet-built piece, most likely App-layer or a
+background check run alongside the forecast.
+
+**Addendum, same day — two gaps the author caught after the first pass:**
+
+- **The cadence is rarer than once a year — "once every few years."** `Renew`'s segment length was
+  hardcoded to `+1 year`; **fixed** by adding `RenewalRequest.SegmentYears` (caller-supplied, validated
+  `≥ 1`). Deliberately kept separate from *how often a renewal check fires* (still unbuilt trigger
+  logic) — the trigger cadence and the segment's own reach don't have to be the same number.
+- **Editing a stale predecessor after a renewal has already happened, with no way to redirect.**
+  Because renewal is now rare, there is real calendar time where the truncated predecessor is still
+  what's sitting in the pattern list, unlabeled as obsolete in any way a user reliably notices — if
+  they open "Edit" on it, the edit lands on a dead branch and never reaches the segment that's actually
+  live. **The detection half turns out to be free**: `Source` is already reused verbatim across every
+  `BreakOff`/`Renew` successor (item 4-A), so "which segment is current" needs no new field or link —
+  it's simply whichever same-`Source` pattern has the latest `Start`. **Built:**
+  `BreakOffFactory.FindCurrentSegment(pattern, allPatterns)` — 4 tests (a broken-off predecessor
+  resolves to its successor; the successor resolves to itself; a two-hop renewal chain skips straight
+  to the latest, not the middle segment; a pattern with no history returns itself). **Ruling (author,
+  2026-07-29): silent redirect.** Opening "Edit" on any segment in a chain opens the CURRENT one via
+  `FindCurrentSegment`, regardless of which row was clicked — no warning, no escape hatch to edit an old
+  segment directly. Chosen over a warn-and-offer flow (closer to philosophy 1's letter, but adds a step
+  for what will be the overwhelmingly common case) and over hiding the action entirely (leaves no path
+  to fix a genuine historical correction). **Not yet wired** — same UI-phase deferral as every other
+  Stage 3 entry point; `FindCurrentSegment` is ready for whichever window's "Edit" handler calls it.
+
+## Grounding audit (2026-07-29)
+
+The settled Stage 2 items in the class documentation's own terms — what each **assumes**,
+**preserves**, and **breaks** ([[feedback-design-in-class-documentation-terms]]). The pressure map in
+[13](13-adjusting-the-plan-charter.md#where-this-phase-puts-pressure-on-the-original-assumptions) and
+the divergence registry in [05](05-original-structure-restructure.md#divergence-registry) were brought
+current with this.
+
+**`ActiveFrom` (Steps 1–3).**
+- *Assumes* the cascade order "patterns are perfect before jars are created/cleaned"
+  ([06 process regions](../../06-assumption-dependency-graph.md#process-regions--the-cascade-steps)) —
+  which is why extend-first (finance lead-in → earmark lead-in → jar) never lets `BalanceSnapshot` see
+  a jar outside its pattern.
+- *Preserves, re-anchored to the active span:* `3.13.5.a2` (jar within the earmark pattern's active
+  span), `3.11.2.a2` (earmark active span ⊆ finance active span, both directions), `3.13.8.a1` (no
+  earmark without a pattern).
+- *Preserves, unchanged, anchored to the occurrence range:* `3.13.7.a1` / `3.13.7.a2` — the
+  `[ActiveFrom, Start)` lead-in generates no expected transaction. The active-span vs. occurrence-range
+  split is the core move.
+- *Extends (our own version), deferred:* `1.2.3.10.a3` / `1.2.3c.11.a3` cross-page identity now include
+  `ActiveFrom`.
+- *Breaks:* adds a domain property outside the documented ten — `DIVERGENCE(active-from)`. Step 3's
+  empty plan is a further consumer (it sets `ActiveFrom` on both the prepared outflow and the
+  `Amount=0` plan so the declined jar reaches today).
+
+**Item C — payoff helper (`PayoffEstimator`).** *No divergence.* Assumes nothing about model state;
+**preserves** the chart-only "`until`, not `count`" rule (it *produces* an `Until` via the
+`Count → Until` resolution) and W3 (that `Until` is a plain stored value that doesn't re-derive). At the
+model level the result is an ordinary bounded `FinancialPattern` — indistinguishable from the user
+picking that end date by hand. Touches no milestone (`10.4.*`) and no free-funds formula.
+
+**Item D — the bill-form question.** *No divergence.* Pure UI: it sets `DatePattern.Until` from the
+chosen answer (a picked date, or the payoff date). The editor's host-controlled-end mode is
+presentation only; the produced `RecurrenceRule` is ordinary. Preserves everything.
 
 ## Still open — carried elsewhere, not decided here
 

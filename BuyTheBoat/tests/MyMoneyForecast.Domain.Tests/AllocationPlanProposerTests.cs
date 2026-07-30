@@ -245,4 +245,59 @@ public class AllocationPlanProposerTests
 
         result.Outflow.DatePattern.ActiveFrom.ShouldBeNull();
     }
+
+    [Fact]
+    public void An_empty_plan_has_no_contributions_and_one_zero_dollar_occurrence_at_the_outflows_end()
+    {
+        // A declined plan still exists — it just contributes nothing. Its single
+        // occurrence sits at the outflow's own end date, at $0.
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.ProposeEmpty(bill, AsOf);
+
+        result.Plan.FinanceId.ShouldBe(bill.FinanceId);
+        result.Plan.Amount.ShouldBe(0m);
+        result.StartingEarmark.ShouldBeNull();
+        result.Plan.DatePattern.Until.ShouldBe(bill.DatePattern.Until);
+
+        var occurrences = result.Plan.DatePattern.GetOccurrences();
+        occurrences.Count.ShouldBe(1);
+        occurrences[0].ShouldBe(bill.DatePattern.Until);
+    }
+
+    [Fact]
+    public void An_empty_plan_for_a_future_dated_outflow_stretches_both_the_outflow_and_the_jar_back_to_today()
+    {
+        // The bill starts Feb 1, after the as-of date, so both the outflow's span
+        // and the empty jar reach back to today — the jar is visible now even
+        // though nothing is being reserved.
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.ProposeEmpty(bill, AsOf);
+
+        result.Outflow.DatePattern.ActiveFrom.ShouldBe(AsOf);
+        result.Plan.DatePattern.ActiveStart.ShouldBe(AsOf);
+    }
+
+    [Fact]
+    public void An_empty_plans_jar_is_visible_from_today_even_when_the_outflow_already_covers_it()
+    {
+        // The outflow already covers the as-of date, so the sparing rule leaves
+        // its own ActiveFrom null — but the empty plan's single occurrence is at
+        // the far-off end date, so it still needs ActiveFrom to put the jar on
+        // today's page.
+        var bill = MonthlyBill(-300m, 1, AsOf, new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.ProposeEmpty(bill, AsOf);
+
+        result.Outflow.DatePattern.ActiveFrom.ShouldBeNull();
+        result.Plan.DatePattern.ActiveStart.ShouldBe(AsOf);
+    }
+
+    [Fact]
+    public void An_empty_plan_rejects_a_non_outflow()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1), id: 1);
+        Should.Throw<ArgumentException>(() => AllocationPlanProposer.ProposeEmpty(income, AsOf));
+    }
 }

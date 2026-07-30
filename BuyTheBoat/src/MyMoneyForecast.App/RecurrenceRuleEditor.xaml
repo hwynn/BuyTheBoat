@@ -45,7 +45,7 @@
             <TextBlock Text="Starts" Margin="0,10,0,0"/>
             <DatePicker x:Name="StartDatePicker" Margin="0,2,0,0" SelectedDateChanged="OnSelectionChanged"/>
 
-            <TextBlock Text="Ends" Margin="0,14,0,0" FontWeight="Bold"/>
+            <TextBlock x:Name="EndsHeader" Text="Ends" Margin="0,14,0,0" FontWeight="Bold"/>
             <RadioButton x:Name="EndsOnDateRadio" Content="On date" GroupName="EndCondition" IsChecked="True"
                          Margin="0,4,0,0" Checked="OnCheckChanged"/>
             <DatePicker x:Name="UntilDatePicker" Margin="20,2,0,6" SelectedDateChanged="OnSelectionChanged"/>

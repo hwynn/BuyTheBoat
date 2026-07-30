@@ -139,7 +139,7 @@ system-managed), or move a milestone — a manual catch-up closes the gap, it do
 > **Items 8, 22 and 23 all press on ruling 1.** Allocating toward something that hasn't started yet
 > (item 23) is precisely a request for a jar outside any pattern's span.
 
-## W8 · Split-and-continue ("break off")  ·  PROPOSED (stage 3)
+## W8 · Split-and-continue ("break off", user-facing: "Change starting on a date")  ·  PROPOSED (stage 3)
 
 **How:** cut a pattern's rrule at the change date and create a second pattern that continues from
 there, handing the jar balance across so allocated money isn't dropped into free funds.

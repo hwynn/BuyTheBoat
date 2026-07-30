@@ -72,6 +72,18 @@ public sealed class RecurrenceRule
         ActiveFrom = activeFrom,
     });
 
+    /// <summary>[CALC] A copy of this rule ending on the given date instead — Start, ActiveFrom, and everything else stay the same. Used to end a pattern early (planning/16, items 4 and 16).</summary>
+    public RecurrenceRule WithUntil(DateOnly until) => Create(new RecurrenceRuleOptions
+    {
+        Frequency = Frequency,
+        Start = Start,
+        Interval = Interval,
+        ByDay = ByDay,
+        ByMonthDay = ByMonthDay,
+        Until = until,
+        ActiveFrom = ActiveFrom,
+    });
+
     private RecurrenceRule(RecurrenceRuleOptions options, DateOnly resolvedUntil)
     {
         Start = options.Start;

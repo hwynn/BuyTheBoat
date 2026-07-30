@@ -54,7 +54,7 @@ look finished defeats the audit.
 | B9 | Change **description / source** | — | — | — | — | 3 |
 | B10 | Move a pattern to a different account | jars recompute fresh — nothing is stuck in the old silo | — | — | — | 4 |
 | B11 | Delete a pattern | **its savings plan is removed with it** — was blocked, now confirms first ([14 item D-2](14-stage1-allocation-model.md#what-d-2-means-concretely)) | "this will also remove its savings plan — continue?" | — | — | 1 ✔ / 3 |
-| B12 | Say when a bill or paycheck stops | **ongoing** keeps a hidden end date extended to the horizon plus a cycle, and propagates to any savings plan; the other answers set a real end date ([15](15-stage2-pattern-lifetime.md)) | one question, three answers — no category names | — | — | 2 ✔ |
+| B12 | Say when a bill or paycheck stops | the *on a date* and *paid off* answers set a real end date; **ongoing deferred** 2026-07-28 (was: a hidden horizon-extended end date propagated to the savings plan) — [15](15-stage2-pattern-lifetime.md) | one question; **two answers built** (on a date / paid off), the "keeps going" third stubbed pending the deferred design; no category names | — | — | 2 (partial) |
 | B13 | Ask for a loan's payoff date | computes owed ÷ payment, rounded up, and sets it as the end date — a one-time estimate that does **not** re-derive if the payment changes | total owed, regular payment | re-run it themselves if the payment changes | the date is a **floor** — interest and fees push it later | 2 ✔ |
 | B14 | Change a pattern **starting on a date** — break off *(proposed)* | — | — | — | — | 3 |
 | B15 | End a pattern at a date — "cancel Netflix next month" *(proposed)* | — | — | — | — | 3 |

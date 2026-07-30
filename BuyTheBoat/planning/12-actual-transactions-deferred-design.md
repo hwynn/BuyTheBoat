@@ -184,6 +184,32 @@ Tags as of this writing, all of which are revisit sites for import
   transaction that never pairs is exactly the case where *not* draining its jar might be right.
   Revisit F20's resolution then.
 
+### Pattern identity & break-off (stage 3)
+
+- **Item 5 — identity-only change: the biller's description/source string changes, nothing else does,
+  so nothing pairs.** *Raised: [13's charter](13-adjusting-the-plan-charter.md), item 5, scoped in
+  [16](16-stage3-break-off.md), 2026-07-29.* A bank starts describing the same real-world electric bill
+  with new statement text (a merger, a rebrand) — the pattern hasn't changed in any way the user cares
+  about, but automatic `Source` matching breaks. *What it blocks:* needs a contextual "we found this new
+  transaction, is this your electric bill?" offer once pairing exists; no mechanism to design without
+  actuals to observe the mismatch against.
+- **Item 17 — a bill cancelled in the past and never told to the app.** *Raised: charter item 17, scoped
+  in [16](16-stage3-break-off.md), 2026-07-29.* The user stopped paying something (or it stopped being
+  charged) without ever recording it — the pattern keeps generating expected transactions that will
+  never be fulfilled. *What it blocks:* most likely surfaces as an option on the unpaired-transaction
+  warning ("this bill hasn't shown up in N cycles — did it end?"), which needs unpaired-actual detection
+  to exist first.
+- **F23 — `Source` uniqueness is documented but unenforced, and a break-off's kept predecessor will
+  collide with it.** *Raised: [16](16-stage3-break-off.md), 2026-07-29, while scoping item 4's identity
+  question.* `4.2.a1` requires `Source` non-null; the pressure map separately states "no two patterns
+  share one," but neither `FinancialPattern.Create` nor the persistence layer enforces uniqueness today
+  (confirmed in code). Stage 3's break-off mechanism may keep a bounded predecessor pattern around for
+  history while the successor continues, and the natural choice — the successor reusing the exact same
+  `Source` string, so future bank statements keep matching the same biller text — collides with
+  uniqueness the moment it's enforced. *What it blocks:* whether the successor needs a distinct `Source`
+  (and if so, how continued bank-statement matching is meant to work at all) can't be settled until
+  actual-transaction matching's own rules exist; until then this is dormant, not broken.
+
 ### Persistence & the original model's missing surface
 
 - Methods from the documented original model with **no C# analogue yet**; per
@@ -254,3 +280,5 @@ None of these have been answered anywhere:
 - [01-glossary-of-terms.md](../../01-glossary-of-terms.md#actualtransaction) —
   the original documented shape of `ActualTransaction` and the pairing
   vocabulary.
+- [16-stage3-break-off.md](16-stage3-break-off.md) — items 5 and 17 registered above came from scoping
+  this stage; F23 (`Source` uniqueness) was found there too.

@@ -90,6 +90,58 @@ public static class AllocationPlanProposer
         return ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate);
     }
 
+    // The empty (declined) plan. When the user removes or declines the proposed
+    // Allocation Plan, the outflow STILL gets a real EarMarkPattern — one with no
+    // contributions — plus a fund jar visible from today, so the money still
+    // reads as unspent, there is a jar to top up, and the shortfall is the full
+    // unfunded amount (planning/15, ActiveFrom resolution). The plan is a plain
+    // Count = 1 rrule at the outflow's Until with Amount = 0; ActiveFrom does the
+    // span work so the rrule stays ordinary (no empty-rrule type). The single $0
+    // earmark event it emits at Until is the accepted cost of keeping it plain.
+    /// <summary>[CALC] Gives an outflow a real (but empty) savings plan when the proposed one is declined, so its jar still exists and can be topped up by hand.</summary>
+    /// <param name="asOfDate">Today, or the forecast's as-of date — the jar becomes visible from here rather than only on the outflow's last day.</param>
+    public static ProposedAllocationPlan ProposeEmpty(FinancialPattern outflow, DateOnly asOfDate)
+    {
+        if (outflow.Amount >= 0m)
+        {
+            throw new ArgumentException(
+                "An Allocation Plan is only created for an outflow (negative Amount).",
+                nameof(outflow));
+        }
+
+        // Same sparing rule as Propose: stretch the outflow's active span back to
+        // today only when it starts in the future, so its jar is visible now.
+        var preparedOutflow = outflow.DatePattern.Start > asOfDate
+            ? outflow.WithActiveFrom(asOfDate)
+            : outflow;
+
+        var planStart = preparedOutflow.DatePattern.Until;
+
+        var planPattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            // Frequency is immaterial for a single occurrence; Yearly matches the
+            // proposer's other Count = 1 plan.
+            Frequency = RecurrenceFrequency.Yearly,
+            Start = planStart,
+            Count = 1,
+            // Reach the jar's span back to today so the jar exists now, not only
+            // on the outflow's last day — but only when that day is in the future
+            // (ActiveFrom must be <= Start; the same sparing rule again).
+            ActiveFrom = planStart > asOfDate ? asOfDate : null,
+        });
+
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = preparedOutflow.FinanceId,
+                DatePattern = planPattern,
+                Amount = 0m,
+            },
+            preparedOutflow);
+
+        return new ProposedAllocationPlan(preparedOutflow, plan, null);
+    }
+
     // Shape A: one contribution per payday, sized so the window's contributions
     // equal the window's bill consumption — bill × billOccs ÷ incomeOccs.
     private static ProposedAllocationPlan ProposePaced(

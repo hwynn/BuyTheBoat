@@ -49,4 +49,14 @@ public sealed class Transfer
 
         return new Transfer(options);
     }
+
+    /// <summary>[CALC] A copy of this transfer ending on the given (earlier) date instead — everything else, including which accounts and how much, unchanged. Used to end a transfer early, including the predecessor half of "Change starting on a date" (planning/16).</summary>
+    public Transfer WithUntil(DateOnly until) => Create(new TransferOptions
+    {
+        Id = Id,
+        FromAccountId = FromAccountId,
+        ToAccountId = ToAccountId,
+        Amount = Amount,
+        DatePattern = DatePattern.WithUntil(until),
+    });
 }
