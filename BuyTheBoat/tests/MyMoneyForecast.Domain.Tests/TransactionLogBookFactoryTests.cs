@@ -127,8 +127,9 @@ public class TransactionLogBookFactoryTests
         Jar(dueDay, 1).ShouldBe(0m);
         dueDay.ExpectedAmount.ShouldBe(4000m); // 5000 - 1000
 
-        result.GoalShortfalls.ShouldHaveSingleItem();
-        result.GoalShortfalls.Single().ShortfallAmount.ShouldBe(0m);
+        var onTrack = result.GoalShortfalls.ShouldHaveSingleItem();
+        onTrack.ShortfallAmount.ShouldBe(0m);
+        onTrack.OverfundedAmount.ShouldBe(0m); // exactly on track — neither signal fires
     }
 
     [Fact]
@@ -207,6 +208,56 @@ public class TransactionLogBookFactoryTests
         var shortfall = result.GoalShortfalls.ShouldHaveSingleItem();
         shortfall.AmountAllocatedByDueDate.ShouldBe(300m);
         shortfall.ShortfallAmount.ShouldBe(700m);
+        shortfall.OverfundedAmount.ShouldBe(0m); // short, not over-funded — mutually exclusive
+    }
+
+    // planning/17, item 24 (F32): the mirror case — a goal met early (the
+    // charter's own example: a big manual earmark got a jar ahead of
+    // schedule). No new engine computation; OverfundedAmount just surfaces
+    // what AmountAllocatedByDueDate/AmountNeeded already carry.
+    [Fact]
+    public void An_overfunded_one_time_goal_reports_the_surplus_with_no_shortfall()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 94,
+            Source = "Vacation fund",
+            Amount = -1_000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2025, 6, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        // Already saved more than the goal needs, via a lump sum rather than
+        // ongoing contributions.
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 94,
+                Amount = 0m,
+                StartingAllocation = 1_200m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Yearly,
+                    Start = new DateOnly(2025, 6, 1),
+                    Count = 1,
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 6, 1),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark]));
+
+        var shortfall = result.GoalShortfalls.ShouldHaveSingleItem();
+        shortfall.ShortfallAmount.ShouldBe(0m);
+        shortfall.OverfundedAmount.ShouldBe(200m);
     }
 
     [Fact]
@@ -1211,6 +1262,256 @@ public class TransactionLogBookFactoryTests
         ManualEarmark.Create(
             new ManualEarmarkOptions { FinanceId = pattern.FinanceId, Date = date, Amount = amount },
             pattern);
+
+    // planning/17, item 8 (F27/F29): more than one EarMarkPattern can now
+    // share a finance_id — a "Restructure the plan" predecessor + successor.
+    // These two tests are the regression proof for the aggregation bug found
+    // while building it: both the initial-jar seed and the shortfall used to
+    // ASSIGN per pattern (last one processed wins) instead of summing across
+    // every plan funding the same goal.
+    [Fact]
+    public void Two_earmark_patterns_sharing_a_finance_id_sum_into_one_jar()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 77,
+            Source = "Boat fund",
+            Amount = -10_000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2026, 6, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2024, 1, 1),
+            }),
+        });
+        // Predecessor: $100/month, Jan-Jun 2025 (6 occurrences).
+        var predecessor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 77,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 6, 1),
+                }),
+            },
+            goal);
+        // Successor ("Restructure the plan"): $150/month, Jul-Dec 2025 (6 occurrences).
+        var successor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 77,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 7, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 20_000m,
+            asOfDate: new DateOnly(2026, 1, 1), // after both segments have fully run
+            horizonEndDate: new DateOnly(2026, 6, 1),
+            financialPatterns: [goal],
+            earMarkPatterns: [predecessor, successor]));
+
+        // 6 × 100 + 6 × 150 = 1500 — both segments counted, not just one.
+        Jar(SnapshotOn(result, new DateOnly(2026, 1, 1)), 77).ShouldBe(1_500m);
+    }
+
+    [Fact]
+    public void Two_earmark_patterns_sharing_a_finance_id_produce_one_shortfall_row()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 78,
+            Source = "Boat fund 2",
+            Amount = -10_000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2026, 6, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2024, 1, 1),
+            }),
+        });
+        var predecessor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 78,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 6, 1),
+                }),
+            },
+            goal);
+        var successor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 78,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 7, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 20_000m,
+            asOfDate: new DateOnly(2026, 1, 1),
+            horizonEndDate: new DateOnly(2026, 6, 1),
+            financialPatterns: [goal],
+            earMarkPatterns: [predecessor, successor]));
+
+        // One row for the goal, not one per plan — and its allocated total
+        // sums both segments (1500), not just whichever pattern was last.
+        var shortfall = result.GoalShortfalls.ShouldHaveSingleItem();
+        shortfall.AmountAllocatedByDueDate.ShouldBe(1_500m);
+    }
+
+    // planning/17, item 9 (F30): two concurrent funders (e.g. a household
+    // partner's own paycheck starts funding the same goal) can generate an
+    // occurrence on the same day — merged into ONE event, summing the
+    // amounts, not two separate events (3.13.8.1.a2).
+    [Fact]
+    public void Two_concurrent_earmark_patterns_landing_on_the_same_day_merge_into_one_event()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 91,
+            Source = "Shared savings goal",
+            Amount = -10_000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2027, 1, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        // Partner A, already contributing from January.
+        var partnerA = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 91,
+                Amount = -50m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            goal);
+        // Partner B, starting a concurrent plan in February — same day of
+        // month, so their occurrences collide with Partner A's from then on.
+        var partnerB = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 91,
+                Amount = -30m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 2, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 20_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [partnerA, partnerB]));
+
+        // Before Partner B starts: one event, Partner A's own amount.
+        var january = SnapshotOn(result, new DateOnly(2025, 1, 1));
+        january.EarMarkEvents.Count(e => e.FinanceId == 91).ShouldBe(1);
+        january.EarMarkEvents.Single(e => e.FinanceId == 91).ExpectedAmount.ShouldBe(50m);
+
+        // Once both land on the same day: ONE merged event, not two, summing
+        // both amounts.
+        var february = SnapshotOn(result, new DateOnly(2025, 2, 1));
+        february.EarMarkEvents.Count(e => e.FinanceId == 91).ShouldBe(1);
+        february.EarMarkEvents.Single(e => e.FinanceId == 91).ExpectedAmount.ShouldBe(80m);
+    }
+
+    // planning/17, item 22 (F31): "stop contributing, keep the jar alive" —
+    // proves the actual forecast behavior, not just the successor's shape
+    // (already covered by RestructureFactoryTests): no new inflow, but the
+    // jar keeps draining on the goal's own schedule right through to the due
+    // date, where the empty successor's own $0 occurrence lands too.
+    [Fact]
+    public void Stop_contributing_keeps_the_jar_alive_and_releasing_with_no_new_inflow()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 90,
+            Source = "Boat fund",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 6, 1),
+                ActiveFrom = new DateOnly(2024, 6, 1), // saving started well before the due date
+            }),
+        });
+        // Already fully funded via a lump sum before the window starts;
+        // contributes nothing further itself even before being stopped.
+        var predecessor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 90,
+                Amount = 0m,
+                StartingAllocation = 600m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2024, 6, 1),
+                    Until = new DateOnly(2024, 12, 1),
+                }),
+            },
+            goal);
+
+        var result = RestructureFactory.StopContributing(predecessor, goal, new DateOnly(2025, 1, 1));
+
+        var forecast = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 6, 1),
+            financialPatterns: [goal],
+            earMarkPatterns: [result.Predecessor, result.Successor]));
+
+        // $600 to start (the as-of day is a no-delta day), then $100 off on
+        // each of the goal's own occurrences — no new inflow ever raises it.
+        Jar(SnapshotOn(forecast, new DateOnly(2025, 1, 1)), 90).ShouldBe(500m);
+        Jar(SnapshotOn(forecast, new DateOnly(2025, 3, 1)), 90).ShouldBe(300m);
+        // The due date, where the empty successor's own $0 occurrence lands too.
+        Jar(SnapshotOn(forecast, new DateOnly(2025, 6, 1)), 90).ShouldBe(0m);
+    }
 
     [Fact]
     public void A_manual_addition_raises_the_jar_on_its_day_and_persists_forward()

@@ -128,7 +128,14 @@ Tags as of this writing, all of which are revisit sites for import
   element.
 - **A new warning class becomes possible** ([08](08-forecast-tab-design-philosophy.md),
   warning *b*): a bill in the near past that still hasn't been paid, or that came
-  in at an unexpectedly different cost.
+  in at an unexpectedly different cost. **This is now load-bearing for a Stage 6 decision
+  ([19](19-stage6-warnings-levers-shortcuts.md), states 3/4, author's ruling 2026-07-30):**
+  a plan's pacing going stale — because its bill moved accounts, or because the paycheck it
+  was paced against changed — gets **no dedicated detection or lever at all** right now, not
+  even an informational one. The author's reasoning: the user should notice a change that
+  drastic themselves, and already has the tools (`RestructureFactory`, break-off) to fix it.
+  Real detection belongs here instead, once actuals exist to notice the mismatch against —
+  this is that detection's first concrete use case, not just a hypothetical one.
 - **Explicit non-goal: do not show every actual transaction**
   ([08](08-forecast-tab-design-philosophy.md)). Once they exist they'll be
   numerous; the **total spent that day** is the right granularity for the

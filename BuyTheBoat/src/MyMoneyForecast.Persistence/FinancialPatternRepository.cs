@@ -15,9 +15,9 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO FinancialPatterns
-                (FinanceId, Source, Amount, Priority, Mandatory, Description, AccountId, TransferId, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom)
+                (FinanceId, Source, Amount, Priority, Mandatory, Description, AccountId, TransferId, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, AutoRenew)
             VALUES
-                ($FinanceId, $Source, $Amount, $Priority, $Mandatory, $Description, $AccountId, $TransferId, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom)
+                ($FinanceId, $Source, $Amount, $Priority, $Mandatory, $Description, $AccountId, $TransferId, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $AutoRenew)
             ON CONFLICT(FinanceId) DO UPDATE SET
                 Source = excluded.Source,
                 Amount = excluded.Amount,
@@ -32,7 +32,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
                 ByMonthDay = excluded.ByMonthDay,
                 StartDate = excluded.StartDate,
                 UntilDate = excluded.UntilDate,
-                ActiveFrom = excluded.ActiveFrom;
+                ActiveFrom = excluded.ActiveFrom,
+                AutoRenew = excluded.AutoRenew;
             """;
 
         command.Parameters.AddWithValue("$AccountId", accountId);
@@ -43,6 +44,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         command.Parameters.AddWithValue("$Priority", pattern.Priority);
         command.Parameters.AddWithValue("$Mandatory", pattern.Mandatory ? 1 : 0);
         command.Parameters.AddWithValue("$Description", (object?)pattern.Description ?? DBNull.Value);
+        command.Parameters.AddWithValue("$AutoRenew", pattern.AutoRenew ? 1 : 0);
         RecurrenceRuleColumns.AddParameters(command, pattern.DatePattern);
 
         command.ExecuteNonQuery();
@@ -111,6 +113,28 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT * FROM FinancialPatterns WHERE TransferId IS NULL ORDER BY FinanceId;";
+
+        using var reader = command.ExecuteReader();
+        var patterns = new List<FinancialPattern>();
+        while (reader.Read())
+        {
+            patterns.Add(Read(reader));
+        }
+
+        return patterns;
+    }
+
+    // Income candidates for a NEW outflow's Allocation Plan must be scoped to
+    // the SAME account it's filed under (planning/17, F33) — GetAllExcludingTransferPatterns
+    // is household-wide, so a bill in one account could get its plan paced
+    // against a paycheck filed under a different account, which never actually
+    // funds it. Transfers stay excluded for the same reason as that method.
+    public IReadOnlyList<FinancialPattern> GetByAccountExcludingTransferPatterns(int accountId)
+    {
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM FinancialPatterns WHERE AccountId = $AccountId AND TransferId IS NULL ORDER BY FinanceId;";
+        command.Parameters.AddWithValue("$AccountId", accountId);
 
         using var reader = command.ExecuteReader();
         var patterns = new List<FinancialPattern>();
@@ -231,6 +255,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
             Description = reader.IsDBNull(reader.GetOrdinal("Description"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("Description")),
+            AutoRenew = reader.GetInt32(reader.GetOrdinal("AutoRenew")) != 0,
             DatePattern = RecurrenceRuleColumns.Read(reader),
         });
 }

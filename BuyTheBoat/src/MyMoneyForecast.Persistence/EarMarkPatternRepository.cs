@@ -5,6 +5,12 @@ namespace MyMoneyForecast.Persistence;
 
 public sealed class EarMarkPatternRepository(PatternDatabase database, FinancialPatternRepository financialPatterns)
 {
+    // Keyed on (FinanceId, StartDate), not FinanceId alone (planning/17, item
+    // 8 — F27/F29): more than one plan may now fund the same goal in
+    // sequence (a "Restructure" predecessor + successor), so saving a plan
+    // updates the ONE row that already starts on that date — typically the
+    // same plan being re-edited — and inserts a new row for a genuinely new
+    // segment starting on a different date.
     public void Save(EarMarkPattern pattern)
     {
         using var connection = database.OpenConnection();
@@ -14,13 +20,12 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
                 (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation)
             VALUES
                 ($FinanceId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $StartingAllocation)
-            ON CONFLICT(FinanceId) DO UPDATE SET
+            ON CONFLICT(FinanceId, StartDate) DO UPDATE SET
                 Amount = excluded.Amount,
                 Frequency = excluded.Frequency,
                 IntervalValue = excluded.IntervalValue,
                 ByDay = excluded.ByDay,
                 ByMonthDay = excluded.ByMonthDay,
-                StartDate = excluded.StartDate,
                 UntilDate = excluded.UntilDate,
                 ActiveFrom = excluded.ActiveFrom,
                 StartingAllocation = excluded.StartingAllocation;
@@ -42,7 +47,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM EarMarkPatterns ORDER BY FinanceId;";
+        command.CommandText = "SELECT * FROM EarMarkPatterns ORDER BY FinanceId, StartDate;";
 
         using var reader = command.ExecuteReader();
         var patterns = new List<EarMarkPattern>();

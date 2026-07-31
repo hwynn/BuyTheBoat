@@ -81,11 +81,12 @@ public sealed class PatternDatabase
                 ByMonthDay TEXT NULL,
                 StartDate TEXT NOT NULL,
                 UntilDate TEXT NOT NULL,
-                ActiveFrom TEXT NULL
+                ActiveFrom TEXT NULL,
+                AutoRenew INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS EarMarkPatterns (
-                FinanceId INTEGER PRIMARY KEY REFERENCES FinancialPatterns(FinanceId),
+                FinanceId INTEGER NOT NULL REFERENCES FinancialPatterns(FinanceId),
                 Amount TEXT NOT NULL,
                 Frequency TEXT NOT NULL,
                 IntervalValue INTEGER NOT NULL,
@@ -94,7 +95,8 @@ public sealed class PatternDatabase
                 StartDate TEXT NOT NULL,
                 UntilDate TEXT NOT NULL,
                 ActiveFrom TEXT NULL,
-                StartingAllocation TEXT NOT NULL DEFAULT '0'
+                StartingAllocation TEXT NOT NULL DEFAULT '0',
+                PRIMARY KEY (FinanceId, StartDate)
             );
 
             CREATE TABLE IF NOT EXISTS CurrentBalance (
@@ -106,7 +108,7 @@ public sealed class PatternDatabase
             );
 
             CREATE TABLE IF NOT EXISTS ManualEarmarks (
-                FinanceId INTEGER NOT NULL REFERENCES EarMarkPatterns(FinanceId),
+                FinanceId INTEGER NOT NULL REFERENCES FinancialPatterns(FinanceId),
                 EarmarkDate TEXT NOT NULL,
                 Amount TEXT NOT NULL,
                 PRIMARY KEY (FinanceId, EarmarkDate)
@@ -166,6 +168,26 @@ public sealed class PatternDatabase
         EnsureColumn(connection, "EarMarkPatterns", "ActiveFrom", "TEXT NULL");
         EnsureColumn(connection, "Transfers", "ActiveFrom", "TEXT NULL");
 
+        // The AutoRenew marker (planning/18, B12): set invisibly when the user
+        // answers "it just keeps going" at creation. DEFAULT 0 *is* the
+        // migration — every pre-existing pattern was created before this
+        // question existed, so none of them opted in.
+        EnsureColumn(connection, "FinancialPatterns", "AutoRenew", "INTEGER NOT NULL DEFAULT 0");
+
+        // planning/17, item 8 (F27/F29): more than one EarMarkPattern may now
+        // share a finance_id, so FinanceId alone can no longer be the table's
+        // key. Run after the EnsureColumn calls above so a pre-existing table
+        // already has every column before it's copied across.
+        EnsureEarMarkPatternsAllowMultiplePerFinanceId(connection);
+
+        // A manual earmark is about the GOAL (the jar), not any one plan
+        // segment, so it always should have referenced FinancialPatterns —
+        // but now it MUST: SQLite rejects any statement touching a table
+        // declaring REFERENCES EarMarkPatterns(FinanceId) once FinanceId
+        // alone is no longer that table's key ("foreign key mismatch",
+        // checked at prepare time regardless of PRAGMA foreign_keys).
+        EnsureManualEarmarksReferenceFinancialPatterns(connection);
+
         // One-time backfill for the restored 3.11.2.a2 front-half check
         // (planning/15): a pre-existing goal whose savings plan starts before the
         // goal's own Start had no ActiveFrom, which the restored check rejects on
@@ -186,6 +208,108 @@ public sealed class PatternDatabase
                   AND e.StartDate < FinancialPatterns.StartDate);
             """;
         backfill.ExecuteNonQuery();
+    }
+
+    // SQLite can't ALTER a primary key in place, so a database still on the
+    // old single-column key (FinanceId alone) is rebuilt: renamed aside,
+    // recreated with the composite key the CREATE TABLE statement above now
+    // declares, data copied across, old copy dropped. Checked via
+    // PRAGMA table_info rather than a version flag, so this is a no-op both
+    // on a fresh install (already created with the composite key) and on a
+    // database already migrated by an earlier run.
+    private static void EnsureEarMarkPatternsAllowMultiplePerFinanceId(SqliteConnection connection)
+    {
+        var startDateIsPartOfPrimaryKey = false;
+        using (var checkCommand = connection.CreateCommand())
+        {
+            checkCommand.CommandText = "PRAGMA table_info(EarMarkPatterns);";
+            using var reader = checkCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(reader.GetOrdinal("name")), "StartDate", StringComparison.OrdinalIgnoreCase)
+                    && reader.GetInt32(reader.GetOrdinal("pk")) > 0)
+                {
+                    startDateIsPartOfPrimaryKey = true;
+                    break;
+                }
+            }
+        }
+
+        if (startDateIsPartOfPrimaryKey)
+        {
+            return;
+        }
+
+        using var migrate = connection.CreateCommand();
+        migrate.CommandText = """
+            ALTER TABLE EarMarkPatterns RENAME TO EarMarkPatterns_old_singlekey;
+
+            CREATE TABLE EarMarkPatterns (
+                FinanceId INTEGER NOT NULL REFERENCES FinancialPatterns(FinanceId),
+                Amount TEXT NOT NULL,
+                Frequency TEXT NOT NULL,
+                IntervalValue INTEGER NOT NULL,
+                ByDay TEXT NULL,
+                ByMonthDay TEXT NULL,
+                StartDate TEXT NOT NULL,
+                UntilDate TEXT NOT NULL,
+                ActiveFrom TEXT NULL,
+                StartingAllocation TEXT NOT NULL DEFAULT '0',
+                PRIMARY KEY (FinanceId, StartDate)
+            );
+
+            INSERT INTO EarMarkPatterns
+                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation)
+            SELECT FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation
+            FROM EarMarkPatterns_old_singlekey;
+
+            DROP TABLE EarMarkPatterns_old_singlekey;
+            """;
+        migrate.ExecuteNonQuery();
+    }
+
+    // Checked via PRAGMA foreign_key_list rather than a version flag, so this
+    // is a no-op both on a fresh install (already created referencing
+    // FinancialPatterns) and on a database already migrated by an earlier run.
+    private static void EnsureManualEarmarksReferenceFinancialPatterns(SqliteConnection connection)
+    {
+        var stillReferencesEarMarkPatterns = false;
+        using (var checkCommand = connection.CreateCommand())
+        {
+            checkCommand.CommandText = "PRAGMA foreign_key_list(ManualEarmarks);";
+            using var reader = checkCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(reader.GetOrdinal("table")), "EarMarkPatterns", StringComparison.OrdinalIgnoreCase))
+                {
+                    stillReferencesEarMarkPatterns = true;
+                    break;
+                }
+            }
+        }
+
+        if (!stillReferencesEarMarkPatterns)
+        {
+            return;
+        }
+
+        using var migrate = connection.CreateCommand();
+        migrate.CommandText = """
+            ALTER TABLE ManualEarmarks RENAME TO ManualEarmarks_old_reference;
+
+            CREATE TABLE ManualEarmarks (
+                FinanceId INTEGER NOT NULL REFERENCES FinancialPatterns(FinanceId),
+                EarmarkDate TEXT NOT NULL,
+                Amount TEXT NOT NULL,
+                PRIMARY KEY (FinanceId, EarmarkDate)
+            );
+
+            INSERT INTO ManualEarmarks (FinanceId, EarmarkDate, Amount)
+            SELECT FinanceId, EarmarkDate, Amount FROM ManualEarmarks_old_reference;
+
+            DROP TABLE ManualEarmarks_old_reference;
+            """;
+        migrate.ExecuteNonQuery();
     }
 
     private static void EnsureColumn(SqliteConnection connection, string table, string column, string columnDefinition)

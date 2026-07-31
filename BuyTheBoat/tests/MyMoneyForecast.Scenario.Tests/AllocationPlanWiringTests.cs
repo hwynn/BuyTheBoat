@@ -63,9 +63,11 @@ public class AllocationPlanWiringTests : IDisposable
         _financialPatterns.Save(bill, accountId: 1);
 
         // The create-window flow: propose the plan from the current as-of date and
-        // the user's income, then persist the plan (and any starting earmark).
+        // the user's own-account income, then persist the plan (and any starting
+        // earmark) — mirrors AutoCreateAllocationPlan (planning/17, F33: scoped to
+        // the outflow's own account, not household-wide).
         var proposal = AllocationPlanProposer.Propose(
-            bill, _financialPatterns.GetAllExcludingTransferPatterns(), asOf);
+            bill, _financialPatterns.GetByAccountExcludingTransferPatterns(1), asOf);
         _financialPatterns.Save(proposal.Outflow, accountId: 1); // the prepared bill (ActiveFrom set)
         _earMarkPatterns.Save(proposal.Plan);
         if (proposal.StartingEarmark is { } starting)
@@ -97,6 +99,50 @@ public class AllocationPlanWiringTests : IDisposable
         maxBillJar.ShouldBeGreaterThan(0m);
     }
 
+    // planning/17, F33: a paycheck filed under a DIFFERENT account than the
+    // bill must not be treated as this bill's income. A paced plan copies the
+    // income's own Frequency (Weekly here) — if the wrong-account paycheck
+    // leaked in, the proposed plan would come back Weekly instead of Monthly.
+    [Fact]
+    public void An_outflows_plan_does_not_pace_against_another_accounts_income()
+    {
+        var paycheck = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Employer",
+            Amount = 3000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Weekly,
+                Start = new DateOnly(2025, 1, 3),
+                Until = new DateOnly(2026, 1, 1),
+            }),
+        });
+        _financialPatterns.Save(paycheck, accountId: 2); // Savings
+
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 2,
+            Source = "Rent",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2027, 1, 1),
+            }),
+        });
+        _financialPatterns.Save(bill, accountId: 1); // Checking — a different account
+
+        var proposal = AllocationPlanProposer.Propose(
+            bill, _financialPatterns.GetByAccountExcludingTransferPatterns(1), new DateOnly(2025, 1, 1));
+
+        // Front-loaded against the bill's own cadence, not paced against the
+        // other account's paycheck.
+        proposal.Plan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Monthly);
+    }
+
     [Fact]
     public void Deleting_a_transfer_also_removes_its_withdrawals_plan()
     {
@@ -119,7 +165,10 @@ public class AllocationPlanWiringTests : IDisposable
         });
         // The wiring gives the withdrawal a front-loaded plan and persists the
         // prepared withdrawal (with ActiveFrom) via the transfer, so its plan fits.
-        var plan = AllocationPlanProposer.Propose(transfer.Withdrawal, [], new DateOnly(2025, 1, 1));
+        // spreadEvenlyWithNoIncome: false matches what MainWindow's transfer
+        // creation actually passes (planning/18, C1) — a transfer stays plain.
+        var plan = AllocationPlanProposer.Propose(
+            transfer.Withdrawal, [], new DateOnly(2025, 1, 1), spreadEvenlyWithNoIncome: false);
         _transfers.Save(transfer with { Withdrawal = plan.Outflow });
         _earMarkPatterns.Save(plan.Plan);
         _earMarkPatterns.GetAll().ShouldHaveSingleItem();

@@ -31,7 +31,7 @@ When actual-transaction import becomes real, `grep -rn "ASSUMED-PAIRING" src/` i
 
 ## Divergence registry
 
-Regenerate with: `grep -rn "ASSUMED-PAIRING\|DIVERGENCE" src/` — the table below reflects the state at implementation time (18 tagged sites after `active-from` was added 2026-07-28; the factory's header mention of the convention is not itself a site).
+Regenerate with: `grep -rn "ASSUMED-PAIRING\|DIVERGENCE" src/` — the table below reflects the state at implementation time (19 tagged sites after `auto-renew` was added 2026-07-30; the factory's header mention of the convention is not itself a site).
 
 ### ASSUMED-PAIRING sites
 
@@ -53,6 +53,7 @@ Regenerate with: `grep -rn "ASSUMED-PAIRING\|DIVERGENCE" src/` — the table bel
 | `(page-length)` | `TransactionLogBook.cs`, factory assembly | One window-sized page per forecast run; `PageLength = null`. Fixed month-length pages matter once persisted history and expired pages exist. |
 | `(runoff)` | `AccountTransactionPage.PageRunoffData()` | Implemented as a documented stub returning the closing snapshot's data; nothing consumes it until multi-page books exist. |
 | `(active-from)` | `RecurrenceRule.cs` (`ActiveFrom` field), `EarMarkPattern.Create` | A new property not in the documented ten: a "lead-in" date letting a pattern's active span (and its jar) begin before its first occurrence, so saving in advance holds `3.11.2.a2` / `3.13.5.a2` literally instead of relaxing them. `GetOccurrences` ignores it (occurrences unchanged); `EarMarkPattern.Create` checks the earmark's active span against the goal's in both directions. The creation paths (`OneTimeGoalFactory`, the proposer) set it only when the outflow starts after the as-of date, and a load-time migration backfills pre-existing goals. **Step 3 (2026-07-29):** the empty/declined-plan factory `AllocationPlanProposer.ProposeEmpty` also sets `ActiveFrom` — on the prepared outflow and on the `Amount=0` plan (single occurrence at the outflow's `Until`) — so a declined jar still reaches today. planning/15; ActiveFrom Steps 2–3, 2026-07-28/29. |
+| `(auto-renew)` | `FinancialPattern.cs` (`AutoRenew` field), `BreakOffFactory.cs` (successor construction in both `BreakOff` and `Renew`'s relabeling step) | A new property not in the documented ten, same category as `active-from`: a marker set invisibly when the user answers "it just keeps going" at creation, gating a still-unbuilt scheduled check that silently renews the pattern (`BreakOffFactory.Renew`) instead of letting it end. Never affects the rrule, the math, or occurrence generation — carried through `WithActiveFrom`/`WithUntil` and copied onto every break-off/renewal successor so a "keeps going" pattern keeps qualifying across repeated future renewals rather than lapsing after one. Creation-time UI wiring and the scheduled trigger itself (S7) are not yet built. planning/18 (B12), 2026-07-30. |
 
 ### Divergences without a code tag (structural, documented here)
 

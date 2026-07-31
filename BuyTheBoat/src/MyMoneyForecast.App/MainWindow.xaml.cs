@@ -163,11 +163,14 @@ public partial class MainWindow : Window
         // Stage-1 revision (planning/14): the transfer reserves in the account it
         // leaves, through a front-loaded Allocation Plan on the withdrawal — no
         // income pacing (a transfer isn't a recurring bill), so the no-income
-        // shape reserves the full amount from the as-of date. Propose first: the
-        // proposer may stretch the withdrawal's active span back to the as-of date
-        // (planning/15, ActiveFrom) so its plan fits, and that prepared withdrawal
-        // is what must be persisted (via the transfer) for the plan to resolve.
-        var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate());
+        // shape reserves the full amount from the as-of date. spreadEvenlyWithNoIncome:
+        // false — a transfer stays plain and immediate, not spread like a one-time
+        // goal (planning/18, C1); the author's own ruling against adaptive behavior
+        // for transfers. Propose first: the proposer may stretch the withdrawal's
+        // active span back to the as-of date (planning/15, ActiveFrom) so its plan
+        // fits, and that prepared withdrawal is what must be persisted (via the
+        // transfer) for the plan to resolve.
+        var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate(), spreadEvenlyWithNoIncome: false);
         _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
         _earMarkPatterns.Save(withdrawalPlan.Plan);
 
@@ -1081,7 +1084,9 @@ public partial class MainWindow : Window
     // starting earmark, for a bill due before its first paycheck) is persisted
     // like a savings plan and appears in the earmark grid, where it can be
     // edited or removed. Transfer patterns are excluded from the income scan so
-    // a deposit isn't mistaken for a paycheck.
+    // a deposit isn't mistaken for a paycheck, and the scan is scoped to this
+    // outflow's own account (planning/17, F33) — a paycheck filed under a
+    // different account never actually funds this one.
     private void AutoCreateAllocationPlan(FinancialPattern pattern, int accountId)
     {
         if (pattern.Amount >= 0m)
@@ -1090,7 +1095,7 @@ public partial class MainWindow : Window
         }
 
         var proposal = AllocationPlanProposer.Propose(
-            pattern, _financialPatterns.GetAllExcludingTransferPatterns(), CurrentAsOfDate());
+            pattern, _financialPatterns.GetByAccountExcludingTransferPatterns(accountId), CurrentAsOfDate());
         // The proposer may stretch the outflow's active span back to the as-of
         // date (planning/15, ActiveFrom) so its plan fits — persist that prepared
         // outflow, not the original, or the plan reads short against a goal whose

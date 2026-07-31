@@ -48,6 +48,7 @@ public class PatternRepositoryTests : IDisposable
         loaded.Amount.ShouldBe(paycheck.Amount);
         loaded.Mandatory.ShouldBe(paycheck.Mandatory);
         loaded.Description.ShouldBe(paycheck.Description);
+        loaded.AutoRenew.ShouldBe(paycheck.AutoRenew);
         loaded.DatePattern.GetOccurrences().ShouldBe(paycheck.DatePattern.GetOccurrences());
     }
 
@@ -164,6 +165,156 @@ public class PatternRepositoryTests : IDisposable
         all[0].StartingAllocation.ShouldBe(5000m);
     }
 
+    // planning/17, item 8 (F27): more than one EarMarkPattern may now share a
+    // finance_id (a "Restructure the plan" predecessor + successor) — keyed
+    // on (FinanceId, StartDate), not FinanceId alone.
+    [Fact]
+    public void Two_earmark_patterns_can_share_a_finance_id_with_different_start_dates()
+    {
+        var goal = Bill(80, "Boat fund");
+        _financialPatterns.Save(goal, accountId: 1);
+
+        var predecessor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 80,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 6, 1),
+                }),
+            },
+            goal);
+        var successor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 80,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 7, 1),
+                    Until = new DateOnly(2027, 1, 1),
+                }),
+            },
+            goal);
+        _earMarkPatterns.Save(predecessor);
+        _earMarkPatterns.Save(successor);
+
+        var all = _earMarkPatterns.GetAll();
+        all.Count.ShouldBe(2);
+        all.Select(pattern => pattern.Amount).ShouldBe(new[] { -100m, -150m }); // ordered by StartDate
+    }
+
+    [Fact]
+    public void Saving_an_earmark_pattern_again_with_the_same_start_date_updates_it_instead_of_duplicating()
+    {
+        var goal = Bill(81, "Rent fund");
+        _financialPatterns.Save(goal, accountId: 1);
+
+        var original = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 81,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2027, 1, 1),
+                }),
+            },
+            goal);
+        _earMarkPatterns.Save(original);
+
+        var edited = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 81,
+                Amount = -125m, // same Start, just a different amount
+                DatePattern = original.DatePattern,
+            },
+            goal);
+        _earMarkPatterns.Save(edited);
+
+        var all = _earMarkPatterns.GetAll();
+        all.Count.ShouldBe(1);
+        all[0].Amount.ShouldBe(-125m);
+    }
+
+    // Simulates a database created before this stage: EarMarkPatterns keyed
+    // on FinanceId alone. Reopening must rebuild it onto the composite key
+    // without losing the existing row (planning/17, item 8).
+    [Fact]
+    public void An_existing_database_on_the_old_single_key_schema_is_migrated_without_losing_data()
+    {
+        // The goal must exist BEFORE the raw earmark row is inserted — FK
+        // enforcement is active (Microsoft.Data.Sqlite defaults PRAGMA
+        // foreign_keys to ON), so an orphaned row would fail to insert here
+        // exactly as it would in a real database.
+        _financialPatterns.Save(Bill(82, "Migrated goal"), accountId: 1);
+        RecreateEarMarkPatternsOnTheOldSingleKeySchema();
+        InsertRawEarMarkPatternRow(
+            financeId: 82, amount: "-100", start: "2025-01-01", until: "2027-01-01");
+
+        // Reopening runs Initialize again, which must detect the old schema
+        // and migrate it.
+        var reopened = new FinancialPatternRepository(new PatternDatabase(_databasePath));
+        var reopenedEarmarks = new EarMarkPatternRepository(new PatternDatabase(_databasePath), reopened);
+
+        var all = reopenedEarmarks.GetAll();
+
+        all.ShouldHaveSingleItem();
+        all[0].Amount.ShouldBe(-100m);
+    }
+
+    private void RecreateEarMarkPatternsOnTheOldSingleKeySchema()
+    {
+        SqliteConnection.ClearAllPools();
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder { DataSource = _databasePath }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            DROP TABLE EarMarkPatterns;
+            CREATE TABLE EarMarkPatterns (
+                FinanceId INTEGER PRIMARY KEY,
+                Amount TEXT NOT NULL,
+                Frequency TEXT NOT NULL,
+                IntervalValue INTEGER NOT NULL,
+                ByDay TEXT NULL,
+                ByMonthDay TEXT NULL,
+                StartDate TEXT NOT NULL,
+                UntilDate TEXT NOT NULL,
+                ActiveFrom TEXT NULL,
+                StartingAllocation TEXT NOT NULL DEFAULT '0'
+            );
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private void InsertRawEarMarkPatternRow(int financeId, string amount, string start, string until)
+    {
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder { DataSource = _databasePath }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO EarMarkPatterns (FinanceId, Amount, Frequency, IntervalValue, StartDate, UntilDate)
+            VALUES ($FinanceId, $Amount, 'Monthly', 1, $Start, $Until);
+            """;
+        command.Parameters.AddWithValue("$FinanceId", financeId);
+        command.Parameters.AddWithValue("$Amount", amount);
+        command.Parameters.AddWithValue("$Start", start);
+        command.Parameters.AddWithValue("$Until", until);
+        command.ExecuteNonQuery();
+    }
+
     [Fact]
     public void Deleting_a_financial_pattern_with_no_linked_earmark_pattern_succeeds()
     {
@@ -260,6 +411,37 @@ public class PatternRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void A_pattern_with_auto_renew_set_round_trips_through_sqlite()
+    {
+        var rent = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2026, 1, 1),
+            }),
+            Amount = -1_600m,
+            Mandatory = true,
+            AutoRenew = true,
+        });
+        _financialPatterns.Save(rent, accountId: 1);
+
+        _financialPatterns.GetAll().Single().AutoRenew.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void A_pattern_with_no_auto_renew_round_trips_as_false()
+    {
+        _financialPatterns.Save(Bill(1, "Rent"), accountId: 1);
+
+        _financialPatterns.GetAll().Single().AutoRenew.ShouldBeFalse();
+    }
+
+    [Fact]
     public void An_existing_goal_whose_plan_predates_it_gets_active_from_backfilled_on_load()
     {
         // Simulates pre-ActiveFrom data: a goal plus a save-in-advance plan that
@@ -347,6 +529,20 @@ public class PatternRepositoryTests : IDisposable
         byAccount.Keys.OrderBy(key => key).ToArray().ShouldBe(new[] { 7, 9 });
         byAccount[7].Select(pattern => pattern.Source).ToArray().ShouldBe(new[] { "Rent", "Electric" });
         byAccount[9].Single().Source.ShouldBe("Boat fund");
+    }
+
+    // planning/17, F33: the Allocation Plan proposer's income scan must be
+    // scoped to the outflow's own account, not household-wide.
+    [Fact]
+    public void Excluding_transfer_patterns_by_account_only_returns_that_accounts_non_transfer_patterns()
+    {
+        _financialPatterns.Save(Bill(1, "Rent"), accountId: 1);
+        _financialPatterns.Save(Bill(2, "Paycheck"), accountId: 2); // a different account
+        _financialPatterns.Save(Bill(3, "Transfer leg"), accountId: 1, transferId: 9);
+
+        var forAccountOne = _financialPatterns.GetByAccountExcludingTransferPatterns(1);
+
+        forAccountOne.Select(pattern => pattern.Source).ShouldBe(new[] { "Rent" });
     }
 
     [Fact]

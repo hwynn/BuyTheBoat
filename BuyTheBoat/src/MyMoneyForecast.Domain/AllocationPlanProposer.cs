@@ -25,13 +25,23 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 //     bill's total consumption over it. If the first bill occurrence lands
 //     before the first paycheck-contribution, a starting earmark front-loads
 //     that first occurrence (branch B).
-//   C (no single usable income — none, or more than one stream) — reserve the
-//     full amount, on the bill's own cadence, starting from the as-of date so
-//     the first contribution front-loads. No starting earmark needed.
+//   C (no single usable income — none, or more than one stream) — a
+//     genuinely recurring outflow reserves the full amount on its own
+//     cadence, starting from the as-of date (front-loaded, no starting
+//     earmark needed). A SINGLE-occurrence outflow (planning/18, C1) instead
+//     spreads the amount evenly across the remaining time by default —
+//     mirroring OneTimeGoalFactory's own long-standing installment default,
+//     which this genuinely supersedes now, not just for the paced case — a
+//     one-time goal or one-off bill should never lock up a large, long-dated
+//     amount all at once. The one exception is a transfer's withdrawal
+//     (`spreadEvenlyWithNoIncome: false`): a transfer stays plain and
+//     immediate, with no adaptive behavior, by the author's own ruling.
 //
 // Divide-by-zero (F22) is structurally impossible: incomeOccurrences is a
 // divisor only inside shape A, which is entered only when exactly one income
-// stream has at least one occurrence in the window.
+// stream has at least one occurrence in the window; the new spread-evenly
+// shape divides by an occurrence count that's always >= 1 by construction
+// (the installment pattern's own Start is always its first occurrence).
 //
 // Documented v1 simplifications (defensible defaults, refine later):
 //  - "More than one income stream" is treated as shape C rather than the
@@ -51,7 +61,16 @@ public static class AllocationPlanProposer
     public static ProposedAllocationPlan Propose(
         FinancialPattern outflow,
         IReadOnlyList<FinancialPattern> allPatterns,
-        DateOnly asOfDate)
+        DateOnly asOfDate,
+        // planning/18 (C1): a single-occurrence outflow with no clean income
+        // to pace against spreads evenly across the remaining time by
+        // default (a one-time goal or one-off bill) — but a transfer's
+        // withdrawal must keep reserving immediately, in full: transfers are
+        // deliberately plain, with no adaptive behavior (author, 2026-07-30
+        // — "no shortcuts beyond making it easy to create a transfer once or
+        // on a schedule"). Callers proposing a transfer's withdrawal pass
+        // false.
+        bool spreadEvenlyWithNoIncome = true)
     {
         if (outflow.Amount >= 0m)
         {
@@ -87,7 +106,7 @@ public static class AllocationPlanProposer
             }
         }
 
-        return ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate);
+        return ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate, spreadEvenlyWithNoIncome);
     }
 
     // The empty (declined) plan. When the user removes or declines the proposed
@@ -188,34 +207,41 @@ public static class AllocationPlanProposer
         FinancialPattern outflow,
         decimal billAmount,
         DateOnly billUntil,
-        DateOnly asOfDate)
+        DateOnly asOfDate,
+        bool spreadEvenlyWithNoIncome)
     {
-        // A single-occurrence outflow (a one-time expense, a one-off transfer)
-        // reserves its whole amount once, up front — one contribution at the
-        // as-of date. Generating on the outflow's frequency would instead emit
-        // one full contribution per cycle between now and the due date,
-        // over-reserving many times over. A genuinely recurring outflow with no
-        // usable income does reserve the full amount per cycle (each contribution
-        // funds the next occurrence).
+        // A single-occurrence outflow (a one-time goal, a one-off bill, a
+        // one-off transfer) never generates one full contribution per
+        // frequency cycle between now and the due date — that would
+        // over-reserve many times over. What it does instead differs by kind
+        // (planning/18, C1): a one-time goal or one-off bill spreads the
+        // amount evenly across the remaining time, mirroring
+        // OneTimeGoalFactory's own long-standing default — reserving a large,
+        // long-dated, discretionary amount all at once is wrong for the same
+        // reason a boat can't be saved for in one contribution the way a TV
+        // can. A transfer's withdrawal is the one exception: it keeps
+        // reserving the whole amount immediately (spreadEvenlyWithNoIncome
+        // false), since a transfer is a plain, deliberate move with no
+        // adaptive behavior. A genuinely recurring outflow with no usable
+        // income (the multi-occurrence branch below) is unaffected either
+        // way — it already reserves the full amount per cycle.
         var isSingleOccurrence =
             outflow.DatePattern.GetOccurrences(outflow.DatePattern.Start, billUntil).Count <= 1;
 
-        var planPattern = isSingleOccurrence
-            ? RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = RecurrenceFrequency.Yearly,
-                // Guard a past-dated one-off: the plan can't end after the
-                // outflow it funds (EarMarkPattern.Create / 3.11.2.a2).
-                Start = asOfDate <= billUntil ? asOfDate : billUntil,
-                Count = 1,
-            })
-            : RecurrenceRule.Create(new RecurrenceRuleOptions
-            {
-                Frequency = outflow.DatePattern.Frequency,
-                Interval = outflow.DatePattern.Interval,
-                Start = asOfDate,
-                Until = billUntil,
-            });
+        if (isSingleOccurrence)
+        {
+            return spreadEvenlyWithNoIncome
+                ? ProposeSpreadEvenly(outflow, billAmount, billUntil, asOfDate)
+                : ProposeImmediateSingleContribution(outflow, billAmount, billUntil, asOfDate);
+        }
+
+        var planPattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = outflow.DatePattern.Frequency,
+            Interval = outflow.DatePattern.Interval,
+            Start = asOfDate,
+            Until = billUntil,
+        });
 
         var plan = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -228,6 +254,65 @@ public static class AllocationPlanProposer
 
         // The first contribution is at the as-of date (front-loaded), so nothing
         // lands before it — no starting earmark needed.
+        return new ProposedAllocationPlan(outflow, plan, null);
+    }
+
+    // A single contribution at the as-of date, for the whole amount — today's
+    // original single-occurrence shape, kept as-is for a transfer's
+    // withdrawal (planning/18, C1).
+    private static ProposedAllocationPlan ProposeImmediateSingleContribution(
+        FinancialPattern outflow, decimal billAmount, DateOnly billUntil, DateOnly asOfDate)
+    {
+        var planPattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Yearly,
+            // Guard a past-dated one-off: the plan can't end after the
+            // outflow it funds (EarMarkPattern.Create / 3.11.2.a2).
+            Start = asOfDate <= billUntil ? asOfDate : billUntil,
+            Count = 1,
+        });
+
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = outflow.FinanceId,
+                DatePattern = planPattern,
+                Amount = -billAmount,
+            },
+            outflow);
+
+        return new ProposedAllocationPlan(outflow, plan, null);
+    }
+
+    // Monthly installments from the as-of date (or the due date, if it's
+    // already past) to the due date — mirrors
+    // OneTimeGoalFactory.BuildSavingsDatePattern's own default cadence. A
+    // goal due within about a month reduces to a single installment on its
+    // own, the same number front-loading would have produced, arrived at the
+    // same way rather than as a special case.
+    private static ProposedAllocationPlan ProposeSpreadEvenly(
+        FinancialPattern outflow, decimal billAmount, DateOnly billUntil, DateOnly asOfDate)
+    {
+        var start = asOfDate <= billUntil ? asOfDate : billUntil;
+        var installmentPattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [start.Day],
+            Start = start,
+            Until = billUntil,
+        });
+        var occurrenceCount = installmentPattern.GetOccurrences().Count;
+        var installmentAmount = Math.Round(billAmount / occurrenceCount, 2);
+
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = outflow.FinanceId,
+                DatePattern = installmentPattern,
+                Amount = -installmentAmount,
+            },
+            outflow);
+
         return new ProposedAllocationPlan(outflow, plan, null);
     }
 

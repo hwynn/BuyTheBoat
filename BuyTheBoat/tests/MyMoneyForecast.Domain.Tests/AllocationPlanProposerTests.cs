@@ -128,26 +128,87 @@ public class AllocationPlanProposerTests
     }
 
     [Fact]
-    public void A_one_off_outflow_with_no_income_reserves_the_full_amount_once_up_front()
+    public void A_one_off_outflow_with_no_income_spreads_evenly_by_default()
     {
-        // A single-occurrence outflow must not generate one full contribution per
-        // frequency cycle between the as-of date and its due date — it reserves
-        // once, up front.
+        // planning/18 (C1): a single-occurrence outflow with no clean income
+        // must not generate one full contribution per frequency cycle
+        // between the as-of date and its due date (that would over-reserve
+        // many times over) — and, since Stage 1's revision, it must not
+        // reserve the whole amount immediately either. It spreads evenly:
+        // $800 over 9 monthly installments (Jan through Sep inclusive).
         var oneOff = FinancialPattern.Create(new FinancialPatternOptions
         {
             FinanceId = 5,
-            Source = "Car repair",
+            Source = "Trip to Japan",
             Amount = -800m,
             Mandatory = false,
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
-                Frequency = RecurrenceFrequency.Monthly, // 8 months of cycles from the as-of date
+                Frequency = RecurrenceFrequency.Monthly,
                 Start = new DateOnly(2025, 9, 1),
                 Count = 1,
             }),
         });
 
         var result = AllocationPlanProposer.Propose(oneOff, [oneOff], AsOf);
+
+        result.Plan.Amount.ShouldBe(-88.89m); // 800 / 9, rounded
+        result.Plan.DatePattern.GetOccurrences().Count.ShouldBe(9);
+        result.StartingEarmark.ShouldBeNull();
+    }
+
+    [Fact]
+    public void A_near_term_one_off_outflow_still_reduces_to_one_installment()
+    {
+        // Due within about a month: the spread-evenly pattern (monthly,
+        // starting today) has nowhere to put a second installment before the
+        // due date, so it reduces to exactly the same shape front-loading
+        // would have produced — not a special case, just the same formula
+        // landing on one occurrence.
+        var oneOff = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 6,
+            Source = "Car repair",
+            Amount = -800m,
+            Mandatory = false,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                Start = new DateOnly(2025, 1, 20),
+                Count = 1,
+            }),
+        });
+
+        var result = AllocationPlanProposer.Propose(oneOff, [oneOff], AsOf);
+
+        result.Plan.Amount.ShouldBe(-800m);
+        result.Plan.DatePattern.GetOccurrences().Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void A_transfer_withdrawal_opts_out_of_spreading_and_still_reserves_the_full_amount_up_front()
+    {
+        // spreadEvenlyWithNoIncome: false — what MainWindow's transfer
+        // creation and TransferBreakOffFactory both actually pass. A
+        // transfer's withdrawal stays plain and immediate (planning/18, C1) —
+        // the same scenario as the pre-C1 behavior, opted back into
+        // explicitly rather than left as the silent default.
+        var oneOffTransferWithdrawal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 5,
+            Source = "Transfer to Savings",
+            Amount = -800m,
+            Mandatory = false,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                Start = new DateOnly(2025, 9, 1),
+                Count = 1,
+            }),
+        });
+
+        var result = AllocationPlanProposer.Propose(
+            oneOffTransferWithdrawal, [oneOffTransferWithdrawal], AsOf, spreadEvenlyWithNoIncome: false);
 
         result.Plan.Amount.ShouldBe(-800m);
         result.Plan.DatePattern.GetOccurrences(AsOf, result.Plan.DatePattern.Until).Count.ShouldBe(1);

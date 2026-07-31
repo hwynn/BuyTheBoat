@@ -15,6 +15,15 @@ public sealed record FinancialPatternOptions
     // null defers to "true if Amount is negative" — the documented default.
     public bool? Mandatory { get; init; }
     public string? Description { get; init; }
+
+    // DIVERGENCE(auto-renew): a marker set invisibly when the user answers
+    // "it just keeps going" at creation — gates a still-unbuilt scheduled
+    // check that silently renews the pattern (BreakOffFactory.Renew) instead
+    // of letting it end. A new property not in the documented model, same
+    // category as ActiveFrom. Never affects the rrule, the math, or
+    // occurrence generation; purely a flag for that future background check.
+    // planning/18 (B12).
+    public bool AutoRenew { get; init; }
 }
 
 public sealed class FinancialPattern
@@ -26,6 +35,7 @@ public sealed class FinancialPattern
     public int Priority { get; }
     public bool Mandatory { get; }
     public string? Description { get; }
+    public bool AutoRenew { get; }
 
     private FinancialPattern(FinancialPatternOptions options, bool mandatory)
     {
@@ -36,6 +46,7 @@ public sealed class FinancialPattern
         Priority = options.Priority;
         Mandatory = mandatory;
         Description = options.Description;
+        AutoRenew = options.AutoRenew;
     }
 
     public static FinancialPattern Create(FinancialPatternOptions options)
@@ -60,6 +71,7 @@ public sealed class FinancialPattern
         Priority = Priority,
         Mandatory = Mandatory,
         Description = Description,
+        AutoRenew = AutoRenew,
     });
 
     /// <summary>[CALC] A copy of this pattern ending on the given (earlier) date instead — every other field, including occurrences up to that date, unchanged. Used to end a pattern early (planning/16, items 4 and 16).</summary>
@@ -72,5 +84,6 @@ public sealed class FinancialPattern
         Priority = Priority,
         Mandatory = Mandatory,
         Description = Description,
+        AutoRenew = AutoRenew,
     });
 }

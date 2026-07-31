@@ -18,6 +18,14 @@ public sealed record BreakOffRequest
     public required RecurrenceRuleOptions SuccessorSchedule { get; init; }
     public required decimal CarriedOverJarBalance { get; init; }
     public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
+
+    // planning/18 (C1): whether the successor's freshly-proposed plan should
+    // spread evenly when there's no clean income to pace against (an
+    // ordinary bill or goal) or reserve immediately in full (a transfer's
+    // withdrawal — see TransferBreakOffFactory, which sets this false).
+    // Irrelevant whenever the successor is genuinely recurring (multi-
+    // occurrence), which is unaffected either way.
+    public bool SpreadEvenlyWithNoIncome { get; init; } = true;
 }
 
 // The truncated predecessor plus everything the successor needs — the same
@@ -110,6 +118,12 @@ public static class BreakOffFactory
             Amount = request.SuccessorAmount,
             Priority = request.Predecessor.Priority,
             Mandatory = request.Predecessor.Mandatory,
+            // planning/18 (B12): a break-off is a change to amount/schedule,
+            // not to whether the pattern "keeps going" — carried over like
+            // every other identity field. Renew (below) depends on this: it
+            // is itself a BreakOff, and each renewed segment must keep
+            // qualifying for the next one.
+            AutoRenew = request.Predecessor.AutoRenew,
         });
 
         if (request.Predecessor.Amount >= 0m)
@@ -128,7 +142,8 @@ public static class BreakOffFactory
             };
         }
 
-        var proposal = AllocationPlanProposer.Propose(successor, request.AllPatterns, request.CutDate);
+        var proposal = AllocationPlanProposer.Propose(
+            successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
 
         var successorPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -195,6 +210,7 @@ public static class BreakOffFactory
             Amount = result.Successor.Amount,
             Priority = result.Successor.Priority,
             Mandatory = result.Successor.Mandatory,
+            AutoRenew = result.Successor.AutoRenew,
         });
 
         return result with { Successor = markedSuccessor };

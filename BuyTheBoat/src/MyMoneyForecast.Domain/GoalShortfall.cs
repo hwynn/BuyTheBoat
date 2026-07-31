@@ -14,4 +14,13 @@ public sealed record GoalShortfall
     public required decimal AmountAllocatedByDueDate { get; init; }
 
     public decimal ShortfallAmount => Math.Max(0m, AmountNeeded - AmountAllocatedByDueDate);
+
+    // planning/17, item 24 (F32): the mirror image of ShortfallAmount — a
+    // goal met early (charter's own example: a big manual earmark fills a
+    // jar ahead of schedule). Costs no new computation; both fields it reads
+    // already exist. Same gross-vs-gross scope as ShortfallAmount: correct
+    // for a one-time goal, and for a repeating one (a loan) it reads the
+    // whole remaining span rather than pace against the next occurrence —
+    // the same accepted limitation, not a new one.
+    public decimal OverfundedAmount => Math.Max(0m, AmountAllocatedByDueDate - AmountNeeded);
 }

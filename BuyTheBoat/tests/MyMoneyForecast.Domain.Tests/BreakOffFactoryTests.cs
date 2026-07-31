@@ -5,13 +5,14 @@ namespace MyMoneyForecast.Domain.Tests;
 
 public class BreakOffFactoryTests
 {
-    private static FinancialPattern MonthlyBill(decimal amount, int dayOfMonth, DateOnly start, DateOnly until, int id = 1) =>
+    private static FinancialPattern MonthlyBill(decimal amount, int dayOfMonth, DateOnly start, DateOnly until, int id = 1, bool autoRenew = false) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
             FinanceId = id,
             Source = $"bill{id}",
             Description = "Rent",
             Amount = amount,
+            AutoRenew = autoRenew,
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
@@ -88,6 +89,30 @@ public class BreakOffFactoryTests
 
         result.Successor.Source.ShouldBe(rent.Source);
         result.Successor.Description.ShouldBe(rent.Description);
+    }
+
+    [Fact]
+    public void The_successor_carries_the_predecessors_auto_renew_marker()
+    {
+        // planning/18 (B12): a break-off changes amount/schedule, not whether
+        // the pattern "keeps going" — that marker travels with the successor
+        // like every other identity field.
+        var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), autoRenew: true);
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOff(new BreakOffRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -1_800m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.AutoRenew.ShouldBeTrue();
     }
 
     [Fact]
@@ -414,6 +439,29 @@ public class BreakOffFactoryTests
         });
 
         result.Successor.Source.ShouldBe(rent.Source);
+    }
+
+    [Fact]
+    public void Renew_carries_the_predecessors_auto_renew_marker_so_it_keeps_qualifying()
+    {
+        // The whole point of AutoRenew is surviving repeated renewals — if
+        // Renew's relabeling step ever dropped it, a "keeps going" pattern
+        // would stop qualifying after its very first renewal.
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5), autoRenew: true);
+        var renewalDate = new DateOnly(2026, 1, 5);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.Successor.AutoRenew.ShouldBeTrue();
     }
 
     [Fact]

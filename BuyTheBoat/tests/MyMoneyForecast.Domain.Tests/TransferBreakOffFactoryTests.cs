@@ -9,7 +9,7 @@ public class TransferBreakOffFactoryTests
     private const int ToAccountId = 2;
 
     private static (Transfer Transfer, FinancialPattern Withdrawal, FinancialPattern Deposit) MonthlyTransfer(
-        decimal amount, DateOnly start, DateOnly until, int transferId = 1, int withdrawalId = 10, int depositId = 11)
+        decimal amount, DateOnly start, DateOnly until, int transferId = 1, int withdrawalId = 10, int depositId = 11, bool autoRenew = false)
     {
         var schedule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
@@ -36,6 +36,7 @@ public class TransferBreakOffFactoryTests
             DatePattern = schedule,
             Amount = -amount,
             Mandatory = false,
+            AutoRenew = autoRenew,
         });
 
         var deposit = FinancialPattern.Create(new FinancialPatternOptions
@@ -46,6 +47,7 @@ public class TransferBreakOffFactoryTests
             DatePattern = schedule,
             Amount = amount,
             Mandatory = false,
+            AutoRenew = autoRenew,
         });
 
         return (transfer, withdrawal, deposit);
@@ -288,5 +290,187 @@ public class TransferBreakOffFactoryTests
         result.PredecessorTransfer.DatePattern.Until.ShouldBe(new DateOnly(2024, 7, 31));
         result.SuccessorTransfer.DatePattern.Start.ShouldBe(pastCutDate);
         result.SuccessorWithdrawalPlan.StartingAllocation.ShouldBe(50m);
+    }
+
+    // planning/18 (B12): the lockstep discipline BreakOff already enforces for
+    // amount/schedule, extended to the new AutoRenew marker — both legs must
+    // always agree, never drift independently.
+    [Fact]
+    public void BreakOff_rejects_legs_that_disagree_on_auto_renew()
+    {
+        var (transfer, withdrawal, deposit) = MonthlyTransfer(200m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), autoRenew: true);
+        var driftedDeposit = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = deposit.FinanceId,
+            Source = deposit.Source,
+            Description = deposit.Description,
+            DatePattern = deposit.DatePattern,
+            Amount = deposit.Amount,
+            Mandatory = false,
+            AutoRenew = false, // withdrawal says true — drifted
+        });
+        var cutDate = new DateOnly(2025, 8, 1);
+
+        Should.Throw<ArgumentException>(() => TransferBreakOffFactory.BreakOff(new TransferBreakOffRequest
+        {
+            PredecessorTransfer = transfer,
+            PredecessorWithdrawal = withdrawal,
+            PredecessorWithdrawalPlan = null,
+            PredecessorDeposit = driftedDeposit,
+            CutDate = cutDate,
+            SuccessorTransferId = 2,
+            SuccessorWithdrawalFinanceId = 12,
+            SuccessorDepositFinanceId = 13,
+            SuccessorAmount = 300m,
+            SuccessorSchedule = MonthlyFrom(cutDate, new DateOnly(2026, 1, 1)),
+            CarriedOverWithdrawalJarBalance = 0m,
+            AllPatterns = [withdrawal, driftedDeposit],
+        }));
+    }
+
+    [Fact]
+    public void Renew_keeps_both_legs_and_the_transfer_record_moving_together()
+    {
+        var (transfer, withdrawal, deposit) = MonthlyTransfer(200m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var renewalDate = new DateOnly(2026, 1, 1);
+
+        var result = TransferBreakOffFactory.Renew(new TransferRenewalRequest
+        {
+            PredecessorTransfer = transfer,
+            PredecessorWithdrawal = withdrawal,
+            PredecessorWithdrawalPlan = null,
+            PredecessorDeposit = deposit,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorTransferId = 2,
+            SuccessorWithdrawalFinanceId = 12,
+            SuccessorDepositFinanceId = 13,
+            CarriedOverWithdrawalJarBalance = 0m,
+            AllPatterns = [withdrawal, deposit],
+        });
+
+        result.SuccessorWithdrawal.DatePattern.Start.ShouldBe(renewalDate);
+        result.SuccessorDeposit.DatePattern.Start.ShouldBe(renewalDate);
+        result.SuccessorTransfer.DatePattern.Start.ShouldBe(renewalDate);
+        result.SuccessorTransfer.DatePattern.Until.ShouldBe(renewalDate.AddYears(1));
+        // Unchanged — a renewal is not a change.
+        result.SuccessorWithdrawal.Amount.ShouldBe(-200m);
+        result.SuccessorDeposit.Amount.ShouldBe(200m);
+        result.SuccessorTransfer.Amount.ShouldBe(200m);
+    }
+
+    [Fact]
+    public void Renew_truncates_the_old_transfer_record_to_match_its_legs()
+    {
+        var (transfer, withdrawal, deposit) = MonthlyTransfer(200m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var renewalDate = new DateOnly(2026, 1, 1);
+
+        var result = TransferBreakOffFactory.Renew(new TransferRenewalRequest
+        {
+            PredecessorTransfer = transfer,
+            PredecessorWithdrawal = withdrawal,
+            PredecessorWithdrawalPlan = null,
+            PredecessorDeposit = deposit,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorTransferId = 2,
+            SuccessorWithdrawalFinanceId = 12,
+            SuccessorDepositFinanceId = 13,
+            CarriedOverWithdrawalJarBalance = 0m,
+            AllPatterns = [withdrawal, deposit],
+        });
+
+        result.PredecessorTransfer.DatePattern.Until.ShouldBe(renewalDate.AddDays(-1));
+        result.PredecessorWithdrawal.DatePattern.Until.ShouldBe(renewalDate.AddDays(-1));
+        result.PredecessorDeposit.DatePattern.Until.ShouldBe(renewalDate.AddDays(-1));
+    }
+
+    [Fact]
+    public void Renew_carries_the_auto_renew_marker_onto_both_legs_successors()
+    {
+        // The whole point: a transfer that "keeps going" must still qualify
+        // after renewing, on BOTH legs, or the scheduled trigger would stop
+        // renewing it after just one cycle.
+        var (transfer, withdrawal, deposit) = MonthlyTransfer(200m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), autoRenew: true);
+        var renewalDate = new DateOnly(2026, 1, 1);
+
+        var result = TransferBreakOffFactory.Renew(new TransferRenewalRequest
+        {
+            PredecessorTransfer = transfer,
+            PredecessorWithdrawal = withdrawal,
+            PredecessorWithdrawalPlan = null,
+            PredecessorDeposit = deposit,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorTransferId = 2,
+            SuccessorWithdrawalFinanceId = 12,
+            SuccessorDepositFinanceId = 13,
+            CarriedOverWithdrawalJarBalance = 0m,
+            AllPatterns = [withdrawal, deposit],
+        });
+
+        result.SuccessorWithdrawal.AutoRenew.ShouldBeTrue();
+        result.SuccessorDeposit.AutoRenew.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Renew_rejects_a_withdrawal_already_drifted_from_the_transfers_amount()
+    {
+        var (transfer, withdrawal, deposit) = MonthlyTransfer(200m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var driftedWithdrawal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = withdrawal.FinanceId,
+            Source = withdrawal.Source,
+            Description = withdrawal.Description,
+            DatePattern = withdrawal.DatePattern,
+            Amount = -199m, // should be -200 to match the transfer
+            Mandatory = false,
+        });
+
+        Should.Throw<ArgumentException>(() => TransferBreakOffFactory.Renew(new TransferRenewalRequest
+        {
+            PredecessorTransfer = transfer,
+            PredecessorWithdrawal = driftedWithdrawal,
+            PredecessorWithdrawalPlan = null,
+            PredecessorDeposit = deposit,
+            RenewalDate = new DateOnly(2026, 1, 1),
+            SegmentYears = 1,
+            SuccessorTransferId = 2,
+            SuccessorWithdrawalFinanceId = 12,
+            SuccessorDepositFinanceId = 13,
+            CarriedOverWithdrawalJarBalance = 0m,
+            AllPatterns = [driftedWithdrawal, deposit],
+        }));
+    }
+
+    [Fact]
+    public void Renew_rejects_legs_that_disagree_on_auto_renew()
+    {
+        var (transfer, withdrawal, deposit) = MonthlyTransfer(200m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), autoRenew: true);
+        var driftedDeposit = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = deposit.FinanceId,
+            Source = deposit.Source,
+            Description = deposit.Description,
+            DatePattern = deposit.DatePattern,
+            Amount = deposit.Amount,
+            Mandatory = false,
+            AutoRenew = false, // withdrawal says true — drifted
+        });
+
+        Should.Throw<ArgumentException>(() => TransferBreakOffFactory.Renew(new TransferRenewalRequest
+        {
+            PredecessorTransfer = transfer,
+            PredecessorWithdrawal = withdrawal,
+            PredecessorWithdrawalPlan = null,
+            PredecessorDeposit = driftedDeposit,
+            RenewalDate = new DateOnly(2026, 1, 1),
+            SegmentYears = 1,
+            SuccessorTransferId = 2,
+            SuccessorWithdrawalFinanceId = 12,
+            SuccessorDepositFinanceId = 13,
+            CarriedOverWithdrawalJarBalance = 0m,
+            AllPatterns = [withdrawal, driftedDeposit],
+        }));
     }
 }

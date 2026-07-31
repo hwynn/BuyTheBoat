@@ -447,7 +447,7 @@ implementation before stages 3+ are designed.
 | F9 | A computed jar can't remember when saving began; a long-dated one-off's ramp restarts each run | **item D** (makes it a three-way trade) |
 | F10 | The engine can't identify a transfer's patterns; needed for the household add-back | 1b implementation |
 | F11 | `Mandatory` defaults to "yes" for every expense, making item B's protection inert unless the user intervenes | **resolved by B-4** — default kept; discoverability moves to wording + a stage-6 nudge |
-| F12 | The middle warning state is inert at a cushion of 0 (the default) — the **second** fail-safe-but-dormant default in this stage | **stage 6**, designed as one "your settings make this dormant" nudge family |
+| F12 | The middle warning state is inert at a cushion of 0 (the default) — the **second** fail-safe-but-dormant default in this stage | **Stage 6, SETTLED 2026-07-30** ([19](19-stage6-warnings-levers-shortcuts.md#7a-in-detail--passive-by-default-active-only-as-a-shortcut-riding-on-an-existing-warning)) — the "one nudge family" framing below was revised: entries 1–2 (this one and unskippable-by-default) get passive, in-context treatment now; entries 3–4 (the materialize button and its absence from create forms) are deferred whole-cloth to a future UI stage |
 
 ## Item A — SETTLED 2026-07-23
 

@@ -274,19 +274,15 @@ public static class TransactionLogBookFactory
         // Repeated earmark events from each EarMarkPattern's schedule. The
         // stored pattern amount is negative (its sign convention is "effect
         // on free balance"); an event's ExpectedAmount is positive-into-jar,
-        // so the sign flips here.
+        // so the sign flips here. planning/17, item 9 (F30): two patterns
+        // sharing a finance_id (concurrent funders) can land on the same
+        // day, so this merges rather than always appending — the repeated
+        // counterpart to MergeOrAppendIsolatedEarmark below.
         foreach (var earmark in input.EarMarkPatterns)
         {
             foreach (var date in earmark.DatePattern.GetOccurrences(asOfDate, horizonEndDate))
             {
-                GetOrAdd(earmarkEventsByDate, date).Add(new EarMarkEvent
-                {
-                    FinanceId = earmark.FinanceId,
-                    EarmarkDate = date,
-                    RepeatedEarmark = true,
-                    ExpectedAmount = -earmark.Amount,
-                    ExplicitAmount = null,
-                });
+                MergeOrAppendRepeatedEarmark(GetOrAdd(earmarkEventsByDate, date), earmark.FinanceId, -earmark.Amount, date);
             }
         }
 
@@ -341,24 +337,32 @@ public static class TransactionLogBookFactory
         // already partway through its schedule shows a non-zero jar today).
         var jarValues = new Dictionary<int, decimal>();
         var milestones = new Dictionary<int, decimal>();
-        foreach (var earmark in input.EarMarkPatterns)
+        // planning/17, item 8 (F27/F29): more than one EarMarkPattern may now
+        // share a finance_id (a "Restructure" predecessor + successor), so
+        // every plan funding a goal is summed here — one jar/milestone value
+        // per finance_id, not one per plan. Each plan's own GetOccurrences
+        // call is bounded by ITS OWN Until, so a truncated predecessor and
+        // its successor never double-count the same day.
+        foreach (var group in input.EarMarkPatterns.ToLookup(earmark => earmark.FinanceId))
         {
-            var goal = patternsById[earmark.FinanceId];
-            var contributed = earmark.StartingAllocation
-                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count
+            var financeId = group.Key;
+            var goal = patternsById[financeId];
+            var contributed = group.Sum(earmark =>
+                    earmark.StartingAllocation
+                    - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count)
                 // Manual adjustments already made on/before the as-of date are
                 // part of the jar's settled history (planning/09) — dated
                 // StartingAllocation, effectively.
                 + input.ManualEarmarks
-                    .Where(manual => manual.FinanceId == earmark.FinanceId && manual.Date <= asOfDate)
+                    .Where(manual => manual.FinanceId == financeId && manual.Date <= asOfDate)
                     .Sum(manual => manual.Amount);
             var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.Start, asOfDate).Count;
-            jarValues[earmark.FinanceId] = Math.Max(0m, contributed - withdrawn);
+            jarValues[financeId] = Math.Max(0m, contributed - withdrawn);
 
             // 3.13.5.4.a1: milestone counts scheduled contributions only —
             // StartingAllocation is money already saved, not target.
-            milestones[earmark.FinanceId] =
-                -earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count;
+            milestones[financeId] = group.Sum(earmark =>
+                -earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count);
         }
 
         // The safety cushion (finance_id = null jar, priority 0) can't live in
@@ -647,6 +651,35 @@ public static class TransactionLogBookFactory
         return isDeallocationDay;
     }
 
+    // planning/17, item 9 (F30): two EarMarkPatterns sharing a finance_id
+    // (concurrent funders, e.g. two household partners each funding the same
+    // goal) can generate an occurrence on the same day — merged into one
+    // event, summing the amounts, so 3.13.8.1.a2 ("only one repeated earmark
+    // with finance_id x can exist on a single day") holds literally. The
+    // same treatment MergeOrAppendIsolatedEarmark already gives isolated
+    // earmarks on a collision; a repeated and an isolated earmark for the
+    // same jar/day still coexist as two separate events (unchanged).
+    private static void MergeOrAppendRepeatedEarmark(List<EarMarkEvent> events, int financeId, decimal amount, DateOnly date)
+    {
+        for (var i = 0; i < events.Count; i++)
+        {
+            if (events[i].RepeatedEarmark && events[i].FinanceId == financeId)
+            {
+                events[i] = events[i] with { ExpectedAmount = events[i].ExpectedAmount + amount };
+                return;
+            }
+        }
+
+        events.Add(new EarMarkEvent
+        {
+            FinanceId = financeId,
+            EarmarkDate = date,
+            RepeatedEarmark = true,
+            ExpectedAmount = amount,
+            ExplicitAmount = null,
+        });
+    }
+
     // A deallocation give-back merges into any ISOLATED earmark the jar already
     // carries that day (an automatic funding delta), preserving "one
     // isolated earmark per finance id per day" and avoiding a duplicate
@@ -732,22 +765,28 @@ public static class TransactionLogBookFactory
     {
         var shortfalls = new List<GoalShortfall>();
 
-        foreach (var earmark in earMarkPatterns)
+        // planning/17, item 8 (F27/F29): one row per GOAL, not one per plan —
+        // more than one EarMarkPattern may now share a finance_id (a
+        // "Restructure" predecessor + successor), and every plan funding a
+        // goal must be summed into its one shortfall row.
+        foreach (var group in earMarkPatterns.ToLookup(earmark => earmark.FinanceId))
         {
-            var goal = goalsByFinanceId[earmark.FinanceId];
+            var financeId = group.Key;
+            var goal = goalsByFinanceId[financeId];
             var dueDate = goal.DatePattern.Until;
 
             var occurrenceCount = goal.DatePattern
                 .GetOccurrences(goal.DatePattern.Start, goal.DatePattern.Until).Count;
             var amountNeeded = Math.Abs(goal.Amount) * occurrenceCount;
 
-            // StartingAllocation (the entered opening balance) + the plan's
+            // StartingAllocation (the entered opening balance) + every plan's
             // repeated contributions to date + any isolated earmarks dated on or
             // before the due date. The three don't overlap, so no double count.
-            var allocated = earmark.StartingAllocation
-                - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, dueDate).Count
+            var allocated = group.Sum(earmark =>
+                    earmark.StartingAllocation
+                    - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, dueDate).Count)
                 + manualEarmarks
-                    .Where(manual => manual.FinanceId == earmark.FinanceId && manual.Date <= dueDate)
+                    .Where(manual => manual.FinanceId == financeId && manual.Date <= dueDate)
                     .Sum(manual => manual.Amount);
 
             shortfalls.Add(new GoalShortfall
