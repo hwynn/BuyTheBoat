@@ -118,6 +118,16 @@ Tags as of this writing, all of which are revisit sites for import
   is a ready-made checklist of what reverts to its literal meaning.
 - **[DEFERRED, from 07]** the meaning of `HasNegativeFreeBalance` after
   deallocation. Author wants more explanation when the time comes.
+- **The reset-at-release milestone fix (2026-08-03, planning/14) inherits the same dependency as
+  `(3.13c.a10)`.** `FundJar.MilestoneAmount` now resets to "scheduled contributions since the last
+  release" instead of a lifetime sum (fixing a defect where a repeating goal's milestone climbed
+  forever). The reset is keyed off exactly the same signal the existing `(3.13c.a10)` release mechanism
+  already uses — "does this finance id have its own expected transaction today" — because that's the
+  only signal available without actuals. *What it blocks:* once actual-transaction pairing exists, this
+  reset trigger has to move alongside `(3.13c.a10)`'s own release trigger, from "the expected occurrence's
+  date arrived" to "the expected occurrence was paired with a real actual transaction" — the same code
+  change moves both, since they're now driven by the identical signal
+  (`AppendDeallocationOrGoalReleases`'s `ReleasedFinanceIds`).
 
 ### Forecast tab UI
 

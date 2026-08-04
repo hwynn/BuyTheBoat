@@ -138,6 +138,40 @@ StartingAllocation, effectively" (`TransactionLogBookFactory.cs`). See **F21**.
   exactly like a goal. This **removes the null-milestone computed jar entirely** — a jar has a plan
   (real milestone) or does not exist. (The bill's amount survives as a due-date *need* in
   `GoalShortfall.AmountNeeded`, a different quantity from a per-day milestone.)
+  **Reconsideration flagged 2026-08-02 (author), surfaced while designing Earmark's UI summary —
+  RESOLVED 2026-08-03:** the discard's own analogy holds (`10.4.a2`'s flat rule genuinely is the same
+  "always the full amount, no ramp" shape philosophy 3(b)'s own worked example already fixed once, via
+  the bill-accrual A/B ramp) — but the replacement didn't follow that same fix. The ramp's fix was
+  *ramping toward* an amount; the replacement here was a sum that only ever climbed and never reset
+  across a bill's own repeated payments (confirmed in code: the only mutation site was
+  `TransactionLogBookFactory.cs:478-483`, gated on `RepeatedEarmark`, and a bill's own release event is
+  coded non-repeated so it could never touch it; traced against the real multi-cycle test
+  `A_repeating_bills_plan_that_underfunds_the_stream_is_flagged_short`,
+  `TransactionLogBookFactoryTests.cs:476-521`). So a repeating outflow's milestone never answered "what
+  should I have saved **for the next occurrence**" — only "lifetime total contributed," an always-true,
+  ever-growing number regardless of how many payments already cleared.
+
+  **Fixed 2026-08-03 — the milestone now resets at each release**, the shape flagged above as likely
+  right: both the per-day cascade and the seed (initial-snapshot) formula now compute "scheduled
+  contributions since the goal's LAST release," not the lifetime total, reusing the *same* `withdrawn`
+  value already computed for the jar balance (no new state, no second tracker) rather than replaying
+  release history separately. Floored at 0 in both places — a chronically underfunded repeating stream
+  would otherwise produce a *negative* milestone (confirmed by
+  `An_underfunded_streams_milestone_floors_at_zero_instead_of_going_negative`: 4 cycles at
+  50-contributed vs. 100-released nets to -200 before the floor), which would flip the
+  ExpectedAmount-vs-MilestoneAmount comparison backwards and make a badly underfunded plan read as
+  *overfunded* instead. **Known, accepted limit, stated up front rather than discovered later:** the
+  reset is deliberately per-cycle, so a chronic multi-cycle shortfall does not carry forward — the
+  milestone alone cannot catch it, and will quietly read "on track" every cycle once the floor absorbs
+  the gap. `GoalShortfall` (whole-span, never resets) remains the metric that actually flags a
+  chronically underfunded stream; the two are complementary, not duplicates. Two new tests, both green:
+  `Milestone_resets_after_each_release_instead_of_climbing_forever` (offset schedule, proves the reset
+  and re-ramp) and the floor test above. Suite: **266 green (214 domain + 52 scenario)**, 0 warnings —
+  no existing test changed, because none of them ever checked `MilestoneAmount` after a release had
+  happened; this path was previously untested. Tagged `ASSUMED-PAIRING(3.13c.a10)` at the reset site —
+  it reuses the exact "today's paired occurrence" signal the existing release mechanism already
+  depends on, so it inherits the same actuals-dependency; logged in
+  [planning/12](12-actual-transactions-deferred-design.md).
 - **`8.4.a2` — satisfied literally**, per decision 4.
 
 ### F20 — dissolved by decision 1 (verify at build)

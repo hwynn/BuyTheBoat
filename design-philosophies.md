@@ -6,6 +6,12 @@ These are forward-looking and apply to every implementation equally. They are de
 
 *Author-stated 2026-07-21. The author's own read at that point: we're already largely meeting these; #2 and #3 just haven't been exercised much yet, because the UI and cross-account features aren't fleshed out.*
 
+*Philosophies 4–7 added 2026-07-30, at the start of the dedicated UI-implementation pass following the
+["Adjusting the Plan" phase](MyMoneyForecast/planning/13-adjusting-the-plan-charter.md). Full elaboration —
+form layout, the two shortcut-transparency mechanics, and everything still open — lives in
+[planning/21](MyMoneyForecast/planning/21-form-architecture.md); these entries state the principle only,
+matching 1–3's own level of detail.*
+
 ---
 
 ## Philosophy 1 — Inform and equip the user; don't automate away their agency
@@ -50,3 +56,49 @@ Some original assumptions are discardable.
 The freedom is real but not free: **creative abstractions and assumption changes both require planning before they are locked in.** "The docs don't forbid it" is not a design; "here is the abstraction, here is what it costs, here is how the user sees it" is.
 
 **Practical test:** *Is this the best experience for the user, or just the most literal reading of the 2021 docs?* When those diverge, the user wins — after we have thought it through.
+
+## Philosophy 4 — Put the information where the decision gets made
+
+Wherever the user is about to make a choice, whatever that choice depends on should already be on the
+screen in front of them — not one tab over, not something they have to go recall.
+
+We already meet this once: the recurrence-rule editor shows a live preview of the actual occurrences a
+rule will produce, right where the user is setting it. That is the bar — *what does someone need to
+know, right here, to make this specific choice well* — for every other action, not just that one.
+[Planning/21](MyMoneyForecast/planning/21-form-architecture.md) works through cases this hasn't been
+built for yet (what a manual earmark's date needs to show; where a "funds are thin" warning's own
+shortcut would even go).
+
+**Practical test:** *If the user paused here and asked "what do I need to know before deciding?", is
+the answer already visible, or would they have to go find it?*
+
+## Philosophy 5 — Every form keeps a standing door open, not just a shortcut's
+
+To keep the user in control, almost every form should be reachable on its own, standing tab — not only
+through a contextual shortcut acting as its one narrow window in. Shortcuts (philosophy 6) are for
+convenience; they must never be the *only* way in.
+
+Concretely: the create/edit forms for the program's core things each get their own always-selectable
+tab, rather than existing only as dialogs summoned from somewhere specific.
+
+**Practical test:** *If every contextual shortcut into this form vanished tomorrow, could the user
+still get here on their own?*
+
+## Philosophy 6 — A shortcut should show its own work
+
+A rich set of contextual shortcuts (philosophy 5's own stated exception) risks feeling like a maze —
+convenient in the moment, opaque about how the user got there or how they'd get there again unaided.
+Every shortcut should make its own path legible: when it lands the user somewhere, something on screen
+should show *this is how we reached this point*, so it reads as a fast version of a path the user
+could always walk by hand, not a separate hidden one.
+
+**Practical test:** *After using a shortcut, could the user explain how they'd have reached the same
+place themselves?*
+
+## Philosophy 7 — A handful of reusable forms, not one per action
+
+A small, fixed set of form *kinds* — one per core thing the user manages, each doing double duty for
+both creating a new one and editing an existing one — rather than the program accumulating a new
+one-off dialog for every individual action.
+
+**Practical test:** *Before building a new form, could one of the existing few do this job instead?*

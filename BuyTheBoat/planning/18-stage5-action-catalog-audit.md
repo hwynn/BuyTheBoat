@@ -155,10 +155,11 @@ Deliberately different from bills/goals: *"unlike bills or goals, transfers don'
 easily identifiable profiles... we can just have one button."* It opens a **simple one-time form**
 (from, to, amount, date — no schedule complexity shown at all). Two buttons near the top escalate:
 one to a **simple-recurring** mode of the same form, one to today's already-built **advanced** form
-(`CreateTransferWindow`, unchanged). Implementation-wise this mirrors `CreateFinancialPatternWindow`'s
-existing `forcedMandatory`-flag mode switch (one class, multiple modes) — just with an in-form link
-between modes instead of separate top-level buttons, since there's no bill/goal-style taxonomy
-justifying separate entry points here.
+(`CreateTransferWindow`, unchanged). **Correction, 2026-07-30 ([21](21-form-architecture.md)):** this
+does *not* share `CreateFinancialPatternWindow`'s code — the author ruled transfers get their own
+dedicated form, similar in behavior (one class, multiple modes, an in-form link between them rather
+than separate top-level buttons) but not reusing much code, since a transfer is different enough
+under the hood (a linked `Transfer` + two `FinancialPattern` legs) to make sharing not worth it.
 
 **"Just keep going" applies to recurring transfers too — SETTLED, at parity with bills, not behind
 them.** Bills can't fully do this yet either: the stub exists in `CreateFinancialPatternWindow`, but
@@ -210,7 +211,7 @@ already settled); they're screens and entry points nobody has drawn yet.
 | 9 | **Item D's known rendering issues** (Stage 2, the loan-payoff bill form) | The window is confirmed too tall for a laptop screen; several smaller uncertainties are listed in [15](15-stage2-pattern-lifetime.md#item-d--the-form-family--built-ui-unverified-2026-07-29--uncertainties-listed-below) itself | Built, just unverified on screen |
 | 10 | **Item 18's confirmation wording** (delete) | Already done, for the record — names the amount being freed. Listed here only so the backlog doesn't look like it skipped it | Done, UI-unverified only |
 | 11 | **B12's creation-time "it just keeps going" checkbox** | The stub already exists in `CreateFinancialPatternWindow` but does nothing (planning/18, transfers section) — needs to actually set `AutoRenew = true` on save. Same checkbox, same wiring, for both bills and transfers | Fully settled — the marker exists now |
-| 12 | **The transfer create-flow's settled 3-tier structure** | One **"Create Transfer…"** entry point → simple one-time form → two escalation buttons near the top (simple-recurring / today's advanced `CreateTransferWindow`, unchanged) — mirrors `CreateFinancialPatternWindow`'s `forcedMandatory` mode-switch, but with in-form links instead of separate top-level buttons | Fully settled (2026-07-30) |
+| 12 | **The transfer create-flow's settled 3-tier structure** | One **"Create Transfer…"** entry point → simple one-time form → two escalation buttons near the top (simple-recurring / today's advanced `CreateTransferWindow`, unchanged) — behaves like `CreateFinancialPatternWindow`'s `forcedMandatory` mode-switch (in-form links, not separate top-level buttons) but is its own dedicated form, not shared code ([21](21-form-architecture.md)) | Fully settled (2026-07-30) |
 | 13 | **Entry points for the transfer-specific factories** (`TransferBreakOffFactory.BreakOff`/`Renew`, `TransferTruncation.EndOn`) | Same shape as rows 1/2/6, but on a transfer row instead of a bill/paycheck row — whether that's the identical screen generalized or a transfer-specific variant is a layout call for the UI pass, not a data-contract question | Fully settled |
 
 **Everything above is domain/engine-complete and tested.** None of it is blocked on a design decision
