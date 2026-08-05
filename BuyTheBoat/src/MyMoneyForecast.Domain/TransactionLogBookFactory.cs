@@ -75,6 +75,19 @@ public static class TransactionLogBookFactory
             .Where(jar => jar.FinanceId is not null)
             .ToDictionary(jar => jar.FinanceId!.Value);
 
+        // planning/22 §3's two "not yet built" capabilities — the forward
+        // per-occurrence walk and account-level free funds on a future date —
+        // both turn out to be the same missing thread: each account's own
+        // BalanceRecord already carries both (a jar's day-by-day state, and
+        // ExpectedFreeAmount) by this point in CreateForecast. Same source/
+        // iteration as jarsByFinanceId above, just keyed to the page instead
+        // of one jar, so IsWorthWarningAbout can walk it for any future date.
+        var pageByFinanceId = accountForecasts
+            .SelectMany(account => account.Page.InitialSnapshot.FundJars
+                .Where(jar => jar.FinanceId is not null)
+                .Select(jar => (FinanceId: jar.FinanceId!.Value, account.Page)))
+            .ToDictionary(pair => pair.FinanceId, pair => pair.Page);
+
         var book = new TransactionLogBook
         {
             PageLength = null, // DIVERGENCE(page-length): one window-sized page
@@ -96,7 +109,8 @@ public static class TransactionLogBookFactory
             Book = book,
             GoalShortfalls = goalShortfalls,
             PlanHealthStates = CalculatePlanHealthStates(
-                goalShortfalls, jarsByFinanceId, patternsById, allEarmarks, underfundedReleases),
+                goalShortfalls, jarsByFinanceId, patternsById, allEarmarks, underfundedReleases,
+                pageByFinanceId, options.AsOfDate),
             JarLabels = patternsById.ToDictionary(
                 pair => pair.Key,
                 pair => pair.Value.Description ?? pair.Value.Source),
@@ -212,15 +226,7 @@ public static class TransactionLogBookFactory
         DateOnly date,
         IReadOnlySet<int> transferWithdrawalFinanceIds)
     {
-        var snapshot = page.InitialSnapshot;
-        foreach (var (snapshotDate, dated) in page.BalanceRecord)
-        {
-            if (snapshotDate > date)
-            {
-                break;
-            }
-            snapshot = dated;
-        }
+        var snapshot = SnapshotAsOf(page, date);
 
         var free = snapshot.ExpectedFreeAmount ?? 0m;
         var expected = snapshot.ExpectedAmount ?? 0m;
@@ -867,12 +873,24 @@ public static class TransactionLogBookFactory
     // the questions a due-date-only shortfall/overfund pair can't answer —
     // today's live pace, whether a catch-up would fix it for good, and which
     // single state is worth showing when more than one applies at once.
+    // planning/22 §5: named, easily-adjustable constants for
+    // DetermineIsWorthWarningAbout's thresholds — not literals, so they can
+    // be tuned without hunting through the rule's own branches. Hunting down
+    // *other* pre-existing magic numbers elsewhere is explicitly deferred to
+    // a future pass, not this one.
+    private const int WarnIfWithinMonths = 2;
+    private const int LookaheadMonths = 6;
+    private const decimal HalfOfFreeFundsRatio = 0.5m;
+    private const decimal ExcessWarningMultiplier = 2m;
+
     private static IReadOnlyList<PlanHealthState> CalculatePlanHealthStates(
         IReadOnlyList<GoalShortfall> goalShortfalls,
         IReadOnlyDictionary<int, FundJar> jarsByFinanceId,
         IReadOnlyDictionary<int, FinancialPattern> goalsByFinanceId,
         IReadOnlyList<EarMarkPattern> earMarkPatterns,
-        IReadOnlyList<(DateOnly Date, int FinanceId)> underfundedReleases)
+        IReadOnlyList<(DateOnly Date, int FinanceId)> underfundedReleases,
+        IReadOnlyDictionary<int, AccountTransactionPage> pageByFinanceId,
+        DateOnly asOfDate)
     {
         var releaseDatesByFinanceId = underfundedReleases
             .ToLookup(release => release.FinanceId, release => release.Date);
@@ -903,13 +921,30 @@ public static class TransactionLogBookFactory
                     * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, shortfall.DueDate).Count);
             var isChronicShortfall = shortfall.ShortfallAmount > 0m && plannedTotal < shortfall.AmountNeeded;
 
+            // Built 2026-08-05: the earliest date this financeId's own release
+            // actually came up short, from the same forward-walk data
+            // IsWorthWarningAbout already uses — real per-occurrence data now
+            // that pageByFinanceId threads it through, not a stub. Falls back
+            // to the due date only when the walk found no specific short
+            // occurrence to point at (e.g. the horizon requested didn't reach
+            // one) but the whole-span shortfall is still positive.
+            var shortReleaseDates = releaseDatesByFinanceId[financeId];
+            var projectedShortfallStartDate = shortReleaseDates.Any()
+                ? shortReleaseDates.Min()
+                : shortfall.ShortfallAmount > 0m ? shortfall.DueDate : (DateOnly?)null;
+
             // "Is the excess so much that we could skip a payment?" (author,
-            // 2026-08-04) is folded into the dramatic-excess/worth-warning
-            // question rather than kept as its own property — see planning/21
-            // once that rule is built: the threshold is double the SMALLEST
-            // repeated EarMarkPattern amount in this Savings Plan (not the
-            // goal's own amount), since a plan can have more than one
-            // concurrent funder at different rates (F27).
+            // 2026-08-04) is folded into DetermineIsWorthWarningAbout's own
+            // excess branch below rather than kept as its own property — the
+            // threshold is double the SMALLEST repeated EarMarkPattern
+            // amount in this Savings Plan (not the goal's own amount), since
+            // a plan can have more than one concurrent funder at different
+            // rates (F27).
+            var isWorthWarningAbout = DetermineIsWorthWarningAbout(
+                goalsByFinanceId[financeId], shortfall, currentShortfall, currentOverfunded,
+                pageByFinanceId[financeId], asOfDate,
+                earMarkPatterns.Where(earmark => earmark.FinanceId == financeId).ToList(),
+                shortReleaseDates);
 
             states.Add(new PlanHealthState
             {
@@ -918,7 +953,8 @@ public static class TransactionLogBookFactory
                 CurrentShortfallAmount = currentShortfall,
                 CurrentOverfundedAmount = currentOverfunded,
                 IsChronicShortfall = isChronicShortfall,
-                IsWorthWarningAbout = true, // placeholder — full rule specified 2026-08-04, not yet built
+                IsWorthWarningAbout = isWorthWarningAbout,
+                ProjectedShortfallStartDate = projectedShortfallStartDate,
                 MostImportantHealthState = DetermineMostImportantHealthState(
                     currentShortfall, shortfall.ShortfallAmount, currentOverfunded, shortfall.OverfundedAmount),
                 UnderfundedReleaseDates = releaseDatesByFinanceId[financeId].ToList(),
@@ -926,6 +962,134 @@ public static class TransactionLogBookFactory
         }
 
         return states;
+    }
+
+    // planning/22 §5, full spec (author, 2026-08-04/2026-08-05): is a
+    // detected shortage/excess worth actually warning the user about?
+    // Non-repeated and repeated patterns get separate rule sets because the
+    // two genuinely differ (§5's own framing) — each branch below is
+    // commented with the exact rule it implements. Only meaningful for a
+    // plan MostImportantHealthState would otherwise flag as non-Healthy.
+    private static bool DetermineIsWorthWarningAbout(
+        FinancialPattern goal,
+        GoalShortfall shortfall,
+        decimal currentShortfall,
+        decimal currentOverfunded,
+        AccountTransactionPage page,
+        DateOnly asOfDate,
+        IReadOnlyList<EarMarkPattern> plansForThisGoal,
+        IEnumerable<DateOnly> shortReleaseDatesForThisGoal)
+    {
+        // A shortage TODAY is always worth surfacing — none of §5's rules
+        // soften "already behind right now," only the further-off/excess cases.
+        if (currentShortfall > 0m)
+        {
+            return true;
+        }
+
+        var isRepeated = goal.DatePattern.GetOccurrences(goal.DatePattern.Start, goal.DatePattern.Until).Count > 1;
+        var warnByDate = asOfDate.AddMonths(WarnIfWithinMonths);
+
+        if (shortfall.ShortfallAmount > 0m)
+        {
+            if (!isRepeated)
+            {
+                // Non-repeated rule 2: due soon — warn regardless of size.
+                if (shortfall.DueDate <= warnByDate)
+                {
+                    return true;
+                }
+
+                // Non-repeated rules 3/4: further off — the half-of-free-funds
+                // boundary (rule 4: the same shared calculation the repeated
+                // branch below reuses, not two separate computations).
+                return shortfall.ShortfallAmount >= HalfOfFreeFunds(page, shortfall.DueDate);
+            }
+
+            var nextOccurrence = goal.DatePattern.GetOccurrences(asOfDate, goal.DatePattern.Until).FirstOrDefault();
+            if (nextOccurrence == default)
+            {
+                return true; // no more occurrences to project against — default to the visible side
+            }
+
+            // Repeated rule 3: any occurrence within six months being short
+            // is always worth surfacing, independent of rules 1/2 (confirmed
+            // 2026-08-05 — a repeating pattern's future shortfall doesn't
+            // get to "hide" the way a single far-off one-time goal's can).
+            // This also covers rule 1 (next occurrence soon and short)
+            // whenever that's the occurrence actually flagged, since "soon"
+            // is always inside the six-month window.
+            var lookaheadEnd = asOfDate.AddMonths(LookaheadMonths);
+            if (shortReleaseDatesForThisGoal.Any(date => date <= lookaheadEnd))
+            {
+                return true;
+            }
+
+            // Repeated rule 2 — next occurrence further out than the
+            // lookahead covers; still worth a look if the overall shortfall
+            // is large relative to free funds that day.
+            return shortfall.ShortfallAmount >= HalfOfFreeFunds(page, nextOccurrence);
+        }
+
+        // Excess/overfunded case (both kinds, author 2026-08-04): worth
+        // warning when the projected excess on the date of the next expected
+        // transaction exceeds double the smallest repeated
+        // EarMarkPattern.Amount in the Savings Plan — also
+        // CanSkipNextPayment's replacement (§2).
+        if (currentOverfunded > 0m || shortfall.OverfundedAmount > 0m)
+        {
+            var nextTransactionDate = isRepeated
+                ? goal.DatePattern.GetOccurrences(asOfDate, goal.DatePattern.Until).FirstOrDefault()
+                : shortfall.DueDate;
+            if (nextTransactionDate == default)
+            {
+                return currentOverfunded > 0m; // no future occurrence to project to — fall back to today's own reading
+            }
+
+            var smallestContribution = plansForThisGoal
+                .Where(plan => plan.DatePattern.GetOccurrences(plan.DatePattern.Start, plan.DatePattern.Until).Count > 1)
+                .Select(plan => Math.Abs(plan.Amount))
+                .DefaultIfEmpty(0m)
+                .Min();
+            if (smallestContribution <= 0m)
+            {
+                return currentOverfunded > 0m; // no repeated rate to size the threshold against
+            }
+
+            var projectedExcess = ProjectedJarExcess(page, nextTransactionDate, shortfall.FinanceId);
+            return projectedExcess > smallestContribution * ExcessWarningMultiplier;
+        }
+
+        return false;
+    }
+
+    private static decimal HalfOfFreeFunds(AccountTransactionPage page, DateOnly date) =>
+        (SnapshotAsOf(page, date).ExpectedFreeAmount ?? 0m) * HalfOfFreeFundsRatio;
+
+    private static decimal ProjectedJarExcess(AccountTransactionPage page, DateOnly date, int financeId)
+    {
+        var jar = SnapshotAsOf(page, date).FundJars.FirstOrDefault(candidate => candidate.FinanceId == financeId);
+        return jar is null ? 0m : Math.Max(0m, jar.ExpectedAmount - (jar.MilestoneAmount ?? 0m));
+    }
+
+    // The account's own snapshot as of `date` — its latest BalanceRecord
+    // entry on or before it, else the initial snapshot. Same "nearest
+    // at-or-before" lookup SampleAsOf below already used for the household
+    // roll-up, extracted so DetermineIsWorthWarningAbout's per-date
+    // jar/free-funds lookups share it too.
+    private static BalanceSnapshot SnapshotAsOf(AccountTransactionPage page, DateOnly date)
+    {
+        var snapshot = page.InitialSnapshot;
+        foreach (var (snapshotDate, dated) in page.BalanceRecord)
+        {
+            if (snapshotDate > date)
+            {
+                break;
+            }
+            snapshot = dated;
+        }
+
+        return snapshot;
     }
 
     // The author's ranking (2026-08-03): a shortage today always wins; any

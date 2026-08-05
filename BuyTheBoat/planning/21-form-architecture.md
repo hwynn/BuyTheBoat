@@ -17,11 +17,11 @@ answered.
 - **Earmark** — the biggest structural finding of the whole document: "Saving toward" doesn't
   survive as a field, the instance-picker becomes a goal-picker instead, and the form has two real
   modes (Savings plan / One-off adjustment) rather than Expense's single-mode-with-toggles shape.
-  Content (Steps 1–2) and the top/bottom layout are settled. **Not done, and the actual next step:**
-  designing the informational content for the **four plan-health use cases** (will-miss / already-
-  missing / overfunded / will-be-overfunded) — per the standing principle in Step 2, informational
-  content comes before any shortcut. Also not done: the layout for everything between top and
-  bottom, the instance-picker popup's real design, and break-off/restructure UI.
+  Content (Steps 1–2) and the top/bottom layout are settled. **The four plan-health use cases'
+  informational content is now its own document, [22](22-plan-health-state.md) (IN PROGRESS,
+  2026-08-05) — read that, not this bullet, for current status.** Also not done: the layout for
+  everything between top and bottom, the instance-picker popup's real design, and break-off/restructure
+  UI.
 - **Transfer** — not started at all.
 - Two topics identified but explicitly *not* designed anywhere in this document yet: **break-off/
   restructure UI** (both forms) and the **instance-picker popup** (both forms need it; Earmark's use
@@ -420,8 +420,10 @@ block's own buttons are about *which instance you're looking at*, these are abou
 you just did*, and sit at the opposite end so the user has seen the whole form before reaching them.
 Applies equally to creating a new Expense and editing an existing one.
 
-- **Save** — commits and returns to the Forecast tab.
-- **Save and Plan** (name pending) — commits, then jumps to the Earmark form with this Expense's
+- **Save and Skip planning** (SETTLED 2026-08-05, was plain "Save") — commits and returns to the
+  Forecast tab. Named as the deliberate pair to Save and Plan, not a bare default action — "clumsy but
+  clearly communicates what this button does" (author).
+- **Save and Plan** (SETTLED 2026-08-05, was "name pending") — commits, then jumps to the Earmark form with this Expense's
   linked plan already loaded in the instance picker (Philosophy 6 — programmatic selection, no
   popup). Relevant on an edit as much as a create: many changes to an Expense meaningfully affect its
   linked plan, and a follow-up visit there is expected, not merely offered. **A real `EarMarkPattern`
@@ -448,6 +450,24 @@ to fix the problem itself — it just names the state; every actual fix lives on
 which one to design toward is intentionally not decided yet (see below). Designing the actual
 Earmark-side helper regions for these four states is queued as the next content pass, following the
 standing principle below.
+
+**Labels, SETTLED 2026-08-05:** "Currently Underfunded" (`AlreadyMissing`), "Currently Overfunded"
+(`CurrentlyOverfunded`), "Underfunding Projected" (`WillMiss`), "Overfunding Projected"
+(`WillBeOverfunded`) — a deliberate word pair (Underfunded/Overfunded, Currently/Projected) distinct
+from the "short"/"over" vocabulary the Earmark form's own regions use ([22](22-plan-health-state.md)
+§6). Two different registers for the same underlying states, both intentional: this is a compact
+status label, those are narrative sentences. **Confirmed scope of "Currently Underfunded":** purely
+today's jar against today's milestone (`CurrentShortfallAmount > 0`) — it does **not** imply the next
+occurrence of the linked `ExpectedTransaction` is itself projected to be missed; that's what
+`WillMiss`/"Underfunding Projected" is for, a separate, independent check.
+
+**Open, not yet designed:** the four labels alone don't convey *how urgently* the linked plan needs
+attention, which is exactly what the user needs to weigh Save and Plan against Save and Skip planning.
+`MostImportantHealthState`'s own ranking order (today-short > future-short > today-over > future-over)
+already encodes a severity gradient — worth reusing rather than inventing a new one. `PatternRows.cs`
+already does near-identical severity-tiered styling for the Forecast tab's own day-detail pane
+(`StatusKind`: "FullyCovered"/"OnTrack"/"Behind"/"Neutral" driving pill color intensity) — a strong,
+precedented pattern to extend here rather than a new mechanism.
 
 **Not the same thing as charter item 24's deferred nudge.** Item 24's own deferred piece is the
 *proactive* half — the system reaching out to the user unprompted, still parked at a future UI stage.
@@ -607,24 +627,15 @@ information design itself is settled, not part of the information design.
   a declined proposal (`AllocationPlanProposer.ProposeEmpty`), which is short from the moment of
   creation.
 
-**Engine backing built 2026-08-04 — `PlanHealthState`, one per Savings Plan, computed inside
-`CreateForecast` alongside `GoalShortfall` (which it nests, not duplicates).** Answers every question
-this section needed a number for, all reusing existing computations rather than a parallel one:
-`CurrentShortfallAmount`/`CurrentOverfundedAmount` (today's `ExpectedAmount` vs. the reset-at-release
-`MilestoneAmount`, [14](14-stage1-allocation-model.md)), `IsChronicShortfall` (a static check — would
-the Savings Plan's own scheduled contributions, run to completion, structurally reach `AmountNeeded`
-on their own, independent of anything that's already happened — a one-time catch-up only helps when
-this is true), `CanSkipNextPayment` (the excess covers a whole extra occurrence),
-`UnderfundedReleaseDates` (the empirical "has this already happened" record — extends the existing
-`FlooredManualEarmarks` floor-detection to a goal's own release, not just manual withdrawals), and
-`MostImportantHealthState` (a `PlanHealthCategory`: `AlreadyMissing`/`WillMiss`/`CurrentlyOverfunded`/
-`WillBeOverfunded`/`Healthy` — the author's ranking rule: today-short always wins, any future shortage
-beats any excess regardless of timing, excess only surfaces when no shortage exists anywhere).
-`IsWorthWarningAbout` is a deliberate placeholder (always true) — the false-positive filter is a
-parked author idea, not designed yet. 7 new tests, 273 total green, 0 warnings. **Still not done:**
-the actual informational content/copy for the four states (this section's own stated next step) and
-the instance-picker popup's highlighting behavior (planning/21 discussion, 2026-08-03) — this only
-supplies the numbers.
+**Engine backing built 2026-08-04, content design ongoing — moved to its own document, [22](22-plan-health-state.md), 2026-08-05.**
+`PlanHealthState` (one per Savings Plan, computed inside `CreateForecast` alongside `GoalShortfall`)
+now answers every question this section needed a number for. Doc 22 is the live, detailed record —
+the full property inventory, the `IsWorthWarningAbout` rule specification, per-region content
+decisions for Current jar state / the RRule preview / the Summary region (including a real finding
+about `earmark-form-layout-mockups.html`'s Summary C needing an update), open architecture questions,
+and the standing principles this pass produced. **Read 22 before continuing any of this work** — this
+paragraph is intentionally just a pointer now, not a summary, to avoid the two documents drifting out
+of sync.
 
 **Standing principle, added 2026-08-02 (author):** design the *informational* helper regions for a
 state first — what's wrong, what the user could do about it — before any shortcut that acts on it.

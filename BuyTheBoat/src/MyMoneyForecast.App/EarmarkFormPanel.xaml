@@ -1,0 +1,69 @@
+<UserControl x:Class="MyMoneyForecast.App.EarmarkFormPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:MyMoneyForecast.App">
+    <DockPanel Margin="8">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="550"
+                       VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <Button Content="Clear form" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnClearClick"/>
+            <Button x:Name="SaveButton" Content="Save" Width="90" Padding="0,5" Click="OnSaveClick"/>
+        </StackPanel>
+
+        <GroupBox DockPanel.Dock="Top" Header="Which goal" Padding="10" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="Saving toward (an existing Bill/Paycheck/Goal entry)"/>
+                <ComboBox x:Name="GoalComboBox" DisplayMemberPath="DisplayText" Margin="0,2,0,10" SelectionChanged="OnGoalChanged"/>
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="SavingsPlanRadio" Content="Savings plan" GroupName="EarmarkMode" IsChecked="True"
+                                 Checked="OnModeChanged" Margin="0,0,16,0"/>
+                    <RadioButton x:Name="OneOffRadio" Content="One-off adjustment" GroupName="EarmarkMode" Checked="OnModeChanged"/>
+                </StackPanel>
+                <TextBlock x:Name="NoPatternNote" Margin="0,6,0,0" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                           Text="This goal has no savings plan yet — set one up here before adding a one-off adjustment on top of it."
+                           Visibility="Collapsed"/>
+            </StackPanel>
+        </GroupBox>
+
+        <Grid DockPanel.Dock="Top">
+            <!-- Savings-plan mode -->
+            <StackPanel x:Name="SavingsPlanPanel">
+                <GroupBox Header="Savings plan details" Padding="10" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="Amount to set aside per occurrence."/>
+                        <TextBox x:Name="AmountTextBox" Margin="0,2,0,0"/>
+                        <TextBlock Text="Already saved toward this goal (optional)" Margin="0,10,0,0"/>
+                        <TextBox x:Name="StartingAllocationTextBox" Text="0" Margin="0,2,0,0"/>
+                        <Button x:Name="AddManualFromPlanButton" Content="+ Add manual earmark on this goal" HorizontalAlignment="Left"
+                                Margin="0,10,0,0" Padding="8,3" Click="OnTransformToOneOffClick"/>
+                    </StackPanel>
+                </GroupBox>
+                <local:RecurrenceRuleEditor x:Name="RuleEditor" Margin="0,0,0,10"/>
+                <local:SummaryRegion x:Name="Summary"/>
+            </StackPanel>
+
+            <!-- One-off adjustment mode -->
+            <StackPanel x:Name="OneOffPanel" Visibility="Collapsed">
+                <GroupBox Header="One-off adjustment details" Padding="10">
+                    <StackPanel>
+                        <TextBlock Text="What do you want to do?"/>
+                        <ComboBox x:Name="ActionComboBox" Margin="0,2,0,10" SelectionChanged="OnInputsChanged" SelectedIndex="0">
+                            <ComboBoxItem Content="Add money"/>
+                            <ComboBoxItem Content="Withdraw"/>
+                            <ComboBoxItem Content="Move"/>
+                        </ComboBox>
+                        <StackPanel x:Name="TargetRow" Visibility="Collapsed">
+                            <TextBlock Text="Move to which other goal's fund?"/>
+                            <ComboBox x:Name="TargetComboBox" DisplayMemberPath="DisplayText" Margin="0,2,0,10"/>
+                        </StackPanel>
+                        <TextBlock Text="On what day?"/>
+                        <DatePicker x:Name="EarmarkDatePicker" Margin="0,2,0,10" SelectedDateChanged="OnInputsChanged"/>
+                        <TextBlock Text="How much?"/>
+                        <TextBox x:Name="OneOffAmountTextBox" Margin="0,2,0,10" TextChanged="OnInputsChanged"/>
+                        <TextBlock x:Name="BalanceInfoText" TextWrapping="Wrap" FontStyle="Italic" Foreground="Gray"/>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

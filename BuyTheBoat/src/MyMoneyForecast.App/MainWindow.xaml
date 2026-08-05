@@ -1,7 +1,10 @@
 <Window x:Class="MyMoneyForecast.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:MyMoneyForecast.App"
         Title="MyMoneyForecast" Height="820" Width="1100"
+        MaxHeight="{x:Static SystemParameters.MaximizedPrimaryScreenHeight}"
+        MaxWidth="{x:Static SystemParameters.MaximizedPrimaryScreenWidth}"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -41,7 +44,7 @@
             </StackPanel>
         </Grid>
 
-        <TabControl Grid.Row="1">
+        <TabControl x:Name="MainTabControl" Grid.Row="1">
             <TabItem Header="Forecast">
                 <!-- Design philosophy: planning/08-forecast-tab-design-philosophy.md.
                      Three regions with distinct jobs — TOP CONTROLS (forecast range +
@@ -573,6 +576,16 @@
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
+            </TabItem>
+
+            <!-- EARMARK (planning/21 Philosophy 5/7 + planning/22): the
+                 permanent form tab, separate from the Allocations list tab
+                 above — replaces the CreateEarMarkPatternWindow/
+                 ManualEarmarkWindow popups. Pick a goal, edit its Savings
+                 plan, or transform into a One-off adjustment on the same
+                 goal, all without leaving this tab. -->
+            <TabItem Header="Earmark">
+                <local:EarmarkFormPanel x:Name="EarmarkForm"/>
             </TabItem>
         </TabControl>
     </Grid>

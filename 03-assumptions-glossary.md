@@ -420,6 +420,7 @@ Class numbers used throughout, for reference: **1**=TransactionLogBook, **2**=Tr
 -3.13.5.4.a1: self.milestone_amount should be = sum of all expected values of repeated earmarks up to and including this date (unless it has a finance_id of None)
 	&[1.2.3n.12.5.a1, 1.2.3n.12.5.a2: initial snapshot fund jars are deepcopy of last page's last balancesnapshot]
 ```
+> **Note, flagged 2026-08-05 (author):** as written, this drops the word **unpaired** — it should read "sum of all *unpaired* expected values of repeated earmarks." Without it, the formula is a lifetime-climbing total that never accounts for an earmark a past release already consumed — an absurd result on its own terms: needing $1,500 saved against a $500 bill that's already been paid twice. `3.13.a10` (chart-only — see [06](06-assumption-dependency-graph.md#ch11-balance-record)) already deals in exactly this paired/unpaired distinction for a fund-jar-linked expected transaction, the strongest evidence this is a dropped word rather than original intent. Reproduced verbatim above per this document's own rule regardless.
 
 ### Chapter 14: Actual Transactions
 *(`a03.txt`, lines 212-224, under `---Actual Transactions---`)*

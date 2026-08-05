@@ -11,6 +11,11 @@ public sealed record ForecastResult
     public required TransactionLogBook Book { get; init; }
     public required IReadOnlyList<GoalShortfall> GoalShortfalls { get; init; }
 
+    // One entry per GoalShortfalls row, same order, carrying its full
+    // diagnostic picture (planning/21, four plan-health states) rather than
+    // just the due-date shortfall/overfund pair.
+    public required IReadOnlyList<PlanHealthState> PlanHealthStates { get; init; }
+
     // Display label for every finance id that can appear on a jar, expected
     // transaction, or earmark event. The safety cushion (null id) is not in
     // here — it has no FinancialPattern; display layers label it directly.

@@ -1,0 +1,17 @@
+<UserControl x:Class="MyMoneyForecast.App.SummaryRegion"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <GroupBox Header="Summary">
+        <StackPanel Margin="6">
+            <TextBlock x:Name="NarrativeText" TextWrapping="Wrap" Margin="0,0,0,10"/>
+            <DockPanel LastChildFill="True">
+                <StackPanel x:Name="AsideStack" DockPanel.Dock="Right" Width="190" Margin="14,0,0,0">
+                    <TextBlock Text="Fund jar, today:" FontWeight="Bold"/>
+                    <TextBlock x:Name="AsideText" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    <TextBlock x:Name="AsideSecondaryText" TextWrapping="Wrap" Margin="0,10,0,0" Visibility="Collapsed"/>
+                </StackPanel>
+                <Canvas x:Name="ChartCanvas" Height="150" ClipToBounds="True"/>
+            </DockPanel>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

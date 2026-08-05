@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
@@ -20,6 +22,16 @@ public partial class RecurrenceRuleEditor : UserControl
     private bool _hostControlsEnd;
     private DateOnly? _hostUntil;
 
+    // planning/22 §6b, SETTLED 2026-08-05 — a host form can mark specific
+    // occurrences with an altered highlight color and show a short caption
+    // below the list (e.g. "Projected short," with the short occurrences
+    // highlighted). Both default to "nothing to flag," so every existing
+    // caller that never calls SetHighlight is unaffected.
+    private IReadOnlyCollection<DateOnly> _highlightedDates = [];
+    private string? _caption;
+
+    private static readonly Brush ShortDateHighlightBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD9, 0xA0));
+
     public RecurrenceRuleEditor()
     {
         InitializeComponent();
@@ -27,8 +39,24 @@ public partial class RecurrenceRuleEditor : UserControl
         StartDatePicker.SelectedDate = DateTime.Today;
         UntilDatePicker.SelectedDate = DateTime.Today.AddYears(3);
 
+        // The calendar recycles its CalendarDayButtons as the user pages
+        // between months, rather than keeping every date's button alive at
+        // once — the highlight has to be re-applied every time the visible
+        // days change, not just when the schedule fields do.
+        PreviewCalendar.DisplayDateChanged += (_, _) => ApplyHighlight();
+        Loaded += (_, _) => ApplyHighlight();
+
         _initialized = true;
         Recalculate();
+    }
+
+    /// <summary>[UI] Marks specific occurrences with an altered highlight color and shows a short caption below the occurrence list (planning/22 §6b). An empty list and a null/blank caption clears both back to the plain preview.</summary>
+    public void SetHighlight(IReadOnlyCollection<DateOnly> dates, string? caption)
+    {
+        _highlightedDates = dates ?? [];
+        _caption = caption;
+        ApplyHighlight();
+        ApplyCaption();
     }
 
     public RecurrenceRule? Result { get; private set; }
@@ -153,6 +181,68 @@ public partial class RecurrenceRuleEditor : UserControl
         }
 
         ResultChanged?.Invoke(this, EventArgs.Empty);
+
+        // Schedule edits rebuild SelectedDates/OccurrencesListBox from
+        // scratch — reapply whatever highlight/caption the host last set so
+        // it survives the user continuing to edit the form afterward.
+        ApplyHighlight();
+        ApplyCaption();
+    }
+
+    // Colors whichever currently-realized CalendarDayButtons fall in
+    // _highlightedDates, and clears the color from any we previously set
+    // that are no longer in that set. A button we never touched is left
+    // alone, so the calendar's own "today"/selected styling isn't disturbed.
+    private void ApplyHighlight()
+    {
+        if (!PreviewCalendar.IsLoaded)
+        {
+            return; // no CalendarDayButtons realized yet — Loaded/DisplayDateChanged call back in
+        }
+
+        foreach (var dayButton in FindVisualChildren<CalendarDayButton>(PreviewCalendar))
+        {
+            var isHighlighted = dayButton.DataContext is DateTime day
+                                 && _highlightedDates.Contains(DateOnly.FromDateTime(day));
+            if (isHighlighted)
+            {
+                dayButton.Background = ShortDateHighlightBrush;
+            }
+            else if (ReferenceEquals(dayButton.Background, ShortDateHighlightBrush))
+            {
+                dayButton.ClearValue(Control.BackgroundProperty);
+            }
+        }
+    }
+
+    // The caption takes over the vertical space freed up by bounding the
+    // occurrence list to a scrollable height instead of letting it grow to
+    // fit every date — planning/22 §6b's "space freed up when the list is
+    // collapsed." No caption means no bound, same behavior as before this.
+    private void ApplyCaption()
+    {
+        var hasCaption = !string.IsNullOrWhiteSpace(_caption);
+        CaptionText.Text = _caption ?? string.Empty;
+        CaptionText.Visibility = hasCaption ? Visibility.Visible : Visibility.Collapsed;
+        OccurrencesListBox.MaxHeight = hasCaption ? 220 : double.PositiveInfinity;
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        var childCount = VisualTreeHelper.GetChildrenCount(parent);
+        for (var i = 0; i < childCount; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed)
+            {
+                yield return typed;
+            }
+
+            foreach (var descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     // Frequency drives which fields are even meaningful: BYDAY only makes sense

@@ -12,6 +12,14 @@ namespace MyMoneyForecast.App;
 // jars — the user may know money is coming that the forecast doesn't). Day
 // balances come from the currently-shown forecast; the domain type enforces
 // the pattern-span-is-jar-lifetime rule on top.
+//
+// TODO (2026-08-05): retired — MainWindow no longer opens this popup, having
+// switched to the permanent Earmark tab's One-off adjustment mode
+// (EarmarkFormPanel, which ports this exact validation policy verbatim —
+// see its own SaveOneOff/Merge/RequireFundsCover/WarnIfOverFree). No
+// remaining `new ManualEarmarkWindow` call sites as of this note. Kept in
+// the tree rather than deleted in the same pass that orphaned it, so the
+// change is reviewable on its own; safe to delete once that's confirmed.
 public partial class ManualEarmarkWindow : Window
 {
     private sealed record JarChoice(EarMarkPattern Pattern, string Label)

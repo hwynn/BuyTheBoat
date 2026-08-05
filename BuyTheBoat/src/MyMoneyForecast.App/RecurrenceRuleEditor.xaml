@@ -87,6 +87,8 @@
                 <StackPanel Grid.Column="2">
                     <TextBlock Text="All occurrences" FontWeight="Bold"/>
                     <ListBox x:Name="OccurrencesListBox" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="CaptionText" Margin="0,8,0,0" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Foreground="#FFB05A00" Visibility="Collapsed"/>
                 </StackPanel>
             </Grid>
         </Grid>

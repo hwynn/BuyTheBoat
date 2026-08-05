@@ -62,9 +62,57 @@ public partial class MainWindow : Window
         var legacy = _currentBalance.GetCurrent();
         _accounts.EnsureDefaultAccount(legacy?.Balance ?? 0m, legacy?.IdealSafetyCushion ?? 0m);
 
+        // planning/21 Philosophy 5/7, wired 2026-08-05: the permanent Earmark
+        // tab persists through these callbacks instead of a ShowDialog() ==
+        // true check — this panel owns no repository itself.
+        EarmarkForm.PatternSaved = pattern =>
+        {
+            _earMarkPatterns.Save(pattern);
+            RefreshGrids();
+            RefreshEarmarkFormContext();
+            if (_lastForecast is { } shown)
+            {
+                RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
+            }
+        };
+        EarmarkForm.ManualEarmarksSaved = (saved, deleted) =>
+        {
+            foreach (var earmark in saved)
+            {
+                _manualEarmarks.Save(earmark);
+            }
+
+            foreach (var (financeId, date) in deleted)
+            {
+                _manualEarmarks.Delete(financeId, date);
+            }
+
+            RefreshGrids();
+            RefreshEarmarkFormContext();
+            RefreshShownForecast();
+        };
+
         RefreshGrids();
         RefreshAccountsGrid();
         LoadSavedBalance();
+    }
+
+    // Snapshots the panel needs before every Load* call — repeated rather
+    // than held live, matching how CreateEarMarkPatternWindow/
+    // ManualEarmarkWindow always took a fresh snapshot at construction too.
+    private void RefreshEarmarkFormContext() =>
+        EarmarkForm.SetContext(_financialPatterns.GetAll(), _earMarkPatterns.GetAll(), _manualEarmarks.GetAll(), _lastForecast);
+
+    private void SwitchToEarmarkTab()
+    {
+        foreach (System.Windows.Controls.TabItem item in MainTabControl.Items)
+        {
+            if (item.Header as string == "Earmark")
+            {
+                MainTabControl.SelectedItem = item;
+                return;
+            }
+        }
     }
 
     // Pre-fills from whatever was entered last time (Forecast tab's own state
@@ -797,10 +845,10 @@ public partial class MainWindow : Window
     }
 
     private void OnAdjustFundsClick(object sender, RoutedEventArgs e) =>
-        ShowManualEarmarkDialog(initialDate: _selectedDayCell?.Date, editTarget: null);
+        ShowManualEarmarkForm(initialDate: _selectedDayCell?.Date, editTarget: null);
 
     private void OnAddManualEarmarkClick(object sender, RoutedEventArgs e) =>
-        ShowManualEarmarkDialog(initialDate: null, editTarget: null);
+        ShowManualEarmarkForm(initialDate: null, editTarget: null);
 
     private void OnEditManualEarmarkClick(object sender, RoutedEventArgs e)
     {
@@ -810,7 +858,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        ShowManualEarmarkDialog(initialDate: null, editTarget: row.Earmark);
+        ShowManualEarmarkForm(initialDate: null, editTarget: row.Earmark);
     }
 
     private void OnDeleteManualEarmarkClick(object sender, RoutedEventArgs e)
@@ -831,10 +879,13 @@ public partial class MainWindow : Window
         RefreshShownForecast();
     }
 
-    private void ShowManualEarmarkDialog(DateOnly? initialDate, ManualEarmark? editTarget)
+    // planning/21 Philosophy 5/7, wired 2026-08-05: the permanent Earmark tab
+    // replaces ManualEarmarkWindow's popup — same "no funds yet" guard as
+    // before, then populates the tab's One-off mode instead of opening a
+    // dialog.
+    private void ShowManualEarmarkForm(DateOnly? initialDate, ManualEarmark? editTarget)
     {
-        var patterns = _earMarkPatterns.GetAll();
-        if (patterns.Count == 0)
+        if (_earMarkPatterns.GetAll().Count == 0)
         {
             MessageBox.Show(
                 this,
@@ -843,31 +894,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var labels = _financialPatterns.GetAll()
-            .ToDictionary(pattern => pattern.FinanceId, pattern => pattern.Description ?? pattern.Source);
-
-        var window = new ManualEarmarkWindow(
-            patterns, labels, _manualEarmarks.GetAll(), _lastForecast, initialDate, editTarget)
-        {
-            Owner = this,
-        };
-        if (window.ShowDialog() != true)
-        {
-            return;
-        }
-
-        foreach (var earmark in window.SavedEarmarks)
-        {
-            _manualEarmarks.Save(earmark);
-        }
-
-        foreach (var (financeId, date) in window.DeletedEarmarks)
-        {
-            _manualEarmarks.Delete(financeId, date);
-        }
-
-        RefreshGrids();
-        RefreshShownForecast();
+        RefreshEarmarkFormContext();
+        EarmarkForm.LoadOneOff(editTarget, initialDate);
+        SwitchToEarmarkTab();
     }
 
     // Output-only snapshot of whatever forecast is currently on screen — not
@@ -1220,16 +1249,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new CreateEarMarkPatternWindow(row.Pattern, CurrentJarAmount(row.FinanceId)) { Owner = this };
-        if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
-        {
-            _earMarkPatterns.Save(pattern);
-            RefreshGrids();
-            if (_lastForecast is { } shown)
-            {
-                RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
-            }
-        }
+        RefreshEarmarkFormContext();
+        EarmarkForm.LoadForMaterialize(row.Pattern, CurrentJarAmount(row.FinanceId));
+        SwitchToEarmarkTab();
     }
 
     // What this jar holds as of the forecast's own start date, so a new savings
@@ -1269,12 +1291,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new CreateEarMarkPatternWindow(goals) { Owner = this };
-        if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
-        {
-            _earMarkPatterns.Save(pattern);
-            RefreshGrids();
-        }
+        RefreshEarmarkFormContext();
+        EarmarkForm.LoadForNewPattern();
+        SwitchToEarmarkTab();
     }
 
     private void OnEditEarMarkPatternClick(object sender, RoutedEventArgs e)
@@ -1303,12 +1322,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new CreateEarMarkPatternWindow(row.Pattern, goal) { Owner = this };
-        if (window.ShowDialog() == true && window.CreatedPattern is { } updated)
-        {
-            _earMarkPatterns.Save(updated);
-            RefreshGrids();
-        }
+        RefreshEarmarkFormContext();
+        EarmarkForm.LoadPattern(row.Pattern, goal);
+        SwitchToEarmarkTab();
     }
 
     private void OnDeleteEarMarkPatternClick(object sender, RoutedEventArgs e)

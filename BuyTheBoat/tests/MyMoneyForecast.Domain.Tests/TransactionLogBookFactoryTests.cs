@@ -387,6 +387,8 @@ public class TransactionLogBookFactoryTests
         state.CurrentShortfallAmount.ShouldBe(0m);
         state.Shortfall.ShortfallAmount.ShouldBeGreaterThan(0m);
         state.MostImportantHealthState.ShouldBe(PlanHealthCategory.WillMiss);
+        // Stub: defaults to the due date itself until the real per-occurrence walk exists.
+        state.ProjectedShortfallStartDate.ShouldBe(new DateOnly(2026, 6, 1));
     }
 
     [Fact]
@@ -456,6 +458,7 @@ public class TransactionLogBookFactoryTests
 
         var state = result.PlanHealthStates.ShouldHaveSingleItem();
         state.MostImportantHealthState.ShouldBe(PlanHealthCategory.Healthy);
+        state.ProjectedShortfallStartDate.ShouldBeNull();
     }
 
     [Fact]
@@ -569,6 +572,365 @@ public class TransactionLogBookFactoryTests
         state.Shortfall.ShortfallAmount.ShouldBe(0m);       // but it's already scheduled, so the projection is fine
         state.Shortfall.OverfundedAmount.ShouldBe(160m);
         state.MostImportantHealthState.ShouldBe(PlanHealthCategory.AlreadyMissing); // today still wins
+    }
+
+    // planning/22 §5, full IsWorthWarningAbout spec, built 2026-08-05 (was a
+    // placeholder always returning true). Non-repeated and repeated get
+    // separate coverage below because the rule sets genuinely differ.
+
+    [Fact]
+    public void IsWorthWarningAbout_true_for_currently_short_regardless_of_anything_else()
+    {
+        // Same fixture as MostImportantHealthState_is_AlreadyMissing... above
+        // — a shortage today always wins, before any of §5's other rules.
+        var (goal, earmark) = LiveGoal(1);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 4, 15),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark],
+            manualEarmarks: [Manual(earmark, new DateOnly(2025, 4, 10), -300m)]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.CurrentShortfallAmount.ShouldBeGreaterThan(0m);
+        state.IsWorthWarningAbout.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_true_for_a_non_repeated_goal_short_and_due_soon()
+    {
+        // planning/22 §5, non-repeated rule 2: due within the warn-if-within
+        // window → warn regardless of size, even though the free balance
+        // here is large enough that the far-off rule would have ignored it.
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Trip",
+            Amount = -1000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2025, 2, 15), // 45 days out — well inside 2 months
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -50m, // one $50 contribution against a $1000 goal — barely started
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 1, 1),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 1_000_000m, // huge free balance — proves this isn't the half-of-free-funds rule firing
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 3, 1),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.Shortfall.ShortfallAmount.ShouldBeGreaterThan(0m);
+        state.IsWorthWarningAbout.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_false_for_a_non_repeated_goal_short_but_far_off_and_small_next_to_free_funds()
+    {
+        // planning/22 §5, non-repeated rule 3: far off, and the shortfall is
+        // under half of projected account free funds that day → ignore.
+        // Reuses LiveGoal's well-established 8700 shortfall (see the
+        // ProjectedShortfallStartDate/WillMiss tests above) against a huge
+        // starting balance, so half of free funds vastly exceeds it.
+        var (goal, earmark) = LiveGoal(1);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 1_000_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            // Has to reach past the 2026-06-01 due date, or the cascade never
+            // simulates the actual release and HalfOfFreeFunds reads
+            // pre-release (still-reserved) free funds instead of post-release
+            // — exactly the horizon caveat planning/22 §3 flagged.
+            horizonEndDate: new DateOnly(2026, 7, 1),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.Shortfall.ShortfallAmount.ShouldBe(8700m);
+        state.Shortfall.DueDate.ShouldBe(new DateOnly(2026, 6, 1)); // ~17 months out — well past the 2-month window
+        state.IsWorthWarningAbout.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_true_for_a_non_repeated_goal_short_and_far_off_but_large_next_to_free_funds()
+    {
+        // planning/22 §5, non-repeated rule 4: same far-off 8700 shortfall as
+        // above, but this time the starting balance is small enough that
+        // half of projected free funds no longer covers it.
+        var (goal, earmark) = LiveGoal(1);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 20_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2026, 7, 1), // must reach past the due date — see the note above
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.Shortfall.ShortfallAmount.ShouldBe(8700m);
+        state.IsWorthWarningAbout.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_true_for_a_repeated_pattern_short_within_the_six_month_lookahead()
+    {
+        // planning/22 §5, repeated rule 3: any occurrence within six months
+        // being short warns regardless of the half-of-free-funds check.
+        // Same underfunding fixture as IsChronicShortfall_is_true_... above
+        // (100/month bill, 50/month plan) — Feb through Jun 2025 are all
+        // inside the six-month window and all underfunded.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 1),
+            }),
+        });
+        var underfundingPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -50m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [bill],
+            earMarkPatterns: [underfundingPlan]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.UnderfundedReleaseDates.ShouldContain(new DateOnly(2025, 2, 1)); // inside the 6-month window
+        state.IsWorthWarningAbout.ShouldBeTrue();
+        // Real per-occurrence data now, not the due-date fallback — the
+        // earliest actual short release (Jan 1 is the seed/as-of day, folded
+        // into the initial snapshot with no delta, so Feb 1 is the first date
+        // the walk itself finds short), well before the goal's own Dec 1 due date.
+        state.ProjectedShortfallStartDate.ShouldBe(new DateOnly(2025, 2, 1));
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_true_for_a_repeated_pattern_clear_near_term_but_large_far_off_shortfall()
+    {
+        // planning/22 §5, repeated rule 2: the plan matches the bill exactly
+        // through August (every near-term release is fully funded — nothing
+        // in the six-month lookahead is short), then stops contributing
+        // while the bill keeps going, so releases from September onward come
+        // up short. That first short date is well past the six-month window,
+        // so only the half-of-free-funds check decides this one.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2026, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -100m, // matches the bill exactly while it runs
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 8, 1), // stops after August — bill keeps going 16 more months
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 2000m, // small enough that half of it (1000) is under the 1600 shortfall
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31), // covers the near-term window; proves it's genuinely clear
+            financialPatterns: [bill],
+            earMarkPatterns: [plan]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.UnderfundedReleaseDates.Any(date => date <= new DateOnly(2025, 7, 1)).ShouldBeFalse(); // clear near-term
+        state.Shortfall.ShortfallAmount.ShouldBe(1600m); // 16 unfunded months (Sep 2025-Dec 2026) * 100
+        state.IsWorthWarningAbout.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_false_for_a_repeated_pattern_clear_near_term_and_small_far_off_shortfall()
+    {
+        // Same shape as the test above, but with enough free balance that
+        // half of it comfortably covers the far-off shortfall.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2026, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 8, 1),
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 1_000_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [bill],
+            earMarkPatterns: [plan]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.Shortfall.ShortfallAmount.ShouldBe(1600m);
+        state.IsWorthWarningAbout.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_true_for_excess_beyond_double_the_smallest_repeated_contribution()
+    {
+        // planning/22 §5's excess rule: projected excess on the date of the
+        // next expected transaction exceeds double the smallest repeated
+        // EarMarkPattern amount. $500/month for 5 months way overshoots a
+        // $1000 goal; double the $500 rate is $1000, and the projected
+        // excess (1500) clears that.
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Trip",
+            Amount = -1000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2025, 6, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -500m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 5, 1),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.Shortfall.OverfundedAmount.ShouldBe(1500m); // 2500 contributed - 1000 needed
+        state.IsWorthWarningAbout.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsWorthWarningAbout_false_for_excess_within_double_the_smallest_repeated_contribution()
+    {
+        // Same shape, smaller rate: $300/month for 5 months overshoots the
+        // same $1000 goal by only 500, which doesn't clear double the $300
+        // rate (600).
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Trip",
+            Amount = -1000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2025, 6, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -300m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 5, 1),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [earmark]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.Shortfall.OverfundedAmount.ShouldBe(500m);
+        state.IsWorthWarningAbout.ShouldBeFalse();
     }
 
     [Fact]
