@@ -122,6 +122,55 @@ public static class TransactionLogBookFactory
         };
     }
 
+    // A finance id's MilestoneAmount, day by day, across [from, to] — unlike
+    // everything else this file computes, this needs no starting balance, no
+    // ManualEarmarks, no deallocation pass: 3.13.5.4.a1's reset-at-release
+    // rule is pure pattern math (repeated contributions accumulate; the
+    // goal's own occurrence date zeroes it), so it can be walked for ANY
+    // date range, past included, unlike ExpectedAmount (which genuinely
+    // needs real starting-balance/transaction history and only ever gets
+    // computed forward from a forecast's own AsOfDate). Author's own report
+    // (2026-08-07): the Earmark form's Summary chart needs the real
+    // trajectory before today, not just after, to actually show the pattern
+    // it's supposed to visualize — this is that.
+    //
+    // Deliberately a second, independent implementation of the same rule
+    // BuildAccountPage's own per-day loop already applies (milestones[id] +=
+    // / = 0m on release) rather than a refactor to share code — that loop is
+    // deeply interleaved with jar/cushion/deallocation state this function
+    // doesn't need, and pulling just the milestone piece out would mean
+    // threading a lot of unrelated context through it for what's a ~10-line
+    // rule. Verified against both existing reset-at-release tests'
+    // expected values by hand before writing (see this method's own test),
+    // so a change to the real rule that isn't mirrored here should get
+    // caught by a diverging result, not silently drift.
+    public static IReadOnlyList<(DateOnly Date, decimal MilestoneAmount)> ComputeMilestoneTrajectory(
+        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, DateOnly from, DateOnly to)
+    {
+        var contributionsByDate = patterns
+            .SelectMany(pattern => pattern.DatePattern.GetOccurrences(from, to).Select(date => (Date: date, Amount: -pattern.Amount)))
+            .ToLookup(entry => entry.Date, entry => entry.Amount);
+        var releaseDates = goal.DatePattern.GetOccurrences(from, to).ToHashSet();
+
+        var eventDates = contributionsByDate.Select(group => group.Key).Concat(releaseDates).Distinct().OrderBy(date => date);
+
+        var points = new List<(DateOnly Date, decimal MilestoneAmount)>();
+        var running = 0m;
+        foreach (var date in eventDates)
+        {
+            // Accumulate first, THEN reset if this is also a release date —
+            // same order BuildAccountPage's own loop uses, so a
+            // contribution landing the same day as its own release washes
+            // out with it rather than heading a fresh cycle (matches a plan
+            // deliberately paced to land right when its bill is due).
+            running += contributionsByDate[date].Sum();
+            running = releaseDates.Contains(date) ? 0m : running;
+            points.Add((date, running));
+        }
+
+        return points;
+    }
+
     // The per-account breakdown when given; otherwise one "Primary" account from
     // the flat fields — the pre-multi-account behaviour, byte-for-byte.
     private static IReadOnlyList<AccountForecastInput> ResolveAccountInputs(ForecastOptions options)

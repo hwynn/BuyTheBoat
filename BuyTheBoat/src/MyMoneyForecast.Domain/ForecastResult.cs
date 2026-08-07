@@ -52,9 +52,27 @@ public sealed record ForecastResult
     // followed by every dated snapshot. If events land ON the as-of date, a
     // dated snapshot exists there and IS the as-of row (its values equal the
     // initial's by construction; it additionally carries that day's events).
-    public IReadOnlyList<TimelineEntry> GetTimeline()
+    public IReadOnlyList<TimelineEntry> GetTimeline() => BuildTimeline(PrimaryAccountPage);
+
+    // BUG FOUND AND FIXED (2026-08-07): same rows as the no-arg overload,
+    // but for whichever account's own page actually carries this
+    // FinanceId's EarMarkPattern — not always PrimaryAccountPage. A caller
+    // asking "what does this goal's jar look like over time" for a goal
+    // that lives on a non-Primary account (any account past the first, in a
+    // real multi-account household) got an always-empty result from the
+    // no-arg overload, silently: PrimaryAccountPage only ever exposes ONE
+    // account's own patterns/jars, and the no-arg overload never had a way
+    // to look anywhere else. Empty when the id isn't on any account's page
+    // (a genuinely bad id, not an expected caller case).
+    public IReadOnlyList<TimelineEntry> GetTimeline(int financeId)
     {
-        var page = PrimaryAccountPage;
+        var account = Accounts.FirstOrDefault(candidate =>
+            candidate.Page.EarmarkPatterns.Any(pattern => pattern.FinanceId == financeId));
+        return account is null ? [] : BuildTimeline(account.Page);
+    }
+
+    private IReadOnlyList<TimelineEntry> BuildTimeline(AccountTransactionPage page)
+    {
         var rows = new List<TimelineEntry>(page.BalanceRecord.Count + 1);
 
         if (!page.BalanceRecord.ContainsKey(AsOfDate))

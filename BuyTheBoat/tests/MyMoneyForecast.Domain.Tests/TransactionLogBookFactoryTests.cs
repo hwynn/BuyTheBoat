@@ -197,6 +197,145 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void ComputeMilestoneTrajectory_matches_the_real_cascades_reset_points_exactly()
+    {
+        // Same bill/plan as the cascade test just above (Milestone_resets_
+        // after_each_release...) — same numbers, on purpose: this is the
+        // no-forecast-needed replacement asked to prove it agrees with the
+        // already-trusted day-by-day walk before relying on it anywhere.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Loan",
+            Amount = -500m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -500m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [15],
+                    Start = new DateOnly(2025, 1, 15),
+                    Until = new DateOnly(2025, 11, 15),
+                }),
+            },
+            bill);
+
+        var trajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
+            [plan], bill, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 15));
+
+        trajectory.Single(p => p.Date == new DateOnly(2025, 1, 15)).MilestoneAmount.ShouldBe(500m);
+        trajectory.Single(p => p.Date == new DateOnly(2025, 2, 1)).MilestoneAmount.ShouldBe(0m);
+        trajectory.Single(p => p.Date == new DateOnly(2025, 2, 15)).MilestoneAmount.ShouldBe(500m);
+        trajectory.Single(p => p.Date == new DateOnly(2025, 3, 1)).MilestoneAmount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void ComputeMilestoneTrajectory_covers_dates_no_forecasts_own_AsOfDate_could_ever_reach()
+    {
+        // The whole point of this function, over just reading FundJar off a
+        // real forecast: TransactionLogBookFactory.CreateForecast only ever
+        // cascades forward from its own AsOfDate — asking it for anything
+        // earlier is structurally impossible. This asks for a date range
+        // that ends BEFORE "today" in every realistic sense (a full plan
+        // lifetime that finished nearly a year before this test even
+        // pretends to run) and still gets the right reset-and-climb shape,
+        // because the computation never once needed a starting balance or
+        // "as of" reference point to begin with.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 2,
+            Source = "Quarterly Insurance",
+            Amount = -300m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                Interval = 3,
+                ByMonthDay = [1],
+                Start = new DateOnly(2020, 1, 1),
+                Until = new DateOnly(2020, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 2,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [15],
+                    Start = new DateOnly(2020, 1, 15),
+                    Until = new DateOnly(2020, 11, 15),
+                }),
+            },
+            bill);
+
+        var trajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
+            [plan], bill, new DateOnly(2020, 1, 1), new DateOnly(2020, 4, 1));
+
+        // Climbs through the first quarter's three contributions...
+        trajectory.Single(p => p.Date == new DateOnly(2020, 1, 15)).MilestoneAmount.ShouldBe(100m);
+        trajectory.Single(p => p.Date == new DateOnly(2020, 2, 15)).MilestoneAmount.ShouldBe(200m);
+        trajectory.Single(p => p.Date == new DateOnly(2020, 3, 15)).MilestoneAmount.ShouldBe(300m);
+        // ...and resets the moment the quarterly bill actually releases.
+        trajectory.Single(p => p.Date == new DateOnly(2020, 4, 1)).MilestoneAmount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void ComputeMilestoneTrajectory_washes_out_a_same_day_contribution_with_its_own_release()
+    {
+        // A plan deliberately paced to land its contribution on the exact
+        // day its own bill releases (planning/23 seed data's own Mobile
+        // Carrier scenario) never shows a nonzero milestone at all — the
+        // contribution accumulates first, then the same-day reset wipes it,
+        // every single cycle. Not a bug in the caller reading this; the
+        // underlying stream genuinely never gets ahead even by a day.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 3,
+            Source = "Same-Day Bill",
+            Amount = -65m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [12],
+                Start = new DateOnly(2026, 1, 12),
+                Until = new DateOnly(2026, 6, 12),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 3,
+                Amount = -45m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [12],
+                    Start = new DateOnly(2026, 1, 12),
+                    Until = new DateOnly(2026, 6, 12),
+                }),
+            },
+            bill);
+
+        var trajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
+            [plan], bill, new DateOnly(2026, 1, 12), new DateOnly(2026, 6, 12));
+
+        trajectory.ShouldAllBe(p => p.MilestoneAmount == 0m);
+    }
+
+    [Fact]
     public void An_underfunded_streams_milestone_floors_at_zero_instead_of_going_negative()
     {
         // planning/14 (2026-08-03): a stream that has fallen behind must never
