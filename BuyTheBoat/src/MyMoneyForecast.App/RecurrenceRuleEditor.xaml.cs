@@ -32,6 +32,14 @@ public partial class RecurrenceRuleEditor : UserControl
 
     private static readonly Brush ShortDateHighlightBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD9, 0xA0));
 
+    // The author's own call, 2026-08-06: the occurrence list defaults to
+    // showing only this many dates, with a toggle to see the rest — kept as
+    // a named constant specifically so it's easy to retune later.
+    private const int DefaultVisibleOccurrenceCount = 5;
+
+    private IReadOnlyList<DateOnly> _allOccurrences = [];
+    private bool _showAllOccurrences;
+
     public RecurrenceRuleEditor()
     {
         InitializeComponent();
@@ -68,6 +76,7 @@ public partial class RecurrenceRuleEditor : UserControl
     public void LoadFrom(RecurrenceRule rule)
     {
         _initialized = false;
+        _showAllOccurrences = false;
 
         foreach (var item in FrequencyComboBox.Items.OfType<ComboBoxItem>())
         {
@@ -105,6 +114,40 @@ public partial class RecurrenceRuleEditor : UserControl
         }
 
         Recalculate();
+    }
+
+    /// <summary>[UI] Undoes LetHostControlEndDate — restores the built-in "Ends" controls so the editor decides its own end date again. Needed now that a host form (ExpenseFormPanel) is one long-lived instance reused across every open rather than a fresh window each time: without this, switching from the bill form's "when does this stop?" question to any other mode would leave the Ends controls hidden for good.</summary>
+    public void LetSelfControlEndDate()
+    {
+        if (!_hostControlsEnd)
+        {
+            return;
+        }
+
+        _hostControlsEnd = false;
+        _hostUntil = null;
+        foreach (var element in new UIElement[]
+                 { EndsHeader, EndsOnDateRadio, UntilDatePicker, EndsAfterCountRadio, CountTextBox, ResolvedUntilText })
+        {
+            element.Visibility = Visibility.Visible;
+        }
+
+        Recalculate();
+    }
+
+    /// <summary>[UI] Shows or hides the raw RRULE text box — hidden by default (the author's own call, 2026-08-06): it takes up space most editing doesn't need, and is meant to be revealed by a host's own "Advanced mode" checkbox rather than always being on screen.</summary>
+    public void SetAdvancedMode(bool isAdvanced)
+    {
+        var visibility = isAdvanced ? Visibility.Visible : Visibility.Collapsed;
+        RruleLabel.Visibility = visibility;
+        RruleStringTextBox.Visibility = visibility;
+    }
+
+    /// <summary>[UI] Lets a host inject its own field(s) at the top of this editor's own left column — e.g. Earmark's "Amount per occurrence," so the right-side preview can use the vertical space that would otherwise sit empty above the recurrence fields (settled-designs.html Earmark·1's Placement C, 2026-08-06). Null clears it back to nothing, same as before this existed — every other current caller (Expense, Transfer) is unaffected unless it calls this too.</summary>
+    public void SetLeadingContent(UIElement? content)
+    {
+        LeadingContentHost.Content = content;
+        LeadingContentHost.Visibility = content is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>[UI] Sets the end date the host chose through its own stop question, refreshing the preview. Null leaves the rule incomplete until one is picked.</summary>
@@ -164,9 +207,8 @@ public partial class RecurrenceRuleEditor : UserControl
             }
             PreviewCalendar.DisplayDate = rule.Start.ToDateTime(TimeOnly.MinValue);
 
-            OccurrencesListBox.ItemsSource = occurrences
-                .Select(date => date.ToString("dddd, MMMM d, yyyy"))
-                .ToList();
+            _allOccurrences = occurrences;
+            UpdateOccurrencesDisplay();
 
             Result = rule;
         }
@@ -174,7 +216,8 @@ public partial class RecurrenceRuleEditor : UserControl
         {
             ErrorText.Text = ex.Message;
             PreviewCalendar.SelectedDates.Clear();
-            OccurrencesListBox.ItemsSource = null;
+            _allOccurrences = [];
+            UpdateOccurrencesDisplay();
             RruleStringTextBox.Text = string.Empty;
             ResolvedUntilText.Text = string.Empty;
             Result = null;
@@ -215,16 +258,54 @@ public partial class RecurrenceRuleEditor : UserControl
         }
     }
 
-    // The caption takes over the vertical space freed up by bounding the
-    // occurrence list to a scrollable height instead of letting it grow to
-    // fit every date — planning/22 §6b's "space freed up when the list is
-    // collapsed." No caption means no bound, same behavior as before this.
+    // Shows at most DefaultVisibleOccurrenceCount dates unless the user has
+    // toggled "Show all" — the toggle button's own label carries the total
+    // count regardless of which state it's in, so that's visible even while
+    // collapsed.
+    private void UpdateOccurrencesDisplay()
+    {
+        var visible = _showAllOccurrences
+            ? _allOccurrences
+            : _allOccurrences.Take(DefaultVisibleOccurrenceCount);
+
+        // "dddd, MMMM d, yyyy" (original) -> "MMM d, yyyy" (2026-08-06,
+        // width pass — matched settled-designs.html's own "Feb 15, 2026,"
+        // no weekday) -> "ddd, MMM d, yyyy" (this pass, same day — the
+        // author asked for the weekday back: "It would be helpful if the
+        // dates ... said the name of the week they occurred on"). Abbreviated
+        // rather than the original's full weekday name, paired with the
+        // list column widening back up to fit it (see the XAML).
+        OccurrencesListBox.ItemsSource = visible
+            .Select(date => date.ToString("ddd, MMM d, yyyy"))
+            .ToList();
+
+        if (_allOccurrences.Count <= DefaultVisibleOccurrenceCount)
+        {
+            ToggleOccurrencesButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ToggleOccurrencesButton.Visibility = Visibility.Visible;
+        ToggleOccurrencesButton.Content = _showAllOccurrences
+            ? "Show fewer"
+            : $"Show all {_allOccurrences.Count}";
+    }
+
+    private void OnToggleOccurrencesClick(object sender, RoutedEventArgs e)
+    {
+        _showAllOccurrences = !_showAllOccurrences;
+        UpdateOccurrencesDisplay();
+    }
+
+    // Now only toggles the host-supplied caption's own visibility
+    // (planning/22 §6b's "Projected short," etc.) — the occurrence list's
+    // height is capped unconditionally instead (see the XAML), so this no
+    // longer needs to bound it itself.
     private void ApplyCaption()
     {
         var hasCaption = !string.IsNullOrWhiteSpace(_caption);
         CaptionText.Text = _caption ?? string.Empty;
         CaptionText.Visibility = hasCaption ? Visibility.Visible : Visibility.Collapsed;
-        OccurrencesListBox.MaxHeight = hasCaption ? 220 : double.PositiveInfinity;
     }
 
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject

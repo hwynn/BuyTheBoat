@@ -44,7 +44,7 @@
             </StackPanel>
         </Grid>
 
-        <TabControl x:Name="MainTabControl" Grid.Row="1">
+        <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
             <TabItem Header="Forecast">
                 <!-- Design philosophy: planning/08-forecast-tab-design-philosophy.md.
                      Three regions with distinct jobs — TOP CONTROLS (forecast range +
@@ -578,13 +578,38 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- EARMARK (planning/21 Philosophy 5/7 + planning/22): the
-                 permanent form tab, separate from the Allocations list tab
-                 above — replaces the CreateEarMarkPatternWindow/
-                 ManualEarmarkWindow popups. Pick a goal, edit its Savings
-                 plan, or transform into a One-off adjustment on the same
-                 goal, all without leaving this tab. -->
-            <TabItem Header="Earmark">
+            <!-- ACCOUNT / EXPENSE / EARMARK (planning/21 Philosophy 5/7): the
+                 permanent form tabs, one per list tab above (Accounts, Bills &
+                 Paychecks, Allocations), in the same left-to-right order —
+                 replacing the AccountWindow/CreateFinancialPatternWindow/
+                 CreateEarMarkPatternWindow/ManualEarmarkWindow popups. Each
+                 list tab's Add/Edit buttons populate the matching form tab and
+                 switch to it, rather than opening a dialog. -->
+            <!-- Header is a TextBlock, not a plain string, on these three
+                 (wired 2026-08-06) — MainWindow.UpdateTabHeaderStyle sets its
+                 FontWeight/Foreground from the panel's own IsPopulated/IsDirty:
+                 bold when a form has an existing instance loaded, plus an
+                 accent color on top of that when it has unsaved changes.
+                 Tag carries the stable name SwitchToTab still matches on,
+                 since Header is no longer a plain string here. -->
+            <TabItem Tag="Account">
+                <TabItem.Header>
+                    <TextBlock x:Name="AccountTabHeaderText" Text="Account"/>
+                </TabItem.Header>
+                <local:AccountFormPanel x:Name="AccountForm"/>
+            </TabItem>
+
+            <TabItem Tag="Expense">
+                <TabItem.Header>
+                    <TextBlock x:Name="ExpenseTabHeaderText" Text="Expense"/>
+                </TabItem.Header>
+                <local:ExpenseFormPanel x:Name="ExpenseForm"/>
+            </TabItem>
+
+            <TabItem Tag="Earmark">
+                <TabItem.Header>
+                    <TextBlock x:Name="EarmarkTabHeaderText" Text="Earmark"/>
+                </TabItem.Header>
                 <local:EarmarkFormPanel x:Name="EarmarkForm"/>
             </TabItem>
         </TabControl>

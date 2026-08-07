@@ -5,6 +5,13 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
+// TODO (2026-08-05): retired — MainWindow no longer opens this popup, having
+// switched to the permanent Expense tab (ExpenseFormPanel, planning/21
+// Philosophy 5/7) for all three of its old entry points ("Create Bill...",
+// "Add New (advanced)...", "Edit Selected..."). No remaining
+// `new CreateFinancialPatternWindow` call sites as of this note. Kept in the
+// tree rather than deleted in the same pass that orphaned it, so the change
+// is reviewable on its own; safe to delete once that's confirmed.
 public partial class CreateFinancialPatternWindow : Window
 {
     // (The old _mandatoryIsExplicit / _updatingMandatoryProgrammatically pair

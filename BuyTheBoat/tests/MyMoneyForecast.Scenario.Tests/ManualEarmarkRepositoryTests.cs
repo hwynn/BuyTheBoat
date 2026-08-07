@@ -108,6 +108,75 @@ public class ManualEarmarkRepositoryTests : IDisposable
         _manualEarmarks.GetAll().ShouldBeEmpty();
     }
 
+    [Fact]
+    public void Concurrent_plans_on_the_same_goal_dont_crash_GetAll_and_validate_against_the_right_one()
+    {
+        // planning/17 (F27): more than one EarMarkPattern may now share a
+        // finance id (a second concurrent funder, or a break-off
+        // predecessor+successor). BUG FOUND 2026-08-06 while building seed
+        // data: GetAll() used to key its lookup dictionary by FinanceId
+        // alone, throwing "same key already added" the moment two plans
+        // shared one. Two non-overlapping segments here (like a real
+        // break-off) prove the fix does more than dodge the crash — it
+        // validates each earmark against whichever segment's own span
+        // actually covers its date, not just whichever loaded first.
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 2,
+            Source = "Kitchen renovation",
+            Amount = -5000m,
+            Mandatory = false,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2026, 1, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        _financialPatterns.Save(goal, accountId: 1);
+
+        var earlySegment = EarMarkPattern.Create(new EarMarkPatternOptions
+        {
+            FinanceId = 2,
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 6, 1),
+            }),
+        }, goal);
+        var lateSegment = EarMarkPattern.Create(new EarMarkPatternOptions
+        {
+            FinanceId = 2,
+            Amount = -150m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 7, 1),
+                Until = new DateOnly(2025, 12, 1),
+            }),
+        }, goal);
+        _earMarkPatterns.Save(earlySegment);
+        _earMarkPatterns.Save(lateSegment);
+
+        // Falls only inside the LATE segment's span — would fail the
+        // pattern-span validation if GetAll() picked the early segment
+        // instead of actually checking which one covers this date.
+        _manualEarmarks.Save(ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = 2, Date = new DateOnly(2025, 9, 1), Amount = 75m },
+            lateSegment));
+
+        var all = _manualEarmarks.GetAll();
+
+        all.ShouldHaveSingleItem();
+        all[0].Date.ShouldBe(new DateOnly(2025, 9, 1));
+        all[0].Amount.ShouldBe(75m);
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();

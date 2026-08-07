@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dev-only data seeder — populates the app's real local database (the
+       same file MyMoneyForecast.App reads/writes) with a realistic household
+       worth of data, through the actual domain + persistence layers so
+       everything it creates is valid by construction. Not part of
+       MyMoneyForecast.slnx and not built by "dotnet build"/"dotnet test" run
+       at the repo root; run explicitly with dotnet run, pointing at this
+       project's path. Kept (not deleted after one run) since it's cheap to
+       re-run whenever the dev database needs resetting to a known,
+       inspectable state. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MyMoneyForecast.Domain\MyMoneyForecast.Domain.csproj" />
+    <ProjectReference Include="..\..\src\MyMoneyForecast.Persistence\MyMoneyForecast.Persistence.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

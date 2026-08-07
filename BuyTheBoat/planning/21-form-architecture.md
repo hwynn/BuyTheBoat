@@ -23,6 +23,12 @@ answered.
   everything between top and bottom, the instance-picker popup's real design, and break-off/restructure
   UI.
 - **Transfer** — not started at all.
+- **Form behavior — a distinct question from all of the above, now its own document,
+  [23](23-form-behavior.md) (OPENED 2026-08-06).** Everything above is about form *content and
+  layout*; 23 is about how a form *behaves* once it holds unsaved edits — default values and
+  inheritance, disabled fields, the isolated-earmark entry point, whether derived content reads saved
+  or working state, and break-off-vs-alter-in-place. Read that document, not this bullet, for current
+  status.
 - Two topics identified but explicitly *not* designed anywhere in this document yet: **break-off/
   restructure UI** (both forms) and the **instance-picker popup** (both forms need it; Earmark's use
   is now more demanding than a plain search box — see its Step 1).
@@ -390,7 +396,19 @@ confirmed**, by direct analogy to Account's own "cushion currently held" context
 for an existing, recurring instance — that's general-pattern behavior from variant H, not new to
 Expense specifically.
 
-#### Advanced mode, SETTLED 2026-08-02 (content only — the switch control itself not yet placed)
+#### Advanced mode, SETTLED 2026-08-02 (content), location SETTLED 2026-08-06
+
+**2026-08-06 update:** the switch is a plain checkbox in the characterization-field-block,
+answering the "still open" item below — and it's not Expense-only anymore. Every form (Account
+included) gets one, the author's own call, made independently of this section's own content design
+(which still only covers Expense — see below). The first, and so far only, concrete piece of content
+actually gated by it: `RecurrenceRuleEditor`'s raw RRULE text box (`SetAdvancedMode`), hidden unless
+Advanced mode is on, for Expense and Earmark alike (Account has no recurrence editor, so its checkbox
+is currently inert — present, wired to nothing). The two undecided points in the bullets below are
+still undecided, and Earmark's own Advanced-mode content (beyond the RRULE box, which is generic to
+the shared control, not Earmark-specific design) has never been designed at all — this update is
+about the switch existing and one shared behavior, not a claim that the rest of this section now
+applies beyond Expense.
 
 Historical grounding for why this exists at all: the program's earliest functional UI had no
 characterization-field-block — `Mandatory` was a plain checkbox, and "is this repeating" was never
@@ -406,12 +424,13 @@ and whatever can be derived from the raw fields is derived rather than asked twi
   resolves to exactly one occurrence — a calendar showing a single date reads oddly; some other
   helper region plainly stating "this is a one-time expense" (computed, not asked) is likely
   clearer. Exact replacement content not designed.
-- **A dedicated control to switch into advanced mode is needed** — not yet placed anywhere. The one
-  hard requirement so far: switching shouldn't move the rest of the layout around drastically.
+- **A dedicated control to switch into advanced mode is needed** — placed 2026-08-06, see the update
+  above. The one hard requirement so far ("switching shouldn't move the rest of the layout around
+  drastically") held: it's a checkbox docked into the existing characterization-field-block row, not
+  a new region of its own.
 
-**Still open:** where the mode switch itself lives, and whether Direction/Stops… (the
-characterization-field-block's other controls) behave the same way `Repeats?` does in advanced mode
-or differently.
+**Still open:** whether Direction/Stops… (the characterization-field-block's other controls) behave
+the same way `Repeats?` does in advanced mode or differently.
 
 #### The save controls, SETTLED 2026-08-02
 
@@ -721,8 +740,10 @@ setting is not part of the staggered reveal.
 
 - ~~The generic term for a bill/paycheck~~ — **settled: "Expense."**
 - ~~Whether the form has its own delete button~~ — **settled: no, the list/management tab only.**
-- The exact wording for "discard unsaved edits," distinct enough from anything that sounds like
-  deleting the instance.
+- ~~The exact wording for "discard unsaved edits," distinct enough from anything that sounds like
+  deleting the instance.~~ — **settled: "Discard unsaved changes."** See
+  [23 § A6](23-form-behavior.md) for the fuller justification (worked out alongside the rest of that
+  document's saved/working-state analysis).
 - ~~When a form should implicitly clear itself~~ — **settled: after a successful save.**
 - The full enumeration of helper regions, per form — **Account and Expense done; Earmark's own list
   is now long and largely settled (see its Step 2), though its four plan-health states still need

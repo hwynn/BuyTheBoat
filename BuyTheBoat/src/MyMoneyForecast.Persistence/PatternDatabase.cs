@@ -271,24 +271,40 @@ public sealed class PatternDatabase
     // Checked via PRAGMA foreign_key_list rather than a version flag, so this
     // is a no-op both on a fresh install (already created referencing
     // FinancialPatterns) and on a database already migrated by an earlier run.
+    //
+    // BUG FOUND AND FIXED 2026-08-05: this used to check for a reference to
+    // the literal name "EarMarkPatterns" specifically, on the assumption that
+    // was the only stale value a pre-migration database could have. A real
+    // database was found still referencing "EarMarkPatterns_old_singlekey" —
+    // the transient rename-target EnsureEarMarkPatternsAllowMultiplePerFinanceId
+    // uses below — left over from some earlier, incomplete migration
+    // sequence, and dropped by the time that migration finished, so every
+    // later Initialize() saw a dangling reference this check never caught
+    // (SQLite rejects any statement touching ManualEarmarks once its
+    // referenced table doesn't exist, "checked at prepare time regardless of
+    // PRAGMA foreign_keys" — same class of error the comment below already
+    // describes, just from a second stale name nobody had hit yet). Inverted
+    // to check for the one thing that actually matters — does it already
+    // correctly reference FinancialPatterns — so it self-heals from *any*
+    // stale target, not just the specific one this was first written against.
     private static void EnsureManualEarmarksReferenceFinancialPatterns(SqliteConnection connection)
     {
-        var stillReferencesEarMarkPatterns = false;
+        var alreadyReferencesFinancialPatterns = false;
         using (var checkCommand = connection.CreateCommand())
         {
             checkCommand.CommandText = "PRAGMA foreign_key_list(ManualEarmarks);";
             using var reader = checkCommand.ExecuteReader();
             while (reader.Read())
             {
-                if (string.Equals(reader.GetString(reader.GetOrdinal("table")), "EarMarkPatterns", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(reader.GetString(reader.GetOrdinal("table")), "FinancialPatterns", StringComparison.OrdinalIgnoreCase))
                 {
-                    stillReferencesEarMarkPatterns = true;
+                    alreadyReferencesFinancialPatterns = true;
                     break;
                 }
             }
         }
 
-        if (!stillReferencesEarMarkPatterns)
+        if (alreadyReferencesFinancialPatterns)
         {
             return;
         }

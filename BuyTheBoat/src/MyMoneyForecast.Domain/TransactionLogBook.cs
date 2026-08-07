@@ -16,4 +16,22 @@ public sealed record TransactionLogBook
 {
     public int? PageLength { get; init; }
     public required IReadOnlyList<TransactionLogPage> LogPages { get; init; }
+
+    /// <summary>[CALC] Every FinancialPattern the user has, across every account and page — including one whose occurrences fall entirely outside any single page's own date window (e.g. a goal due next year, forecast on a 3-month horizon). AccountTransactionPage.FinancePatterns already carries each account's complete, unfiltered list (it exists to seed the next page's runoff, so it has to be complete) — this just gathers it up. Deduped by FinanceId; where the same pattern appears on more than one page (page-to-page runoff, once persisted history exists), the later page's version wins.</summary>
+    public IReadOnlyList<FinancialPattern> AllFinancialPatterns()
+    {
+        var byFinanceId = new Dictionary<int, FinancialPattern>();
+        foreach (var page in LogPages)
+        {
+            foreach (var accountPage in page.AccountPages.Values)
+            {
+                foreach (var pattern in accountPage.FinancePatterns)
+                {
+                    byFinanceId[pattern.FinanceId] = pattern;
+                }
+            }
+        }
+
+        return byFinanceId.Values.ToList();
+    }
 }

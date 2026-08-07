@@ -35,9 +35,24 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
     // pattern has since shrunk its span would throw here; Delete-with-pattern
     // (below) prevents the orphan case, and span edits are the restructuring
     // feature's concern.
+    //
+    // BUG FOUND AND FIXED 2026-08-06: this used to key its lookup dictionary
+    // by FinanceId alone (`.ToDictionary(pattern => pattern.FinanceId)`),
+    // which throws ("same key already added") the moment a finance id has
+    // more than one EarMarkPattern — exactly the shape planning/17 (F27)
+    // deliberately legalized (a second concurrent funder, or a break-off
+    // predecessor+successor pair). Any household combining a manual earmark
+    // with a concurrent second plan on the same goal would crash here.
+    // Grouped by FinanceId instead: the jar's real lifetime is the UNION of
+    // every plan sharing that finance id (same reasoning ManualEarmark.cs's
+    // own comment states for the single-plan case), so a stored earmark is
+    // validated against whichever sibling plan actually covers its date —
+    // not just whichever one happened to load first.
     public IReadOnlyList<ManualEarmark> GetAll()
     {
-        var patternsById = earMarkPatterns.GetAll().ToDictionary(pattern => pattern.FinanceId);
+        var plansByFinanceId = earMarkPatterns.GetAll()
+            .GroupBy(pattern => pattern.FinanceId)
+            .ToDictionary(group => group.Key, group => group.ToList());
 
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
@@ -48,17 +63,26 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
         while (reader.Read())
         {
             var financeId = reader.GetInt32(0);
-            if (!patternsById.TryGetValue(financeId, out var pattern))
+            var date = DateOnly.ParseExact(reader.GetString(1), DateFormat, CultureInfo.InvariantCulture);
+
+            if (!plansByFinanceId.TryGetValue(financeId, out var candidatePlans))
             {
                 throw new InvalidOperationException(
                     $"ManualEarmark for finance id {financeId} has no matching EarMarkPattern — data is corrupt.");
             }
 
+            // Prefer whichever sibling plan's own span actually covers this
+            // date; fall back to the first so a genuinely out-of-span earmark
+            // still fails through ManualEarmark.Create's own, more specific
+            // error below rather than a generic one here.
+            var pattern = candidatePlans.Find(candidate => candidate.DatePattern.Start <= date && date <= candidate.DatePattern.Until)
+                ?? candidatePlans[0];
+
             earmarks.Add(ManualEarmark.Create(
                 new ManualEarmarkOptions
                 {
                     FinanceId = financeId,
-                    Date = DateOnly.ParseExact(reader.GetString(1), DateFormat, CultureInfo.InvariantCulture),
+                    Date = date,
                     Amount = decimal.Parse(reader.GetString(2), CultureInfo.InvariantCulture),
                 },
                 pattern));

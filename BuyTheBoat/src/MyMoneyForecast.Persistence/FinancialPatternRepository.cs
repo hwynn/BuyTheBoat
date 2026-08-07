@@ -176,6 +176,30 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return ids;
     }
 
+    // Both legs, unlike GetTransferWithdrawalFinanceIds above (which is
+    // sign-filtered to the withdrawal side only, for a different caller's
+    // reason). FinancialPatternPickerWindow needs both excluded — a transfer
+    // shows as one thing on its own tab, never as its two underlying
+    // patterns — and the domain FinancialPattern it reads from carries no
+    // TransferId (storage concern, planning/10 item 2-A), so it's handed
+    // this set the same way GetTransferWithdrawalFinanceIds is handed to the
+    // engine.
+    public IReadOnlySet<int> GetTransferFinanceIds()
+    {
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT FinanceId FROM FinancialPatterns WHERE TransferId IS NOT NULL;";
+
+        using var reader = command.ExecuteReader();
+        var ids = new HashSet<int>();
+        while (reader.Read())
+        {
+            ids.Add(reader.GetInt32(0));
+        }
+
+        return ids;
+    }
+
     // Removes both patterns of a transfer — used when the transfer itself is
     // deleted. Also removes any Allocation Plan (EarMarkPattern) and its manual
     // earmarks on those patterns: stage-1 gives a transfer's withdrawal a plan

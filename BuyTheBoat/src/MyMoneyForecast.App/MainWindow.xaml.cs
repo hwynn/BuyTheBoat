@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -74,6 +75,11 @@ public partial class MainWindow : Window
             {
                 RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
             }
+
+            // planning/21: Earmark's own save "returns to the Forecast tab —
+            // no onward hop from there to anywhere else." Settled 2026-08-02,
+            // wired 2026-08-06 (previously the form just stayed on Earmark).
+            SwitchToTab("Forecast");
         };
         EarmarkForm.ManualEarmarksSaved = (saved, deleted) =>
         {
@@ -90,7 +96,83 @@ public partial class MainWindow : Window
             RefreshGrids();
             RefreshEarmarkFormContext();
             RefreshShownForecast();
+
+            // Same settled rule as the Savings-plan save path above — one
+            // plain save button for the whole Earmark form, one destination,
+            // regardless of which mode was active.
+            SwitchToTab("Forecast");
         };
+
+        // planning/21 Philosophy 5/7, wired 2026-08-05: same standing-tab
+        // treatment as Earmark above. Each panel does its own validation
+        // (AccountFormPanel's uniqueness check included) — these callbacks are
+        // purely "persist what came back, then refresh". TODO: unlike the
+        // Earmark callbacks above, these two don't call RefreshForecast/
+        // RefreshShownForecast — matches the OLD popup-based handlers exactly
+        // (a bill/paycheck/account edit never auto-refreshed the shown
+        // forecast either), but it's now an inconsistency worth noticing next
+        // to Earmark's live refresh, which is net-new behavior from this same
+        // pass, not something ported from a popup. Navigation (below) is now
+        // built for Account regardless — landing on a Forecast tab that
+        // hasn't refreshed yet is the same known gap Expense's own save has.
+        AccountForm.AccountSaved = account =>
+        {
+            _accounts.Save(account);
+            RefreshAccountsGrid();
+            RefreshExpenseFormContext();
+            SwitchToTab("Forecast");
+        };
+        ExpenseForm.RequestForecast = EnsureForecast;
+        ExpenseForm.PatternSaved = (pattern, accountId, isNew, jumpToEarmark) =>
+        {
+            _financialPatterns.Save(pattern, accountId);
+            if (isNew)
+            {
+                AutoCreateAllocationPlan(pattern, accountId);
+            }
+
+            RefreshGrids();
+            RefreshExpenseFormContext();
+            RefreshEarmarkFormContext();
+
+            // planning/21's two settled save buttons: Save and Skip planning
+            // returns to Forecast; Save and Plan jumps to Earmark with this
+            // Expense's linked plan already loaded (Philosophy 6 — set
+            // programmatically, the instance picker never visibly opens). A
+            // real EarMarkPattern already exists by now regardless of which
+            // button was pressed (Stage 1's proposer runs at creation), so
+            // this should only miss for an edited pattern that never got one
+            // (e.g. Income, or a plan the user removed) — falls back to a
+            // blank Earmark form rather than guessing.
+            if (jumpToEarmark)
+            {
+                var plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
+                if (plan is not null)
+                {
+                    EarmarkForm.LoadPattern(plan, pattern);
+                }
+                else
+                {
+                    EarmarkForm.LoadForNewPattern();
+                }
+
+                SwitchToTab("Earmark");
+            }
+            else
+            {
+                SwitchToTab("Forecast");
+            }
+        };
+
+        EarmarkForm.RequestForecast = EnsureForecast;
+
+        // Tab-header styling, wired 2026-08-06 — live, not just at save/load:
+        // each panel raises StateChanged on every field edit (via
+        // MarkDirty/ClearDirty), not only when its own Load*/Save runs, so
+        // the header updates while the user is still typing.
+        AccountForm.StateChanged += (_, _) => UpdateTabHeaderStyle(AccountTabHeaderText, AccountForm.IsPopulated, AccountForm.IsDirty);
+        ExpenseForm.StateChanged += (_, _) => UpdateTabHeaderStyle(ExpenseTabHeaderText, ExpenseForm.IsPopulated, ExpenseForm.IsDirty);
+        EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
 
         RefreshGrids();
         RefreshAccountsGrid();
@@ -101,17 +183,90 @@ public partial class MainWindow : Window
     // than held live, matching how CreateEarMarkPatternWindow/
     // ManualEarmarkWindow always took a fresh snapshot at construction too.
     private void RefreshEarmarkFormContext() =>
-        EarmarkForm.SetContext(_financialPatterns.GetAll(), _earMarkPatterns.GetAll(), _manualEarmarks.GetAll(), _lastForecast);
+        EarmarkForm.SetContext(_financialPatterns.GetAll(), _earMarkPatterns.GetAll(), _manualEarmarks.GetAll(), _financialPatterns.GetTransferFinanceIds(), _lastForecast);
 
-    private void SwitchToEarmarkTab()
+    private void RefreshAccountFormContext() => AccountForm.SetContext(_accounts.GetAll());
+
+    private void RefreshExpenseFormContext()
+    {
+        // Same accountId-by-financeId shape RefreshGrids() already builds for
+        // the grid's own account-name column — reused here so the instance
+        // picker knows which account each existing Expense is filed under.
+        var accountIdByFinanceId = _financialPatterns.GetAllByAccount()
+            .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
+            .ToDictionary(pair => pair.FinanceId, pair => pair.AccountId);
+        ExpenseForm.SetContext(_financialPatterns.GetAll(), accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll());
+    }
+
+    // Generalized 2026-08-05 (was SwitchToEarmarkTab) for the Account/Expense
+    // tabs added alongside Earmark's. Matches either a plain string Header
+    // (Forecast, still unchanged) or Tag (Account/Expense/Earmark, whose
+    // Header became a styled TextBlock 2026-08-06 — see MainWindow.xaml's
+    // own comment on why Tag carries the stable name now).
+    private void SwitchToTab(string header)
     {
         foreach (System.Windows.Controls.TabItem item in MainTabControl.Items)
         {
-            if (item.Header as string == "Earmark")
+            if (item.Header as string == header || item.Tag as string == header)
             {
                 MainTabControl.SelectedItem = item;
                 return;
             }
+        }
+    }
+
+    // BUG FOUND AND FIXED 2026-08-06: the three permanent form tabs
+    // (Account/Expense/Earmark) only ever got fresh SetContext data when
+    // reached through a specific button handler that happened to call
+    // Refresh*FormContext first (Set Up Savings Plan, Save and Plan, etc.) —
+    // clicking the tab itself, directly, never did. A goal with a real,
+    // saved savings plan would read as having none the moment that was the
+    // *first* way the user reached the tab in a session, since the panel's
+    // own backing fields simply start empty. SetContext only ever replaces
+    // background reference data (available goals, their plans) — it never
+    // touches a form's own in-progress fields — so refreshing on every
+    // selection is safe and can't discard unsaved edits.
+    //
+    // SelectionChanged is a routed event that bubbles up from any Selector
+    // inside a tab's own content (every ComboBox in Expense/Earmark's forms
+    // included) — e.Source must be checked, or picking an item in one of
+    // those would also re-fire this.
+    private void OnMainTabControlSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (e.Source != MainTabControl || MainTabControl.SelectedItem is not System.Windows.Controls.TabItem selected)
+        {
+            return;
+        }
+
+        switch (selected.Tag as string)
+        {
+            case "Account":
+                RefreshAccountFormContext();
+                break;
+            case "Expense":
+                RefreshExpenseFormContext();
+                break;
+            case "Earmark":
+                RefreshEarmarkFormContext();
+                break;
+        }
+    }
+
+    // Bold when the form has an existing instance loaded (IsPopulated), plus
+    // an accent color on top when it also has unsaved changes (IsDirty) —
+    // the author's own rule, wired 2026-08-06. ClearValue rather than a
+    // hardcoded "normal" color/weight so the not-dirty/not-populated state
+    // just inherits whatever the tab strip's own default look is.
+    private static void UpdateTabHeaderStyle(TextBlock headerText, bool hasContent, bool isDirty)
+    {
+        headerText.FontWeight = hasContent ? FontWeights.Bold : FontWeights.Normal;
+        if (isDirty)
+        {
+            headerText.Foreground = Brushes.DarkOrange;
+        }
+        else
+        {
+            headerText.ClearValue(TextBlock.ForegroundProperty);
         }
     }
 
@@ -268,22 +423,15 @@ public partial class MainWindow : Window
         UpdateForecastButtonState();
     }
 
+    // planning/21 Philosophy 5/7, wired 2026-08-05: populates and switches to
+    // the permanent Account tab instead of opening AccountWindow. Validation
+    // (including the name-uniqueness check this used to run post-ShowDialog)
+    // now lives in AccountFormPanel itself — see its own class comment.
     private void OnAddAccountClick(object sender, RoutedEventArgs e)
     {
-        var window = new AccountWindow(_accounts.NextId()) { Owner = this };
-        if (window.ShowDialog() != true || window.Result is not { } account)
-        {
-            return;
-        }
-
-        if (_accounts.GetByName(account.Name) is not null)
-        {
-            MessageBox.Show(this, $"There's already an account called \"{account.Name}\".", "Name already used", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        _accounts.Save(account);
-        RefreshAccountsGrid();
+        RefreshAccountFormContext();
+        AccountForm.LoadForNew();
+        SwitchToTab("Account");
     }
 
     private void OnEditAccountClick(object sender, RoutedEventArgs e)
@@ -294,21 +442,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new AccountWindow(row.Account.Id, row.Account) { Owner = this };
-        if (window.ShowDialog() != true || window.Result is not { } account)
-        {
-            return;
-        }
-
-        // A rename must not collide with a different account's name.
-        if (_accounts.GetByName(account.Name) is { } clash && clash.Id != account.Id)
-        {
-            MessageBox.Show(this, $"There's already an account called \"{account.Name}\".", "Name already used", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        _accounts.Save(account);
-        RefreshAccountsGrid();
+        RefreshAccountFormContext();
+        AccountForm.LoadExisting(row.Account);
+        SwitchToTab("Account");
     }
 
     // Blocked while it's the only account, and blocked while anything is still
@@ -358,6 +494,8 @@ public partial class MainWindow : Window
 
         _accounts.Delete(row.Account.Id);
         RefreshAccountsGrid();
+        RefreshAccountFormContext();
+        RefreshExpenseFormContext();
     }
 
     private void OnForecastClick(object sender, RoutedEventArgs e)
@@ -896,7 +1034,7 @@ public partial class MainWindow : Window
 
         RefreshEarmarkFormContext();
         EarmarkForm.LoadOneOff(editTarget, initialDate);
-        SwitchToEarmarkTab();
+        SwitchToTab("Earmark");
     }
 
     // Output-only snapshot of whatever forecast is currently on screen — not
@@ -1085,26 +1223,22 @@ public partial class MainWindow : Window
         Application.Current.Shutdown();
     }
 
+    // planning/21 Philosophy 5/7, wired 2026-08-05: populates and switches to
+    // the permanent Expense tab instead of opening CreateFinancialPatternWindow.
+    // Persistence + AutoCreateAllocationPlan now happen in ExpenseForm.
+    // PatternSaved (wired in the constructor), matching Earmark's shape.
     private void OnAddFinancialPatternClick(object sender, RoutedEventArgs e)
     {
-        var window = new CreateFinancialPatternWindow(_financialPatterns.GetAll(), _accounts.GetAll()) { Owner = this };
-        if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
-        {
-            _financialPatterns.Save(pattern, window.SelectedAccountId);
-            AutoCreateAllocationPlan(pattern, window.SelectedAccountId);
-            RefreshGrids();
-        }
+        RefreshExpenseFormContext();
+        ExpenseForm.LoadForNewPattern();
+        SwitchToTab("Expense");
     }
 
     private void OnCreateBillClick(object sender, RoutedEventArgs e)
     {
-        var window = new CreateFinancialPatternWindow(_financialPatterns.GetAll(), _accounts.GetAll(), forcedMandatory: true) { Owner = this };
-        if (window.ShowDialog() == true && window.CreatedPattern is { } pattern)
-        {
-            _financialPatterns.Save(pattern, window.SelectedAccountId);
-            AutoCreateAllocationPlan(pattern, window.SelectedAccountId);
-            RefreshGrids();
-        }
+        RefreshExpenseFormContext();
+        ExpenseForm.LoadForNewBill();
+        SwitchToTab("Expense");
     }
 
     // Stage-1 revision (planning/14): every scheduled outflow reserves through
@@ -1142,6 +1276,28 @@ public partial class MainWindow : Window
             ? DateOnly.FromDateTime(asOf)
             : DateOnly.FromDateTime(DateTime.Today);
 
+    // What ExpenseForm.RequestForecast calls (wired in the constructor) —
+    // the author's own call: a feature that needs a forecast to work
+    // (FinancialPatternPickerWindow's own data source) should just compute
+    // one using whatever's on the As-Of/Horizon pickers right now, not tell
+    // the user to go press the Forecast button first. RefreshForecast always
+    // assigns _lastForecast when it returns (or a real computation error
+    // propagates, which is the honest outcome, not something to swallow) —
+    // so the null-forgiving return below is never actually lying.
+    private ForecastResult EnsureForecast()
+    {
+        if (_lastForecast is { } existing)
+        {
+            return existing;
+        }
+
+        var horizonEnd = HorizonEndDatePicker.SelectedDate is { } h
+            ? DateOnly.FromDateTime(h)
+            : CurrentAsOfDate().AddMonths(3);
+        RefreshForecast(CurrentAsOfDate(), horizonEnd);
+        return _lastForecast!;
+    }
+
     private void OnEditFinancialPatternClick(object sender, RoutedEventArgs e)
     {
         if (FinancialPatternsGrid.SelectedItem is not FinancialPatternRow row)
@@ -1150,16 +1306,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        // The picker opens on whichever account the pattern is already filed
+        // The form opens on whichever account the pattern is already filed
         // under, so an unchanged pick preserves the filing and a changed one
         // deliberately moves it.
         var currentAccountId = _financialPatterns.GetAccountId(row.FinanceId) ?? DefaultAccountId();
-        var window = new CreateFinancialPatternWindow(row.Pattern, _accounts.GetAll(), currentAccountId) { Owner = this };
-        if (window.ShowDialog() == true && window.CreatedPattern is { } updated)
-        {
-            _financialPatterns.Save(updated, window.SelectedAccountId);
-            RefreshGrids();
-        }
+        RefreshExpenseFormContext();
+        ExpenseForm.LoadPattern(row.Pattern, currentAccountId);
+        SwitchToTab("Expense");
     }
 
     private void OnDeleteFinancialPatternClick(object sender, RoutedEventArgs e)
@@ -1213,6 +1366,8 @@ public partial class MainWindow : Window
 
         _financialPatterns.Delete(row.FinanceId);
         RefreshGrids();
+        RefreshExpenseFormContext();
+        RefreshEarmarkFormContext();
     }
 
     // planning/14 item D-1. An outflow with no savings plan has its jar filled
@@ -1251,7 +1406,7 @@ public partial class MainWindow : Window
 
         RefreshEarmarkFormContext();
         EarmarkForm.LoadForMaterialize(row.Pattern, CurrentJarAmount(row.FinanceId));
-        SwitchToEarmarkTab();
+        SwitchToTab("Earmark");
     }
 
     // What this jar holds as of the forecast's own start date, so a new savings
@@ -1293,7 +1448,7 @@ public partial class MainWindow : Window
 
         RefreshEarmarkFormContext();
         EarmarkForm.LoadForNewPattern();
-        SwitchToEarmarkTab();
+        SwitchToTab("Earmark");
     }
 
     private void OnEditEarMarkPatternClick(object sender, RoutedEventArgs e)
@@ -1324,7 +1479,7 @@ public partial class MainWindow : Window
 
         RefreshEarmarkFormContext();
         EarmarkForm.LoadPattern(row.Pattern, goal);
-        SwitchToEarmarkTab();
+        SwitchToTab("Earmark");
     }
 
     private void OnDeleteEarMarkPatternClick(object sender, RoutedEventArgs e)
