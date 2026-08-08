@@ -202,6 +202,23 @@
                             Padding="6,2" Margin="0,4,0,0" Click="OnToggleOccurrencesClick" Visibility="Collapsed"/>
                     <TextBlock x:Name="CaptionText" Margin="0,8,0,0" FontWeight="SemiBold" TextWrapping="Wrap"
                                Foreground="#FFB05A00" Visibility="Collapsed"/>
+                    <!-- Author, 2026-08-08: "a legend explaining the color
+                         should appear... The function running the rrule
+                         preview is ignorant of that, so the caller will
+                         have to include that in the optional message
+                         whenever it sends dates to be highlighted." This
+                         control still doesn't know WHY a date is
+                         highlighted or what it means — SetHighlight's own
+                         new legendText parameter is the caller's answer to
+                         that, shown here rather than assumed. Swatch color
+                         is a literal copy of ShortDateHighlightBrush
+                         (code-behind), not a separate constant to drift
+                         from it. -->
+                    <StackPanel x:Name="LegendPanel" Orientation="Horizontal" Margin="0,6,0,0" Visibility="Collapsed">
+                        <Border Width="10" Height="10" Background="#FFFFD9A0" BorderBrush="#FFB05A00" BorderThickness="1"
+                                VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="LegendText" FontSize="10.5" Foreground="Gray" TextWrapping="Wrap" MaxWidth="160"/>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </Grid>

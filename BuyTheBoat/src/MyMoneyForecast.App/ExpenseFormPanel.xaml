@@ -5,13 +5,21 @@
     <DockPanel Margin="8">
         <!-- Bottom bar: the two settled save buttons (planning/21 "The save
              controls"). Both persist identically; only where they navigate to
-             afterward differs. -->
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="450"
-                       VerticalAlignment="Center" Margin="0,0,14,0"/>
-            <Button x:Name="SaveAndSkipPlanningButton" Content="Save and Skip planning" Padding="8,5" Margin="0,0,8,0" Click="OnSaveAndSkipPlanningClick"/>
-            <Button x:Name="SaveAndPlanButton" Content="Save and Plan" Padding="8,5" Click="OnSaveAndPlanClick"/>
-        </StackPanel>
+             afterward differs. StatusText added 2026-08-07 (author's own
+             go-ahead) — planning/21's own "Four plan-health states, SETTLED
+             2026-08-02" / "Labels, SETTLED 2026-08-05": the linked plan's
+             own health, docked left per the mockup's own left-status /
+             right-actions layout (settled-designs.html's "Expense · 1"). -->
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="True">
+            <TextBlock x:Name="StatusText" DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold"
+                       Foreground="#FF9A4F08" Background="#FFFBF0E2" Padding="6,4" Visibility="Collapsed"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="450"
+                           VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <Button x:Name="SaveAndSkipPlanningButton" Content="Save and Skip planning" Padding="8,5" Margin="0,0,8,0" Click="OnSaveAndSkipPlanningClick"/>
+                <Button x:Name="SaveAndPlanButton" Content="Save and Plan" Padding="8,5" Click="OnSaveAndPlanClick"/>
+            </StackPanel>
+        </DockPanel>
 
         <!-- Wrapped in a ScrollViewer, added 2026-08-06 — same fix, same
              reasoning as EarmarkFormPanel (see its own comment there): this

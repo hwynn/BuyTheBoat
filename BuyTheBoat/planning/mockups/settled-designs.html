@@ -86,6 +86,18 @@
   .split > .rest{border-right:1px solid var(--line)}
   .split > .helpercol{padding:16px; display:flex; flex-direction:column; gap:12px}
 
+  /* Starting-point region — ported verbatim from earmark-starting-amount-
+     mockups.html's own "Option A" (the variant actually built, 2026-08-06:
+     100px, amount + date only, no reason text). */
+  .split3{display:grid; grid-template-columns:100px 1.1fr 1fr; gap:0; border-top:1px solid var(--line)}
+  .split3 > .startcol{border-right:1px solid var(--line)}
+  .split3 > .rest{border-right:1px solid var(--line)}
+  .split3 > .helpercol{padding:16px; display:flex; flex-direction:column; gap:12px}
+  .start-pad{padding:16px}
+  .start-h{font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); margin-bottom:10px}
+  .start-amt{font-size:19px; font-weight:700; color:var(--ink); line-height:1.2}
+  .start-date{font-size:11.5px; color:var(--ink-2); margin-top:3px}
+
   .rrule-preview{display:flex; gap:14px; margin-top:8px; flex-wrap:wrap; align-items:flex-start}
   .mini-cal{background:var(--surface); border:1px solid var(--line-2); border-radius:6px; padding:7px; flex:none}
   .mini-cal .mc-head{font-size:10.5px; font-weight:700; text-align:center; margin-bottom:5px; color:var(--ink-2)}
@@ -482,6 +494,274 @@
     </div></div>
   </section>
 
+  <!-- ============ EARMARK — SAVINGS PLAN, WITH A STARTING POINT ============ -->
+  <section class="variant">
+    <div class="vhead"><span class="vnum">Earmark · 5</span><h2>Savings plan, with a Starting point (break-off successor)</h2><span class="intent">Built 2026-08-06, missing from this file until now — "Option A" from earmark-starting-amount-mockups.html (100px, amount + date only, no reason text), the variant actually shipped. The 100px column sits left of Recurrence, inside the same row, not in the helper column.</span></div>
+    <div class="stage"><div class="form">
+      <div class="top-combined" style="grid-template-columns:1.2fr 1fr auto">
+        <div class="top-half iib-half">
+          <span class="half-title">Instance-information-block</span>
+          <span class="picker">Editing: <b>Car Lease Payment savings plan</b> <span class="car">▾</span></span>
+        </div>
+        <div class="top-half cfb-half">
+          <span class="half-title">Characterization-field-block</span>
+          <div class="pillgroup"><span class="pillbtn sel">Savings plan</span><span class="pillbtn">One-off adjustment</span></div>
+        </div>
+        <div class="top-half"><button class="iib-btn ghost">Clear form</button></div>
+      </div>
+      <div class="split3">
+        <div class="startcol start-pad">
+          <div class="start-h">Starting point</div>
+          <div class="start-amt">$790.00</div>
+          <div class="start-date">as of Jul 1, 2026</div>
+        </div>
+        <div class="rest">
+          <div class="grid3" style="margin-bottom:14px">
+            <div class="fld"><label>Amount per occurrence</label><div class="box">$420.00</div></div>
+          </div>
+          <div class="rest-title">Recurrence</div>
+          <div class="grid2">
+            <div class="fld"><label>Frequency</label><div class="box">Monthly</div></div>
+            <div class="fld"><label>Every</label><div class="box">1 month(s)</div></div>
+            <div class="fld"><label>On this day of the month</label><div class="box">1</div></div>
+            <div class="fld"><label>Starts</label><div class="box">Jul 1, 2026</div></div>
+            <div class="fld"><label>Ends</label><div class="box">On date: Dec 31, 2027</div></div>
+          </div>
+        </div>
+        <div class="helpercol">
+          <div class="helper" style="height:100%">
+            <div class="helper-h">Recurrence preview</div>
+            <div class="helper-mini">Monthly, on the 1st — until Dec 2027. No caption — CurrentlyOverfunded is a "today" state, same as Earmark · 4.</div>
+          </div>
+        </div>
+      </div>
+      <div class="summary-block">
+        <div class="summary-h">Summary</div>
+        <div class="summary-narrative">
+          <b>Car Lease Payment</b> costs <b>$420</b> every month — next due <b>Aug 1, 2026</b>. We plan
+          to set aside <b>$420</b> a month toward it.
+        </div>
+        <div class="summary-chart-row">
+          <svg viewBox="0 0 680 156" role="img" aria-label="Fund jar starting well above the ongoing monthly cycle thanks to a break-off hand-off">
+            <line x1="46" y1="132" x2="666" y2="132" stroke="var(--line-2)" stroke-width="1"/>
+            <line x1="46" y1="90" x2="666" y2="90" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="5,4"/>
+            <text x="600" y="83" font-size="10.5" fill="var(--ink-2)" text-anchor="end">$420 goal</text>
+            <path d="M46,50 H196 V90 H666"
+                  fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            <text x="60" y="44" font-size="10.5" fill="var(--accent-ink)">Fund jar (actual) — starts at $790, the break-off hand-off</text>
+            <line x1="196" y1="14" x2="196" y2="132" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="3,3"/>
+            <circle cx="196" cy="90" r="5" fill="var(--good)" stroke="var(--surface)" stroke-width="2"/>
+            <text x="202" y="150" font-size="10.5" fill="var(--ink-2)">Today</text>
+            <text x="40" y="135" font-size="10" fill="var(--ink-3)" text-anchor="end">$0</text>
+            <text x="40" y="54" font-size="10" fill="var(--ink-3)" text-anchor="end">$790</text>
+          </svg>
+          <div class="summary-aside"><b>Fund jar, today:</b><br>$790 saved of $340 milestone — <b class="amount-good">$450 over</b></div>
+        </div>
+        <div class="chart-legend">
+          <span class="lk"><span class="sw" style="color:var(--accent)"></span>Fund jar (actual)</span>
+          <span class="lk"><span class="sw dash" style="color:var(--ink-3)"></span>Bill due ($420 each)</span>
+        </div>
+      </div>
+      <div class="save-row-id">
+        <span class="id-text">Editing: <b>Car Lease Payment savings plan</b></span>
+        <div class="actions"><button class="iib-btn primary">Save</button></div>
+      </div>
+    </div></div>
+    <p class="note">Starting-point numbers are real, verified data from the seed script (tools/SeedData),
+    not invented, the same way this whole file's other examples are illustrative-but-not-arbitrary:
+    <code>BreakOffFactory</code> hands off the predecessor's jar balance via
+    <code>EarMarkPattern.StartingAllocation</code> ($340.00), and <code>AllocationPlanProposer</code>'s
+    own starting-earmark mechanism separately added a real $450.00 manual entry the same day — the
+    region sums both into one total without guessing which is which (a <code>ManualEarmark</code> carries
+    no reason field, so an automatic front-load and a plain manual entry are indistinguishable in storage
+    today — planning/23's own open question, not resolved by this region). Everything else on this card
+    (recurrence cadence, milestone breakdown, chart shape) is illustrative, same license as every other
+    numeric example here — not a literal reproduction of the seed data's own recurrence/health numbers.</p>
+  </section>
+
+  <!-- ============ EARMARK — STARTING-EARMARK / FIRST-PAYMENT WARNING, WITH RRULE HIGHLIGHTING ============ -->
+  <section class="variant">
+    <div class="vhead"><span class="vnum">Earmark · 6</span><h2>First-payment shortfall warning — repeating bill, with RRule highlighting and the live "proposed" chart line</h2><span class="intent">Built 2026-08-07/08, missing from this file until now — IsFirstOccurrencePending/FirstOccurrenceShortfall (PlanHealthState), the RRule preview's own highlighting wired for real (was built, never connected), and the chart's third line. Real numbers, County Property Tax from the seed data.</span></div>
+    <div class="stage"><div class="form">
+      <div class="top-combined" style="grid-template-columns:1.2fr 1fr auto">
+        <div class="top-half iib-half">
+          <span class="half-title">Instance-information-block</span>
+          <span class="picker">Editing: <b>County Property Tax savings plan</b> <span class="car">▾</span></span>
+        </div>
+        <div class="top-half cfb-half">
+          <span class="half-title">Characterization-field-block</span>
+          <div class="pillgroup"><span class="pillbtn sel">Savings plan</span><span class="pillbtn">One-off adjustment</span></div>
+        </div>
+        <div class="top-half"><button class="iib-btn ghost">Clear form</button></div>
+      </div>
+      <div class="split3">
+        <div class="startcol start-pad">
+          <div class="start-h">Starting point</div>
+          <div class="start-amt">$0.00</div>
+          <div class="start-date">savings plan started from 0</div>
+          <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line)">
+            <label style="font-size:11px; color:var(--ink-3)">Starting earmark</label>
+            <div class="box" style="margin-top:4px">$0.00</div>
+          </div>
+        </div>
+        <div class="rest">
+          <div class="grid3" style="margin-bottom:14px">
+            <div class="fld"><label>Amount per occurrence</label><div class="box">$97.30</div></div>
+          </div>
+          <div class="rest-title">Recurrence</div>
+          <div class="grid2">
+            <div class="fld"><label>Frequency</label><div class="box">Weekly</div></div>
+            <div class="fld"><label>Every</label><div class="box">2 week(s)</div></div>
+            <div class="fld"><label>Starts</label><div class="box">Aug 8, 2026</div></div>
+            <div class="fld"><label>Ends</label><div class="box">On date: Dec 31, 2027</div></div>
+          </div>
+        </div>
+        <div class="helpercol">
+          <div class="helper" style="height:100%">
+            <div class="helper-h">Recurrence preview</div>
+            <div class="rrule-preview">
+              <div class="mini-cal">
+                <div class="mc-head">September 2026</div>
+                <div class="mc-grid">
+                  <span class="mc-dow">S</span><span class="mc-dow">M</span><span class="mc-dow">T</span><span class="mc-dow">W</span><span class="mc-dow">T</span><span class="mc-dow">F</span><span class="mc-dow">S</span>
+                  <span class="mc-day off">30</span><span class="mc-day off">31</span><span class="mc-day">1</span><span class="mc-day">2</span><span class="mc-day">3</span><span class="mc-day">4</span><span class="mc-day">5</span>
+                  <span class="mc-day">6</span><span class="mc-day">7</span><span class="mc-day">8</span><span class="mc-day">9</span><span class="mc-day">10</span><span class="mc-day">11</span><span class="mc-day">12</span>
+                  <span class="mc-day">13</span><span class="mc-day">14</span><span class="mc-day">15</span><span class="mc-day">16</span><span class="mc-day short">17</span><span class="mc-day">18</span><span class="mc-day">19</span>
+                </div>
+              </div>
+              <div class="mini-occ">
+                <div class="mo-title">All occurrences (of the GOAL's own due dates — the bill, not this plan's paydays)</div>
+                <div class="mo-row" style="color:var(--bad); font-weight:600">Sep 17, 2026</div>
+                <div class="mo-row">Mar 17, 2027</div>
+                <div class="mo-row">Sep 17, 2027</div>
+              </div>
+            </div>
+            <div class="rrule-caption short">Keeps falling short</div>
+          </div>
+        </div>
+      </div>
+      <div class="summary-block">
+        <div class="summary-h">Summary</div>
+        <div class="summary-narrative">
+          <b>County Property Tax</b> costs <b>$1,200</b> every 6 months — next due <b>Sep 17, 2026</b>.
+          We plan to set aside <b>$97.30</b> every 2 weeks toward it.
+        </div>
+        <div class="summary-chart-row">
+          <svg viewBox="0 0 680 156" role="img" aria-label="Milestone sawtooth across three release cycles, the first one falling well short of the goal, with the short cycle's own gridline highlighted">
+            <line x1="46" y1="132" x2="666" y2="132" stroke="var(--line-2)" stroke-width="1"/>
+            <line x1="46" y1="24" x2="666" y2="24" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="5,4"/>
+            <text x="600" y="17" font-size="10.5" fill="var(--ink-2)" text-anchor="end">$1,200 goal</text>
+            <line x1="95" y1="14" x2="95" y2="132" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="2,3"/>
+            <text x="95" y="10" font-size="9" fill="var(--bad)" text-anchor="middle" font-weight="600">Sep 17</text>
+            <line x1="315" y1="14" x2="315" y2="132" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="2,3"/>
+            <text x="315" y="10" font-size="9" fill="var(--ink-3)" text-anchor="middle">Mar 17</text>
+            <line x1="538" y1="14" x2="538" y2="132" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="2,3"/>
+            <text x="538" y="10" font-size="9" fill="var(--ink-3)" text-anchor="middle">Sep 17</text>
+            <path d="M46,132 V125 H70,132 H95,114 V132 H180,120 H315,32 V132 H420,110 H538,32 V132 H666"
+                  fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            <text x="150" y="120" font-size="10.5" fill="var(--accent-ink)">Savings plan (proposed — rough, live estimate)</text>
+            <line x1="46" y1="14" x2="46" y2="132" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="3,3"/>
+            <circle cx="46" cy="132" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+            <text x="8" y="150" font-size="10.5" fill="var(--ink-2)">Today</text>
+            <text x="40" y="135" font-size="10" fill="var(--ink-3)" text-anchor="end">$0</text>
+          </svg>
+          <div class="summary-aside">
+            <b>Fund jar, today:</b><br>$0 saved of $0 milestone — on track.<br><br>
+            <span class="amount-bad" style="font-weight:600">$1,005 short for the first payment</span>
+          </div>
+        </div>
+        <div class="chart-legend">
+          <span class="lk"><span class="sw dash" style="color:var(--ink-3)"></span>Goal</span>
+          <span class="lk"><span class="sw" style="color:var(--accent)"></span>Savings plan (proposed — rough, live estimate)</span>
+        </div>
+      </div>
+      <div class="save-row-id">
+        <span class="id-text">Editing: <b>County Property Tax savings plan</b></span>
+        <div class="actions"><button class="iib-btn primary">Save</button></div>
+      </div>
+    </div></div>
+    <p class="note">Real numbers, tools/SeedData's own County Property Tax scenario (built to answer the
+    author's own question about a genuine first-payment shortfall) — a plan paced for the LONG run
+    (three payment cycles over ~16 months) simply can't have caught up by the very first one, six weeks
+    from when it started. Whole-span math alone reads this as fine (WillMiss, only $97 short of the
+    $3,600 needed across all three cycles) — <code>FirstOccurrenceShortfall</code> is what actually
+    catches the $1,005 gap sitting in front of the FIRST payment specifically. Three things converge on
+    this one card: the RRule preview's mini-calendar/occurrence-list highlighting (built earlier, never
+    wired to real data until now), the chart's own peak-date gridlines with the short one marked to match
+    the warning text's own color, and the third "proposed — live estimate" chart line (§ below) replacing
+    the flat two-line charts of Earmark · 1-5. <code>MaybeStartingEarmark</code> does NOT fire for this
+    scenario — it only ever checks whether ANYTHING lands before the due date, never whether ENOUGH does
+    — which is exactly the gap this whole warning exists to close. The Starting earmark field (left
+    column) is where a user would actually fix this, by hand, before saving.</p>
+  </section>
+
+  <!-- ============ EARMARK — ONE-OFF MODE'S OWN SUMMARY, WITH THE ADDITION LINE ============ -->
+  <section class="variant">
+    <div class="vhead"><span class="vnum">Earmark · 7</span><h2>One-off adjustment mode — the Summary region's own extra line</h2><span class="intent">Built 2026-08-07, missing from this file until now. Answers the author's own "I think the one-off mode has one extra bit of detail, but I forgot what it was" — it's this: a fourth chart line, running from Today, showing where the jar would land if the currently-typed one-off were saved. Real numbers, Car Insurance Co from the seed data (its own +$50 Mar 1 manual entry already on the books).</span></div>
+    <div class="stage"><div class="form">
+      <div class="top-combined" style="grid-template-columns:1.2fr 1fr auto">
+        <div class="top-half iib-half">
+          <span class="half-title">Instance-information-block</span>
+          <span class="picker">Editing: <b>Car Insurance Co savings plan</b> <span class="car">▾</span></span>
+        </div>
+        <div class="top-half cfb-half">
+          <span class="half-title">Characterization-field-block</span>
+          <div class="pillgroup"><span class="pillbtn">Savings plan</span><span class="pillbtn sel">One-off adjustment</span></div>
+        </div>
+        <div class="top-half"><button class="iib-btn ghost">Clear form</button></div>
+      </div>
+      <div class="rest">
+        <div class="grid3">
+          <div class="fld"><label>What do you want to do?</label><div class="pillgroup"><span class="pillbtn sel">Add</span><span class="pillbtn">Withdraw</span><span class="pillbtn">Move</span></div></div>
+          <div class="fld"><label>On what day?</label><div class="box">Aug 8, 2026</div></div>
+          <div class="fld"><label>How much?</label><div class="box">$150.00</div></div>
+        </div>
+      </div>
+      <div class="summary-block">
+        <div class="summary-h">Summary</div>
+        <div class="summary-narrative">
+          <b>Car Insurance Co</b> costs <b>$300</b> every 3 months — next due <b>Oct 1, 2026</b>. This
+          one-off adjustment is adding <b>$150</b> on Aug 8, 2026.
+        </div>
+        <div class="summary-chart-row">
+          <svg viewBox="0 0 680 156" role="img" aria-label="Fund jar's saved reading with today's proposed addition shown as a fourth, offset line">
+            <line x1="46" y1="132" x2="666" y2="132" stroke="var(--line-2)" stroke-width="1"/>
+            <line x1="46" y1="86" x2="666" y2="86" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="5,4"/>
+            <text x="600" y="79" font-size="10.5" fill="var(--ink-2)" text-anchor="end">$300 goal</text>
+            <path d="M46,86 H666" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            <text x="52" y="80" font-size="10.5" fill="var(--accent-ink)">Fund jar (actual) — $50 over, from the Mar 1 manual entry</text>
+            <path d="M46,86 H666" transform="translate(0,-52)" fill="none" stroke="#cc6d00" stroke-width="2" stroke-dasharray="6,4" stroke-linejoin="round" stroke-linecap="round"/>
+            <text x="52" y="30" font-size="10.5" fill="#cc6d00">With today's addition (+$150)</text>
+            <line x1="46" y1="14" x2="46" y2="132" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="3,3"/>
+            <circle cx="46" cy="86" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+            <circle cx="46" cy="34" r="5" fill="#cc6d00" stroke="var(--surface)" stroke-width="2"/>
+            <text x="8" y="150" font-size="10.5" fill="var(--ink-2)">Today</text>
+            <text x="40" y="135" font-size="10" fill="var(--ink-3)" text-anchor="end">$0</text>
+          </svg>
+          <div class="summary-aside"><b>Fund jar, today:</b><br>$350 saved of $300 milestone — <b class="amount-good">$50 over</b></div>
+        </div>
+        <div class="chart-legend">
+          <span class="lk"><span class="sw dash" style="color:var(--ink-3)"></span>Goal</span>
+          <span class="lk"><span class="sw" style="color:var(--accent)"></span>Fund jar (actual)</span>
+          <span class="lk"><span class="sw dash" style="color:#cc6d00"></span>With today's addition</span>
+        </div>
+      </div>
+      <div class="save-row-id">
+        <span class="id-text">Editing: <b>Car Insurance Co savings plan</b></span>
+        <div class="actions"><button class="iib-btn primary">Save</button></div>
+      </div>
+    </div></div>
+    <p class="note">Earmark · 1-5's own "Savings plan (proposed)" line never appears here — One-off mode
+    doesn't edit Amount/Recurrence, so there's nothing to propose a new rate from; ActualTrajectory
+    (the real, saved reading) takes that visual slot instead, same color, never on screen with Proposed
+    at the same time (the two are mutually exclusive by which mode supplied data, not by an explicit
+    "mode" flag the chart itself knows about). The addition line is a plain parallel shift of the whole
+    Actual shape, not a re-solve of the real floor/deallocation math — a rough preview, same spirit as
+    the Proposed line's own "cheap, not the expensive real history." It also carries the one live-preview
+    scope limit GetOneOffLiveDelta's own TODO documents: a One-off dated before this goal's own most
+    recent release won't offset the line at all (nothing to show would be wrong to guess at).</p>
+  </section>
+
   <!-- ============ EXPENSE — SAVE ROW WITH STATUS INDICATOR ============ -->
   <section class="variant">
     <div class="vhead"><span class="vnum">Expense · 1</span><h2>Bottom bar — plan-health status + both save buttons</h2><span class="intent">planning/21's save-controls section: status text on the left, both buttons on the far right, "Save and Plan" gets an extra outline when the pending change would meaningfully affect the linked plan.</span></div>
@@ -495,15 +775,28 @@
         </div>
       </div>
     </div></div>
-    <p class="note">Names settled 2026-08-05. Four labels total: "Currently Underfunded" (today,
-    severity 1 — strongest), "Underfunding Projected" (future, shown here, severity 2), "Currently
-    Overfunded" (severity 3), "Overfunding Projected" (severity 4 — mildest) — reusing
-    <code>MostImportantHealthState</code>'s own ranking order for severity, styled here the same way
-    <code>PatternRows.cs</code> already tiers status colors on the Forecast tab. Severity styling
-    itself is proposed, not yet confirmed.</p>
+    <p class="note">Names settled 2026-08-05, BUILT 2026-08-07 (<code>PlanHealthMessages.
+    ExpenseStatusLabel</code>, <code>ExpenseFormPanel.UpdateStatusIndicator</code>). Four labels total:
+    "Currently Underfunded" (today, severity 1 — strongest), "Underfunding Projected" (future, shown
+    here, severity 2), "Currently Overfunded" (severity 3), "Overfunding Projected" (severity 4 —
+    mildest) — reusing <code>MostImportantHealthState</code>'s own ranking order for severity, styled
+    here the same way <code>PatternRows.cs</code> already tiers status colors on the Forecast tab.
+    <b>What actually shipped is narrower than this card:</b> the label and the outline both fire off
+    <code>MostImportantHealthState</code> alone (any non-Healthy state gets the same plain outline,
+    same warning color as the Earmark form's own warning text) — the 4-color severity tiering pictured
+    here, and the SEPARATE "does the pending, unsaved edit itself newly cause one of these states" half
+    of the outline trigger (planning/21's own earlier, independent "Save and Plan... gets an outline
+    when the pending change would meaningfully affect the linked plan" — a comparison against
+    currently-typed fields, not the loaded plan's own already-saved health), are both still open,
+    not built.</p>
   </section>
 
-  <footer>Pulled from the fuller exploration files listed above — only what's actually settled, current
-  as of 2026-08-05. If a detail here contradicts planning/21 or planning/22, the markdown wins; update
-  this file to match, don't trust this file over the design record while both exist.</footer>
+  <footer>Pulled from the fuller exploration files listed above — settled content, refreshed 2026-08-08
+  against a full audit of what the real app has vs. what this file showed (some of this file's own
+  content — Earmark · 6/7, the ExpenseStatusLabel note — was ahead of the code; some of the code — the
+  first-payment warning, the RRule highlighting, the third chart line — was ahead of this file. Kept
+  <code>settled-designs.html</code> as the visual anchor going forward per the author's own instruction:
+  when the two disagree, this file should get updated to match the real, running app, not the other way
+  around). If a detail here contradicts planning/21 or planning/22, the markdown wins; update this file
+  to match, don't trust this file over the design record while both exist.</footer>
 </div></div>

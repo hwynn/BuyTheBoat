@@ -125,8 +125,29 @@
                                 <StackPanel>
                                     <TextBlock Text="STARTING POINT" FontSize="10" FontWeight="Bold" Foreground="Gray" Margin="0,0,0,8"/>
                                     <TextBlock x:Name="StartingAmountText" FontSize="16" FontWeight="Bold"/>
-                                    <TextBlock x:Name="StartingDateText" FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="StartingDateText" TextWrapping="Wrap" FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
+                                    <!-- UsersCanEditFundStartPoint, 2026-08-07: the editable
+                                         counterpart to the read-only total above it — StartingAmountText
+                                         keeps showing the combined total (StartingAllocation, never
+                                         user-editable here, plus this), while this box is specifically
+                                         the isolated-earmark portion. Collapsed (not just disabled) once
+                                         ActiveStart is in the past — "locked in", per the author's own
+                                         rule, not merely greyed out. -->
+                                    <StackPanel x:Name="StartingEarmarkEditPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                                        <TextBlock Text="Starting earmark" FontSize="10" Foreground="Gray"/>
+                                        <TextBox x:Name="StartingEarmarkAmountTextBox" Width="80" HorizontalAlignment="Left" Margin="0,2,0,0"
+                                                 TextChanged="OnStartingEarmarkAmountChanged"/>
+                                    </StackPanel>
                                     <TextBlock x:Name="StartingReasonText" TextWrapping="Wrap" FontSize="10.5" Foreground="#FF9A4F08"
+                                               Background="#FFFBF0E2" Padding="6,5" Margin="0,10,0,0" Visibility="Collapsed"/>
+                                    <!-- planning/23 addendum, 2026-08-07: the "will the first
+                                         payment be covered" warning (PlanHealthState.
+                                         FirstOccurrenceShortfall) — same visual treatment as
+                                         StartingReasonText above but a distinct element, since
+                                         the two answer different questions ("why does a starting
+                                         balance exist" vs. "is what's proposed actually enough")
+                                         and shouldn't be conflated under one name. -->
+                                    <TextBlock x:Name="StartingShortfallWarningText" TextWrapping="Wrap" FontSize="10.5" Foreground="#FF9A4F08"
                                                Background="#FFFBF0E2" Padding="6,5" Margin="0,10,0,0" Visibility="Collapsed"/>
                                 </StackPanel>
                             </Border>

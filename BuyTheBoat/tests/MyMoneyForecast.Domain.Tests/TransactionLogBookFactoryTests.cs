@@ -336,6 +336,322 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void ComputeMilestoneTrajectory_seed_only_survives_until_the_first_release_then_matches_the_unseeded_walk_exactly()
+    {
+        // The Summary chart's new "proposed — live estimate" line needs to
+        // start from whatever's currently typed in the Starting-point
+        // region, not $0 — this proves the seed is safe to add: it should
+        // show up on every point BEFORE the first release (seeded ==
+        // unseeded + the seed), then vanish completely from the first
+        // release onward (seeded == unseeded exactly, no seed left in it) —
+        // the same reset-erases-the-seed proof GetLiveJarAmounts' own
+        // header comment already argues for its one "today" point, checked
+        // here across a whole trajectory instead of just one.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 16,
+            Source = "Seed Test Bill",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [15],
+                Start = new DateOnly(2026, 1, 15),
+                Until = new DateOnly(2026, 2, 15),
+            }).WithActiveFrom(new DateOnly(2026, 1, 1)),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 16,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [5],
+                    Start = new DateOnly(2026, 1, 5),
+                    Until = new DateOnly(2026, 2, 5),
+                }),
+            },
+            bill);
+
+        var from = new DateOnly(2026, 1, 5);
+        var to = new DateOnly(2026, 2, 15);
+        var unseeded = TransactionLogBookFactory.ComputeMilestoneTrajectory([plan], bill, from, to);
+        var seeded = TransactionLogBookFactory.ComputeMilestoneTrajectory([plan], bill, from, to, startingAllocation: 200m);
+
+        seeded.Count.ShouldBe(unseeded.Count);
+        var firstReleaseIndex = seeded.ToList().FindIndex(p => p.Date == new DateOnly(2026, 1, 15));
+        firstReleaseIndex.ShouldBeGreaterThan(0); // the Jan 5 contribution must land before it for this test to prove anything
+
+        for (var i = 0; i < seeded.Count; i++)
+        {
+            var expected = i < firstReleaseIndex ? unseeded[i].MilestoneAmount + 200m : unseeded[i].MilestoneAmount;
+            seeded[i].MilestoneAmount.ShouldBe(expected);
+        }
+
+        // Concrete numbers, not just the relative check above — the exact
+        // scenario described in the comment: $300 on Jan 5 (100 unseeded +
+        // the 200 seed), 0 at the Jan 15 release (seed already gone), 100
+        // again on Feb 5 (identical to the unseeded walk from here on).
+        seeded[0].ShouldBe((new DateOnly(2026, 1, 5), 300m));
+        seeded[firstReleaseIndex].ShouldBe((new DateOnly(2026, 1, 15), 0m));
+        seeded[^1].ShouldBe(unseeded[^1]);
+    }
+
+    [Fact]
+    public void IsFirstOccurrencePending_is_true_before_the_first_occurrence_and_on_it_but_false_after()
+    {
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 10,
+            Source = "Rent",
+            Amount = -1000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2026, 3, 1),
+                Until = new DateOnly(2026, 12, 1),
+            }),
+        });
+
+        TransactionLogBookFactory.IsFirstOccurrencePending(bill, new DateOnly(2026, 2, 15)).ShouldBeTrue();
+        TransactionLogBookFactory.IsFirstOccurrencePending(bill, new DateOnly(2026, 3, 1)).ShouldBeTrue(); // same day still counts
+        TransactionLogBookFactory.IsFirstOccurrencePending(bill, new DateOnly(2026, 3, 2)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void FirstOccurrenceShortfall_is_the_full_amount_when_no_contribution_lands_before_it()
+    {
+        // The exact scenario the author asked about directly: a plan whose
+        // own first contribution comes AFTER the bill's first due date.
+        // MilestoneAmount stays at $0 right up to that point (nothing has
+        // happened yet to move it) — this is the check CurrentShortfallAmount
+        // can't make on its own, since $0-vs-$0 reads as perfectly on pace.
+        // Repeating, not one-time: an EarMarkPattern can't outlive its own
+        // goal's date range (3.11.2.a2), so a plan whose contributions run
+        // for months needs a goal with room for that — this is also the
+        // realistic shape for this feature (DMV Registration's own real
+        // seed-data scenario), not just a test-construction convenience.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 11,
+            Source = "Registration",
+            Amount = -180m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2026, 3, 1),
+                Until = new DateOnly(2027, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 11,
+                Amount = -60m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [15],
+                    Start = new DateOnly(2026, 3, 15), // AFTER the Mar 1 bill
+                    Until = new DateOnly(2026, 12, 15),
+                }),
+            },
+            bill);
+
+        TransactionLogBookFactory.FirstOccurrenceShortfall([plan], bill, [], new DateOnly(2026, 2, 1))
+            .ShouldBe(180m); // nothing accumulated yet — the whole bill is exposed
+    }
+
+    [Fact]
+    public void FirstOccurrenceShortfall_is_zero_when_StartingAllocation_alone_covers_it()
+    {
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 12,
+            Source = "Registration",
+            Amount = -180m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2026, 3, 1),
+                Until = new DateOnly(2027, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 12,
+                Amount = -60m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [15],
+                    Start = new DateOnly(2026, 3, 15),
+                    Until = new DateOnly(2026, 12, 15),
+                }),
+                StartingAllocation = 200m,
+            },
+            bill);
+
+        TransactionLogBookFactory.FirstOccurrenceShortfall([plan], bill, [], new DateOnly(2026, 2, 1)).ShouldBe(0m);
+    }
+
+    [Fact]
+    public void FirstOccurrenceShortfall_counts_a_manual_earmark_dated_before_the_first_occurrence_but_not_after()
+    {
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 13,
+            Source = "Registration",
+            Amount = -180m,
+            // WithActiveFrom here too — a plan's own ActiveFrom can't precede
+            // its goal's (3.13.8.a2's own family), so the goal needs an
+            // earlier lead-in of its own. Its actual first OCCURRENCE stays
+            // Mar 1 either way — WithActiveFrom only moves the active-span
+            // boundary, never what GetOccurrences returns.
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2026, 3, 1),
+                Until = new DateOnly(2027, 12, 1),
+            }).WithActiveFrom(new DateOnly(2026, 1, 1)),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 13,
+                Amount = -60m,
+                // ManualEarmark.Create checks against DatePattern.Start
+                // literally, not ActiveStart — WithActiveFrom widens the
+                // active *span* but not that specific check — so Start
+                // itself has to be early enough for Feb 20 to be valid.
+                // ByMonthDay's own true first match (the 15th) still lands
+                // on Mar 15, safely after the bill's own Mar 1 occurrence,
+                // so this plan's own SCHEDULE contributes nothing in the
+                // window this test cares about — verified below, not
+                // assumed (this project's own RRULE/DTSTART quirks have
+                // bitten hand-reasoning about this exact kind of thing
+                // before).
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [15],
+                    Start = new DateOnly(2026, 2, 20),
+                    Until = new DateOnly(2026, 12, 15),
+                }),
+            },
+            bill);
+
+        // Confirms the schedule itself contributes nothing between Feb 20
+        // and the bill's own Mar 1 occurrence, so the two assertions below
+        // are actually isolating the manual earmark's own effect, not
+        // silently riding on an unverified assumption about this schedule.
+        plan.DatePattern.GetOccurrences(new DateOnly(2026, 2, 20), new DateOnly(2026, 3, 1)).ShouldBeEmpty();
+
+        var earlyManual = ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = 13, Date = new DateOnly(2026, 2, 20), Amount = 180m }, plan);
+        var lateManual = ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = 13, Date = new DateOnly(2026, 4, 1), Amount = 180m }, plan);
+
+        TransactionLogBookFactory.FirstOccurrenceShortfall([plan], bill, [earlyManual], new DateOnly(2026, 2, 1)).ShouldBe(0m);
+        TransactionLogBookFactory.FirstOccurrenceShortfall([plan], bill, [lateManual], new DateOnly(2026, 2, 1)).ShouldBe(180m);
+    }
+
+    [Fact]
+    public void FirstOccurrenceShortfall_is_zero_once_the_first_occurrence_has_already_happened()
+    {
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 14,
+            Source = "Registration",
+            Amount = -180m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2026, 3, 1),
+                Until = new DateOnly(2027, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 14,
+                Amount = -60m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [15],
+                    Start = new DateOnly(2026, 3, 15),
+                    Until = new DateOnly(2026, 12, 15),
+                }),
+            },
+            bill);
+
+        // asOfDate is AFTER the Mar 1 first occurrence — no longer pending,
+        // even though nothing was ever actually contributed toward it.
+        TransactionLogBookFactory.FirstOccurrenceShortfall([plan], bill, [], new DateOnly(2026, 3, 2)).ShouldBe(0m);
+    }
+
+    [Fact]
+    public void FirstOccurrenceShortfall_is_a_partial_amount_when_only_one_of_two_needed_contributions_has_landed()
+    {
+        // The exact scenario the author asked about directly: a plan that
+        // NEEDS two contributions to cover the bill, where only the first
+        // of those two has actually landed by the bill's own due date — the
+        // second is scheduled, but too late to help this occurrence. This
+        // must read as a GENUINE partial shortfall (not $0, and not the
+        // full $200) — proving the "current funds AND the upcoming earmark
+        // events" framing the author gave: GetOccurrences counts only
+        // contributions that fall on-or-before firstOccurrence, so a
+        // contribution scheduled for AFTER it (Feb 1, here) simply isn't in
+        // the sum yet, however "upcoming" it is.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 15,
+            Source = "Soon Bill",
+            Amount = -200m,
+            // WithActiveFrom so the plan (below) is allowed to start Jan 1 —
+            // a month ahead of the bill's own literal Start — without
+            // tripping the "can't begin before the goal's active span
+            // starts" check. The bill's actual first OCCURRENCE stays
+            // Jan 15 either way; ActiveFrom only widens the active span.
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [15],
+                Start = new DateOnly(2026, 1, 15),
+                Until = new DateOnly(2027, 12, 15),
+            }).WithActiveFrom(new DateOnly(2025, 12, 1)),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 15,
+                Amount = -100m, // needs TWO of these to cover the $200 bill
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2026, 1, 1), // 1st contribution: Jan 1 — before the Jan 15 due date
+                    Until = new DateOnly(2027, 11, 1), // 2nd contribution: Feb 1 — AFTER it
+                }),
+            },
+            bill);
+
+        // Confirmed, not assumed: exactly one contribution falls on-or-before
+        // the due date, not two and not zero.
+        plan.DatePattern.GetOccurrences(plan.DatePattern.Start, new DateOnly(2026, 1, 15)).Count.ShouldBe(1);
+
+        TransactionLogBookFactory.FirstOccurrenceShortfall([plan], bill, [], new DateOnly(2026, 1, 1))
+            .ShouldBe(100m); // $100 landed, $100 still short — not $0, not $200
+    }
+
+    [Fact]
     public void An_underfunded_streams_milestone_floors_at_zero_instead_of_going_negative()
     {
         // planning/14 (2026-08-03): a stream that has fallen behind must never

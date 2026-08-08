@@ -82,6 +82,22 @@ public partial class EarmarkFormPanel : UserControl
     // placement is settled) should read/write this field.
     private decimal _startingAllocation;
 
+    // Author, 2026-08-07: the OTHER starting-point source — the isolated
+    // earmark (ManualEarmark) dated exactly on the plan's own ActiveStart,
+    // not StartingAllocation (which only a break-off ever sets). Populated
+    // on Load*, edited live via StartingEarmarkAmountTextBox (visible only
+    // when UsersCanEditFundStartPoint), written on Save (SaveSavingsPlan's
+    // own delete-if-zero rule, 3.13c.8.a5).
+    private decimal _startingEarmarkAmount;
+
+    // The ActiveStart this plan's isolated earmark was actually loaded
+    // against — null when there was no saved plan to load one from. Save
+    // compares this to the pattern's own (possibly just-edited) ActiveStart:
+    // if the Start date moved, whatever was sitting at THIS old date is
+    // orphaned and needs deleting too, not just left behind (author's own
+    // instruction, 2026-08-07).
+    private DateOnly? _loadedActiveStart;
+
     // Same fix RecurrenceRuleEditor already uses elsewhere in this app:
     // SavingsPlanRadio's XAML-declared IsChecked="True" raises Checked
     // synchronously mid-parse, while InitializeComponent is still working
@@ -181,6 +197,9 @@ public partial class EarmarkFormPanel : UserControl
         ChangeGoalButton.IsEnabled = true;
         AmountTextBox.Text = string.Empty;
         _startingAllocation = 0m;
+        _startingEarmarkAmount = 0m;
+        StartingEarmarkAmountTextBox.Text = string.Empty;
+        _loadedActiveStart = null;
 
         _suppressEvents = false;
         UpdateModeVisibility();
@@ -201,6 +220,9 @@ public partial class EarmarkFormPanel : UserControl
 
         AmountTextBox.Text = Math.Abs(existing.Amount).ToString(CultureInfo.InvariantCulture);
         _startingAllocation = existing.StartingAllocation;
+        _startingEarmarkAmount = GetStartingEarmarkAmount(existing);
+        StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
+        _loadedActiveStart = existing.DatePattern.ActiveStart;
         RuleEditor.LoadFrom(existing.DatePattern);
 
         _suppressEvents = false;
@@ -222,6 +244,11 @@ public partial class EarmarkFormPanel : UserControl
 
         AmountTextBox.Text = string.Empty;
         _startingAllocation = alreadySaved;
+        // No EarMarkPattern exists yet to have an isolated earmark on —
+        // this jar's balance came from automatic reservation, not a plan.
+        _startingEarmarkAmount = 0m;
+        StartingEarmarkAmountTextBox.Text = string.Empty;
+        _loadedActiveStart = null;
 
         _suppressEvents = false;
         UpdateModeVisibility();
@@ -377,18 +404,31 @@ public partial class EarmarkFormPanel : UserControl
         {
             AmountTextBox.Text = Math.Abs(existing.Amount).ToString(CultureInfo.InvariantCulture);
             _startingAllocation = existing.StartingAllocation;
+            _startingEarmarkAmount = GetStartingEarmarkAmount(existing);
+            StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
+            _loadedActiveStart = existing.DatePattern.ActiveStart;
             RuleEditor.LoadFrom(existing.DatePattern);
         }
         else
         {
             AmountTextBox.Text = string.Empty;
             _startingAllocation = 0m;
+            _startingEarmarkAmount = 0m;
+            StartingEarmarkAmountTextBox.Text = string.Empty;
+            _loadedActiveStart = null;
             // TODO: RecurrenceRuleEditor has no public "reset to defaults"
             // beyond its own constructor — picking a goal with no existing
             // plan leaves whatever schedule was already on screen rather than
             // resetting it. Minor rough edge, not a correctness problem.
         }
     }
+
+    // Shared by every Load* path above — the isolated earmark (if any)
+    // dated exactly on this pattern's own ActiveStart, same lookup
+    // GetStartingPointTotal already does for display, reused here so
+    // _startingEarmarkAmount starts out matching whatever's actually saved.
+    private decimal GetStartingEarmarkAmount(EarMarkPattern pattern) =>
+        _existingManualEarmarks.FirstOrDefault(m => m.FinanceId == pattern.FinanceId && m.Date == pattern.DatePattern.ActiveStart)?.Amount ?? 0m;
 
     // planning/21: "a 'clear the form' control... If unsaved edits exist,
     // this asks for confirmation first" — ExpenseFormPanel's Clear already
@@ -416,6 +456,32 @@ public partial class EarmarkFormPanel : UserControl
         }
 
         UpdateModeVisibility();
+
+        // BUG FOUND AND FIXED (2026-08-08, author's own report: no addition
+        // line in One-off mode, even after typing an amount). EarmarkDatePicker
+        // has no default SelectedDate in XAML, and this handler — unlike
+        // LoadOneOff's own "+ New Earmark" entry point — never gave it one
+        // either; it only toggled visibility. Clicking straight into the
+        // "One-off adjustment" pill (rather than opening an existing entry
+        // or "+ New Earmark" first) left the date genuinely null.
+        // GetOneOffLiveDelta's own "SelectedDate is not {} picked" guard
+        // then correctly read that as "nothing to compute" — not a math
+        // bug, a missing default. Only filled in when it's still blank, so
+        // an already-loaded entry's own date is never overwritten.
+        //
+        // _suppressEvents wraps the assignment on purpose: setting
+        // SelectedDate programmatically still raises SelectedDateChanged,
+        // and OnInputsChanged's own "landed on a day with an existing
+        // entry" switch logic has no business running for a plain default
+        // fill-in — the explicit UpdateSummary() call right below already
+        // covers the refresh this needs.
+        if (OneOffRadio.IsChecked == true && EarmarkDatePicker.SelectedDate is null)
+        {
+            _suppressEvents = true;
+            EarmarkDatePicker.SelectedDate = DateTime.Today;
+            _suppressEvents = false;
+        }
+
         // Same gap as LoadOneOff (see its own BUG FOUND AND FIXED comment) —
         // Summary now lives outside the mode-switching Grid, so toggling the
         // radio button needs its own explicit refresh too.
@@ -672,6 +738,66 @@ public partial class EarmarkFormPanel : UserControl
             },
             selectedGoal);
 
+        // Author, 2026-08-07: the starting-earmark field's own save rule.
+        // 3.13c.8.a5: a $0 isolated earmark doesn't get to exist, so
+        // zero+existing means delete, not save-as-zero (ManualEarmark.Create
+        // rejects a zero Amount outright anyway — this is that same rule,
+        // applied before Create is even attempted, not caught as an
+        // exception from it).
+        //
+        // Latent, pre-existing inconsistency, NOT introduced here (same
+        // ActiveStart GetStartingPointTotal already reads for display):
+        // ManualEarmark.Create validates its own Date against
+        // DatePattern.Start literally, not ActiveStart — the two only ever
+        // coincide today because nothing currently gives an EarMarkPattern
+        // its own ActiveFrom lead-in distinct from Start (WithActiveFrom is
+        // only ever called on the GOAL side, AllocationPlanProposer). Would
+        // need real attention if that ever changes.
+        var newActiveStart = pattern.DatePattern.ActiveStart;
+        var savedEarmarks = new List<ManualEarmark>();
+        var deletedEarmarks = new List<(int FinanceId, DateOnly Date)>();
+
+        var existingAtNewStart = _existingManualEarmarks.FirstOrDefault(
+            m => m.FinanceId == selectedGoal.FinanceId && m.Date == newActiveStart);
+        if (_startingEarmarkAmount == 0m)
+        {
+            if (existingAtNewStart is not null)
+            {
+                deletedEarmarks.Add((selectedGoal.FinanceId, newActiveStart));
+            }
+            // else: zero and nothing there either — the author's own
+            // explicit no-op case.
+        }
+        else
+        {
+            savedEarmarks.Add(ManualEarmark.Create(
+                new ManualEarmarkOptions { FinanceId = selectedGoal.FinanceId, Date = newActiveStart, Amount = _startingEarmarkAmount },
+                pattern));
+        }
+
+        // Author, 2026-08-07: "if we have a starting earmark event and the
+        // start date gets moved, we will have to make sure that old starting
+        // earmark gets deleted." _loadedActiveStart is whatever ActiveStart
+        // was in effect when this plan was loaded — if the Start date has
+        // since moved, whatever was sitting at that OLD date no longer
+        // means anything (it isn't "at the start" of this schedule anymore)
+        // and would otherwise sit there forever, orphaned. Skipped when the
+        // two dates match — already handled by the block above in that case.
+        if (_loadedActiveStart is { } oldActiveStart && oldActiveStart != newActiveStart)
+        {
+            var existingAtOldStart = _existingManualEarmarks.FirstOrDefault(
+                m => m.FinanceId == selectedGoal.FinanceId && m.Date == oldActiveStart);
+            if (existingAtOldStart is not null)
+            {
+                deletedEarmarks.Add((selectedGoal.FinanceId, oldActiveStart));
+            }
+        }
+
+        if (savedEarmarks.Count > 0 || deletedEarmarks.Count > 0)
+        {
+            ManualEarmarksSaved?.Invoke(savedEarmarks, deletedEarmarks);
+        }
+
         // planning/21's instance-information-block rule ("the form clears
         // itself automatically after a successful save"), wired 2026-08-05 —
         // before invoking the callback, same reasoning ExpenseFormPanel.Save
@@ -822,31 +948,282 @@ public partial class EarmarkFormPanel : UserControl
         return (jar?.ExpectedAmount ?? 0m, entry.Snapshot.ExpectedFreeAmount ?? 0m);
     }
 
+    // [ShowFundStartPointRegion] Whether the Starting-point region can appear at all. Author, 2026-08-07: true in Savings-plan mode, false in One-off — deliberately simple for now, expected to grow more restrictive later.
+    private bool ShowFundStartPointRegion => SavingsPlanRadio.IsChecked == true;
+
+    // [UsersCanEditFundStartPoint] Whether the user can see/edit the starting isolated earmark's own amount — needs ShowFundStartPointRegion, and locks once the pattern's own ActiveStart is in the past.
+    // BUG FOUND AND FIXED (2026-08-07, author's own report): read the SAVED
+    // pattern's own ActiveStart, so it could never go true for a brand-new
+    // plan (nothing saved yet to read) or react to a live edit to the Start
+    // date on an existing one — exactly the two cases the author was
+    // testing. Reads RuleEditor.Result instead, the same live source
+    // UpdateSummary's own narrative already reads, so this reacts to typing
+    // the same way everything else in this pass does.
+    private bool UsersCanEditFundStartPoint =>
+        ShowFundStartPointRegion
+        && RuleEditor.Result is { } rule
+        && rule.ActiveStart >= DateOnly.FromDateTime(DateTime.Today);
+
     // planning/23 ("the starting point region"): amount + date only, real
     // data — StartingAllocation (the break-off case, fully unambiguous) plus
     // any ManualEarmark dated exactly on the plan's own ActiveStart (the
     // front-load-or-manual case; which of those two it was is still an open
     // question, not guessed at here — see this region's own XAML comment).
-    // Hidden entirely when the total is $0 — an ordinary plan with nothing
-    // here worth showing, not an error state.
+    //
+    // REVISED 2026-08-07 (author's own correction): ShowFundStartPointRegion
+    // is the ONLY visibility gate now, not a total-is-zero check layered on
+    // top of it — the region always renders whenever it's true, in all three
+    // content cases below. Was: collapsed entirely whenever the total came
+    // out to $0, which silently hid it for almost every ordinary plan
+    // (Trip to Japan, Car Insurance Co, Mobile Carrier, ...) — only Car
+    // Lease Payment and DMV Registration ever showed it under that rule.
     private void UpdateStartingPointRegion()
     {
-        if (_selectedGoal is not { } goal || !_patternsByFinanceId.TryGetValue(goal.FinanceId, out var pattern))
+        if (!ShowFundStartPointRegion)
         {
             StartingPointRegion.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var total = GetStartingPointTotal(pattern);
-        if (total <= 0m)
-        {
-            StartingPointRegion.Visibility = Visibility.Collapsed;
+            StartingShortfallWarningText.Visibility = Visibility.Collapsed;
             return;
         }
 
         StartingPointRegion.Visibility = Visibility.Visible;
-        StartingAmountText.Text = $"{total:C}";
-        StartingDateText.Text = $"as of {pattern.DatePattern.ActiveStart:MMM d, yyyy}";
+        StartingEarmarkEditPanel.Visibility = UsersCanEditFundStartPoint ? Visibility.Visible : Visibility.Collapsed;
+
+        // No saved EarMarkPattern to read from at all — no goal picked yet,
+        // or a goal picked that has none (author's own call, 2026-08-07):
+        // same $0 treatment as an existing zero-total plan, just without a
+        // real ActiveStart to caption.
+        if (_selectedGoal is not { } goal || !_patternsByFinanceId.TryGetValue(goal.FinanceId, out var pattern))
+        {
+            StartingAmountText.Text = $"{0m:C}";
+            StartingDateText.Text = "no savings plan saved yet";
+        }
+        else
+        {
+            var total = GetStartingPointTotal(pattern);
+            if (total <= 0m)
+            {
+                StartingAmountText.Text = $"{0m:C}";
+                StartingDateText.Text = "savings plan started from 0";
+            }
+            else
+            {
+                StartingAmountText.Text = $"{total:C}";
+                StartingDateText.Text = $"as of {pattern.DatePattern.ActiveStart:MMM d, yyyy}";
+            }
+        }
+
+        // Runs for both branches above — brand-new (no saved plan yet) is
+        // exactly when this warning matters most, not a case to skip it in.
+        UpdateStartingShortfallWarning();
+    }
+
+    // planning/23 addendum, 2026-08-07 (author's own instruction): reads the
+    // CURRENTLY-TYPED Amount/Recurrence fields — "the proposed EarmarkPattern
+    // in the form," not the saved plan — since the whole point is catching
+    // this before Save, while there's still time to fix it. Builds the same
+    // kind of throwaway EarMarkPattern SaveSavingsPlan itself constructs
+    // right before persisting, never saved, just fed into the same domain
+    // check (TransactionLogBookFactory.FirstOccurrenceShortfall) the saved
+    // path also runs for the Summary region's own aside — one computation,
+    // two callers, per the author's own "consolidate" instruction.
+    private void UpdateStartingShortfallWarning()
+    {
+        // BUG FOUND AND FIXED (2026-08-07): now shares TryBuildProposedPattern
+        // with GetLiveJarAmounts instead of constructing its own copy —
+        // was harmless duplication on its own, but kept two independent
+        // places that both needed to stay in sync with EarMarkPattern.Create's
+        // own validation, exactly the kind of drift risk the author's own
+        // "consolidate" instruction is about avoiding.
+        if (_selectedGoal is not { } goal || TryBuildProposedPattern(goal) is not { } proposed)
+        {
+            StartingShortfallWarningText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        string? line;
+        try
+        {
+            var asOfDate = DateOnly.FromDateTime(DateTime.Today);
+            var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, asOfDate);
+            var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
+                GetPatternsForLiveCheck(goal, proposed), goal, GetProposedManualEarmarks(goal, proposed), asOfDate);
+            var isOneTime = goal.DatePattern.GetOccurrences().Count == 1;
+            line = PlanHealthMessages.FirstOccurrenceShortfallLine(isPending, shortfall, isOneTime);
+        }
+        catch (ArgumentException)
+        {
+            // GetProposedManualEarmarks' own ManualEarmark.Create call can
+            // still throw even though proposed itself built fine — same
+            // Start-vs-ActiveStart latent inconsistency SaveSavingsPlan's
+            // own comment already flags, not a new risk introduced here.
+            line = null;
+        }
+
+        if (line is null)
+        {
+            StartingShortfallWarningText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        StartingShortfallWarningText.Text = line;
+        StartingShortfallWarningText.Visibility = Visibility.Visible;
+    }
+
+    // BUG FOUND AND FIXED (2026-08-07): UpdateStartingShortfallWarning used
+    // to pass _existingManualEarmarks straight through, which meant
+    // whatever's live in StartingEarmarkAmountTextBox never actually
+    // factored into its own warning — a $500 starting earmark being typed
+    // in still read as "$0 accumulated" until Save. Substitutes the live
+    // _startingEarmarkAmount in place of whatever's saved at this same
+    // (FinanceId, ActiveStart) pair, same "the proposed EarmarkPattern in
+    // the form" principle the rest of this check already follows.
+    private IReadOnlyList<ManualEarmark> GetProposedManualEarmarks(FinancialPattern goal, EarMarkPattern proposed)
+    {
+        var activeStart = proposed.DatePattern.ActiveStart;
+        var withoutOldStartingEntry = _existingManualEarmarks
+            .Where(m => !(m.FinanceId == goal.FinanceId && m.Date == activeStart))
+            .ToList();
+
+        if (_startingEarmarkAmount == 0m)
+        {
+            return withoutOldStartingEntry;
+        }
+
+        withoutOldStartingEntry.Add(ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = activeStart, Amount = _startingEarmarkAmount },
+            proposed));
+        return withoutOldStartingEntry;
+    }
+
+    // [GetOneOffLiveDelta] How much the currently-typed One-off adjustment
+    // would add to today's ExpectedAmount reading, if it were saved right
+    // now — so the Summary aside can react before Save is clicked, the
+    // same way the Starting-point region's own warning already does.
+    //
+    // Only applied when the typed date falls strictly after this goal's
+    // own most recent release before today (or on/after the plan's
+    // ActiveStart, if it hasn't released even once yet), and on or before
+    // today. Reason, with a real example already sitting in the seed data:
+    // a release does NOT reset the jar's ExpectedAmount to exactly 0 — it
+    // only ever subtracts the goal's own fixed Amount
+    // (TransactionLogBookFactory.AppendDeallocationOrGoalReleases), so
+    // whatever the jar held ABOVE that amount is left behind afterward
+    // (or, if it held less, the release floors at 0). Car Insurance Co's
+    // own plan shows exactly this: going into its Apr 1, 2026 release the
+    // jar held $350 (three $100 monthly contributions plus the +$50
+    // manual entry on Mar 1); the release only took the $300 the bill
+    // itself cost, leaving $50 behind — which is still sitting in the jar
+    // today, and is exactly what the Summary aside's "$50 over" reports.
+    //
+    // A One-off dated BEFORE that Apr 1 release, if actually saved, would
+    // change how much was in the jar going into it — which would change
+    // how much was left over afterward, and every day's ExpectedAmount
+    // reading since, including today's. This method has no way to replay
+    // that release and work out the new leftover live; rather than show a
+    // wrong number, it leaves today's reading exactly where it already
+    // was for a date that early. GetLiveJarAmounts's own header comment
+    // carries the same limit, for the same reason. A future-dated entry
+    // still contributes nothing to today's own reading either way,
+    // matching what actually saving it would do.
+    //
+    // TODO (author's own call, 2026-08-07): not urgent, an edge case for
+    // later, not blocking anything — leaving the full account here so it
+    // can be picked up cold, without re-deriving any of this reasoning.
+    //   THE GAP: for a One-off dated on/before this goal's own most recent
+    //   release, the line below returns 0m (no live change shown) even
+    //   though saving it for real WOULD change today's ExpectedAmount.
+    //   Only the live PREVIEW is affected — SaveOneOff -> Merge builds the
+    //   real ManualEarmark independently of this method, and the next real
+    //   forecast run (TransactionLogBookFactory.CreateForecast) always
+    //   computes the correct number regardless.
+    //   HOW TO REPRODUCE, to confirm the gap is still real: open Car
+    //   Insurance Co's savings plan (seed data, tools/SeedData/Program.cs)
+    //   in One-off mode, pick Feb 1, 2026 (before its own Apr 1, 2026
+    //   release), type any amount — the "Fund jar, today" aside should NOT
+    //   move. If it does move, something already changed this behavior;
+    //   re-read this method's current body before trusting the rest of
+    //   this note.
+    //   WHAT A REAL FIX NEEDS: replaying the actual day-by-day cascade
+    //   (TransactionLogBookFactory.CreateForecast's own per-day loop —
+    //   floor-at-0, the leftover-after-release carry described above) from
+    //   the backdated date forward, not a shortcut computed here. That's
+    //   either a new domain function built for this specific purpose, or
+    //   accepting the cost of a full RequestForecast() re-run with the
+    //   proposed entry inserted — a real design decision, not sketched out
+    //   here, and not something to guess at without discussing it first.
+    private decimal GetOneOffLiveDelta(FinancialPattern goal, DateOnly activeStart, DateOnly asOfDate)
+    {
+        if (!decimal.TryParse(OneOffAmountTextBox.Text, out var typedAmount) || typedAmount <= 0m
+            || EarmarkDatePicker.SelectedDate is not { } picked)
+        {
+            return 0m;
+        }
+
+        var date = DateOnly.FromDateTime(picked);
+        if (date > asOfDate)
+        {
+            return 0m;
+        }
+
+        var releases = goal.DatePattern.GetOccurrences(activeStart, asOfDate);
+        var mostRecentReleaseDate = releases.Count > 0 ? releases[^1] : activeStart;
+        if (date <= mostRecentReleaseDate)
+        {
+            return 0m;
+        }
+
+        var newAmount = IsWithdraw || IsMove ? -typedAmount : typedAmount;
+        var oldAmount = _oneOffEditTarget?.Amount ?? 0m; // Merge's own "editing replaces, not stacks" rule (SaveOneOff, above)
+        return newAmount - oldAmount;
+    }
+
+    // [GetProposedOneOffManualEarmarks] One-off mode's counterpart to
+    // GetProposedManualEarmarks above — substitutes the currently-typed
+    // OneOffAmountTextBox/EarmarkDatePicker/Action in place of whatever's
+    // already saved at that same (FinanceId, Date), mirroring Merge's own
+    // "editing replaces, not stacks" rule rather than reinventing it. No
+    // date-vs-today filtering here (unlike GetOneOffLiveDelta) — a manual
+    // earmark dated between today and the goal's own first occurrence is
+    // exactly the "upcoming earmark events" FirstOccurrenceShortfall
+    // itself already knows how to count; this just needs to be in the
+    // list, not pre-filtered.
+    private IReadOnlyList<ManualEarmark> GetProposedOneOffManualEarmarks(FinancialPattern goal, EarMarkPattern plan)
+    {
+        if (!decimal.TryParse(OneOffAmountTextBox.Text, out var typedAmount) || typedAmount <= 0m
+            || EarmarkDatePicker.SelectedDate is not { } picked)
+        {
+            return _existingManualEarmarks;
+        }
+
+        var date = DateOnly.FromDateTime(picked);
+        var withoutThisEntry = _existingManualEarmarks
+            .Where(m => !(m.FinanceId == goal.FinanceId && m.Date == date))
+            .ToList();
+
+        var signedAmount = IsWithdraw || IsMove ? -typedAmount : typedAmount;
+        withoutThisEntry.Add(ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = date, Amount = signedAmount },
+            plan));
+        return withoutThisEntry;
+    }
+
+    // The editable counterpart to AmountTextBox.TextChanged above — same
+    // shape, own field. Blank/unparseable reads as 0, same convention
+    // AmountTextBox's own OnSaveClick validation uses, not a separate error
+    // state here (this field has no "must be filled in" requirement the way
+    // Amount does — 0 is a completely valid, common value for it).
+    private void OnStartingEarmarkAmountChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_initialized || _suppressEvents)
+        {
+            return;
+        }
+
+        decimal.TryParse(StartingEarmarkAmountTextBox.Text, out var amount);
+        _startingEarmarkAmount = amount;
+        UpdateSummary();
+        MarkDirtyIfNotSuppressed();
     }
 
     // Shared by the Starting-point region and the Summary chart's own
@@ -865,14 +1242,33 @@ public partial class EarmarkFormPanel : UserControl
     // planning/23 addendum, 2026-08-07: wired to real PlanHealthState/FundJar
     // data (via PlanHealthMessages, so the wording matches planning/22 §6
     // exactly rather than being composed ad hoc here), in both Savings-plan
-    // and One-off mode. One known, deliberate gap: this shows the SAVED
-    // plan's real health, not a live hypothetical of an in-progress, unsaved
-    // Amount/Schedule edit — that would mean re-running the whole forecast
-    // with the typed-but-unsaved values substituted in, a bigger task than
-    // this pass. Item 23-D's "everything derived reads live" still holds for
-    // the narrative sentence and the Starting-point region (both read
-    // straight off the form's own current fields); it does not yet hold for
-    // the forecast-derived health figures specifically.
+    // and One-off mode.
+    //
+    // REVISED same day (author's own follow-up: "I would like the values
+    // in the isolated earmark mode to update the summary as well"):
+    // One-off mode's aside now folds in whatever's currently typed
+    // (OneOffAmountTextBox/EarmarkDatePicker/Action) on top of the SAVED
+    // reading, live — see GetOneOffLiveDelta's own header comment for the
+    // one deliberate scope limit left (a date dated before this goal's own
+    // most recent release, where a release's real leftover-money effect
+    // isn't replayed live). The first-payment warning is fully live either
+    // way, same as the Starting-point region's own.
+    //
+    // REVISED again 2026-08-07 (author's own go-ahead, "that third chart
+    // line would be incredibly helpful"): the chart itself no longer has
+    // this gap — Savings-plan mode's own ProposedTrajectory line reacts to
+    // Amount/Schedule edits live, regardless of whether a saved
+    // PlanHealthState exists for this goal. What's still true, narrower
+    // than before: asideLine/asideSecondaryLine (the TEXT figures, not the
+    // chart) still read the SAVED PlanHealthState once one exists, rather
+    // than a live recompute of an in-progress edit — full parity there
+    // would mean re-running the whole forecast with the typed-but-unsaved
+    // rule substituted in, a bigger task than this pass (when no saved
+    // PlanHealthState exists yet, the live fallback further below already
+    // covers the text too — TryBuildProposedPattern and friends). The
+    // narrative sentence and the Starting-point region don't share this
+    // gap; both already read straight off the form's own current fields
+    // regardless of mode.
     private void UpdateSummary()
     {
         UpdateStartingPointRegion();
@@ -903,6 +1299,17 @@ public partial class EarmarkFormPanel : UserControl
         var dueDate = goal.DatePattern.Until;
         var label = string.IsNullOrWhiteSpace(goal.Description) ? goal.Source : goal.Description;
         var isOneOff = OneOffRadio.IsChecked == true;
+        var isOneTime = goal.DatePattern.GetOccurrences().Count == 1;
+
+        // This goal's own very first occurrence, ever — the same date
+        // TransactionLogBookFactory.FirstOccurrenceShortfall itself checks
+        // against (that method's own private FirstOccurrence helper isn't
+        // exposed, so this is the same GetOccurrences(Start, Until) call
+        // written out again rather than duplicated logic under a new
+        // name). Only actually used below when IsFirstOccurrencePending is
+        // also true — an established bill like Car Insurance Co, whose
+        // first occurrence is long past, never reads this value.
+        var firstOccurrenceDate = goal.DatePattern.GetOccurrences(goal.DatePattern.Start, goal.DatePattern.Until).FirstOrDefault();
 
         // _forecast is the same cached-on-SetContext field BalancesOn already
         // reads (set once per tab visit, not recomputed per keystroke) —
@@ -945,10 +1352,13 @@ public partial class EarmarkFormPanel : UserControl
         string narrative;
         string asideLine;
         string? asideSecondaryLine = null;
+        DateOnly? highlightDate = null;
+        decimal? additionAmount = null;
+        IReadOnlyList<(DateOnly Date, decimal Amount)> proposedTrajectory = [];
 
         if (isOneOff)
         {
-            narrative = $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.";
+            narrative = GoalNarrativeOpening(goal, goalAmount, label, dueDate, isOneTime, DateOnly.FromDateTime(DateTime.Today));
             if (decimal.TryParse(OneOffAmountTextBox.Text, out var proposedAmount) && proposedAmount > 0m)
             {
                 var verb = IsMove ? "moving" : IsWithdraw ? "withdrawing" : "adding";
@@ -958,30 +1368,177 @@ public partial class EarmarkFormPanel : UserControl
                 narrative += $" This one-off adjustment is {verb} {proposedAmount:C0}{dateText}.";
             }
 
-            // planning/22 §6c, One-off mode: today's actual state
-            // (CurrentJarStateLine), not the due-date projection —
-            // SummaryFutureLine is the Savings-plan-mode framing below.
-            asideLine = jar is not null && health is not null
-                ? PlanHealthMessages.CurrentJarStateLine(jar, health)
-                : "(fund jar state needs a live forecast — not available yet)";
+            var todayDate = DateOnly.FromDateTime(DateTime.Today);
+
+            // Author, 2026-08-07: "I would like the values in the isolated
+            // earmark mode to update the summary as well" — today's actual
+            // state (planning/22 §6c's own CurrentJarStateLine framing,
+            // not the due-date projection) now folds in whatever's
+            // currently typed here, same "warnings work dynamically"
+            // principle the rest of this form already follows.
+            // MilestoneAmount itself needs no change — 3.13.5.4.a1 only
+            // ever accumulates repeated, pattern-scheduled contributions,
+            // never a manual one (GetOneOffLiveDelta's own header comment
+            // has the reasoning for why only ExpectedAmount can move here).
+            // delta == 0m (nothing valid typed) keeps the original
+            // CurrentJarStateLine wording exactly, including its own
+            // health-state-gated delta (planning/22 §6a) — LiveJarStateLine's
+            // simpler always-show-a-delta wording only takes over once
+            // there's an actual live adjustment to reflect, since
+            // CurrentJarStateLine's own gating can't be recomputed live
+            // without a full forecast re-run.
+            try
+            {
+                var delta = GetOneOffLiveDelta(goal, plan.DatePattern.ActiveStart, todayDate);
+                additionAmount = delta == 0m ? null : delta; // null, not 0 — a $0 line would just retrace Actual for no reason
+                if (jar is not null && health is not null)
+                {
+                    asideLine = delta == 0m
+                        ? PlanHealthMessages.CurrentJarStateLine(jar, health)
+                        : PlanHealthMessages.LiveJarStateLine(jar.ExpectedAmount + delta, jar.MilestoneAmount ?? 0m);
+                }
+                else
+                {
+                    var live = GetLiveJarAmounts(
+                        GetPatternsForLiveCheck(goal, plan), plan, goal, GetStartingPointTotal(plan), todayDate);
+                    asideLine = PlanHealthMessages.LiveJarStateLine(live.ExpectedAmount + delta, live.MilestoneAmount);
+                }
+            }
+            catch (ArgumentException)
+            {
+                // A date the picker's own bounds should already exclude,
+                // mid-edit — same defensive shape
+                // UpdateStartingShortfallWarning's own catch uses.
+                asideLine = "(fund jar state needs a live forecast — not available yet)";
+            }
+
+            // Same live substitution for the first-payment warning —
+            // reuses FirstOccurrenceShortfall's own existing
+            // manualEarmarks support rather than new domain math (it
+            // already correctly counts a manual earmark dated between
+            // today and the first occurrence as "upcoming" — see
+            // FirstOccurrenceShortfall_is_a_partial_amount_when... in
+            // TransactionLogBookFactoryTests).
+            try
+            {
+                var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, todayDate);
+                var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
+                    GetPatternsForLiveCheck(goal, plan), goal, GetProposedOneOffManualEarmarks(goal, plan), todayDate);
+                asideSecondaryLine = PlanHealthMessages.FirstOccurrenceShortfallLine(isPending, shortfall, isOneTime);
+                highlightDate = isPending && shortfall > 0m ? firstOccurrenceDate : null;
+            }
+            catch (ArgumentException)
+            {
+                asideSecondaryLine = null;
+            }
         }
         else
         {
             decimal.TryParse(AmountTextBox.Text, out var enteredAmount);
             var start = RuleEditor.Result?.Start ?? DateOnly.FromDateTime(DateTime.Today);
-            narrative = enteredAmount > 0m
-                ? $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {enteredAmount:C0} per occurrence, starting {start:MMM d, yyyy}."
-                : $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.";
+            var opening = GoalNarrativeOpening(goal, goalAmount, label, dueDate, isOneTime, DateOnly.FromDateTime(DateTime.Today));
+
+            // Author, 2026-08-07: "I do like how we phrased the information
+            // in the mockup a little bit better" — Earmark · 5's own
+            // continuation, "We plan to set aside $420 a month toward it,"
+            // for a repeating goal specifically (the author's own "fine as
+            // it is" on the one-time-goal case, item 5, left THAT phrasing
+            // — "per occurrence, starting [date]" — untouched). Reads the
+            // PLAN's own contribution cadence (RuleEditor.Result), not the
+            // goal's — they usually match but aren't the same field (a
+            // monthly bill could be funded biweekly). "a {unit}" for
+            // Interval<=1, "every N {unit}s" otherwise — matches "a month"
+            // reading naturally where "every month... every month" (reusing
+            // GoalNarrativeOpening's own phrasing verbatim) would not.
+            string continuation;
+            if (!isOneTime && RuleEditor.Result is { } contributionRule)
+            {
+                var contributionCadence = ContributionCadencePhrase(contributionRule.Frequency, contributionRule.Interval);
+                continuation = $"We plan to set aside {enteredAmount:C0} {contributionCadence} toward it.";
+            }
+            else
+            {
+                continuation = $"We plan to set aside {enteredAmount:C0} per occurrence, starting {start:MMM d, yyyy}.";
+            }
+
+            narrative = enteredAmount > 0m ? $"{opening} {continuation}" : opening;
+
+            // Author, 2026-08-07: "that third chart line would be
+            // incredibly helpful" — settled-designs.html's own "proposed —
+            // rough, live estimate" line, computed regardless of whether a
+            // saved PlanHealthState exists (unlike asideLine/
+            // asideSecondaryLine below, which still prefer the saved
+            // reading when there is one — that split is unchanged). Reuses
+            // ComputeMilestoneTrajectory's own new startingAllocation seed
+            // (TransactionLogBookFactory) rather than a parallel
+            // computation — same "no forecast needed" pattern math
+            // GetLiveJarAmounts already relies on, just for the whole shape
+            // instead of one "today" point.
+            if (TryBuildProposedPattern(goal) is { } proposedForChart)
+            {
+                var proposedStartingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
+                proposedTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
+                        GetPatternsForLiveCheck(goal, proposedForChart), goal, plan.DatePattern.ActiveStart, dueDate, proposedStartingTotal)
+                    .Select(p => (p.Date, p.MilestoneAmount))
+                    .ToList();
+            }
 
             if (jar is not null && health is not null)
             {
                 asideLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
                     ?? PlanHealthMessages.CurrentJarStateLine(jar, health);
-                asideSecondaryLine = PlanHealthMessages.SummaryRecurringPhrase(health);
+
+                // The first-payment warning takes priority over the
+                // recurring-chronic-shortfall phrase when both would
+                // otherwise apply — planning/22's own "real space budget"
+                // caps this region's aside at two facts, and a payment
+                // about to actually fail is more time-sensitive than an
+                // ongoing structural rate problem.
+                asideSecondaryLine = PlanHealthMessages.FirstOccurrenceShortfallLine(health.IsFirstOccurrencePending, health.FirstOccurrenceShortfall, isOneTime)
+                    ?? PlanHealthMessages.SummaryRecurringPhrase(health);
+                highlightDate = health.IsFirstOccurrencePending && health.FirstOccurrenceShortfall > 0m ? firstOccurrenceDate : null;
+
+                // Author, 2026-08-07: "it was supposed to assist highlighting
+                // future EarmarkEvent occurrences where the user would fall
+                // short of the milestone amount" — UnderfundedReleaseDates is
+                // exactly that: this goal's own release dates, from the real
+                // forecast's forward walk, where the jar came up short (its
+                // own doc comment on PlanHealthState reads as past-tense, but
+                // the forward walk that fills it runs from AsOfDate onward,
+                // so today-or-later dates are exactly what's in it).
+                // SetHighlight and RRulePreviewCaption both already existed;
+                // this is the first place either gets called with real data.
+                // No live-pattern-math equivalent exists for the
+                // no-saved-health branches below (that would need the same
+                // day-by-day floor/deallocation walk GetOneOffLiveDelta's own
+                // TODO already flags as out of scope for a live preview) —
+                // cleared there instead of guessed at.
+                RuleEditor.SetHighlight(
+                    health.UnderfundedReleaseDates,
+                    PlanHealthMessages.RRulePreviewCaption(health),
+                    health.UnderfundedReleaseDates.Count > 0 ? PlanHealthMessages.UnderfundedReleaseHighlightLegend : null);
+            }
+            else if (TryBuildProposedPattern(goal) is { } liveProposed)
+            {
+                // BUG FOUND AND FIXED (2026-08-07, author's own report):
+                // "the summary region in general should be updating based
+                // on what we have in the form — only the sentence on top of
+                // it is getting updated." This branch only ever runs when
+                // there's no saved forecast reading yet (a brand-new plan,
+                // or one whose Start just moved past what's been computed)
+                // — exactly the case the author was testing. Was a static
+                // placeholder the whole time; now computes a real, live
+                // reading (GetLiveJarAmounts' own header comment has the
+                // full reasoning for how that's possible without a forecast).
+                var startingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
+                var live = GetLiveJarAmounts(GetPatternsForLiveCheck(goal, liveProposed), liveProposed, goal, startingTotal, DateOnly.FromDateTime(DateTime.Today));
+                asideLine = PlanHealthMessages.LiveJarStateLine(live.ExpectedAmount, live.MilestoneAmount);
+                RuleEditor.SetHighlight([], null);
             }
             else
             {
                 asideLine = "(fund jar state needs a live forecast — not available yet)";
+                RuleEditor.SetHighlight([], null);
             }
         }
 
@@ -990,6 +1547,17 @@ public partial class EarmarkFormPanel : UserControl
         // milestone line): a committed-plan milestone line applies to every
         // goal with a savings plan, one-time or repeating — not gated to
         // repeating patterns the way the first cut of this region had it.
+        //
+        // peakDates: settled-designs.html's own "Earmark · 3" section
+        // labels 3 gridlines with their own dates, not every occurrence a
+        // frequently-repeating pattern would have — a monthly bill plotted
+        // a year-plus out would otherwise crowd a label onto every single
+        // one. Empty for a one-time goal: DrawChart falls back to its
+        // plain "Due {dueDate}" label for that case, which already names a
+        // real, single due date — nothing to pick out of a row of repeats.
+        var peakDates = isOneTime
+            ? []
+            : goal.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, dueDate).Take(3).ToList();
         Summary.Load(
             narrative,
             start: plan.DatePattern.ActiveStart,
@@ -1000,7 +1568,172 @@ public partial class EarmarkFormPanel : UserControl
             actualTrajectory: trajectory.Select(p => (p.Date, p.Jar.ExpectedAmount)).ToList(),
             milestoneTrajectory: milestoneTrajectory,
             asideLine: asideLine,
-            asideSecondaryLine: asideSecondaryLine);
+            asideSecondaryLine: asideSecondaryLine,
+            peakDates: peakDates,
+            highlightDate: highlightDate,
+            proposedTrajectory: proposedTrajectory,
+            additionAmount: additionAmount);
+    }
+
+    // Turns a repeating pattern's own Frequency/Interval into the cadence
+    // phrase the Summary narrative's opening line needs ("every 3 months",
+    // "every week") — same Daily/Weekly/Monthly/Yearly unit words
+    // RecurrenceRuleEditor.UpdateFormVisibility already uses for its own
+    // "Every N ___(s)" field label, just written out as a plain phrase
+    // instead of that label's "(s)" shorthand.
+    private static string CadencePhrase(RecurrenceFrequency frequency, int interval)
+    {
+        var unit = frequency switch
+        {
+            RecurrenceFrequency.Daily => "day",
+            RecurrenceFrequency.Weekly => "week",
+            RecurrenceFrequency.Monthly => "month",
+            RecurrenceFrequency.Yearly => "year",
+            _ => "occurrence",
+        };
+        return interval <= 1 ? $"every {unit}" : $"every {interval} {unit}s";
+    }
+
+    // The "We plan to set aside" continuation's own cadence phrase ("a
+    // month", "every 3 months") — same unit words as CadencePhrase above,
+    // different article for the Interval<=1 case ("a month" reads more
+    // naturally there than "every month" repeated right after
+    // GoalNarrativeOpening's own "every month").
+    private static string ContributionCadencePhrase(RecurrenceFrequency frequency, int interval)
+    {
+        var unit = frequency switch
+        {
+            RecurrenceFrequency.Daily => "day",
+            RecurrenceFrequency.Weekly => "week",
+            RecurrenceFrequency.Monthly => "month",
+            RecurrenceFrequency.Yearly => "year",
+            _ => "occurrence",
+        };
+        return interval <= 1 ? $"a {unit}" : $"every {interval} {unit}s";
+    }
+
+    // [GoalNarrativeOpening] The Summary narrative's opening sentence.
+    // planning/mockups/settled-designs.html's own "Earmark · 3" section
+    // (chronic shortfall, repeating bill) already settled this; it just
+    // never made it into this control until now (author's own report,
+    // 2026-08-07: the old wording named goal.DatePattern.Until — the
+    // pattern's own far-future end, not a real due date at all for a
+    // repeating pattern — alongside goalAmount, which is the PER-OCCURRENCE
+    // amount; the two numbers didn't describe the same thing).
+    //
+    // A one-time goal keeps the existing single-transaction wording: there
+    // is only one payment, so "by {dueDate}" already says the right thing,
+    // and dueDate really is that payment's own due date. A repeating
+    // pattern instead names its own cost and cadence and anchors on the
+    // NEXT occurrence counting from today, matching Earmark · 3's own
+    // "Car insurance costs $300 every 3 months — next due Oct 1, 2026."
+    private static string GoalNarrativeOpening(
+        FinancialPattern goal, decimal goalAmount, string label, DateOnly dueDate, bool isOneTime, DateOnly asOfDate)
+    {
+        if (isOneTime)
+        {
+            return $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.";
+        }
+
+        var cadence = CadencePhrase(goal.DatePattern.Frequency, goal.DatePattern.Interval);
+        var upcoming = goal.DatePattern.GetOccurrences(asOfDate, dueDate);
+        var nextDueText = upcoming.Count > 0 ? upcoming[0].ToString("MMM d, yyyy") : "no date left in range";
+        return $"{label} costs {goalAmount:C0} {cadence} — next due {nextDueText}.";
+    }
+
+    // Shared by UpdateStartingShortfallWarning and GetLiveJarAmounts below —
+    // the same throwaway, never-saved EarMarkPattern SaveSavingsPlan itself
+    // constructs right before persisting. Null whenever the form doesn't
+    // have enough to build one yet (no rule, unparseable/non-positive
+    // amount), or the rule is momentarily incompatible with the goal —
+    // EarMarkPattern.Create enforces that (Start before the goal's own
+    // active span, Until past its date range, ...), and the user is very
+    // possibly mid-way through fixing exactly that when this runs. Nothing
+    // live to show yet in that case, not a crash.
+    private EarMarkPattern? TryBuildProposedPattern(FinancialPattern goal)
+    {
+        if (RuleEditor.Result is not { } rule || !decimal.TryParse(AmountTextBox.Text, out var enteredAmount) || enteredAmount <= 0m)
+        {
+            return null;
+        }
+
+        try
+        {
+            return EarMarkPattern.Create(
+                new EarMarkPatternOptions
+                {
+                    FinanceId = goal.FinanceId,
+                    DatePattern = rule,
+                    Amount = -enteredAmount,
+                    StartingAllocation = Math.Abs(_startingAllocation),
+                },
+                goal);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    // BUG FOUND AND FIXED (2026-08-07, author's own report against Trip to
+    // Japan specifically): every live check so far only ever passed
+    // [proposed] — ONE pattern — into TransactionLogBookFactory, silently
+    // dropping any OTHER EarMarkPattern also funding this same goal (F27
+    // concurrency — Trip to Japan alone has two, tripPlan + tripPlanPartner).
+    // The saved-state path (CalculatePlanHealthStates) was never wrong —
+    // it already gathers every pattern by FinanceId — only the live,
+    // form-driven checks were undercounting. Every EarMarkPattern actually
+    // funding this goal, with whichever ONE is currently loaded/being
+    // edited in this form (identified the same way _patternsByFinanceId's
+    // own F27 stopgap does — matching Start, since that's its own
+    // resolution key) replaced by its live, not-yet-saved version; every
+    // OTHER concurrent funder passes through unchanged from the saved data.
+    private IReadOnlyList<EarMarkPattern> GetPatternsForLiveCheck(FinancialPattern goal, EarMarkPattern proposed)
+    {
+        var editedStart = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId)?.DatePattern.Start;
+        var otherSavedPatterns = _forecast?.Accounts
+            .SelectMany(account => account.Page.EarmarkPatterns)
+            .Where(p => p.FinanceId == goal.FinanceId && p.DatePattern.Start != editedStart)
+            .ToList() ?? [];
+        return [.. otherSavedPatterns, proposed];
+    }
+
+    // [GetLiveJarAmounts] Author, 2026-08-07: "the summary region in general
+    // should be updating based on what we have in the form" — a live
+    // (ExpectedAmount, MilestoneAmount) reading for today, computed purely
+    // from the proposed pattern's own schedule, no forecast required.
+    //
+    // The trick: ComputeMilestoneTrajectory already walks "accumulate, reset
+    // to 0 on release" starting from 0. Seed that SAME walk with a real
+    // starting balance instead of 0, and the two walks are provably
+    // identical from the first reset onward — a reset always drives BOTH
+    // to exactly 0, erasing whatever the starting balance was worth by
+    // then. So: once this goal has released at least once since ActiveStart,
+    // live ExpectedAmount == live MilestoneAmount exactly (today's true
+    // pace, no reason to reseed); before any release has happened yet, it's
+    // just startingTotal + MilestoneAmount (nothing has erased the offset).
+    // Means the actual walk never needs re-implementing — this reuses the
+    // one that's already built and tested.
+    //
+    // Known, deliberate gap: like ComputeMilestoneTrajectory itself, this
+    // doesn't model manual earmarks beyond the starting point (a real
+    // mid-plan top-up on an EXISTING plan, e.g., isn't reflected) — same
+    // "pattern math only" scope that function already carries, not a new
+    // limit introduced here.
+    //
+    // BUG FOUND AND FIXED (2026-08-07): takes the full pattern list now,
+    // same fix as UpdateStartingShortfallWarning's own — see
+    // GetPatternsForLiveCheck's own header comment for why a single
+    // proposed pattern isn't enough for an F27-concurrent goal.
+    private (decimal ExpectedAmount, decimal MilestoneAmount) GetLiveJarAmounts(
+        IReadOnlyList<EarMarkPattern> patterns, EarMarkPattern proposed, FinancialPattern goal, decimal startingTotal, DateOnly asOfDate)
+    {
+        var activeStart = proposed.DatePattern.ActiveStart;
+        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(patterns, goal, activeStart, asOfDate);
+        var liveMilestone = milestoneTrajectory.Count > 0 ? milestoneTrajectory[^1].MilestoneAmount : 0m;
+        var hasReleased = goal.DatePattern.GetOccurrences(activeStart, asOfDate).Count > 0;
+        var liveExpected = hasReleased ? liveMilestone : startingTotal + liveMilestone;
+        return (liveExpected, liveMilestone);
     }
 
     // The FundJar behind a Savings Plan, walked day-by-day from today through

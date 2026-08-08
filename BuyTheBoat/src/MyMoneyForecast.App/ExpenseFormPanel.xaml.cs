@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
@@ -276,6 +277,8 @@ public partial class ExpenseFormPanel : UserControl
     // there's nothing meaningfully live to react to here yet.
     private void UpdateSummary()
     {
+        UpdateStatusIndicator();
+
         if (_loadedExisting is not { } existing)
         {
             Summary.Clear("Save this Expense to set up its savings plan.");
@@ -316,6 +319,42 @@ public partial class ExpenseFormPanel : UserControl
             actualTrajectory: [],
             milestoneTrajectory: [],
             asideLine: "(fund jar state needs a live forecast — not wired in yet)");
+    }
+
+    // planning/21's own settled status indicator (author, 2026-08-07: "one
+    // of the first things we made that health state class to handle"):
+    // which of the four plan-health states the linked savings plan is in,
+    // shown next to the save buttons — the label alone (PlanHealthMessages.
+    // ExpenseStatusLabel does the actual mapping), plus the same outline
+    // "Save and Plan" gets when the pending edit would meaningfully affect
+    // the linked plan (planning/21, "Save and Plan... gets an extra outline
+    // when the pending change is one that would meaningfully affect the
+    // linked plan"). Only the "linked plan is currently in a non-Healthy
+    // state" half of that trigger is built here — comparing the
+    // currently-typed fields against what's saved to catch an edit that
+    // would newly cause one of these states is a separate, more involved
+    // check (which fields even count is not settled anywhere), not
+    // silently assumed to be covered by this.
+    private void UpdateStatusIndicator()
+    {
+        var health = _loadedExisting is { } existing
+            ? RequestForecast?.Invoke()?.PlanHealthStates.FirstOrDefault(p => p.FinanceId == existing.FinanceId)
+            : null;
+        var label = health is null ? null : PlanHealthMessages.ExpenseStatusLabel(health.MostImportantHealthState);
+
+        if (label is null)
+        {
+            StatusText.Visibility = Visibility.Collapsed;
+            SaveAndPlanButton.ClearValue(Button.BorderBrushProperty);
+            SaveAndPlanButton.ClearValue(Button.BorderThicknessProperty);
+        }
+        else
+        {
+            StatusText.Text = label;
+            StatusText.Visibility = Visibility.Visible;
+            SaveAndPlanButton.BorderBrush = new SolidColorBrush(Color.FromRgb(0x9A, 0x4F, 0x08));
+            SaveAndPlanButton.BorderThickness = new Thickness(2);
+        }
     }
 
     private int NextFinanceId() =>

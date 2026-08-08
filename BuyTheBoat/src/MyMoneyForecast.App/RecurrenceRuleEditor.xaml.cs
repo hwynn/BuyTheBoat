@@ -29,6 +29,7 @@ public partial class RecurrenceRuleEditor : UserControl
     // caller that never calls SetHighlight is unaffected.
     private IReadOnlyCollection<DateOnly> _highlightedDates = [];
     private string? _caption;
+    private string? _legendText;
 
     private static readonly Brush ShortDateHighlightBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD9, 0xA0));
 
@@ -58,13 +59,15 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Marks specific occurrences with an altered highlight color and shows a short caption below the occurrence list (planning/22 §6b). An empty list and a null/blank caption clears both back to the plain preview.</summary>
-    public void SetHighlight(IReadOnlyCollection<DateOnly> dates, string? caption)
+    /// <summary>[UI] Marks specific occurrences with an altered highlight color, shows a short caption below the occurrence list (planning/22 §6b), and — since this control has no idea what a highlighted date actually represents, only that it's highlighted — a caller-supplied legend explaining what the highlight color means (author, 2026-08-08). An empty list, and null/blank text for either string, clears that piece back to the plain preview.</summary>
+    public void SetHighlight(IReadOnlyCollection<DateOnly> dates, string? caption, string? legendText = null)
     {
         _highlightedDates = dates ?? [];
         _caption = caption;
+        _legendText = legendText;
         ApplyHighlight();
         ApplyCaption();
+        ApplyLegend();
     }
 
     public RecurrenceRule? Result { get; private set; }
@@ -226,10 +229,11 @@ public partial class RecurrenceRuleEditor : UserControl
         ResultChanged?.Invoke(this, EventArgs.Empty);
 
         // Schedule edits rebuild SelectedDates/OccurrencesListBox from
-        // scratch — reapply whatever highlight/caption the host last set so
-        // it survives the user continuing to edit the form afterward.
+        // scratch — reapply whatever highlight/caption/legend the host last
+        // set so it survives the user continuing to edit the form afterward.
         ApplyHighlight();
         ApplyCaption();
+        ApplyLegend();
     }
 
     // Colors whichever currently-realized CalendarDayButtons fall in
@@ -306,6 +310,18 @@ public partial class RecurrenceRuleEditor : UserControl
         var hasCaption = !string.IsNullOrWhiteSpace(_caption);
         CaptionText.Text = _caption ?? string.Empty;
         CaptionText.Visibility = hasCaption ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // Author, 2026-08-08: the color-key row beneath the caption — same
+    // on/off shape ApplyCaption already uses, own element since a caption
+    // ("Keeps falling short") and a legend ("highlighted = this release
+    // came up short") answer different questions and a host might supply
+    // one without the other.
+    private void ApplyLegend()
+    {
+        var hasLegend = !string.IsNullOrWhiteSpace(_legendText);
+        LegendText.Text = _legendText ?? string.Empty;
+        LegendPanel.Visibility = hasLegend ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject

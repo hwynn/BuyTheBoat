@@ -12,6 +12,13 @@
                 </StackPanel>
                 <Canvas x:Name="ChartCanvas" Height="150" ClipToBounds="True"/>
             </DockPanel>
+            <!-- Author, 2026-08-07: "I didn't even notice the legend in the
+                 settled design. But yes, that would be helpful" — matches
+                 settled-designs.html's own .chart-legend row. Populated in
+                 code-behind (DrawChart), same as ChartCanvas's own children
+                 — which entries appear depends on which lines actually got
+                 drawn, not a fixed set. -->
+            <WrapPanel x:Name="LegendPanel" Margin="0,6,0,0"/>
         </StackPanel>
     </GroupBox>
 </UserControl>

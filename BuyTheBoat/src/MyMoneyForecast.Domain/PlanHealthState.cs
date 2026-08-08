@@ -86,6 +86,26 @@ public sealed record PlanHealthState
     // positive — that date is the one still vouched for either way. Null
     // means no projected shortfall at all.
     public required DateOnly? ProjectedShortfallStartDate { get; init; }
+
+    // Author's question (2026-08-07): "has this goal's own very first
+    // occurrence not happened yet?" — a same-day occurrence still counts as
+    // not-yet (inclusive of today). Pure date fact about the goal alone, no
+    // EarMarkPattern involved — see TransactionLogBookFactory.
+    // IsFirstOccurrencePending's own header comment for the full reasoning,
+    // including the not-yet-built "paired with a real transaction" carve-out.
+    public required bool IsFirstOccurrencePending { get; init; }
+
+    // Author's question (2026-08-07): "will the Savings Plan's own
+    // contributions (StartingAllocation + repeated contributions + manual
+    // earmarks, same three sources GoalShortfall.AmountAllocatedByDueDate
+    // sums) actually cover the FIRST occurrence specifically, not just the
+    // whole span by its due date?" 0 whenever IsFirstOccurrencePending is
+    // false (nothing left to catch) or the first occurrence is already
+    // covered. CurrentShortfallAmount can't answer this on its own — a plan
+    // reads perfectly on-pace at $0-vs-$0 right up until its first payment
+    // actually fails, since no contribution or release event has happened
+    // yet to move MilestoneAmount off zero either.
+    public required decimal FirstOccurrenceShortfall { get; init; }
 }
 
 public enum PlanHealthCategory

@@ -206,6 +206,70 @@ var carRegStartingEarmark = ManualEarmark.Create(new ManualEarmarkOptions { Fina
 manualEarmarks.Save(carRegStartingEarmark);
 Console.WriteLine("Bill: DMV Registration — starting-earmark shape hand-modeled (see the FINDING comment above); everything else about the plan is real Propose() output.");
 
+// A REPEATING bill whose first due date is soon enough that ProposePaced's
+// own rate — a long-run average spread across every payday through the
+// bill's FAR Until, not tuned to the first occurrence specifically — can't
+// have accumulated enough by then. The author's own question: does a plan
+// that needs SEVERAL contributions to cover one occurrence, but where only
+// some have landed by the due date, actually read as a genuine PARTIAL
+// shortfall (not $0, not the full amount) through the new
+// IsFirstOccurrencePending/FirstOccurrenceShortfall pair?
+//
+// MaybeStartingEarmark can't catch this one either, and not by coincidence:
+// per the FINDING above DMV Registration, ProposePaced's plan always starts
+// AT asOfDate for this dataset, so its own check (firstContribution <=
+// firstBill) is always satisfied and it never fires — REGARDLESS of how
+// short the due date is, or how little that first contribution actually
+// covers. That's the real gap: MaybeStartingEarmark only ever asks "has
+// ANYTHING landed by the due date," never "has ENOUGH" — this scenario, and
+// the new PlanHealthState properties, are what actually answers that
+// second question. See the printed report below for the real number, not
+// this comment's guess.
+var propertyTax = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "County Property Tax", DatePattern = Monthly(asOfDate.AddDays(40), interval: 6), Amount = -1200m, Priority = 8 });
+var propertyTaxProposal = AllocationPlanProposer.Propose(propertyTax, financialPatterns.GetAll(), asOfDate);
+financialPatterns.Save(propertyTaxProposal.Outflow, checking.Id);
+earMarkPatterns.Save(propertyTaxProposal.Plan);
+if (propertyTaxProposal.StartingEarmark is { } propertyTaxStartingEarmark)
+{
+    manualEarmarks.Save(propertyTaxStartingEarmark);
+}
+Console.WriteLine($"Bill: County Property Tax — real Propose() output, semi-annual, first due date {propertyTax.DatePattern.Start:yyyy-MM-dd}, " +
+    $"paced at {-propertyTaxProposal.Plan.Amount:C}/payday; MaybeStartingEarmark fired: {propertyTaxProposal.StartingEarmark is not null} " +
+    "(see FirstOccurrenceShortfall in the report below for the real coverage check)");
+
+// Author, 2026-08-07: "I think we could use a couple more" — same real-
+// Propose() shape as County Property Tax, but quarterly (a shorter cycle
+// relative to the biweekly paycheck, so fewer paydays are "missing" by the
+// due date) — meant to land closer to a HALF-covered gap rather than
+// Property Tax's more dramatic one, so the warning's own scaling (a small
+// gap reads as a small gap, not just "always huge") has a real example too.
+var hoaAssessment = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "HOA Assessment", DatePattern = Monthly(asOfDate.AddDays(35), interval: 3), Amount = -400m, Priority = 7 });
+var hoaProposal = AllocationPlanProposer.Propose(hoaAssessment, financialPatterns.GetAll(), asOfDate);
+financialPatterns.Save(hoaProposal.Outflow, checking.Id);
+earMarkPatterns.Save(hoaProposal.Plan);
+if (hoaProposal.StartingEarmark is { } hoaStartingEarmark)
+{
+    manualEarmarks.Save(hoaStartingEarmark);
+}
+Console.WriteLine($"Bill: HOA Assessment — real Propose() output, quarterly, first due date {hoaAssessment.DatePattern.Start:yyyy-MM-dd}, " +
+    $"paced at {-hoaProposal.Plan.Amount:C}/payday (see FirstOccurrenceShortfall in the report below)");
+
+// A THIRD flavor of the same gap: a small dollar amount can still trigger a
+// real first-occurrence shortfall when the CADENCE mismatch is severe
+// enough — annual bill, biweekly paycheck, due date soon — proportionally
+// even worse than Property Tax despite being a much smaller number, since
+// at most one or two paydays can possibly land before it either way.
+var membershipDues = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Warehouse Club Membership", DatePattern = Monthly(asOfDate.AddDays(22), interval: 12), Amount = -150m, Priority = 3, Mandatory = false });
+var membershipProposal = AllocationPlanProposer.Propose(membershipDues, financialPatterns.GetAll(), asOfDate);
+financialPatterns.Save(membershipProposal.Outflow, checking.Id);
+earMarkPatterns.Save(membershipProposal.Plan);
+if (membershipProposal.StartingEarmark is { } membershipStartingEarmark)
+{
+    manualEarmarks.Save(membershipStartingEarmark);
+}
+Console.WriteLine($"Bill: Warehouse Club Membership — real Propose() output, annual, first due date {membershipDues.DatePattern.Start:yyyy-MM-dd}, " +
+    $"paced at {-membershipProposal.Plan.Amount:C}/payday (see FirstOccurrenceShortfall in the report below)");
+
 // A genuine break-off, wired through the real factory — so the successor's
 // StartingAllocation is authentic, not a guessed number. This is the
 // "inherited from break-off" starting-point case. The predecessor is left
@@ -430,13 +494,16 @@ foreach (var health in forecast.PlanHealthStates.OrderBy(h => h.MostImportantHea
     var startingAllocation = plans.Sum(p => p.StartingAllocation);
     var startingNote = startingAllocation > 0m ? $" | StartingAllocation {startingAllocation:C}" : string.Empty;
     var concurrentNote = plans.Count > 1 ? $" | {plans.Count} concurrent plans (F27)" : string.Empty;
+    var firstOccNote = health.IsFirstOccurrencePending
+        ? $" | firstOccPending=true firstOccShort={health.FirstOccurrenceShortfall:C}"
+        : string.Empty;
 
     Console.WriteLine(
         $"{health.MostImportantHealthState,-20} {label,-24} " +
         $"chronic={health.IsChronicShortfall,-5} warn={health.IsWorthWarningAbout,-5} " +
         $"todayShort={health.CurrentShortfallAmount,10:C} todayOver={health.CurrentOverfundedAmount,10:C} " +
         $"dueShort={health.Shortfall.ShortfallAmount,10:C} dueOver={health.Shortfall.OverfundedAmount,10:C}" +
-        $"{startingNote}{concurrentNote}");
+        $"{startingNote}{concurrentNote}{firstOccNote}");
 }
 
 var seenCategories = forecast.PlanHealthStates.Select(h => h.MostImportantHealthState).Distinct().OrderBy(c => c).ToList();

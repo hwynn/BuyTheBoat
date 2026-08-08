@@ -109,7 +109,7 @@ public static class TransactionLogBookFactory
             Book = book,
             GoalShortfalls = goalShortfalls,
             PlanHealthStates = CalculatePlanHealthStates(
-                goalShortfalls, jarsByFinanceId, patternsById, allEarmarks, underfundedReleases,
+                goalShortfalls, jarsByFinanceId, patternsById, allEarmarks, allManualEarmarks, underfundedReleases,
                 pageByFinanceId, options.AsOfDate),
             JarLabels = patternsById.ToDictionary(
                 pair => pair.Key,
@@ -144,8 +144,22 @@ public static class TransactionLogBookFactory
     // expected values by hand before writing (see this method's own test),
     // so a change to the real rule that isn't mirrored here should get
     // caught by a diverging result, not silently drift.
+    // startingAllocation (author, 2026-08-07): an optional seed for the
+    // Earmark form's new "proposed — rough, live estimate" chart line
+    // (settled-designs.html), which needs to start from whatever's
+    // currently typed in the Starting-point region rather than $0 — the
+    // same live starting total GetLiveJarAmounts' own snapshot already
+    // uses, just carried through a full trajectory instead of one "today"
+    // point. Defaults to 0m, so every existing MilestoneAmount caller
+    // (which wants no such bonus riding on top of it) is unaffected.
+    // Mathematically safe to seed this way: the walk's own reset-at-release
+    // rule zeroes `running` regardless of what it held, so the seed's
+    // influence disappears completely after the first release either way —
+    // proven once already for GetLiveJarAmounts' own single-point case
+    // (see its header comment), verified again here for the full
+    // trajectory shape by this method's own new test.
     public static IReadOnlyList<(DateOnly Date, decimal MilestoneAmount)> ComputeMilestoneTrajectory(
-        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, DateOnly from, DateOnly to)
+        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, DateOnly from, DateOnly to, decimal startingAllocation = 0m)
     {
         var contributionsByDate = patterns
             .SelectMany(pattern => pattern.DatePattern.GetOccurrences(from, to).Select(date => (Date: date, Amount: -pattern.Amount)))
@@ -155,7 +169,7 @@ public static class TransactionLogBookFactory
         var eventDates = contributionsByDate.Select(group => group.Key).Concat(releaseDates).Distinct().OrderBy(date => date);
 
         var points = new List<(DateOnly Date, decimal MilestoneAmount)>();
-        var running = 0m;
+        var running = startingAllocation;
         foreach (var date in eventDates)
         {
             // Accumulate first, THEN reset if this is also a release date —
@@ -169,6 +183,54 @@ public static class TransactionLogBookFactory
         }
 
         return points;
+    }
+
+    // [IsFirstOccurrencePending] Whether a goal's own very first occurrence
+    // hasn't happened yet — today counts as not-yet (inclusive), per the
+    // author's own rule (2026-08-07). Pure date fact about the goal alone,
+    // same "no forecast needed" shape as ComputeMilestoneTrajectory above,
+    // so it's usable both for a saved PlanHealthState and for a proposed,
+    // not-yet-saved pattern straight from the Earmark form.
+    // TODO: once ActualTransaction/pairing exists, an occurrence "paired" to
+    // a real transaction should count as already-happened even if its own
+    // date is still today-or-later (author's own carve-out) — nothing to
+    // pair against yet, so every occurrence is treated as unpaired for now.
+    public static bool IsFirstOccurrencePending(FinancialPattern goal, DateOnly asOfDate) =>
+        FirstOccurrence(goal.DatePattern) is { } date && date >= asOfDate;
+
+    // [FirstOccurrenceShortfall] How short the given patterns' own
+    // contributions (StartingAllocation + repeated occurrences + manual
+    // earmarks, same three sources CalculateGoalShortfalls sums for the
+    // whole span) would be by the time the goal's own FIRST occurrence
+    // lands — 0 when it's already covered, or when IsFirstOccurrencePending
+    // is false. Deliberately takes patterns/manualEarmarks as plain
+    // parameters rather than reading a saved EarMarkPattern off the book,
+    // so the Earmark form can call this against whatever's currently
+    // proposed but unsaved, not just a saved plan (author's own
+    // instruction, 2026-08-07: "the proposed EarmarkPattern in the form").
+    public static decimal FirstOccurrenceShortfall(
+        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, IReadOnlyList<ManualEarmark> manualEarmarks, DateOnly asOfDate)
+    {
+        if (!IsFirstOccurrencePending(goal, asOfDate))
+        {
+            return 0m;
+        }
+
+        var firstOccurrence = FirstOccurrence(goal.DatePattern)!.Value;
+        var accumulated = patterns.Sum(pattern =>
+                pattern.StartingAllocation
+                - pattern.Amount * pattern.DatePattern.GetOccurrences(pattern.DatePattern.Start, firstOccurrence).Count)
+            + manualEarmarks
+                .Where(manual => manual.FinanceId == goal.FinanceId && manual.Date <= firstOccurrence)
+                .Sum(manual => manual.Amount);
+
+        return Math.Max(0m, Math.Abs(goal.Amount) - accumulated);
+    }
+
+    private static DateOnly? FirstOccurrence(RecurrenceRule pattern)
+    {
+        var occurrences = pattern.GetOccurrences(pattern.Start, pattern.Until);
+        return occurrences.Count > 0 ? occurrences[0] : null;
     }
 
     // The per-account breakdown when given; otherwise one "Primary" account from
@@ -937,6 +999,7 @@ public static class TransactionLogBookFactory
         IReadOnlyDictionary<int, FundJar> jarsByFinanceId,
         IReadOnlyDictionary<int, FinancialPattern> goalsByFinanceId,
         IReadOnlyList<EarMarkPattern> earMarkPatterns,
+        IReadOnlyList<ManualEarmark> manualEarmarks,
         IReadOnlyList<(DateOnly Date, int FinanceId)> underfundedReleases,
         IReadOnlyDictionary<int, AccountTransactionPage> pageByFinanceId,
         DateOnly asOfDate)
@@ -995,6 +1058,13 @@ public static class TransactionLogBookFactory
                 earMarkPatterns.Where(earmark => earmark.FinanceId == financeId).ToList(),
                 shortReleaseDates);
 
+            // Author's own new pair (2026-08-07) — see PlanHealthState's own
+            // doc comments on each for the full reasoning.
+            var goal = goalsByFinanceId[financeId];
+            var isFirstOccurrencePending = IsFirstOccurrencePending(goal, asOfDate);
+            var firstOccurrenceShortfall = FirstOccurrenceShortfall(
+                earMarkPatterns.Where(earmark => earmark.FinanceId == financeId).ToList(), goal, manualEarmarks, asOfDate);
+
             states.Add(new PlanHealthState
             {
                 FinanceId = financeId,
@@ -1007,6 +1077,8 @@ public static class TransactionLogBookFactory
                 MostImportantHealthState = DetermineMostImportantHealthState(
                     currentShortfall, shortfall.ShortfallAmount, currentOverfunded, shortfall.OverfundedAmount),
                 UnderfundedReleaseDates = releaseDatesByFinanceId[financeId].ToList(),
+                IsFirstOccurrencePending = isFirstOccurrencePending,
+                FirstOccurrenceShortfall = firstOccurrenceShortfall,
             });
         }
 
