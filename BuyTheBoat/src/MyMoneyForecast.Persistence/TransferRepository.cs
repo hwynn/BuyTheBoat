@@ -7,17 +7,18 @@ namespace MyMoneyForecast.Persistence;
 // A transfer is stored as its canonical Transfers row PLUS two ordinary
 // FinancialPatterns — a withdrawal and a deposit (saved through
 // FinancialPatternRepository, tagged with this transfer's id). The row is the
-// definition; the patterns are what the cascade
-// actually consumes. See planning/10 items 3 and 6.
+// definition; the patterns are what the cascade actually consumes.
 public sealed class TransferRepository(PatternDatabase database, FinancialPatternRepository financialPatterns)
 {
-    // Saves the Transfers row and both patterns. Not wrapped in one transaction —
-    // matching the rest of this single-user layer; a torn write leaves the pair
-    // inconsistent, which the validation sweep is there to catch.
+    /// <summary>[WRITES FILE] Saves a transfer's canonical row plus its withdrawal and deposit patterns.</summary>
+    /// <param name="result">The transfer and its two patterns to save.</param>
     public void Save(TransferResult result)
     {
         var transfer = result.Transfer;
 
+        // Not wrapped in one transaction — matching the rest of this
+        // single-user layer; a torn write leaves the pair inconsistent,
+        // which the validation sweep is there to catch.
         using (var connection = database.OpenConnection())
         using (var command = connection.CreateCommand())
         {
@@ -52,6 +53,7 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         financialPatterns.Save(result.Deposit, transfer.ToAccountId, transfer.Id);
     }
 
+    /// <summary>[READS FILE] Returns every transfer, in Id order.</summary>
     public IReadOnlyList<Transfer> GetAll()
     {
         using var connection = database.OpenConnection();
@@ -68,6 +70,7 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         return transfers;
     }
 
+    /// <summary>[READS FILE] Returns the next Id to assign a new transfer: max existing + 1, or 1 if there are none yet.</summary>
     public int NextId()
     {
         using var connection = database.OpenConnection();
@@ -76,8 +79,8 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
-    // Deleting a transfer removes both of its patterns too — the pair is managed
-    // through the transfer, never a pattern on its own.
+    /// <summary>[DELETES] Removes a transfer, along with its withdrawal and deposit patterns — the pair is always managed through the transfer, never edited on its own.</summary>
+    /// <param name="id">The transfer to delete.</param>
     public void Delete(int id)
     {
         financialPatterns.DeleteByTransferId(id);
@@ -89,9 +92,8 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         command.ExecuteNonQuery();
     }
 
-    // An account can't be deleted while a transfer moves money in or out of it.
-    // (Its patterns are patterns filed under it too, so the pattern guard catches
-    // this as well — this gives the clearer, transfer-specific message.)
+    /// <summary>[READS FILE] Reports whether any transfer moves money in or out of an account — checked before an account can be deleted, for a clearer message than the generic pattern guard alone would give.</summary>
+    /// <param name="accountId">The account to check.</param>
     public bool IsAccountReferenced(int accountId)
     {
         using var connection = database.OpenConnection();
@@ -101,6 +103,8 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         return Convert.ToInt64(command.ExecuteScalar()) > 0;
     }
 
+    /// <summary>[CALC] Builds a Transfer from one row of a Transfers query result.</summary>
+    /// <param name="reader">The reader, positioned on the row to read.</param>
     private static Transfer Read(SqliteDataReader reader) =>
         Transfer.Create(new TransferOptions
         {

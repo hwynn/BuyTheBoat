@@ -10,6 +10,9 @@ internal static class RecurrenceRuleColumns
 {
     private const string DateFormat = "yyyy-MM-dd";
 
+    /// <summary>[WRITES FILE] Adds a recurrence rule's six columns as SQL parameters, ready for an INSERT/UPDATE. Shared by FinancialPatternRepository and EarMarkPatternRepository, since both tables store a rule the same way.</summary>
+    /// <param name="command">The command to add parameters to.</param>
+    /// <param name="rule">The rule to serialize.</param>
     public static void AddParameters(SqliteCommand command, RecurrenceRule rule)
     {
         command.Parameters.AddWithValue("$Frequency", rule.Frequency.ToString());
@@ -27,6 +30,8 @@ internal static class RecurrenceRuleColumns
                 : DBNull.Value);
     }
 
+    /// <summary>[CALC] Builds a RecurrenceRule from a row's six recurrence columns.</summary>
+    /// <param name="reader">The reader, positioned on the row to read.</param>
     public static RecurrenceRule Read(SqliteDataReader reader)
     {
         var frequency = Enum.Parse<RecurrenceFrequency>(ReadString(reader, "Frequency"));
@@ -62,9 +67,15 @@ internal static class RecurrenceRuleColumns
         });
     }
 
+    /// <summary>[CALC] Reads a non-null string column by name.</summary>
+    /// <param name="reader">The reader, positioned on the row to read.</param>
+    /// <param name="columnName">The column to read.</param>
     private static string ReadString(SqliteDataReader reader, string columnName) =>
         reader.GetString(reader.GetOrdinal(columnName));
 
+    /// <summary>[CALC] Reads a nullable string column by name, or null if it's DB null.</summary>
+    /// <param name="reader">The reader, positioned on the row to read.</param>
+    /// <param name="columnName">The column to read.</param>
     private static string? ReadNullableString(SqliteDataReader reader, string columnName)
     {
         var ordinal = reader.GetOrdinal(columnName);

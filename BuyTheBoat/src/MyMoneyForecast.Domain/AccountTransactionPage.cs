@@ -62,13 +62,7 @@ public sealed record AccountTransactionPage
     // ExpectedFreeAmount (balance minus everything sitting in jars).
     public decimal? CurrentFreeAmount { get; init; }
 
-    // page_runoff_data(): "All the information needed for the next
-    // account_transaction_page — finance_patterns, earmark_patterns, balance
-    // snapshot, fund jars."
-    // DIVERGENCE(runoff): each forecast currently builds ONE page spanning
-    // the whole requested window, so nothing consumes this yet. It exists to
-    // mark where cross-page continuity plugs in when fixed page lengths and
-    // persisted history arrive.
+    /// <summary>[CALC] Bundles everything the next page's initial snapshot would need to carry forward — this page's patterns and its closing balance snapshot. DIVERGENCE(runoff): each forecast currently builds one page spanning the whole window, so nothing calls this yet; it exists for when cross-page continuity is built.</summary>
     public PageRunoff PageRunoffData() => new()
     {
         FinancePatterns = FinancePatterns,

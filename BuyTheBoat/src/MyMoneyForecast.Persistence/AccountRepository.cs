@@ -8,10 +8,11 @@ namespace MyMoneyForecast.Persistence;
 // app-assigned like FinanceId (NextId = max + 1); the migration seeds the first
 // account, "primary", as Id 1. Decimals are invariant-culture strings, matching
 // the rest of this layer. Name uniqueness is enforced by the table's UNIQUE
-// column (SQLite honours UNIQUE, unlike declared foreign keys). See
-// planning/10-multiple-accounts.md item 6.
+// column (SQLite honours UNIQUE, unlike declared foreign keys).
 public sealed class AccountRepository(PatternDatabase database)
 {
+    /// <summary>[WRITES FILE] Creates a new account, or updates the existing one with the same Id.</summary>
+    /// <param name="account">The account to save.</param>
     public void Save(Account account)
     {
         using var connection = database.OpenConnection();
@@ -32,6 +33,7 @@ public sealed class AccountRepository(PatternDatabase database)
         command.ExecuteNonQuery();
     }
 
+    /// <summary>[READS FILE] Returns every account, in Id order.</summary>
     public IReadOnlyList<Account> GetAll()
     {
         using var connection = database.OpenConnection();
@@ -48,6 +50,8 @@ public sealed class AccountRepository(PatternDatabase database)
         return accounts;
     }
 
+    /// <summary>[READS FILE] Returns one account by its Id, or null if none exists.</summary>
+    /// <param name="id">The account to look up.</param>
     public Account? GetById(int id)
     {
         using var connection = database.OpenConnection();
@@ -59,6 +63,8 @@ public sealed class AccountRepository(PatternDatabase database)
         return reader.Read() ? Read(reader) : null;
     }
 
+    /// <summary>[READS FILE] Returns one account by its name, or null if none exists.</summary>
+    /// <param name="name">The account name to look up.</param>
     public Account? GetByName(string name)
     {
         using var connection = database.OpenConnection();
@@ -70,9 +76,7 @@ public sealed class AccountRepository(PatternDatabase database)
         return reader.Read() ? Read(reader) : null;
     }
 
-    // The next app-assigned Id (max + 1, or 1 for the very first account) —
-    // mirrors how FinanceId is assigned, and lets the migration seed "primary"
-    // as Id 1.
+    /// <summary>[READS FILE] Returns the next Id to assign a new account: max existing + 1, or 1 if there are none yet.</summary>
     public int NextId()
     {
         using var connection = database.OpenConnection();
@@ -81,11 +85,9 @@ public sealed class AccountRepository(PatternDatabase database)
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
-    // Startup migration (item 6): every install must have at least one account.
-    // On the first run after multi-account lands, the single legacy balance and
-    // cushion become the "primary" account (Id 1 — which the later AccountId
-    // backfill defaults to); a brand-new install just gets an empty one.
-    // Idempotent: does nothing once any account exists.
+    /// <summary>[WRITES FILE] Ensures at least one account exists, creating a "primary" one from the legacy single balance/cushion if none do yet. Idempotent — does nothing once any account exists.</summary>
+    /// <param name="seedBalance">The legacy single balance to seed the primary account with, on a fresh migration.</param>
+    /// <param name="seedCushion">The legacy single safety cushion to seed the primary account with, on a fresh migration.</param>
     public Account EnsureDefaultAccount(decimal seedBalance, decimal seedCushion)
     {
         var existing = GetAll();
@@ -96,6 +98,9 @@ public sealed class AccountRepository(PatternDatabase database)
 
         var primary = Account.Create(new AccountOptions
         {
+            // Id 1 — the AccountId column's own DEFAULT 1 backfill on
+            // existing FinancialPatterns rows relies on the primary account
+            // landing at exactly this id.
             Id = 1,
             Name = "primary",
             Balance = seedBalance,
@@ -106,9 +111,8 @@ public sealed class AccountRepository(PatternDatabase database)
         return primary;
     }
 
-    // No reference guard yet: nothing points at an account until patterns gain
-    // AccountId (item 2) and transfers exist (item 3). The block-if-referenced
-    // guard lands with those, alongside the App-level delete flow.
+    /// <summary>[DELETES] Removes an account. No reference guard here — the App layer checks HasPatternsInAccount/IsAccountReferenced before calling this, so a still-referenced account is never actually deleted.</summary>
+    /// <param name="id">The account to delete.</param>
     public void Delete(int id)
     {
         using var connection = database.OpenConnection();
@@ -118,6 +122,8 @@ public sealed class AccountRepository(PatternDatabase database)
         command.ExecuteNonQuery();
     }
 
+    /// <summary>[CALC] Builds an Account from one row of an Accounts query result.</summary>
+    /// <param name="reader">The reader, positioned on the row to read.</param>
     private static Account Read(SqliteDataReader reader) =>
         Account.Create(new AccountOptions
         {

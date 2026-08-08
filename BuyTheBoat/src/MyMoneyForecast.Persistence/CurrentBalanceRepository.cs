@@ -11,6 +11,11 @@ public sealed class CurrentBalanceRepository(PatternDatabase database)
 {
     private const string DateFormat = "yyyy-MM-dd";
 
+    /// <summary>[WRITES FILE] Saves the current balance snapshot — the single legacy row the Forecast tab reads its inputs from at startup.</summary>
+    /// <param name="balance">The household's current total balance.</param>
+    /// <param name="asOfDate">The forecast's as-of date.</param>
+    /// <param name="horizonEndDate">How far ahead the forecast runs.</param>
+    /// <param name="idealSafetyCushion">The household's total safety cushion target.</param>
     public void Save(decimal balance, DateOnly asOfDate, DateOnly horizonEndDate, decimal idealSafetyCushion)
     {
         using var connection = database.OpenConnection();
@@ -32,6 +37,7 @@ public sealed class CurrentBalanceRepository(PatternDatabase database)
         command.ExecuteNonQuery();
     }
 
+    /// <summary>[READS FILE] Returns the saved balance snapshot, or null if nothing's been saved yet. Feeds the Forecast tab's inputs on startup.</summary>
     public CurrentBalance? GetCurrent()
     {
         using var connection = database.OpenConnection();

@@ -12,7 +12,7 @@ public sealed class FinancialPatternRow(FinancialPattern pattern, string account
     public string Source => Pattern.Source;
     public string? Description => Pattern.Description;
     // The account this pattern is filed under — a display value looked up from
-    // storage, not a property of the domain pattern (planning/10 item 2-A).
+    // storage, not a property of the domain pattern.
     public string Account { get; } = accountName;
     public decimal Amount => Pattern.Amount;
     public bool Mandatory => Pattern.Mandatory;
@@ -73,20 +73,17 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
     // Internal (not private): ForecastSpreadsheetExporter reuses these so the
     // exported file's columns read identically to the on-screen grid.
 
-    // Zero-balance jars (a goal not yet started, a bill just paid, the
-    // still-empty safety cushion) are filtered out — otherwise most days
-    // would read as a wall of "$0.00" entries, exactly the noise this
-    // column exists to cut through.
+    /// <summary>[CALC] Zero-balance jars (a goal not yet started, a bill just paid, the still-empty safety cushion) are filtered out — otherwise most days would read as a wall of "$0.00" entries, exactly the noise this column exists to cut through.</summary>
+    /// <param name="snapshot">The day's balance snapshot, for its fund jars.</param>
+    /// <param name="jarLabels">Finance id → display label, for naming each jar.</param>
     internal static string FormatReserved(BalanceSnapshot snapshot, IReadOnlyDictionary<int, string> jarLabels) =>
         string.Join(", ", snapshot.FundJars
             .Where(jar => jar.ExpectedAmount > 0m)
             .Select(jar => $"{JarLabel(jar.FinanceId, jarLabels)} {jar.ExpectedAmount:C}"));
 
-    // The at-a-glance column shows the day's scheduled events (expected
-    // transactions and planned allocation installments) — the same set the
-    // pre-restructure grid showed. System-generated implicit events (bill
-    // automatically fund steps, goal releases) appear in the selected-day detail
-    // pane instead, where there's room to label what they are.
+    /// <summary>[CALC] The at-a-glance column shows the day's scheduled events (expected transactions and planned allocation installments) — the same set the pre-restructure grid showed. System-generated implicit events (bill automatically fund steps, goal releases) appear in the selected-day detail pane instead, where there's room to label what they are.</summary>
+    /// <param name="snapshot">The day's balance snapshot, for its transactions and earmark events.</param>
+    /// <param name="jarLabels">Finance id → display label, for naming each event.</param>
     internal static string FormatEvents(BalanceSnapshot snapshot, IReadOnlyDictionary<int, string> jarLabels)
     {
         var parts = new List<string>();
@@ -202,14 +199,15 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
-    // A leading grid slot before day 1 — renders as nothing.
+    /// <summary>[CALC] A leading grid slot before day 1 — renders as nothing.</summary>
     public static DayCellRow Padding() => new();
 
     private DayCellRow()
     {
     }
 
-    // An event-less day: present but faint, with nothing to report (§2.I.d).
+    /// <summary>[CALC] An event-less day: present but faint, with nothing to report (§2.I.d).</summary>
+    /// <param name="date">The day this cell represents.</param>
     public DayCellRow(DateOnly date)
     {
         Date = date;
@@ -351,13 +349,20 @@ public sealed class JarDetailRow
         };
     }
 
-    // The floored warning leads the sub line so it can't be missed.
+    /// <summary>[CALC] The floored warning leads the sub line so it can't be missed.</summary>
+    /// <param name="subText">The sub-line text to prepend the warning to.</param>
+    /// <param name="floored">Whether a manual withdrawal exceeded this jar and got floored.</param>
     private static string WithFlooredWarning(string subText, bool floored) =>
         floored ? $"⚠ a manual withdrawal exceeded this jar — only what it held moved · {subText}" : subText;
 
-    // §3.III.c — a regular bill: show the amount due; styling distinguishes
-    // "on track vs. the milestone" (green) from "could pay the whole bill right
-    // now" (strongest green). Precise due date, month as a word.
+    /// <summary>[CALC] §3.III.c — a regular bill: show the amount due; styling distinguishes "on track vs. the milestone" (green) from "could pay the whole bill right now" (strongest green). Precise due date, month as a word.</summary>
+    /// <param name="label">The jar's display label.</param>
+    /// <param name="pattern">The bill's financial pattern, for its amount and due date.</param>
+    /// <param name="jar">The bill's fund jar, for its milestone.</param>
+    /// <param name="saved">What the jar currently holds.</param>
+    /// <param name="context">The selected day's shared context (dates, labels, etc.).</param>
+    /// <param name="drained">Whether this jar was raided on a deallocation day.</param>
+    /// <param name="floored">Whether a manual withdrawal exceeded this jar and got floored.</param>
     private static JarDetailRow Bill(
         string label, FinancialPattern pattern, FundJar jar, decimal saved,
         DayDetailContext context, bool drained, bool floored)
@@ -399,9 +404,15 @@ public sealed class JarDetailRow
         };
     }
 
-    // §3.III.a/b — a goal with a savings plan: progress toward the MILESTONE
-    // (am I on track setting money aside), not the full amount. One-time goals
-    // get a relative due summary when far out; repeating ones a precise date.
+    /// <summary>[CALC] §3.III.a/b — a goal with a savings plan: progress toward the MILESTONE (am I on track setting money aside), not the full amount. One-time goals get a relative due summary when far out; repeating ones a precise date.</summary>
+    /// <param name="label">The jar's display label.</param>
+    /// <param name="pattern">The goal's financial pattern, for its due date and amount.</param>
+    /// <param name="jar">The goal's fund jar, for its milestone.</param>
+    /// <param name="saved">What the jar currently holds.</param>
+    /// <param name="context">The selected day's shared context (dates, shortfalls, etc.).</param>
+    /// <param name="drained">Whether this jar was raided on a deallocation day.</param>
+    /// <param name="floored">Whether a manual withdrawal exceeded this jar and got floored.</param>
+    /// <param name="oneTime">Whether this is a one-time goal rather than a repeating one.</param>
     private static JarDetailRow Goal(
         string label, FinancialPattern pattern, FundJar jar, decimal saved,
         DayDetailContext context, bool drained, bool floored, bool oneTime)
@@ -463,8 +474,9 @@ public sealed class JarDetailRow
         };
     }
 
-    // Sum of this finance id's isolated (non-repeated) earmark amounts on the
-    // day — negative once a deallocation give-back outweighs any scheduled fill.
+    /// <summary>[CALC] Sum of this finance id's isolated (non-repeated) earmark amounts on the day — negative once a deallocation give-back outweighs any scheduled fill.</summary>
+    /// <param name="snapshot">The day's balance snapshot, for its earmark events.</param>
+    /// <param name="financeId">Which jar to sum isolated earmarks for.</param>
     private static decimal NetIsolatedEarmark(BalanceSnapshot snapshot, int? financeId) =>
         snapshot.EarMarkEvents
             .Where(earmark => !earmark.RepeatedEarmark && earmark.FinanceId == financeId)
@@ -657,7 +669,7 @@ public sealed class AccountRow(Account account)
 
 // One row of the Transfers tab. From/To are account names (resolved by the
 // caller); the two underlying patterns never appear here — a transfer reads as one
-// thing (planning/10 item 3).
+// thing.
 public sealed class TransferRow(Transfer transfer, string fromName, string toName)
 {
     public Transfer Transfer { get; } = transfer;

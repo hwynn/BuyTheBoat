@@ -1,37 +1,48 @@
 # 21 — Form architecture: the three-form system
 
-**Status: DRAFTED 2026-07-30, IN PROGRESS — not a finished spec.** Elaborates
+**Status: DRAFTED 2026-07-30.** Elaborates
 [design-philosophies.md](../design-philosophies.md)'s Philosophies 4–7, added the same day at the
 start of the UI-implementation pass that follows the ["Adjusting the Plan"
 phase](13-adjusting-the-plan-charter.md) ([20](20-ui-phase-inventory.md) is that pass's raw
 inventory; this document is the shape the forms in that inventory should take). Author-authored
 draft, transcribed and organized here — genuinely unresolved points are marked **OPEN**, not quietly
-answered.
+answered. The structural findings below (what fields each form needs, why Earmark has two real
+modes, why the instance-picker had to change) are still the reasoning; the "where things stand" list
+right below has been superseded by the 2026-08-08 update beneath it.
 
-**Where each form actually stands, 2026-08-02 (read this before anything else in the document):**
+**Where each form actually stands, updated 2026-08-08 — verified against the running app and code,
+not assumed (read this before anything else in the document):**
 - **Account** — fully done: content, layout, everything (§ Account).
-- **Expense** — content (Steps 1–2) and layout (top/bottom + the recurrence split) settled; a
-  genuine **Advanced mode** is now designed (content only, its switch control not yet placed); the
-  **save controls** (Save / Save and Plan) and **four plan-health states** are settled. Not done:
-  Step 3's exact geometry for the plain fields region, and break-off/restructure UI.
-- **Earmark** — the biggest structural finding of the whole document: "Saving toward" doesn't
-  survive as a field, the instance-picker becomes a goal-picker instead, and the form has two real
-  modes (Savings plan / One-off adjustment) rather than Expense's single-mode-with-toggles shape.
-  Content (Steps 1–2) and the top/bottom layout are settled. **The four plan-health use cases'
-  informational content is now its own document, [22](22-plan-health-state.md) (IN PROGRESS,
-  2026-08-05) — read that, not this bullet, for current status.** Also not done: the layout for
-  everything between top and bottom, the instance-picker popup's real design, and break-off/restructure
-  UI.
-- **Transfer** — not started at all.
-- **Form behavior — a distinct question from all of the above, now its own document,
-  [23](23-form-behavior.md) (OPENED 2026-08-06).** Everything above is about form *content and
-  layout*; 23 is about how a form *behaves* once it holds unsaved edits — default values and
-  inheritance, disabled fields, the isolated-earmark entry point, whether derived content reads saved
-  or working state, and break-off-vs-alter-in-place. Read that document, not this bullet, for current
-  status.
-- Two topics identified but explicitly *not* designed anywhere in this document yet: **break-off/
-  restructure UI** (both forms) and the **instance-picker popup** (both forms need it; Earmark's use
-  is now more demanding than a plain search box — see its Step 1).
+- **Expense** — content, layout, and the plain-fields region are all built: `ExpenseFormPanel` is a
+  real, permanent tab with its full field set (Details, Advanced mode, the Due-date/Stop-question
+  split, `RecurrenceRuleEditor`, `SummaryRegion`). The save controls and the four plan-health states
+  are both wired too — see [23](23-form-behavior.md) for the behavior work, and
+  `PlanHealthMessages.ExpenseStatusLabel` for the status indicator specifically (built 2026-08-07).
+  Not done: break-off/restructure UI (same gap as Earmark, below).
+- **Earmark** — the biggest structural finding of the whole document still holds: "Saving toward"
+  doesn't survive as a field, the instance-picker becomes a goal-picker instead, and the form has two
+  real modes (Savings plan / One-off adjustment) rather than Expense's single-mode-with-toggles
+  shape. Content, the top/bottom layout, **and** the layout for everything between (the
+  Starting-point region with its own editable starting-earmark field, `RecurrenceRuleEditor`, and
+  `SummaryRegion`) are all real, built UI now — see
+  [`planning/mockups/settled-designs.html`](mockups/settled-designs.html)'s Earmark · 1–7 for the
+  current visual record. **The four plan-health use cases' informational content is its own
+  document, [22](22-plan-health-state.md), and is extensively built, not just designed** — read that
+  document's own status for specifics (first-payment-shortfall warning, RRule preview highlighting,
+  the Summary chart's third/fourth line). Not done: break-off/restructure UI.
+- **Transfer** — still not started at all (reconfirmed 2026-08-08: still `CreateTransferWindow.xaml`,
+  the old popup, no permanent tab).
+- **Form behavior — a distinct question from all of the above, its own document,
+  [23](23-form-behavior.md).** Everything above is about form *content and layout*; 23 is about how a
+  form *behaves* once it holds unsaved edits — default values and inheritance, disabled fields, the
+  isolated-earmark entry point, whether derived content reads saved or working state, and
+  break-off-vs-alter-in-place. **All five of 23's own items (A–E) were SETTLED 2026-08-06**, with
+  most since built — read that document's own status header for specifics, not this bullet.
+- **The instance-picker popup is built** — `FinancialPatternPickerWindow`, used by both Expense and
+  Earmark (`OnChangeInstanceClick`/`OnChangeGoalClick`), not the plain search box this document
+  originally sketched. **Still genuinely open, both forms: break-off/restructure UI** — confirmed
+  2026-08-08 that `RestructureFactory` and `BreakOffFactory` are never called from the App layer at
+  all; both mechanisms exist only in the domain layer and the seed data.
 
 **Naming note — SETTLED 2026-07-30:** the generic term covering both a bill and a paycheck (domain
 name `FinancialPattern`) is **"Expense."** The author's own words: *"It's dumb, but we can consider a

@@ -1,10 +1,14 @@
 # 06 — Deallocation math (from `DeallocationProof.ods`)
 
 Reconstructed 2026-07-10 from `DeallocationProof.ods` (sheets `explanation`,
-`DeallocationPieces`; test vectors in `DeallTest` not yet mined). **This is
-reference documentation for the not-yet-built deallocation engine — no code
-exists for it yet.** Verbatim formulas are quoted from `DeallocationPieces`;
-prose examples are reproduced from `explanation`.
+`DeallocationPieces`; test vectors in `DeallTest`). **Status, 2026-08-08: the
+engine this documents is fully built** — see
+[07-deallocation-implementation-plan.md](07-deallocation-implementation-plan.md)
+for the staged implementation (Steps 1-3, all done). This doc remains the
+authoritative math reference: the formulas, symbols, and goal invariants below
+are the test oracles the implementation was built and verified against, not a
+to-do list. Verbatim formulas are quoted from `DeallocationPieces`; prose
+examples are reproduced from `explanation`.
 
 > **Standalone-terms warning (from the sheet itself):** "Some of the terms
 > used in the context of this problem are used differently [than] they are in

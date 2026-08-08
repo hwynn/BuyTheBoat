@@ -3,13 +3,13 @@ namespace MyMoneyForecast.Domain;
 // Builds one forecast's TransactionLogBook from patterns + a seed balance —
 // the original model's organization (Book -> Page -> AccountPage ->
 // BalanceSnapshot -> FundJar/EarMarkEvent/ExpectedTransaction) computed as a
-// stateless, in-memory pass, replacing the old flat ForecastCalculator.
+// stateless, in-memory pass.
 //
-// Multi-account (planning/10 item 4): each account is its own silo. CreateForecast
-// runs the per-account cascade (BuildAccountPage) once per account, then rolls the
-// results up into a household summary. The single-account path (no ForecastOptions
-// .Accounts) synthesizes one "Primary" account from the flat fields, so its output
-// — and every existing test's numbers — is unchanged.
+// Multi-account: each account is its own silo. CreateForecast runs the
+// per-account cascade (BuildAccountPage) once per account, then rolls the
+// results up into a household summary. The single-account path (no
+// ForecastOptions.Accounts) synthesizes one "Primary" account from the flat
+// fields, so its output is unchanged.
 //
 // The internal steps carry the documented cascade's names:
 // - AdjustSnapshots role: materialize events and decide which dates get a
@@ -29,6 +29,8 @@ public static class TransactionLogBookFactory
 {
     public const string PrimaryAccountName = "Primary";
 
+    /// <summary>[CALC] Runs one forecast: builds each account's own day-by-day cascade from its patterns and seed balance, then rolls the results up into goal shortfalls, plan health, and a household summary. The one function every screen's forecast ultimately comes from.</summary>
+    /// <param name="options">The patterns, seed balances, and date range to forecast — either the flat single-account fields, or a per-account breakdown via Accounts.</param>
     public static ForecastResult CreateForecast(ForecastOptions options)
     {
         var accountInputs = ResolveAccountInputs(options);
@@ -122,42 +124,12 @@ public static class TransactionLogBookFactory
         };
     }
 
-    // A finance id's MilestoneAmount, day by day, across [from, to] — unlike
-    // everything else this file computes, this needs no starting balance, no
-    // ManualEarmarks, no deallocation pass: 3.13.5.4.a1's reset-at-release
-    // rule is pure pattern math (repeated contributions accumulate; the
-    // goal's own occurrence date zeroes it), so it can be walked for ANY
-    // date range, past included, unlike ExpectedAmount (which genuinely
-    // needs real starting-balance/transaction history and only ever gets
-    // computed forward from a forecast's own AsOfDate). Author's own report
-    // (2026-08-07): the Earmark form's Summary chart needs the real
-    // trajectory before today, not just after, to actually show the pattern
-    // it's supposed to visualize — this is that.
-    //
-    // Deliberately a second, independent implementation of the same rule
-    // BuildAccountPage's own per-day loop already applies (milestones[id] +=
-    // / = 0m on release) rather than a refactor to share code — that loop is
-    // deeply interleaved with jar/cushion/deallocation state this function
-    // doesn't need, and pulling just the milestone piece out would mean
-    // threading a lot of unrelated context through it for what's a ~10-line
-    // rule. Verified against both existing reset-at-release tests'
-    // expected values by hand before writing (see this method's own test),
-    // so a change to the real rule that isn't mirrored here should get
-    // caught by a diverging result, not silently drift.
-    // startingAllocation (author, 2026-08-07): an optional seed for the
-    // Earmark form's new "proposed — rough, live estimate" chart line
-    // (settled-designs.html), which needs to start from whatever's
-    // currently typed in the Starting-point region rather than $0 — the
-    // same live starting total GetLiveJarAmounts' own snapshot already
-    // uses, just carried through a full trajectory instead of one "today"
-    // point. Defaults to 0m, so every existing MilestoneAmount caller
-    // (which wants no such bonus riding on top of it) is unaffected.
-    // Mathematically safe to seed this way: the walk's own reset-at-release
-    // rule zeroes `running` regardless of what it held, so the seed's
-    // influence disappears completely after the first release either way —
-    // proven once already for GetLiveJarAmounts' own single-point case
-    // (see its header comment), verified again here for the full
-    // trajectory shape by this method's own new test.
+    /// <summary>[CALC] Walks a finance id's MilestoneAmount day by day across a date range. Unlike ExpectedAmount, this needs no starting balance or transaction history — the reset-at-release rule is pure pattern math, so it can be walked for any range, including before today. Feeds the Earmark form's Summary chart. A deliberately separate implementation from BuildAccountPage's own per-day loop (too deeply interleaved with jar/cushion/deallocation state to share cleanly) — both are checked against the same tests.</summary>
+    /// <param name="patterns">The savings plan(s) funding the goal.</param>
+    /// <param name="goal">The goal being funded.</param>
+    /// <param name="from">Start of the range to walk.</param>
+    /// <param name="to">End of the range to walk.</param>
+    /// <param name="startingAllocation">Seeds the walk instead of starting from 0, for a live "proposed" chart line before a plan is saved — safe, since the first release always resets the running total to 0 regardless of what it held, so the seed's influence disappears after that point (see ComputeMilestoneTrajectory_seed_only_survives_until_the_first_release_then_matches_the_unseeded_walk_exactly).</param>
     public static IReadOnlyList<(DateOnly Date, decimal MilestoneAmount)> ComputeMilestoneTrajectory(
         IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, DateOnly from, DateOnly to, decimal startingAllocation = 0m)
     {
@@ -185,29 +157,17 @@ public static class TransactionLogBookFactory
         return points;
     }
 
-    // [IsFirstOccurrencePending] Whether a goal's own very first occurrence
-    // hasn't happened yet — today counts as not-yet (inclusive), per the
-    // author's own rule (2026-08-07). Pure date fact about the goal alone,
-    // same "no forecast needed" shape as ComputeMilestoneTrajectory above,
-    // so it's usable both for a saved PlanHealthState and for a proposed,
-    // not-yet-saved pattern straight from the Earmark form.
-    // TODO: once ActualTransaction/pairing exists, an occurrence "paired" to
-    // a real transaction should count as already-happened even if its own
-    // date is still today-or-later (author's own carve-out) — nothing to
-    // pair against yet, so every occurrence is treated as unpaired for now.
+    /// <summary>[CALC] Reports whether a goal's very first occurrence hasn't happened yet — today counts as not-yet. A pure date fact, usable both for a saved PlanHealthState and a proposed, not-yet-saved pattern straight from the Earmark form. TODO: once actual-transaction pairing exists, an occurrence paired to a real transaction should count as already-happened even if its own date is still today-or-later.</summary>
+    /// <param name="goal">The goal to check.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
     public static bool IsFirstOccurrencePending(FinancialPattern goal, DateOnly asOfDate) =>
         FirstOccurrence(goal.DatePattern) is { } date && date >= asOfDate;
 
-    // [FirstOccurrenceShortfall] How short the given patterns' own
-    // contributions (StartingAllocation + repeated occurrences + manual
-    // earmarks, same three sources CalculateGoalShortfalls sums for the
-    // whole span) would be by the time the goal's own FIRST occurrence
-    // lands — 0 when it's already covered, or when IsFirstOccurrencePending
-    // is false. Deliberately takes patterns/manualEarmarks as plain
-    // parameters rather than reading a saved EarMarkPattern off the book,
-    // so the Earmark form can call this against whatever's currently
-    // proposed but unsaved, not just a saved plan (author's own
-    // instruction, 2026-08-07: "the proposed EarmarkPattern in the form").
+    /// <summary>[CALC] Returns how short the given patterns' own contributions (StartingAllocation + repeated occurrences + manual earmarks) would be by the time the goal's first occurrence lands — 0 when it's already covered, or when the first occurrence isn't pending. Takes patterns/manualEarmarks as plain parameters rather than a saved EarMarkPattern, so the Earmark form can call this against whatever's currently proposed but unsaved, not just a saved plan.</summary>
+    /// <param name="patterns">The savings plan(s) funding the goal.</param>
+    /// <param name="goal">The goal being funded.</param>
+    /// <param name="manualEarmarks">Every manual earmark, to include any covering this goal.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
     public static decimal FirstOccurrenceShortfall(
         IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, IReadOnlyList<ManualEarmark> manualEarmarks, DateOnly asOfDate)
     {
@@ -227,14 +187,16 @@ public static class TransactionLogBookFactory
         return Math.Max(0m, Math.Abs(goal.Amount) - accumulated);
     }
 
+    /// <summary>[CALC] Returns a pattern's first occurrence, or null if it has none.</summary>
+    /// <param name="pattern">The pattern to search.</param>
     private static DateOnly? FirstOccurrence(RecurrenceRule pattern)
     {
         var occurrences = pattern.GetOccurrences(pattern.Start, pattern.Until);
         return occurrences.Count > 0 ? occurrences[0] : null;
     }
 
-    // The per-account breakdown when given; otherwise one "Primary" account from
-    // the flat fields — the pre-multi-account behaviour, byte-for-byte.
+    /// <summary>[CALC] Returns the per-account breakdown when given; otherwise one "Primary" account synthesized from the flat fields — the pre-multi-account behavior, byte-for-byte.</summary>
+    /// <param name="options">The forecast options, with either Accounts set or the flat single-account fields.</param>
     private static IReadOnlyList<AccountForecastInput> ResolveAccountInputs(ForecastOptions options)
     {
         if (options.Accounts is { Count: > 0 } accounts)
@@ -257,10 +219,9 @@ public static class TransactionLogBookFactory
         ];
     }
 
-    // The household roll-up (item 4-C). On each date any account has an event,
-    // sample every account's free/set-aside as of that date (its latest snapshot
-    // on or before it) and sum — flagging any account whose own free went
-    // negative, since a positive household total can hide a locally-short account.
+    /// <summary>[CALC] Builds the household roll-up: on each date any account has an event, sums every account's free/set-aside as of that date (its latest snapshot on or before it) — flagging any account whose own free went negative, since a positive household total can hide a locally-short account.</summary>
+    /// <param name="accounts">Every account's own forecast.</param>
+    /// <param name="transferWithdrawalFinanceIds">Finance ids of transfer withdrawals, so their reservations can be added back into household free.</param>
     private static HouseholdSummary BuildHouseholdSummary(
         IReadOnlyList<AccountForecast> accounts,
         IReadOnlySet<int> transferWithdrawalFinanceIds)
@@ -288,13 +249,13 @@ public static class TransactionLogBookFactory
             {
                 var sample = SampleAsOf(account.Page, date, transferWithdrawalFinanceIds);
 
-                // planning/14 item A-1: a transfer's withdrawal reserves in the
-                // account it leaves, so that account's own free reflects money
-                // already committed to going. Household-wide it is not spending
-                // — the money is still in the household — so it is moved back
+                // A transfer's withdrawal reserves in the account it leaves,
+                // so that account's own free reflects money already
+                // committed to going. Household-wide it is not spending —
+                // the money is still in the household — so it is moved back
                 // out of set-aside and into free here. Total is untouched
-                // either way, which is why this is a reclassification and the
-                // free + set-aside = total identity still holds.
+                // either way, which is why this is a reclassification and
+                // the free + set-aside = total identity still holds.
                 free += sample.Free + sample.TransferReserved;
                 setAside += sample.SetAside - sample.TransferReserved;
 
@@ -306,8 +267,8 @@ public static class TransactionLogBookFactory
                     shortAccounts.Add(account.Name);
                 }
 
-                // planning/14 item C: the buffer is not whole. Never fires for
-                // an account with no cushion, since 0 can't sit below 0.
+                // The buffer is not whole. Never fires for an account with
+                // no cushion, since 0 can't sit below 0.
                 if (sample.Cushion < account.Page.IdealSafetyCushion)
                 {
                     cushionDipped.Add(account.Name);
@@ -327,11 +288,11 @@ public static class TransactionLogBookFactory
         return new HouseholdSummary { AsOfFree = asOfFree, Days = days };
     }
 
-    // An account's state as of `date`: the latest snapshot on or before it, else
-    // the initial snapshot. Set-aside is the reserved portion (expected minus
-    // free); TransferReserved is the part of that sitting in transfer-withdrawal
-    // jars; Cushion is the null-id jar's amount. BalanceRecord is sorted, so we
-    // stop at the first later date.
+    /// <summary>[CALC] Samples an account's state as of a date: the latest snapshot on or before it, else the initial snapshot.</summary>
+    /// <param name="page">The account to sample.</param>
+    /// <param name="date">The date to sample as of.</param>
+    /// <param name="transferWithdrawalFinanceIds">Finance ids of transfer withdrawals, to split their reservation out separately.</param>
+    /// <returns>Free (spendable), SetAside (the reserved portion, expected minus free), TransferReserved (the part of SetAside sitting in transfer-withdrawal jars), and Cushion (the null-id jar's amount).</returns>
     private static (decimal Free, decimal SetAside, decimal TransferReserved, decimal Cushion) SampleAsOf(
         AccountTransactionPage page,
         DateOnly date,
@@ -365,21 +326,21 @@ public static class TransactionLogBookFactory
         IReadOnlyList<(DateOnly Date, int FinanceId)> Floored,
         IReadOnlyList<(DateOnly Date, int FinanceId)> UnderfundedReleases);
 
-    // Builds ONE account's page — the per-account silo cascade. This is the body
-    // the single-account engine used to be; everything here is scoped to this
-    // account's own patterns, balance and cushion.
+    /// <summary>[CALC] Builds one account's page — the per-account silo cascade that produces its own day-by-day balance record from its own patterns, balance, and cushion.</summary>
+    /// <param name="input">The account's patterns, seed balance, and cushion.</param>
+    /// <param name="asOfDate">The forecast's as-of date.</param>
+    /// <param name="horizonEndDate">The forecast's horizon end date.</param>
     private static AccountPageBuild BuildAccountPage(AccountForecastInput input, DateOnly asOfDate, DateOnly horizonEndDate)
     {
         var patternsById = input.FinancialPatterns.ToDictionary(pattern => pattern.FinanceId);
         var earmarkedIds = input.EarMarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
 
-        // Stage-1 revision (planning/14 "Revision 2026-07-24"): the computed
-        // A/B ramp is RETIRED. Every outflow that reserves against free funds
-        // now does so through a real EarMarkPattern (its Allocation Plan),
-        // created at pattern-creation time by AllocationPlanProposer and passed
-        // in via input.EarMarkPatterns — so the engine treats a bill's plan
-        // exactly like a goal's savings plan, and an outflow with no plan
-        // simply reduces free funds on its due date (and reads short).
+        // Every outflow that reserves against free funds does so through a
+        // real EarMarkPattern (its Allocation Plan), created at
+        // pattern-creation time by AllocationPlanProposer and passed in via
+        // input.EarMarkPatterns — so the engine treats a bill's plan exactly
+        // like a goal's savings plan, and an outflow with no plan simply
+        // reduces free funds on its due date (and reads short).
 
         // === AdjustSnapshots role: materialize the window's events ===
 
@@ -468,12 +429,12 @@ public static class TransactionLogBookFactory
         // already partway through its schedule shows a non-zero jar today).
         var jarValues = new Dictionary<int, decimal>();
         var milestones = new Dictionary<int, decimal>();
-        // planning/17, item 8 (F27/F29): more than one EarMarkPattern may now
-        // share a finance_id (a "Restructure" predecessor + successor), so
-        // every plan funding a goal is summed here — one jar/milestone value
-        // per finance_id, not one per plan. Each plan's own GetOccurrences
-        // call is bounded by ITS OWN Until, so a truncated predecessor and
-        // its successor never double-count the same day.
+        // More than one EarMarkPattern may share a finance_id (a
+        // "Restructure" predecessor + successor), so every plan funding a
+        // goal is summed here — one jar/milestone value per finance_id, not
+        // one per plan. Each plan's own GetOccurrences call is bounded by
+        // ITS OWN Until, so a truncated predecessor and its successor never
+        // double-count the same day.
         foreach (var group in input.EarMarkPatterns.ToLookup(earmark => earmark.FinanceId))
         {
             var financeId = group.Key;
@@ -481,8 +442,8 @@ public static class TransactionLogBookFactory
             var contributed = group.Sum(earmark =>
                     earmark.StartingAllocation
                     - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count)
-                // Manual adjustments already made on/before the as-of date are
-                // part of the jar's settled history (planning/09) — dated
+                // Manual adjustments already made on/before the as-of date
+                // are part of the jar's settled history — dated
                 // StartingAllocation, effectively.
                 + input.ManualEarmarks
                     .Where(manual => manual.FinanceId == financeId && manual.Date <= asOfDate)
@@ -490,8 +451,8 @@ public static class TransactionLogBookFactory
             var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.Start, asOfDate).Count;
             jarValues[financeId] = Math.Max(0m, contributed - withdrawn);
 
-            // 3.13.5.4.a1, reset-at-release (planning/14, 2026-08-03): milestone
-            // counts scheduled contributions since the goal's LAST release, not
+            // 3.13.5.4.a1, reset-at-release: milestone counts scheduled
+            // contributions since the goal's LAST release, not
             // its lifetime total — otherwise a repeating goal's milestone climbs
             // forever even though its jar returns to ~0 on every on-time payment
             // (a $500/month loan paid on schedule would read "$500 short," then
@@ -612,16 +573,16 @@ public static class TransactionLogBookFactory
                     // A clamped event whose user-entered portion is a withdrawal
                     // means the user's stated intent didn't fully happen — only
                     // what the jar held actually moved. Reported so the UI can
-                    // flag it in place (planning/09). System-only events never
-                    // over-pull (deallocation's W = Max(-Fa, N) is bounded), so
-                    // this only fires on manual withdrawals.
+                    // flag it in place. System-only events never over-pull
+                    // (deallocation's W = Max(-Fa, N) is bounded), so this
+                    // only fires on manual withdrawals.
                     if (unfloored < 0m && earMarkEvent.ExplicitAmount is < 0m)
                     {
                         flooredManualEarmarks.Add((date, financeId));
                     }
 
-                    // PlanHealthState's UnderfundedReleaseDates (2026-08-04):
-                    // this specific finance id's OWN release (its goal/bill
+                    // PlanHealthState's UnderfundedReleaseDates: this
+                    // specific finance id's OWN release (its goal/bill
                     // occurrence today, per ReleasedFinanceIds — not some
                     // unrelated jar a deallocation day happened to raid)
                     // wanted to pay out more than the jar held. A release is
@@ -643,8 +604,8 @@ public static class TransactionLogBookFactory
                     }
                 }
 
-                // ASSUMED-PAIRING(3.13c.a10), reset-at-release (planning/14,
-                // 2026-08-03): today's own goal/bill occurrence(s) close out
+                // ASSUMED-PAIRING(3.13c.a10), reset-at-release: today's own
+                // goal/bill occurrence(s) close out
                 // their current cycle, so the pacing milestone starts fresh —
                 // AFTER today's own accumulation above, so a same-day final
                 // contribution (a plan intentionally paced to land right when
@@ -703,6 +664,9 @@ public static class TransactionLogBookFactory
         return new AccountPageBuild(accountPage, firstNegativeDate, flooredManualEarmarks, underfundedReleases);
     }
 
+    /// <summary>[CALC] Returns the list for a date in a date-keyed dictionary, creating and inserting an empty one if it isn't there yet.</summary>
+    /// <param name="map">The dictionary to look up (and possibly insert into).</param>
+    /// <param name="date">The date to look up.</param>
     private static List<T> GetOrAdd<T>(Dictionary<DateOnly, List<T>> map, DateOnly date)
     {
         if (!map.TryGetValue(date, out var list))
@@ -714,21 +678,16 @@ public static class TransactionLogBookFactory
         return list;
     }
 
-    // The Q2 engine (07 Step 2): on a deallocation day drain the lowest-priority
-    // jars first to cap allocation at available funds; otherwise release each
-    // goal's jar on its own occurrence. Either way the result is appended to the
-    // day's earMarkEvents (mutated in place) and applied by the caller's floor
-    // loop — deallocation never rewrites jar values directly.
-    //
-    // Proof-term mapping (06): c = previousExpected; f = each jar's PREVIOUS-day
-    // balance (jarValues, not yet updated for today); ap = today's goal
-    // occurrences (finance id has an EarMarkPattern); au = every other expected
-    // transaction; er + ei = the day's already-scheduled earmark events.
-    // Returns whether this was a deallocation day (spending overdrew free funds
-    // and jars were drained) — surfaced onto the snapshot for the UI drain
-    // highlight and the "Deallocation" event label — plus which finance ids had
-    // their OWN occurrence today (ap's own finance ids), so the caller can reset
-    // their milestone pacing (3.13.5.4.a1) regardless of which branch ran.
+    /// <summary>[CALC] The Q2 engine: on a deallocation day drains the lowest-priority jars first to cap allocation at available funds; otherwise releases each goal's jar on its own occurrence. Either way, appends the result to the day's earMarkEvents (mutated in place) — deallocation never rewrites jar values directly.</summary>
+    /// <param name="earMarkEvents">The day's already-scheduled earmark events; the day's release/deallocation events are appended here.</param>
+    /// <param name="date">The day being processed.</param>
+    /// <param name="previousExpected">Yesterday's ExpectedAmount (c).</param>
+    /// <param name="jarValues">Every jar's previous-day balance (f), keyed by finance id.</param>
+    /// <param name="cushionValue">The cushion's previous-day balance.</param>
+    /// <param name="expectedTransactions">Today's expected transactions.</param>
+    /// <param name="patternsById">Every financial pattern, keyed by finance id.</param>
+    /// <param name="earmarkedIds">Finance ids with a savings plan — their own occurrence today is a paired transaction (ap), not an unpaired one.</param>
+    /// <returns>Whether this was a deallocation day (surfaced onto the snapshot for the UI drain highlight), plus which finance ids had their own occurrence today, so the caller can reset their milestone pacing regardless of which branch ran.</returns>
     private static (bool IsDeallocationDay, IReadOnlyList<int> ReleasedFinanceIds) AppendDeallocationOrGoalReleases(
         List<EarMarkEvent> earMarkEvents,
         DateOnly date,
@@ -790,9 +749,9 @@ public static class TransactionLogBookFactory
                 Priority: patternsById[financeId].Priority,
                 Balance: balance,
                 ExistingEarmark: existingByJar.GetValueOrDefault(financeId),
-                // planning/14 item B: Mandatory now means "the user has to pay
-                // this", and its only job is protecting the jar — everything
-                // skippable is drained before anything unskippable is touched.
+                // Mandatory means "the user has to pay this", and its only
+                // job is protecting the jar — everything skippable is
+                // drained before anything unskippable is touched.
                 Skippable: !patternsById[financeId].Mandatory));
         }
 
@@ -829,14 +788,11 @@ public static class TransactionLogBookFactory
         return (isDeallocationDay, pairedTransactions.Select(paired => paired.FinanceId).ToList());
     }
 
-    // planning/17, item 9 (F30): two EarMarkPatterns sharing a finance_id
-    // (concurrent funders, e.g. two household partners each funding the same
-    // goal) can generate an occurrence on the same day — merged into one
-    // event, summing the amounts, so 3.13.8.1.a2 ("only one repeated earmark
-    // with finance_id x can exist on a single day") holds literally. The
-    // same treatment MergeOrAppendIsolatedEarmark already gives isolated
-    // earmarks on a collision; a repeated and an isolated earmark for the
-    // same jar/day still coexist as two separate events (unchanged).
+    /// <summary>[CALC] Merges an amount into an existing repeated earmark event for the same jar/day if one exists, otherwise appends a new one — two EarMarkPatterns sharing a finance id (concurrent funders) can generate an occurrence on the same day, and only one repeated earmark per finance id per day may exist (3.13.8.1.a2). A repeated and an isolated earmark for the same jar/day still coexist as two separate events.</summary>
+    /// <param name="events">The day's earmark events; merged into or appended to in place.</param>
+    /// <param name="financeId">Which jar the earmark is for.</param>
+    /// <param name="amount">The amount to merge in.</param>
+    /// <param name="date">The day being processed.</param>
     private static void MergeOrAppendRepeatedEarmark(List<EarMarkEvent> events, int financeId, decimal amount, DateOnly date)
     {
         for (var i = 0; i < events.Count; i++)
@@ -858,11 +814,11 @@ public static class TransactionLogBookFactory
         });
     }
 
-    // A deallocation give-back merges into any ISOLATED earmark the jar already
-    // carries that day (an automatic funding delta), preserving "one
-    // isolated earmark per finance id per day" and avoiding a duplicate
-    // detail-pane row; otherwise it is appended. Repeated earmarks are left
-    // alone — an isolated and a repeated earmark for the same jar/day coexist.
+    /// <summary>[CALC] Merges an amount into an existing isolated earmark event for the same jar/day if one exists, otherwise appends a new one — preserves "one isolated earmark per finance id per day" and avoids a duplicate detail-pane row. Repeated earmarks are left alone.</summary>
+    /// <param name="events">The day's earmark events; merged into or appended to in place.</param>
+    /// <param name="financeId">Which jar the earmark is for; null for the safety cushion.</param>
+    /// <param name="amount">The amount to merge in.</param>
+    /// <param name="date">The day being processed.</param>
     private static void MergeOrAppendIsolatedEarmark(
         List<EarMarkEvent> events, int? financeId, decimal amount, DateOnly date)
     {
@@ -885,9 +841,11 @@ public static class TransactionLogBookFactory
         });
     }
 
-    // Jar order is stable (insertion order of jarValues: goals, then auto
-    // bills), with the safety cushion appended last. Exactly one null-id jar
-    // per snapshot (9.5.a1), carrying the running cushion value.
+    /// <summary>[CALC] Builds a snapshot's list of fund jars from the running per-jar values — one goal/bill jar per finance id, plus the safety cushion appended last. Order is stable (insertion order of jarValues).</summary>
+    /// <param name="jarValues">Every jar's current balance, keyed by finance id.</param>
+    /// <param name="milestones">Every jar's current milestone accrual, keyed by finance id.</param>
+    /// <param name="cushionValue">The cushion's current balance.</param>
+    /// <param name="currentIsKnown">Whether CurrentAmount is knowable yet (true only for the as-of day's seed snapshot).</param>
     private static List<FundJar> BuildJars(
         Dictionary<int, decimal> jarValues,
         Dictionary<int, decimal> milestones,
@@ -921,21 +879,10 @@ public static class TransactionLogBookFactory
         return jars;
     }
 
-    // ~3.13.5.4.a1: milestone vs. saved — but "saved" and "milestone" are
-    // structurally identical without real transactions, so the only way an
-    // outflow can look short is if its Allocation Plan doesn't put in enough by
-    // its due date. Evaluated independently of any display horizon, and always
-    // includes every outflow that has a plan (ShortfallAmount is 0 when fully on
-    // track) so a UI can render one row per plan without a separate lookup.
-    //
-    // F21 (planning/14 revision): the SAME formula serves a one-time goal and a
-    // repeating bill. The need scales by occurrence count — a repeating bill
-    // must have its whole stream covered, not one occurrence (a one-time goal
-    // has exactly one, so it is unchanged there). And "allocated" now counts
-    // isolated earmarks (manual adjustments and the starting earmark) as well as
-    // the plan's own contributions. Gross-vs-gross: it can't see a plan that
-    // back-loads its contributions within the span; the proposer never produces
-    // that shape.
+    /// <summary>[CALC] Computes each goal's shortfall: whether its Allocation Plan will put in enough by its due date. Always includes every outflow that has a plan (ShortfallAmount is 0 when fully on track), evaluated independently of any display horizon, so a UI can render one row per plan without a separate lookup. The same formula serves a one-time goal and a repeating bill — the need scales by occurrence count, and "allocated" counts isolated earmarks (manual adjustments, the starting earmark) as well as the plan's own contributions. Gross-vs-gross: can't detect a plan that back-loads its contributions within the span, though the proposer never actually produces that shape.</summary>
+    /// <param name="earMarkPatterns">Every savings plan.</param>
+    /// <param name="goalsByFinanceId">Every goal/bill pattern, keyed by finance id.</param>
+    /// <param name="manualEarmarks">Every manual earmark.</param>
     private static IReadOnlyList<GoalShortfall> CalculateGoalShortfalls(
         IReadOnlyList<EarMarkPattern> earMarkPatterns,
         IReadOnlyDictionary<int, FinancialPattern> goalsByFinanceId,
@@ -943,10 +890,10 @@ public static class TransactionLogBookFactory
     {
         var shortfalls = new List<GoalShortfall>();
 
-        // planning/17, item 8 (F27/F29): one row per GOAL, not one per plan —
-        // more than one EarMarkPattern may now share a finance_id (a
-        // "Restructure" predecessor + successor), and every plan funding a
-        // goal must be summed into its one shortfall row.
+        // One row per GOAL, not one per plan — more than one EarMarkPattern
+        // may share a finance_id (a "Restructure" predecessor + successor),
+        // and every plan funding a goal must be summed into its one
+        // shortfall row.
         foreach (var group in earMarkPatterns.ToLookup(earmark => earmark.FinanceId))
         {
             var financeId = group.Key;
@@ -980,11 +927,7 @@ public static class TransactionLogBookFactory
         return shortfalls;
     }
 
-    // PlanHealthState (2026-08-04): one row per GoalShortfalls entry, adding
-    // the questions a due-date-only shortfall/overfund pair can't answer —
-    // today's live pace, whether a catch-up would fix it for good, and which
-    // single state is worth showing when more than one applies at once.
-    // planning/22 §5: named, easily-adjustable constants for
+    // Named, easily-adjustable constants for
     // DetermineIsWorthWarningAbout's thresholds — not literals, so they can
     // be tuned without hunting through the rule's own branches. Hunting down
     // *other* pre-existing magic numbers elsewhere is explicitly deferred to
@@ -994,6 +937,15 @@ public static class TransactionLogBookFactory
     private const decimal HalfOfFreeFundsRatio = 0.5m;
     private const decimal ExcessWarningMultiplier = 2m;
 
+    /// <summary>[CALC] Builds one PlanHealthState row per GoalShortfalls entry, adding the questions a due-date-only shortfall/overfund pair can't answer — today's live pace, whether a catch-up would fix it for good, and which single state is worth showing when more than one applies at once.</summary>
+    /// <param name="goalShortfalls">Every goal's due-date shortfall/overfund pair.</param>
+    /// <param name="jarsByFinanceId">Today's fund jar for each goal, keyed by finance id.</param>
+    /// <param name="goalsByFinanceId">Every goal/bill pattern, keyed by finance id.</param>
+    /// <param name="earMarkPatterns">Every savings plan.</param>
+    /// <param name="manualEarmarks">Every manual earmark.</param>
+    /// <param name="underfundedReleases">Every date/finance-id pair where a release came up short.</param>
+    /// <param name="pageByFinanceId">Each goal's own account page, keyed by finance id.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
     private static IReadOnlyList<PlanHealthState> CalculatePlanHealthStates(
         IReadOnlyList<GoalShortfall> goalShortfalls,
         IReadOnlyDictionary<int, FundJar> jarsByFinanceId,
@@ -1033,33 +985,31 @@ public static class TransactionLogBookFactory
                     * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, shortfall.DueDate).Count);
             var isChronicShortfall = shortfall.ShortfallAmount > 0m && plannedTotal < shortfall.AmountNeeded;
 
-            // Built 2026-08-05: the earliest date this financeId's own release
-            // actually came up short, from the same forward-walk data
-            // IsWorthWarningAbout already uses — real per-occurrence data now
-            // that pageByFinanceId threads it through, not a stub. Falls back
-            // to the due date only when the walk found no specific short
-            // occurrence to point at (e.g. the horizon requested didn't reach
-            // one) but the whole-span shortfall is still positive.
+            // The earliest date this financeId's own release actually came
+            // up short, from the same forward-walk data IsWorthWarningAbout
+            // already uses. Falls back to the due date only when the walk
+            // found no specific short occurrence to point at (e.g. the
+            // horizon requested didn't reach one) but the whole-span
+            // shortfall is still positive.
             var shortReleaseDates = releaseDatesByFinanceId[financeId];
             var projectedShortfallStartDate = shortReleaseDates.Any()
                 ? shortReleaseDates.Min()
                 : shortfall.ShortfallAmount > 0m ? shortfall.DueDate : (DateOnly?)null;
 
-            // "Is the excess so much that we could skip a payment?" (author,
-            // 2026-08-04) is folded into DetermineIsWorthWarningAbout's own
-            // excess branch below rather than kept as its own property — the
-            // threshold is double the SMALLEST repeated EarMarkPattern
-            // amount in this Savings Plan (not the goal's own amount), since
-            // a plan can have more than one concurrent funder at different
-            // rates (F27).
+            // "Is the excess so much that we could skip a payment?" is
+            // folded into DetermineIsWorthWarningAbout's own excess branch
+            // below rather than kept as its own property — the threshold is
+            // double the SMALLEST repeated EarMarkPattern amount in this
+            // Savings Plan (not the goal's own amount), since a plan can
+            // have more than one concurrent funder at different rates.
             var isWorthWarningAbout = DetermineIsWorthWarningAbout(
                 goalsByFinanceId[financeId], shortfall, currentShortfall, currentOverfunded,
                 pageByFinanceId[financeId], asOfDate,
                 earMarkPatterns.Where(earmark => earmark.FinanceId == financeId).ToList(),
                 shortReleaseDates);
 
-            // Author's own new pair (2026-08-07) — see PlanHealthState's own
-            // doc comments on each for the full reasoning.
+            // See PlanHealthState's own doc comments on each for the full
+            // reasoning.
             var goal = goalsByFinanceId[financeId];
             var isFirstOccurrencePending = IsFirstOccurrencePending(goal, asOfDate);
             var firstOccurrenceShortfall = FirstOccurrenceShortfall(
@@ -1085,12 +1035,15 @@ public static class TransactionLogBookFactory
         return states;
     }
 
-    // planning/22 §5, full spec (author, 2026-08-04/2026-08-05): is a
-    // detected shortage/excess worth actually warning the user about?
-    // Non-repeated and repeated patterns get separate rule sets because the
-    // two genuinely differ (§5's own framing) — each branch below is
-    // commented with the exact rule it implements. Only meaningful for a
-    // plan MostImportantHealthState would otherwise flag as non-Healthy.
+    /// <summary>[CALC] Reports whether a detected shortage/excess is worth actually warning the user about. Non-repeated and repeated patterns get separate rule sets because the two genuinely differ — each branch is commented with the exact rule it implements. Only meaningful for a plan MostImportantHealthState would otherwise flag as non-Healthy.</summary>
+    /// <param name="goal">The goal/bill pattern.</param>
+    /// <param name="shortfall">The goal's due-date shortfall/overfund pair.</param>
+    /// <param name="currentShortfall">How far behind the jar sits today.</param>
+    /// <param name="currentOverfunded">How far ahead the jar sits today.</param>
+    /// <param name="page">The goal's own account page.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
+    /// <param name="plansForThisGoal">Every savings plan funding this goal.</param>
+    /// <param name="shortReleaseDatesForThisGoal">Dates this goal's own release came up short.</param>
     private static bool DetermineIsWorthWarningAbout(
         FinancialPattern goal,
         GoalShortfall shortfall,
@@ -1134,10 +1087,10 @@ public static class TransactionLogBookFactory
             }
 
             // Repeated rule 3: any occurrence within six months being short
-            // is always worth surfacing, independent of rules 1/2 (confirmed
-            // 2026-08-05 — a repeating pattern's future shortfall doesn't
-            // get to "hide" the way a single far-off one-time goal's can).
-            // This also covers rule 1 (next occurrence soon and short)
+            // is always worth surfacing, independent of rules 1/2 — a
+            // repeating pattern's future shortfall doesn't get to "hide" the
+            // way a single far-off one-time goal's can. This also covers
+            // rule 1 (next occurrence soon and short)
             // whenever that's the occurrence actually flagged, since "soon"
             // is always inside the six-month window.
             var lookaheadEnd = asOfDate.AddMonths(LookaheadMonths);
@@ -1152,11 +1105,10 @@ public static class TransactionLogBookFactory
             return shortfall.ShortfallAmount >= HalfOfFreeFunds(page, nextOccurrence);
         }
 
-        // Excess/overfunded case (both kinds, author 2026-08-04): worth
-        // warning when the projected excess on the date of the next expected
-        // transaction exceeds double the smallest repeated
-        // EarMarkPattern.Amount in the Savings Plan — also
-        // CanSkipNextPayment's replacement (§2).
+        // Excess/overfunded case (both kinds): worth warning when the
+        // projected excess on the date of the next expected transaction
+        // exceeds double the smallest repeated EarMarkPattern.Amount in the
+        // Savings Plan.
         if (currentOverfunded > 0m || shortfall.OverfundedAmount > 0m)
         {
             var nextTransactionDate = isRepeated
@@ -1184,20 +1136,25 @@ public static class TransactionLogBookFactory
         return false;
     }
 
+    /// <summary>[CALC] Returns half of an account's free funds as of a date — the excess-warning threshold for a non-repeated goal projected further out than the lookahead window.</summary>
+    /// <param name="page">The account to read free funds from.</param>
+    /// <param name="date">The date to read free funds as of.</param>
     private static decimal HalfOfFreeFunds(AccountTransactionPage page, DateOnly date) =>
         (SnapshotAsOf(page, date).ExpectedFreeAmount ?? 0m) * HalfOfFreeFundsRatio;
 
+    /// <summary>[CALC] Returns how far a jar's balance sits above its milestone on a given date, or 0 if it isn't ahead (or doesn't exist).</summary>
+    /// <param name="page">The account to read the jar from.</param>
+    /// <param name="date">The date to read the jar as of.</param>
+    /// <param name="financeId">Which jar to read.</param>
     private static decimal ProjectedJarExcess(AccountTransactionPage page, DateOnly date, int financeId)
     {
         var jar = SnapshotAsOf(page, date).FundJars.FirstOrDefault(candidate => candidate.FinanceId == financeId);
         return jar is null ? 0m : Math.Max(0m, jar.ExpectedAmount - (jar.MilestoneAmount ?? 0m));
     }
 
-    // The account's own snapshot as of `date` — its latest BalanceRecord
-    // entry on or before it, else the initial snapshot. Same "nearest
-    // at-or-before" lookup SampleAsOf below already used for the household
-    // roll-up, extracted so DetermineIsWorthWarningAbout's per-date
-    // jar/free-funds lookups share it too.
+    /// <summary>[CALC] Returns an account's own snapshot as of a date — its latest BalanceRecord entry on or before it, else the initial snapshot. Same "nearest at-or-before" lookup SampleAsOf uses for the household roll-up, extracted so DetermineIsWorthWarningAbout's per-date jar/free-funds lookups share it too.</summary>
+    /// <param name="page">The account to read a snapshot from.</param>
+    /// <param name="date">The date to read the snapshot as of.</param>
     private static BalanceSnapshot SnapshotAsOf(AccountTransactionPage page, DateOnly date)
     {
         var snapshot = page.InitialSnapshot;
@@ -1213,12 +1170,11 @@ public static class TransactionLogBookFactory
         return snapshot;
     }
 
-    // The author's ranking (2026-08-03): a shortage today always wins; any
-    // future shortage beats any excess regardless of which is sooner; an
-    // excess only surfaces when no shortage exists anywhere in the window.
-    // "Today's excess beats a later one" (the last two branches' order) is
-    // this method's own inferred extension of that rule, not separately
-    // confirmed.
+    /// <summary>[CALC] Ranks which single health state to show when more than one applies: a shortage today always wins; any future shortage beats any excess regardless of which is sooner; an excess only surfaces when no shortage exists anywhere in the window. "Today's excess beats a later one" is this method's own inferred extension of that rule, not separately confirmed.</summary>
+    /// <param name="currentShortfall">How far behind the jar sits today.</param>
+    /// <param name="projectedShortfall">The goal's due-date shortfall.</param>
+    /// <param name="currentOverfunded">How far ahead the jar sits today.</param>
+    /// <param name="projectedOverfunded">The goal's due-date overfund.</param>
     private static PlanHealthCategory DetermineMostImportantHealthState(
         decimal currentShortfall, decimal projectedShortfall, decimal currentOverfunded, decimal projectedOverfunded)
     {

@@ -31,9 +31,8 @@ public sealed record RecurrenceRuleOptions
 
     // DIVERGENCE(active-from): a "lead-in" date the pattern counts as active FROM
     // — earlier than its first occurrence — so a fund jar for it can exist before
-    // the pattern starts producing occurrences (planning/15). A new property not
-    // in the documented model. Null = no lead-in. Never affects occurrence
-    // generation; used only for span/containment checks.
+    // the pattern starts producing occurrences. Null = no lead-in. Never affects
+    // occurrence generation; used only for span/containment checks.
     public DateOnly? ActiveFrom { get; init; }
 }
 
@@ -57,10 +56,12 @@ public sealed class RecurrenceRule
     /// <summary>[CALC] The date this pattern counts as active from — its ActiveFrom lead-in if one is set, otherwise its own Start.</summary>
     public DateOnly ActiveStart => ActiveFrom ?? Start;
 
-    /// <summary>[CALC] Whether a date falls inside the pattern's active span (ActiveStart..Until) — the range a fund jar for it may exist in, wider than its occurrences when there is a lead-in.</summary>
+    /// <summary>[CALC] Reports whether a date falls inside the pattern's active span (ActiveStart..Until) — the range a fund jar for it may exist in, wider than its occurrences when there is a lead-in.</summary>
+    /// <param name="date">The date to check.</param>
     public bool ActiveSpanContains(DateOnly date) => date >= ActiveStart && date <= Until;
 
-    /// <summary>[CALC] A copy of this rule with its ActiveFrom lead-in set to the given date — everything else, including which dates it occurs on, stays the same.</summary>
+    /// <summary>[CALC] Returns a copy of this rule with its ActiveFrom lead-in set to the given date — everything else, including which dates it occurs on, stays the same.</summary>
+    /// <param name="activeFrom">The new lead-in date.</param>
     public RecurrenceRule WithActiveFrom(DateOnly activeFrom) => Create(new RecurrenceRuleOptions
     {
         Frequency = Frequency,
@@ -72,7 +73,8 @@ public sealed class RecurrenceRule
         ActiveFrom = activeFrom,
     });
 
-    /// <summary>[CALC] A copy of this rule ending on the given date instead — Start, ActiveFrom, and everything else stay the same. Used to end a pattern early (planning/16, items 4 and 16).</summary>
+    /// <summary>[CALC] Returns a copy of this rule ending on the given date instead — Start, ActiveFrom, and everything else stay the same. Used to end a pattern early.</summary>
+    /// <param name="until">The new end date.</param>
     public RecurrenceRule WithUntil(DateOnly until) => Create(new RecurrenceRuleOptions
     {
         Frequency = Frequency,
@@ -84,6 +86,9 @@ public sealed class RecurrenceRule
         ActiveFrom = ActiveFrom,
     });
 
+    /// <summary>[CALC] Builds a RecurrenceRule from already-validated options and a resolved (non-null) Until date.</summary>
+    /// <param name="options">The rule's frequency, start, interval, and day constraints.</param>
+    /// <param name="resolvedUntil">The rule's actual end date — either the caller's own Until, or Count resolved to a date.</param>
     private RecurrenceRule(RecurrenceRuleOptions options, DateOnly resolvedUntil)
     {
         Start = options.Start;
@@ -96,6 +101,8 @@ public sealed class RecurrenceRule
         _pattern = BuildPattern(options with { Until = resolvedUntil, Count = null });
     }
 
+    /// <summary>[CALC] Creates a recurrence rule, resolving a Count into a concrete Until date — every constructed rule has an Until, never a Count, so downstream code has exactly one end-of-schedule shape to handle.</summary>
+    /// <param name="options">The rule's frequency, start, interval, day constraints, and either an Until or a Count (exactly one).</param>
     public static RecurrenceRule Create(RecurrenceRuleOptions options)
     {
         if (options.Interval < 1)
@@ -124,9 +131,9 @@ public sealed class RecurrenceRule
         }
     }
 
-    // Builds a temporary count-bounded pattern purely to find its last
-    // occurrence, then discards it — the returned RecurrenceRule never has a
-    // Count-based pattern, only the resolved Until date.
+    /// <summary>[CALC] Works out the Until date N occurrences resolves to, by building a temporary count-bounded pattern purely to find its last occurrence, then discarding it.</summary>
+    /// <param name="options">The rule's frequency, start, interval, and day constraints.</param>
+    /// <param name="count">How many occurrences to resolve the end date from.</param>
     private static DateOnly ResolveCountToUntil(RecurrenceRuleOptions options, int count)
     {
         if (count < 1)
@@ -149,6 +156,8 @@ public sealed class RecurrenceRule
         return lastOccurrence;
     }
 
+    /// <summary>[CALC] Builds the underlying Ical.Net recurrence pattern from a rule's options.</summary>
+    /// <param name="options">The rule's frequency, interval, day constraints, and end (Until or Count).</param>
     private static RecurrencePattern BuildPattern(RecurrenceRuleOptions options)
     {
         var pattern = new RecurrencePattern(ToFrequencyType(options.Frequency), options.Interval);
@@ -176,6 +185,8 @@ public sealed class RecurrenceRule
         return pattern;
     }
 
+    /// <summary>[CALC] Maps this project's RecurrenceFrequency to Ical.Net's own FrequencyType.</summary>
+    /// <param name="frequency">The frequency to map.</param>
     private static FrequencyType ToFrequencyType(RecurrenceFrequency frequency) => frequency switch
     {
         RecurrenceFrequency.Daily => FrequencyType.Daily,
@@ -185,10 +196,14 @@ public sealed class RecurrenceRule
         _ => throw new ArgumentOutOfRangeException(nameof(frequency)),
     };
 
+    /// <summary>[CALC] Converts an Ical.Net occurrence to a plain DateOnly.</summary>
+    /// <param name="occurrence">The occurrence to convert.</param>
     private static DateOnly ToDateOnly(Occurrence occurrence) =>
         DateOnly.FromDateTime(occurrence.Period.StartTime.Value);
 
-    // Bounded by construction: Until is always set, so this never runs away.
+    /// <summary>[CALC] Returns every date this rule occurs on within a range. Always bounded — Until is always set by construction, so this never runs away.</summary>
+    /// <param name="from">Start of the range to search; defaults to the rule's own Start.</param>
+    /// <param name="to">End of the range to search; defaults to the rule's own Until.</param>
     public IReadOnlyList<DateOnly> GetOccurrences(DateOnly? from = null, DateOnly? to = null)
     {
         var searchStart = from ?? Start;
@@ -207,5 +222,6 @@ public sealed class RecurrenceRule
             .ToList();
     }
 
+    /// <summary>[CALC] Returns this rule's RRULE string representation (e.g. "FREQ=WEEKLY;INTERVAL=2;UNTIL=..."), for display or storage.</summary>
     public string ToRruleString() => _pattern.ToString() ?? string.Empty;
 }

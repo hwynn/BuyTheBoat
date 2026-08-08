@@ -65,7 +65,12 @@ Regenerate with: `grep -rn "ASSUMED-PAIRING\|DIVERGENCE" src/` — the table bel
 
 ## Deferred, in dependency order
 
-1. **Deallocation days / safety cushion / priority reallocation** (the Q2 engine — next pass). Under assumed pairing, an expected transaction that would overdraw free funds triggers the deallocation day. **Prerequisite reading is now DONE:** the distribution math lives in a separate `DeallocationProof.ods` (not an unmined `class documentation.ods` sheet as first guessed), and is fully written up in **[`06-deallocation-math.md`](06-deallocation-math.md)** — the two-step process (Step A paired earmarks, Step B balancing earmarks over all jars in priority order), the verbatim formulas, both worked examples, the three end-goal invariants (test oracles), the debt case, and the safety cushion (always priority 0). All five open questions on it were resolved with the author 2026-07-10. `DeallTest`/`Proof`/`Random` sheets there still hold ready-made numeric test vectors to mine when building the engine. The archived Python's `BalanceSnapshot.deallocation_fund_distribution()` is a secondary reference but its `is_deallocation_day()` is demonstrably unfinished — trust `06`, not that code.
+1. **Deallocation days / safety cushion / priority reallocation — DONE (2026-07-11).** The math spec
+   is **[`06-deallocation-math.md`](06-deallocation-math.md)**; the staged build (pure function →
+   cascade integration → cushion + UI) is **[`07-deallocation-implementation-plan.md`](07-deallocation-implementation-plan.md)**,
+   all three steps complete. The archived Python's `BalanceSnapshot.deallocation_fund_distribution()`
+   was a secondary reference during that build but was demonstrably unfinished — `06`/`07` are the
+   ones that reflect what actually got built.
 2. **Actual-transaction import + pairing** — retire the ASSUMED-PAIRING sites.
 3. **Multiple accounts** — populate `TransactionLogPage.AccountPages` beyond `"Primary"`; per-account balances and transfers.
 4. **Fixed `PageLength` + cross-page runoff** — real `page_runoff_data` consumption, expired pages, cascade continuity between pages.

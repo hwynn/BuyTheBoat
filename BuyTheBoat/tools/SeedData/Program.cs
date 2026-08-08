@@ -1,46 +1,18 @@
 using MyMoneyForecast.Domain;
 using MyMoneyForecast.Persistence;
 
-// [WRITES FILE] Resets the app's real local database and repopulates it with
-// a deliberately varied household's worth of data — accounts, bills, a
-// paycheck, one-time and repeating goals, savings plans, manual adjustments,
-// a recurring transfer, a real break-off chain, and a second concurrent
-// funder on one goal (F27) — built entirely through the domain's own
-// Create() methods, the real factories (AllocationPlanProposer,
-// BreakOffFactory), and the real repositories, so nothing here can be
-// invalid in a way hand-written SQL could accidentally be.
+// [WRITES FILE] Resets the app's real local database and repopulates it with a varied
+// household's worth of sample data — accounts, bills, a paycheck, one-time
+// and repeating goals, savings plans, manual adjustments, a recurring
+// transfer, a break-off chain, and a second concurrent funder on one goal —
+// built entirely through the domain's own Create() methods, the real
+// factories (AllocationPlanProposer, BreakOffFactory), and the real
+// repositories, so nothing here can be invalid in a way hand-written SQL
+// could accidentally be.
 //
-// That is also the concrete answer to "which assumptions govern saved data":
-// whichever ones those Create() methods already enforce — 4.1.a1/4.2.a1
-// (FinancialPattern), 5.1-5.3.a1 (EarMarkPattern), 3.11.2.a2 (via the
-// active-from divergence), 3.13.8.a1/a2 (ManualEarmark's span check),
-// 3.1.a1/3.8.a1 (Account) — never the cascade-only assumptions
-// (BalanceSnapshot/FundJar/EarMarkEvent chapters), because none of that is
-// persisted (planning/05: "Patterns + the entered balance remain the only
-// persisted truth; snapshots/jars/events are never stored"). Building
-// through Create()/the factories is what makes that guarantee real instead
-// of a claim — hand-written INSERTs couldn't enforce any of it.
-//
-// Deliberately varied for the CURRENT design work (planning/21 §Earmark,
-// planning/22 PlanHealthState, and mockups/earmark-starting-amount-
-// mockups.html): every PlanHealthCategory is represented at least once
-// (verified by the report at the end, not just claimed here), all three
-// "starting point" cases from that new mockup get an example — break-off
-// inheritance and the plain-user-decision case are built through the real
-// factories; the urgency-front-load case is hand-modeled after a genuine
-// FINDING (see its own comment) that the real trigger path doesn't fire for
-// this dataset's asOfDate — one chronic vs. one one-off shortfall, an
-// AutoRenew ("keeps going") bill, and a declined (ProposeEmpty) plan. A few
-// numbers are still deliberately reused from earlier mockups (Trip to Japan
-// $3,200 by Dec 1; Car insurance $100/mo; the $500 "Emergency Fund Top-up"
-// figure) so the real app's numbers line up with what those mockups show.
-//
-// This project has already been burned once by trusting hand arithmetic
-// over the actual cascade (planning/22's 3.13.5.4.a1 "unpaired" note, and
-// earmark-form-layout-mockups.html's Summary C going stale against a fix) —
-// so the report printed at the end runs a REAL forecast and states what
-// PlanHealthCategory each scenario actually landed in. Don't trust the
-// comments below on their own; read that report.
+// Don't trust the inline comments below about which PlanHealthCategory a
+// scenario lands in — read the report printed at the end, which runs a real
+// forecast and states the actual result.
 
 var dbPath = PatternDatabase.DefaultDatabasePath();
 Console.WriteLine($"Database: {dbPath}");
@@ -73,11 +45,11 @@ var currentBalance = new CurrentBalanceRepository(database);
 
 // "Today" for this whole dataset — every relative date below ("due in N
 // days," "already a few payments in") is anchored off this. Reads the real
-// clock rather than a fixed date (changed 2026-08-06 -> dynamic) so
-// re-running the tool on a later day doesn't need this line touched by hand
-// to keep "today"-dated entries (the DMV/Emergency Fund starting earmarks
-// especially — planning/23 item B's date-picker marking is future-only, so
-// a stale hardcoded date would silently stop having anything to mark.
+// clock rather than a fixed date, so re-running the tool on a later day
+// doesn't need this line touched by hand to keep "today"-dated entries
+// working (the date-picker's own "mark existing entries" feature is
+// future-only, so a stale hardcoded date would silently stop having
+// anything to mark).
 var asOfDate = DateOnly.FromDateTime(DateTime.Today);
 var horizonEndDate = asOfDate.AddMonths(12);
 
@@ -162,12 +134,10 @@ financialPatterns.Save(streaming, checking.Id);
 var gym = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Gym Membership", DatePattern = Monthly(new DateOnly(2026, 2, 1)), Amount = -45m, Priority = 3, Mandatory = false });
 financialPatterns.Save(gym, checking.Id);
 
-// A "keeps going" bill (item 10 / B12) plus a DELIBERATELY thin plan: $45/mo
-// against a $65/mo bill can never catch up on its own rate alone — a
-// structural, chronic shortfall (IsChronicShortfall = true), distinct from
-// Car Repair's one-off gap below that a single catch-up earmark would fully
-// close. This is the real example Summary C's "Keeps falling short" wording
-// (planning/22 §6c) needs.
+// A "keeps going" bill plus a DELIBERATELY thin plan: $45/mo against a
+// $65/mo bill can never catch up on its own rate alone — a structural,
+// chronic shortfall (IsChronicShortfall = true), distinct from Car Repair's
+// one-off gap below that a single catch-up earmark would fully close.
 var phoneBill = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Mobile Carrier", DatePattern = Monthly(new DateOnly(2026, 1, 12)), Amount = -65m, Priority = 6, AutoRenew = true });
 financialPatterns.Save(phoneBill, checking.Id);
 var phonePlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = phoneBill.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 12)), Amount = -45m }, phoneBill);
@@ -176,32 +146,26 @@ Console.WriteLine("Bill: Mobile Carrier — AutoRenew ('keeps going'), plan deli
 
 // A bill due soon enough that AllocationPlanProposer's own logic should
 // front-load it with a starting earmark before the paced plan's first
-// contribution catches up — the "implicit urgency front-load" case
-// mockups/earmark-starting-amount-mockups.html asks a real example of.
-// Built through the real proposer, not a hand-set number, so this is
-// authentic rather than simulated. Whether "3 days out" actually lands
-// before the next paced contribution depends on calendar/payday phase — see
-// the printed note below and in the final report rather than trusting this
+// contribution catches up — an "implicit urgency front-load" example. Built
+// through the real proposer, not a hand-set number. Whether "3 days out"
+// actually lands before the next paced contribution depends on
+// calendar/payday phase — see the printed report rather than trusting this
 // comment; nudge the day offset here and re-run if it didn't fire.
 var carRegistration = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "DMV Registration", DatePattern = OneTime(asOfDate.AddDays(1)), Amount = -180m, Priority = 8 });
 var carRegProposal = AllocationPlanProposer.Propose(carRegistration, financialPatterns.GetAll(), asOfDate);
 financialPatterns.Save(carRegProposal.Outflow, checking.Id);
 earMarkPatterns.Save(carRegProposal.Plan);
 
-// FINDING, not fixed here: MaybeStartingEarmark never actually fires for
-// this asOfDate, for any due date — confirmed by printing the paced plan's
-// own occurrences during development. ProposePaced always anchors the
-// plan's DatePattern.Start to asOfDate itself; when asOfDate doesn't fall on
-// the income's own ByDay (here: asOfDate is a Thursday, paydays are
-// Fridays), the underlying RRULE library still yields asOfDate as the
-// plan's first occurrence — so the plan always "already covers" any due
-// date on or after asOfDate, and the urgency check
-// (firstContribution <= firstBill) can never trip. Whether that also
-// under-fires in the real app on an ordinary day is a genuine open question,
-// not chased down here — flagging it rather than either fixing or hiding it.
-// The line below hand-models what the mechanism is DESIGNED to produce (same
-// shape MaybeStartingEarmark itself would build), so there's still a real
-// example to look at — it just didn't come from Propose() today.
+// FINDING, not resolved: MaybeStartingEarmark never actually fires for this
+// asOfDate, for any due date. ProposePaced always anchors the plan's
+// DatePattern.Start to asOfDate itself, and the RRULE library still yields
+// asOfDate as the first occurrence even when it doesn't fall on the
+// income's own payday — so the plan always "already covers" any due date on
+// or after asOfDate, and the urgency check can never trip. Whether that
+// also under-fires in the real app on an ordinary day is an open question.
+// The line below hand-models what the mechanism is designed to produce, so
+// there's still a real example to look at even though it didn't come from
+// Propose() today.
 var carRegStartingEarmark = ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = carRegProposal.Outflow.FinanceId, Date = asOfDate, Amount = 180m }, carRegProposal.Plan);
 manualEarmarks.Save(carRegStartingEarmark);
 Console.WriteLine("Bill: DMV Registration — starting-earmark shape hand-modeled (see the FINDING comment above); everything else about the plan is real Propose() output.");
@@ -209,22 +173,18 @@ Console.WriteLine("Bill: DMV Registration — starting-earmark shape hand-modele
 // A REPEATING bill whose first due date is soon enough that ProposePaced's
 // own rate — a long-run average spread across every payday through the
 // bill's FAR Until, not tuned to the first occurrence specifically — can't
-// have accumulated enough by then. The author's own question: does a plan
-// that needs SEVERAL contributions to cover one occurrence, but where only
-// some have landed by the due date, actually read as a genuine PARTIAL
-// shortfall (not $0, not the full amount) through the new
-// IsFirstOccurrencePending/FirstOccurrenceShortfall pair?
+// have accumulated enough by then. Tests whether a plan needing SEVERAL
+// contributions to cover one occurrence, with only some landed by the due
+// date, reads as a genuine PARTIAL shortfall (not $0, not the full amount)
+// through IsFirstOccurrencePending/FirstOccurrenceShortfall.
 //
-// MaybeStartingEarmark can't catch this one either, and not by coincidence:
-// per the FINDING above DMV Registration, ProposePaced's plan always starts
-// AT asOfDate for this dataset, so its own check (firstContribution <=
-// firstBill) is always satisfied and it never fires — REGARDLESS of how
-// short the due date is, or how little that first contribution actually
-// covers. That's the real gap: MaybeStartingEarmark only ever asks "has
-// ANYTHING landed by the due date," never "has ENOUGH" — this scenario, and
-// the new PlanHealthState properties, are what actually answers that
-// second question. See the printed report below for the real number, not
-// this comment's guess.
+// MaybeStartingEarmark can't catch this one either, for the same reason as
+// DMV Registration above: its plan always starts AT asOfDate for this
+// dataset, so the urgency check never fires regardless of how short the due
+// date is. MaybeStartingEarmark only ever asks "has ANYTHING landed by the
+// due date," never "has ENOUGH" — this scenario, and the PlanHealthState
+// properties, answer that second question. See the printed report below
+// for the real number, not this comment's guess.
 var propertyTax = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "County Property Tax", DatePattern = Monthly(asOfDate.AddDays(40), interval: 6), Amount = -1200m, Priority = 8 });
 var propertyTaxProposal = AllocationPlanProposer.Propose(propertyTax, financialPatterns.GetAll(), asOfDate);
 financialPatterns.Save(propertyTaxProposal.Outflow, checking.Id);
@@ -237,12 +197,12 @@ Console.WriteLine($"Bill: County Property Tax — real Propose() output, semi-an
     $"paced at {-propertyTaxProposal.Plan.Amount:C}/payday; MaybeStartingEarmark fired: {propertyTaxProposal.StartingEarmark is not null} " +
     "(see FirstOccurrenceShortfall in the report below for the real coverage check)");
 
-// Author, 2026-08-07: "I think we could use a couple more" — same real-
-// Propose() shape as County Property Tax, but quarterly (a shorter cycle
-// relative to the biweekly paycheck, so fewer paydays are "missing" by the
-// due date) — meant to land closer to a HALF-covered gap rather than
-// Property Tax's more dramatic one, so the warning's own scaling (a small
-// gap reads as a small gap, not just "always huge") has a real example too.
+// Same real-Propose() shape as County Property Tax, but quarterly (a
+// shorter cycle relative to the biweekly paycheck, so fewer paydays are
+// "missing" by the due date) — meant to land closer to a HALF-covered gap
+// rather than Property Tax's more dramatic one, so the warning's own
+// scaling (a small gap reads as a small gap, not just "always huge") has a
+// real example too.
 var hoaAssessment = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "HOA Assessment", DatePattern = Monthly(asOfDate.AddDays(35), interval: 3), Amount = -400m, Priority = 7 });
 var hoaProposal = AllocationPlanProposer.Propose(hoaAssessment, financialPatterns.GetAll(), asOfDate);
 financialPatterns.Save(hoaProposal.Outflow, checking.Id);
@@ -317,7 +277,7 @@ if (carLeaseBreakOff.SuccessorStartingEarmark is { } carLeaseStartingEarmark)
 // (AllocationPlanProposer.MaybeStartingEarmark, fired for real here — unlike
 // DMV Registration above, where it doesn't) because the new segment's first
 // payment is due the same day it starts. The Earmark form's Starting-point
-// region (planning/23) sums both on purpose — $790 total is correct, not a bug.
+// region sums both on purpose — $790 total is correct, not a bug.
 Console.WriteLine($"Bill: Car Lease Payment — real break-off chain, successor StartingAllocation = {carLeaseBreakOff.SuccessorPlan?.StartingAllocation:C}" +
     (carLeaseBreakOff.SuccessorStartingEarmark is { } se ? $" + a real starting earmark {se.Amount:C} on {se.Date:yyyy-MM-dd}" : string.Empty));
 
@@ -338,23 +298,19 @@ financialPatterns.Save(newLaptop, checking.Id);
 
 // A user who DECLINED the proposed plan at creation time — a real,
 // zero-contribution EarMarkPattern (AllocationPlanProposer.ProposeEmpty),
-// not a hand-set $0 plan. Reads as short from the moment it exists
-// (planning/21's own "a freshly-created pattern can already be in the
-// missing state" note) — check the printed report below for which category
-// it actually lands in. Doubles as the "$0, nothing to explain" starting-
-// point control case (mockups/earmark-starting-amount-mockups.html's own
-// "Home down payment" card).
+// not a hand-set $0 plan. Reads as short from the moment it exists — check
+// the printed report below for which category it actually lands in.
+// Doubles as the "$0, nothing to explain" starting-point control case.
 var homeDownPayment = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Home Down Payment", DatePattern = OneTime(new DateOnly(2027, 4, 1)), Amount = -15000m, Priority = 5 });
 var homeProposal = AllocationPlanProposer.ProposeEmpty(homeDownPayment, asOfDate);
 financialPatterns.Save(homeProposal.Outflow, savings.Id);
 earMarkPatterns.Save(homeProposal.Plan);
 
 // A repeating, non-mandatory goal whose plan starts with a MANUAL, plainly
-// user-declared "already saved" entry — no proposer, no automatic reasoning,
-// just what mockups/earmark-starting-amount-mockups.html's own "Emergency
-// fund top-up" card describes: "Added manually — no automatic reason
-// recorded." This is the third starting-point case (the first two are the
-// DMV Registration and Car Lease scenarios above).
+// user-declared "already saved" entry — no proposer, no automatic
+// reasoning, added manually with no automatic reason recorded. This is the
+// third starting-point case (the first two are the DMV Registration and Car
+// Lease scenarios above).
 var emergencyFundReserve = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Emergency Fund Reserve", Description = "Emergency fund top-up", DatePattern = Monthly(asOfDate, until: new DateOnly(2027, 8, 1)), Amount = -100m, Priority = 3, Mandatory = false });
 financialPatterns.Save(emergencyFundReserve, checking.Id);
 var emergencyPlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = emergencyFundReserve.FinanceId, DatePattern = Monthly(asOfDate, until: new DateOnly(2027, 8, 1)), Amount = -100m }, emergencyFundReserve);
@@ -401,11 +357,10 @@ earMarkPatterns.Save(carInsurancePlan);
 var tripPlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = tripToJapan.FinanceId, DatePattern = Biweekly(new DateOnly(2026, 6, 5), DayOfWeek.Friday, until: new DateOnly(2026, 12, 1)), Amount = -320m }, tripToJapan);
 earMarkPatterns.Save(tripPlan);
 
-// A second person funding the SAME goal (charter item 9 / F27) — the
-// original design forbids this outright (3.11.1.a1); the current app
-// deliberately allows it as long as the two plans don't share a StartDate
-// (the EarMarkPatterns table's real composite key now). The engine sums
-// both into one jar, one PlanHealthState.
+// A second person funding the SAME goal — the original design forbids this
+// outright (3.11.1.a1); the current app deliberately allows it as long as
+// the two plans don't share a StartDate (the EarMarkPatterns table's real
+// composite key now). The engine sums both into one jar, one PlanHealthState.
 var tripPlanPartner = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = tripToJapan.FinanceId, DatePattern = Biweekly(new DateOnly(2026, 6, 19), DayOfWeek.Friday, until: new DateOnly(2026, 11, 20)), Amount = -100m }, tripToJapan);
 earMarkPatterns.Save(tripPlanPartner);
 
@@ -428,15 +383,15 @@ manualEarmarks.Save(ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = 
 manualEarmarks.Save(ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = emergencyFundReserve.FinanceId, Date = asOfDate, Amount = 500m }, emergencyPlan));
 
 // A recent WITHDRAWAL, not a deposit — pulls today's jar below today's
-// milestone. Tried this against Mobile Carrier first; it had NO effect,
-// which is itself worth knowing: Mobile Carrier's release lands the SAME day
-// each month as its one contribution, so the jar is back near $0 within a
-// day of every accrual and per-day flooring (planning/05's own divergence
-// note) absorbs a withdrawal that lands in that gap. Car Repair's plan
-// contributes weekly toward a due date that's still 3 days out, so real
-// balance actually sits in the jar to pull from — this is the only scenario
-// in the set that reads short RIGHT NOW (AlreadyMissing outranks WillMiss in
-// the ranking rule), layered on the whole-span shortfall it already has.
+// milestone. Tried this against Mobile Carrier first; it had no effect,
+// since Mobile Carrier's release lands the same day each month as its one
+// contribution, so the jar is back near $0 within a day of every accrual
+// and per-day flooring absorbs a withdrawal that lands in that gap. Car
+// Repair's plan contributes weekly toward a due date that's still 3 days
+// out, so real balance actually sits in the jar to pull from — this is the
+// only scenario in the set that reads short RIGHT NOW (AlreadyMissing
+// outranks WillMiss in the ranking rule), layered on the whole-span
+// shortfall it already has.
 manualEarmarks.Save(ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = carRepair.FinanceId, Date = asOfDate.AddDays(-1), Amount = -40m }, carRepairPlan));
 
 Console.WriteLine("Manual earmarks: +$200 on Trip to Japan (Jul 4), +$50 on Car Insurance (Mar 1), +$500 on Emergency Fund Top-up (day one, plain user decision), -$40 on Car Repair (recent withdrawal, forces AlreadyMissing)");

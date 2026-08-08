@@ -1,8 +1,7 @@
 namespace MyMoneyForecast.Domain;
 
-// A transfer's "Change starting on a date" (planning/16, item 4, extended to
-// transfers). A transfer is THREE linked things (planning/10 item 3): a
-// withdrawal FinancialPattern, a matching deposit FinancialPattern, and a
+// A transfer's "Change starting on a date". A transfer is THREE linked
+// things: a withdrawal FinancialPattern, a matching deposit FinancialPattern, and a
 // Transfer record that is the canonical definition the other two are
 // validated against. BreakOffFactory only knows about FinancialPattern —
 // calling it on each leg independently would let the two successors drift
@@ -48,8 +47,7 @@ public sealed record TransferBreakOffResult
     public required FinancialPattern SuccessorDeposit { get; init; }
 }
 
-// A transfer's periodic renewal (planning/16's "ongoing" mechanism, extended
-// to transfers — planning/18, B12). Deliberately narrower than
+// A transfer's periodic renewal. Deliberately narrower than
 // TransferBreakOffRequest the same way RenewalRequest is narrower than
 // BreakOffRequest: no SuccessorAmount or SuccessorSchedule-shape field,
 // because renewal changes nothing about the transfer itself.
@@ -106,8 +104,8 @@ public static class TransferBreakOffFactory
             SuccessorSchedule = request.SuccessorSchedule,
             CarriedOverJarBalance = request.CarriedOverWithdrawalJarBalance,
             AllPatterns = request.AllPatterns,
-            // planning/18 (C1): a transfer's withdrawal stays plain and
-            // immediate even after a break-off — no adaptive spreading.
+            // A transfer's withdrawal stays plain and immediate even after
+            // a break-off — no adaptive spreading.
             SpreadEvenlyWithNoIncome = false,
         });
 

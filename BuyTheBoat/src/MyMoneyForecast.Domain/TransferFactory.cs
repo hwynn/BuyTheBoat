@@ -15,11 +15,11 @@ public sealed record TransferRequest
 
 // The Transfer plus the two ordinary FinancialPatterns it expands into.
 // Withdrawal is negative and files under the FROM account; Deposit is
-// positive and files under the TO account. The filing itself happens
-// at save time (the patterns, like every FinancialPattern, carry no account of
-// their own — item 2-A). Both patterns carry the transfer's schedule and are
-// non-mandatory: moving your own money is not a bill, so it never auto-reserves
-// (planning/10 item 3, "Parked").
+// positive and files under the TO account. The filing itself happens at
+// save time (the patterns, like every FinancialPattern, carry no account of
+// their own). Both patterns carry the transfer's schedule and are
+// non-mandatory: moving your own money is not a bill, so it never
+// auto-reserves.
 public sealed record TransferResult
 {
     public required Transfer Transfer { get; init; }
@@ -32,6 +32,8 @@ public sealed record TransferResult
 // the patterns are plain FinancialPatterns.
 public static class TransferFactory
 {
+    /// <summary>[CALC] Builds a transfer's Transfer record plus its withdrawal and deposit patterns, from the accounts, amount, and schedule the user entered.</summary>
+    /// <param name="request">The transfer's accounts, amount, and schedule.</param>
     public static TransferResult Create(TransferRequest request)
     {
         var transfer = Transfer.Create(new TransferOptions

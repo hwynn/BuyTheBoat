@@ -5,16 +5,18 @@ namespace MyMoneyForecast.Persistence;
 
 public sealed class EarMarkPatternRepository(PatternDatabase database, FinancialPatternRepository financialPatterns)
 {
-    // Keyed on (FinanceId, StartDate), not FinanceId alone (planning/17, item
-    // 8 — F27/F29): more than one plan may now fund the same goal in
-    // sequence (a "Restructure" predecessor + successor), so saving a plan
-    // updates the ONE row that already starts on that date — typically the
-    // same plan being re-edited — and inserts a new row for a genuinely new
-    // segment starting on a different date.
+    /// <summary>[WRITES FILE] Creates a new savings plan segment, or updates the existing one starting on the same date.</summary>
+    /// <param name="pattern">The savings plan to save.</param>
     public void Save(EarMarkPattern pattern)
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
+        // Keyed on (FinanceId, StartDate), not FinanceId alone: more than
+        // one plan may fund the same goal in sequence (a "Restructure"
+        // predecessor + successor), so this updates the one row that
+        // already starts on that date — typically the same plan being
+        // re-edited — and inserts a new row for a genuinely new segment
+        // starting on a different date.
         command.CommandText = """
             INSERT INTO EarMarkPatterns
                 (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation)
@@ -39,10 +41,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
         command.ExecuteNonQuery();
     }
 
-    // Re-validates against the linked goal on the way back out, same as
-    // EarMarkPattern.Create does going in — a goal's own dates can't have
-    // changed underneath it since this was saved, but this keeps both paths
-    // going through the one place that enforces 3.11.2.a2.
+    /// <summary>[READS FILE] Returns every savings plan (EarMarkPattern), one row per fund-jar segment.</summary>
     public IReadOnlyList<EarMarkPattern> GetAll()
     {
         using var connection = database.OpenConnection();
@@ -58,6 +57,11 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
             var startingAllocation = decimal.Parse(reader.GetString(reader.GetOrdinal("StartingAllocation")), CultureInfo.InvariantCulture);
             var datePattern = RecurrenceRuleColumns.Read(reader);
 
+            // Re-validates against the linked goal on the way back out, same
+            // as EarMarkPattern.Create does going in — a goal's own dates
+            // can't have changed underneath it since this was saved, but
+            // this keeps both read and write paths going through the one
+            // place that enforces 3.11.2.a2.
             var goal = financialPatterns.GetByFinanceId(financeId)
                 ?? throw new InvalidOperationException(
                     $"EarMarkPattern {financeId} has no matching FinancialPattern — data is corrupt.");
@@ -76,13 +80,15 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
         return patterns;
     }
 
+    /// <summary>[DELETES] Removes a savings plan and its manual earmarks.</summary>
+    /// <param name="financeId">The plan to delete.</param>
     public void Delete(int financeId)
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
-        // The pattern's span is the fund jar's lifetime (planning/09), so the
-        // jar's manual adjustments die with the pattern — otherwise they'd be
-        // orphans pointing at a jar that no longer exists.
+        // The pattern's span is the fund jar's lifetime, so the jar's manual
+        // adjustments die with the pattern — otherwise they'd be orphans
+        // pointing at a jar that no longer exists.
         command.CommandText = """
             DELETE FROM ManualEarmarks WHERE FinanceId = $FinanceId;
             DELETE FROM EarMarkPatterns WHERE FinanceId = $FinanceId;

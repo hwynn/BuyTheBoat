@@ -1,18 +1,13 @@
 namespace MyMoneyForecast.Domain;
 
 // A named bucket of money set aside for one goal or bill — or the safety
-// cushion, when FinanceId is null. Per class documentation.ods (Properties
-// sheet, the class's own responsibilities statement): "Used for setting
-// money aside (recording that the money is set aside without moving it to
-// another account) for big expenses. Keeps track of 1: how much money we
-// have set aside, 2: what the money is set aside for, 3: how much money
-// should we have set aside at this point. The user should be warned if they
-// are falling behind on setting money aside for a goal."
+// cushion, when FinanceId is null. Records that money is set aside without
+// actually moving it to another account, and tracks whether enough has been
+// set aside so far.
 //
 // A jar is never created directly by the user — it exists only as a side
-// effect of earmark activity. Jars are the generic allocation mechanism for
-// EVERYTHING (bills, one-time goals, the cushion) — not a goals-only
-// feature (confirmed against the original docs, 2026-07-10).
+// effect of earmark activity, and is the generic allocation mechanism for
+// bills, one-time goals, and the cushion alike, not a goals-only feature.
 public sealed record FundJar
 {
     // null = the safety cushion jar (3.7.a2: current_safety_cushion is the

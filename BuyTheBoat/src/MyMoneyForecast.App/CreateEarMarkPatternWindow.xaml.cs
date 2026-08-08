@@ -4,17 +4,17 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// TODO (2026-08-05): retired — MainWindow no longer opens this popup, having
-// switched to the permanent Earmark tab (EarmarkFormPanel, planning/21
-// Philosophy 5/7). No remaining `new CreateEarMarkPatternWindow` call sites
-// as of this note. Kept in the tree rather than deleted in the same pass
-// that orphaned it, so the change is reviewable on its own; safe to delete
-// once that's confirmed.
+// Retired — MainWindow no longer opens this popup, having switched to the
+// permanent Earmark tab (EarmarkFormPanel). No remaining
+// `new CreateEarMarkPatternWindow` call sites. Kept in the tree rather than
+// deleted in the same pass that orphaned it, so the change is reviewable on
+// its own; safe to delete once that's confirmed.
 public partial class CreateEarMarkPatternWindow : Window
 {
     public EarMarkPattern? CreatedPattern { get; private set; }
 
-    // Create mode: pick from any existing goal.
+    /// <summary>[STEP] Create mode: pick from any existing goal.</summary>
+    /// <param name="goals">Every goal the user can save toward.</param>
     public CreateEarMarkPatternWindow(IReadOnlyList<FinancialPattern> goals)
     {
         InitializeComponent();
@@ -25,13 +25,9 @@ public partial class CreateEarMarkPatternWindow : Window
         UpdateSummary();
     }
 
-    // Materialize mode (planning/14 item D-1): the user pressed "set up a
-    // savings plan" on an outflow whose jar has been filling automatically. The
-    // goal is fixed, and the already-saved figure is pre-filled with what that
-    // jar currently holds — so taking control never MOVES money, it only
-    // changes what governs the jar from here on. Once this pattern exists the
-    // outflow stops filling automatically, by the rule that already excludes
-    // anything with a savings plan.
+    /// <summary>[STEP] Materialize mode: the user pressed "set up a savings plan" on an outflow whose jar has been filling automatically. The goal is fixed, and the already-saved figure is pre-filled with what that jar currently holds — so taking control never moves money, it only changes what governs the jar from here on. Once this pattern exists the outflow stops filling automatically, by the rule that already excludes anything with a savings plan.</summary>
+    /// <param name="goal">The outflow this savings plan is being created for.</param>
+    /// <param name="alreadySaved">What the jar already holds, pre-filled as the starting allocation.</param>
     public CreateEarMarkPatternWindow(FinancialPattern goal, decimal alreadySaved)
     {
         InitializeComponent();
@@ -47,8 +43,9 @@ public partial class CreateEarMarkPatternWindow : Window
         UpdateSummary();
     }
 
-    // Edit mode: the goal it's linked to can't change (FinanceId is the link,
-    // and FinanceId is fixed once created) — only amount/timing can.
+    /// <summary>[STEP] Edit mode: the goal it's linked to can't change (FinanceId is the link, and FinanceId is fixed once created) — only amount/timing can.</summary>
+    /// <param name="existing">The earmark pattern being edited.</param>
+    /// <param name="goal">The goal it's linked to.</param>
     public CreateEarMarkPatternWindow(EarMarkPattern existing, FinancialPattern goal)
     {
         InitializeComponent();
@@ -67,10 +64,7 @@ public partial class CreateEarMarkPatternWindow : Window
         UpdateSummary();
     }
 
-    // Keeps the Summary preview reacting live to every field that feeds it
-    // (Philosophy 4) — subscribed once per constructor, right after
-    // InitializeComponent, so every field-prefill line below it in each
-    // constructor also triggers a refresh for free.
+    /// <summary>[UI] Keeps the Summary preview reacting live to every field that feeds it (Philosophy 4) — subscribed once per constructor, right after InitializeComponent, so every field-prefill line below it in each constructor also triggers a refresh for free.</summary>
     private void WireLiveUpdates()
     {
         GoalComboBox.SelectionChanged += (_, _) => UpdateSummary();
@@ -79,16 +73,7 @@ public partial class CreateEarMarkPatternWindow : Window
         RuleEditor.ResultChanged += (_, _) => UpdateSummary();
     }
 
-    // planning/22 §6c's Summary region, wired in 2026-08-05. TODO: the
-    // narrative and chart are computed straight from this window's own raw
-    // fields (goal amount/due date, this plan's amount/schedule, starting
-    // allocation) — genuinely fine for the chart's "proposed, rough
-    // estimate" line (planning/22 §6c confirms that line was never meant to
-    // be the expensive real history). The ASIDE is a different story: it
-    // needs a live ForecastResult/PlanHealthState (today's actual jar vs.
-    // milestone) that this window doesn't have and isn't computing here —
-    // shows a plain placeholder instead of fake numbers until that plumbing
-    // exists (tracked separately, not deferred silently).
+    /// <summary>[UI] TODO: the narrative and chart are computed straight from this window's own raw fields (goal amount/due date, this plan's amount/schedule, starting allocation) — genuinely fine for the chart's "proposed, rough estimate" line, which was never meant to be the expensive real history. The ASIDE is a different story: it needs a live ForecastResult/PlanHealthState (today's actual jar vs. milestone) that this window doesn't have and isn't computing here — shows a plain placeholder instead of fake numbers until that plumbing exists (tracked separately, not deferred silently).</summary>
     private void UpdateSummary()
     {
         if (GoalComboBox.SelectedItem is not GoalOption selectedGoal)

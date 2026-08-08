@@ -3,21 +3,21 @@ namespace MyMoneyForecast.Domain;
 public sealed record TruncatedPattern(FinancialPattern Pattern, EarMarkPattern? Plan);
 
 // Ends a pattern — and its savings plan, if it has one — on a chosen date.
-// Shared by two settled items in planning/16: item 16 ("truncate", a pattern
-// that simply stops, no continuation) uses this as its ENTIRE mechanism; item
-// 4 ("break off") uses it for the predecessor half before a successor picks
-// up from the next day.
+// Used both when a pattern simply stops with no continuation, and as the
+// predecessor half of a break-off before a successor picks up from the next
+// day.
 //
-// The jar question needs no separate handling: 3.11.2.a2 requires the plan's
-// Until to never exceed its goal's, so truncating the plan to match is the
-// same operation as truncating the pattern, not a new one. Whatever was in
-// the jar isn't moved or destroyed — a FundJar was never a real transfer of
-// money (its own class doc: "without moving it to another account") — it
-// simply stops being computed past LastDay and reads as ordinary free balance
-// from then on, the same way 3.13.5.a2 already governs every jar's lifetime.
+// The jar question needs no separate handling: 3.11.2.a2 requires the
+// plan's Until to never exceed its goal's, so truncating the plan to match
+// is the same operation as truncating the pattern. Whatever was in the jar
+// isn't moved or destroyed — a jar was never a real transfer of money — it
+// simply stops being computed past LastDay and reads as ordinary free
+// balance from then on.
 public static class PatternTruncation
 {
     /// <summary>[CALC] Stops a bill or paycheck — and the savings plan behind it, if it has one — on a chosen date, with nothing continuing after. Whatever was already saved simply becomes free money again from that date on.</summary>
+    /// <param name="pattern">The bill or paycheck to stop.</param>
+    /// <param name="plan">Its savings plan, if it has one.</param>
     /// <param name="lastDay">The last day the pattern (and its plan) should still be active.</param>
     /// <returns>The pattern and its plan, both ending on <paramref name="lastDay"/> — the plan only if one existed, and never pushed later than it already ended.</returns>
     public static TruncatedPattern EndOn(FinancialPattern pattern, EarMarkPattern? plan, DateOnly lastDay)

@@ -4,22 +4,22 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// Create/edit manual earmarks (planning/09-manual-earmarks.md, UI flows).
-// Validation policy: withdrawals/moves exceeding what the fund holds on the
-// chosen day are BLOCKED (jars never go below 0 — no money from nothing);
-// adds exceeding that day's free balance WARN but are allowed (the plan is
-// over-committed and deallocation may pull funds back from lower-priority
-// jars — the user may know money is coming that the forecast doesn't). Day
-// balances come from the currently-shown forecast; the domain type enforces
-// the pattern-span-is-jar-lifetime rule on top.
+// Create/edit manual earmarks. Validation policy: withdrawals/moves
+// exceeding what the fund holds on the chosen day are BLOCKED (jars never
+// go below 0 — no money from nothing); adds exceeding that day's free
+// balance WARN but are allowed (the plan is over-committed and
+// deallocation may pull funds back from lower-priority jars — the user may
+// know money is coming that the forecast doesn't). Day balances come from
+// the currently-shown forecast; the domain type enforces the
+// pattern-span-is-jar-lifetime rule on top.
 //
-// TODO (2026-08-05): retired — MainWindow no longer opens this popup, having
-// switched to the permanent Earmark tab's One-off adjustment mode
-// (EarmarkFormPanel, which ports this exact validation policy verbatim —
-// see its own SaveOneOff/Merge/RequireFundsCover/WarnIfOverFree). No
-// remaining `new ManualEarmarkWindow` call sites as of this note. Kept in
-// the tree rather than deleted in the same pass that orphaned it, so the
-// change is reviewable on its own; safe to delete once that's confirmed.
+// Retired — MainWindow no longer opens this popup, having switched to the
+// permanent Earmark tab's One-off adjustment mode (EarmarkFormPanel, which
+// ports this exact validation policy verbatim — see its own
+// SaveOneOff/Merge/RequireFundsCover/WarnIfOverFree). No remaining
+// `new ManualEarmarkWindow` call sites. Kept in the tree rather than
+// deleted in the same pass that orphaned it, so the change is reviewable
+// on its own; safe to delete once that's confirmed.
 public partial class ManualEarmarkWindow : Window
 {
     private sealed record JarChoice(EarMarkPattern Pattern, string Label)
@@ -184,9 +184,12 @@ public partial class ManualEarmarkWindow : Window
         }
     }
 
-    // The documented merge rule: a second manual amount on an occupied day
-    // adds onto the existing one (edit mode replaces instead). A result of
-    // exactly zero removes the day's manual earmark.
+    /// <summary>[CALC] The documented merge rule: a second manual amount on an occupied day adds onto the existing one (edit mode replaces instead). A result of exactly zero removes the day's manual earmark.</summary>
+    /// <param name="saved">Accumulates earmarks to upsert.</param>
+    /// <param name="deleted">Accumulates (financeId, date) pairs to delete.</param>
+    /// <param name="pattern">The earmark pattern the amount is filed under.</param>
+    /// <param name="date">The day being adjusted.</param>
+    /// <param name="delta">The signed amount to merge in.</param>
     private void Merge(List<ManualEarmark> saved, List<(int, DateOnly)> deleted, EarMarkPattern pattern, DateOnly date, decimal delta)
     {
         var existing = _editTarget is not null && _editTarget.FinanceId == pattern.FinanceId && _editTarget.Date == date
@@ -205,8 +208,10 @@ public partial class ManualEarmarkWindow : Window
             pattern));
     }
 
-    // Ruling: jars never go below 0 — a withdrawal (or move-source) larger
-    // than what the fund holds that day is blocked outright.
+    /// <summary>[CALC] Ruling: jars never go below 0 — a withdrawal (or move-source) larger than what the fund holds that day is blocked outright.</summary>
+    /// <param name="source">The jar the withdrawal comes from.</param>
+    /// <param name="date">The day being adjusted.</param>
+    /// <param name="withdrawal">The amount being withdrawn.</param>
     private void RequireFundsCover(JarChoice source, DateOnly date, decimal withdrawal)
     {
         if (_forecast is null)
@@ -223,7 +228,9 @@ public partial class ManualEarmarkWindow : Window
         }
     }
 
-    // Ruling: over-adds warn but are allowed.
+    /// <summary>[UI] Ruling: over-adds warn but are allowed.</summary>
+    /// <param name="date">The day being adjusted.</param>
+    /// <param name="addition">The amount being added.</param>
     private void WarnIfOverFree(DateOnly date, decimal addition)
     {
         if (_forecast is null || JarComboBox.SelectedItem is not JarChoice choice)
@@ -254,8 +261,9 @@ public partial class ManualEarmarkWindow : Window
     private decimal ExistingAmountFor(int financeId, DateOnly date) =>
         _existing.FirstOrDefault(m => m.FinanceId == financeId && m.Date == date)?.Amount ?? 0m;
 
-    // The fund's and free balance on the chosen day, read from the shown
-    // forecast: the timeline entry on that date, or the nearest one before it.
+    /// <summary>[CALC] The fund's and free balance on the chosen day, read from the shown forecast: the timeline entry on that date, or the nearest one before it.</summary>
+    /// <param name="date">The day to read balances as of.</param>
+    /// <param name="financeId">Which fund's balance to read.</param>
     private (decimal JarBalance, decimal Free) BalancesOn(DateOnly date, int financeId)
     {
         var entry = _forecast!.GetTimeline().LastOrDefault(candidate => candidate.Date <= date);

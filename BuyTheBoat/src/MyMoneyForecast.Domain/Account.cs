@@ -3,10 +3,10 @@ namespace MyMoneyForecast.Domain;
 // A real bank account the user tracks — checking, savings, and so on. Each is an
 // independent silo with its own current balance and its own safety cushion; a
 // bill, paycheck, or goal belongs to exactly one account, and money only crosses
-// between accounts through a Transfer. See planning/10-multiple-accounts.md,
-// item 1. Id is a hidden surrogate (the user only ever sees/enters the Name,
-// which is unique); balances are the one hand-entered number per account, all as
-// of the forecast's single global as-of date (no bank import yet).
+// between accounts through a Transfer. Id is a hidden surrogate (the user only
+// ever sees/enters the Name, which is unique); balances are the one hand-entered
+// number per account, all as of the forecast's single global as-of date (no bank
+// import yet).
 public sealed record AccountOptions
 {
     public required int Id { get; init; }
@@ -25,6 +25,8 @@ public sealed class Account
     // hides it for accounts the user hasn't given one.
     public decimal IdealSafetyCushion { get; }
 
+    /// <summary>[CALC] Builds an Account from already-validated options.</summary>
+    /// <param name="options">The account's identity, balance, and cushion.</param>
     private Account(AccountOptions options)
     {
         Id = options.Id;
@@ -33,6 +35,8 @@ public sealed class Account
         IdealSafetyCushion = options.IdealSafetyCushion;
     }
 
+    /// <summary>[CALC] Creates an account, validating that the name isn't blank and the safety cushion isn't negative.</summary>
+    /// <param name="options">The account's identity, balance, and cushion.</param>
     public static Account Create(AccountOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.Name))

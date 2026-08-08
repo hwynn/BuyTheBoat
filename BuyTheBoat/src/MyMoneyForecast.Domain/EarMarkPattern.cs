@@ -26,6 +26,8 @@ public sealed class EarMarkPattern
     public decimal Amount { get; }
     public decimal StartingAllocation { get; }
 
+    /// <summary>[CALC] Builds an EarMarkPattern from already-validated options.</summary>
+    /// <param name="options">The plan's finance id, schedule, amount, and starting allocation.</param>
     private EarMarkPattern(EarMarkPatternOptions options)
     {
         FinanceId = options.FinanceId;
@@ -34,17 +36,9 @@ public sealed class EarMarkPattern
         StartingAllocation = options.StartingAllocation;
     }
 
-    // `goal` is the FinancialPattern this earmark pattern is saving toward.
-    //
-    // DIVERGENCE(active-from): enforces 3.11.2.a2 in BOTH directions, against the
-    // goal's ACTIVE span (planning/15). An earmark can't still be allocating after
-    // the goal's range ends (Until), and can't begin before the goal's active span
-    // starts (ActiveStart = the goal's ActiveFrom lead-in if set, else its Start).
-    // Saving in advance for a single-occurrence goal is exactly why the goal
-    // carries an ActiveFrom reaching back to the save-start day, so the earmark
-    // legitimately begins before the due-date occurrence and this check holds
-    // literally. (The front half was relaxed 2026-07-07 when no ActiveFrom
-    // existed; ActiveFrom restores it rather than breaking the assumption.)
+    /// <summary>[CALC] Creates a savings plan pattern for a goal, validating that its active span stays within the goal's own — it can't allocate before the goal's active span starts, or after the goal's date range ends.</summary>
+    /// <param name="options">The plan's finance id, schedule, amount, and starting allocation.</param>
+    /// <param name="goal">The FinancialPattern this earmark pattern is saving toward.</param>
     public static EarMarkPattern Create(EarMarkPatternOptions options, FinancialPattern goal)
     {
         if (options.FinanceId != goal.FinanceId)
@@ -54,6 +48,11 @@ public sealed class EarMarkPattern
                 nameof(options));
         }
 
+        // DIVERGENCE(active-from): enforces 3.11.2.a2 in both directions,
+        // against the goal's active span — an earmark can't still be
+        // allocating after the goal's range ends (Until), and can't begin
+        // before the goal's active span starts (its ActiveFrom lead-in if
+        // set, else its Start).
         if (options.DatePattern.ActiveStart < goal.DatePattern.ActiveStart)
         {
             throw new ArgumentException(

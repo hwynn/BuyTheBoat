@@ -15,18 +15,16 @@ public sealed record PayoffRequest
     public IReadOnlyList<int> ByMonthDay { get; init; } = [];
 }
 
-// How many payments it takes and the date of the last one. Both are LOWER
-// BOUNDS: interest and fees are ignored, so a real loan takes at least this
-// many payments and runs at least this long. The form states the date to the
-// user as a floor ("at least until ..."), never as an exact date — see
-// planning/15 stage 2, ruling C-1.
+// How many payments it takes and the date of the last one. Both are lower
+// bounds: interest and fees are ignored, so a real loan takes at least this
+// many payments and runs at least this long. The form states the date to
+// the user as a floor ("at least until ..."), never as an exact date.
 public sealed record PayoffEstimate(int PaymentCount, DateOnly PayoffDate);
 
 // Answers a bill's "when does this stop?" with "when I've paid it off", from
-// just the amount owed and the regular payment (planning/15 stage 2, item C).
-// It deliberately ignores interest and fees — the figure it returns is the
-// SOONEST a loan could be clear, presented as a floor; no interest rate is
-// asked for (ruling C-1).
+// just the amount owed and the regular payment. Deliberately ignores
+// interest and fees — the figure it returns is the soonest a loan could be
+// clear, presented as a floor, not an exact date.
 //
 // It is the mirror of RecurrenceRule's own Count->Until resolution: "pay it
 // off" means "make N payments", N payments is a Count, and a Count resolves to
@@ -35,6 +33,7 @@ public sealed record PayoffEstimate(int PaymentCount, DateOnly PayoffDate);
 public static class PayoffEstimator
 {
     /// <summary>[CALC] Works out the fewest payments and earliest date a loan could be paid off in, from the amount owed and the regular payment — a floor, since it ignores interest and fees.</summary>
+    /// <param name="request">The amount owed, the regular payment, and the payment schedule.</param>
     public static PayoffEstimate Estimate(PayoffRequest request)
     {
         if (request.TotalOwed <= 0)

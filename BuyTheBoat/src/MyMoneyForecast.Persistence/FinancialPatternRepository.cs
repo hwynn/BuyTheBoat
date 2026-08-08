@@ -5,10 +5,10 @@ namespace MyMoneyForecast.Persistence;
 
 public sealed class FinancialPatternRepository(PatternDatabase database)
 {
-    // accountId is which account this pattern is FILED UNDER — deliberately a
-    // separate argument rather than a property of the pattern, because the
-    // documented model gives FinancialPattern no account (planning/10 item 2-A).
-    // transferId, when set, marks this pattern as one pattern of a transfer (item 3).
+    /// <summary>[WRITES FILE] Creates a new financial pattern, or updates the existing one with the same FinanceId.</summary>
+    /// <param name="pattern">The pattern to save.</param>
+    /// <param name="accountId">Which account this pattern is filed under — stored separately since the domain type itself carries no account.</param>
+    /// <param name="transferId">When set, marks this pattern as one leg of a transfer.</param>
     public void Save(FinancialPattern pattern, int accountId, int? transferId = null)
     {
         using var connection = database.OpenConnection();
@@ -50,6 +50,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         command.ExecuteNonQuery();
     }
 
+    /// <summary>[READS FILE] Returns every financial pattern in storage, in FinanceId order.</summary>
     public IReadOnlyList<FinancialPattern> GetAll()
     {
         using var connection = database.OpenConnection();
@@ -66,6 +67,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return patterns;
     }
 
+    /// <summary>[READS FILE] Returns one financial pattern by its FinanceId, or null if none exists.</summary>
+    /// <param name="financeId">The pattern to look up.</param>
     public FinancialPattern? GetByFinanceId(int financeId)
     {
         using var connection = database.OpenConnection();
@@ -77,10 +80,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return reader.Read() ? Read(reader) : null;
     }
 
-    // Rebuilds the containment the class model describes: each account's page
-    // gets exactly its own finance_patterns list. The stored account id is
-    // consumed here and never reaches the domain type — past this point the
-    // model is pure containment, as documented.
+    /// <summary>[READS FILE] Returns every financial pattern, grouped by the account it's filed under. Feeds the forecast engine's per-account partitioning.</summary>
     public IReadOnlyDictionary<int, IReadOnlyList<FinancialPattern>> GetAllByAccount()
     {
         using var connection = database.OpenConnection();
@@ -91,6 +91,10 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         var byAccount = new Dictionary<int, List<FinancialPattern>>();
         while (reader.Read())
         {
+            // The stored account id is consumed here and never reaches the
+            // domain type — past this point the model is pure containment,
+            // exactly as the class documentation describes: an account's
+            // patterns live in its own list, not on the pattern itself.
             var accountId = reader.GetInt32(reader.GetOrdinal("AccountId"));
             if (!byAccount.TryGetValue(accountId, out var patterns))
             {
@@ -104,10 +108,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return byAccount.ToDictionary(entry => entry.Key, entry => (IReadOnlyList<FinancialPattern>)entry.Value);
     }
 
-    // The pattern-list UI shows only patterns the user created directly — a
-    // transfer's two patterns are hidden here and surfaced as the single transfer
-    // instead (planning/10 item 3). GetAll (and GetAllByAccount) still return
-    // the patterns, because they are what actually move money in the cascade.
+    /// <summary>[READS FILE] Returns every financial pattern except the two legs of a transfer. Feeds the Bills/Paychecks list, where a transfer shows as one thing on its own tab instead of its two underlying patterns. Don't use this for the forecast engine — it needs GetAll/GetAllByAccount instead, since a transfer's patterns are what actually move money in the cascade.</summary>
     public IReadOnlyList<FinancialPattern> GetAllExcludingTransferPatterns()
     {
         using var connection = database.OpenConnection();
@@ -124,11 +125,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return patterns;
     }
 
-    // Income candidates for a NEW outflow's Allocation Plan must be scoped to
-    // the SAME account it's filed under (planning/17, F33) — GetAllExcludingTransferPatterns
-    // is household-wide, so a bill in one account could get its plan paced
-    // against a paycheck filed under a different account, which never actually
-    // funds it. Transfers stay excluded for the same reason as that method.
+    /// <summary>[READS FILE] Returns one account's financial patterns, except the two legs of a transfer. Used to scope a new outflow's Allocation Plan proposal to income from the same account — a plan paced against another account's paycheck would never actually be funded by it.</summary>
+    /// <param name="accountId">The account to scope the patterns to.</param>
     public IReadOnlyList<FinancialPattern> GetByAccountExcludingTransferPatterns(int accountId)
     {
         using var connection = database.OpenConnection();
@@ -146,18 +144,12 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return patterns;
     }
 
-    // The finance ids of every transfer's WITHDRAWAL — the negative pattern, in
-    // the account the money leaves. The engine needs these for planning/14 item
-    // A-1: a transfer reserves in the account it leaves, but the household view
-    // must not count that as set aside, since the household is not down a cent.
-    //
-    // The domain FinancialPattern deliberately carries no TransferId (that is a
-    // storage concern, planning/10 item 2-A), so the engine is handed the set
-    // rather than working it out. Amounts are stored as invariant-culture TEXT,
-    // so the sign test is done in C# rather than in SQL, where comparing a text
-    // column numerically is not dependable.
+    /// <summary>[READS FILE] Returns the FinanceId of every transfer's withdrawal leg (the negative pattern, in the account the money leaves). Used by the forecast engine to add a transfer's reservation back into the household's free balance — moving your own money between accounts should never read as household spending.</summary>
     public IReadOnlySet<int> GetTransferWithdrawalFinanceIds()
     {
+        // The domain FinancialPattern carries no TransferId of its own (a
+        // storage-only concern), so callers are handed this set rather than
+        // reading it off the pattern directly.
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT FinanceId, Amount FROM FinancialPatterns WHERE TransferId IS NOT NULL;";
@@ -166,6 +158,9 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         var ids = new HashSet<int>();
         while (reader.Read())
         {
+            // Amounts are stored as invariant-culture TEXT, so the sign test
+            // happens here in C# rather than in SQL, where comparing a text
+            // column numerically isn't dependable.
             var amount = decimal.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
             if (amount < 0m)
             {
@@ -176,16 +171,12 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return ids;
     }
 
-    // Both legs, unlike GetTransferWithdrawalFinanceIds above (which is
-    // sign-filtered to the withdrawal side only, for a different caller's
-    // reason). FinancialPatternPickerWindow needs both excluded — a transfer
-    // shows as one thing on its own tab, never as its two underlying
-    // patterns — and the domain FinancialPattern it reads from carries no
-    // TransferId (storage concern, planning/10 item 2-A), so it's handed
-    // this set the same way GetTransferWithdrawalFinanceIds is handed to the
-    // engine.
+    /// <summary>[READS FILE] Returns the FinanceId of both legs of every transfer. Used wherever a transfer's own two patterns need to be excluded from a general pattern list — the picker, the Bills/Paychecks tab — since a transfer shows as one thing, never as its two underlying patterns.</summary>
     public IReadOnlySet<int> GetTransferFinanceIds()
     {
+        // The domain FinancialPattern carries no TransferId of its own (a
+        // storage-only concern), so callers are handed this set the same
+        // way GetTransferWithdrawalFinanceIds hands its set to the engine.
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT FinanceId FROM FinancialPatterns WHERE TransferId IS NOT NULL;";
@@ -200,17 +191,16 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return ids;
     }
 
-    // Removes both patterns of a transfer — used when the transfer itself is
-    // deleted. Also removes any Allocation Plan (EarMarkPattern) and its manual
-    // earmarks on those patterns: stage-1 gives a transfer's withdrawal a plan
-    // so it reserves (planning/14), and a plan whose goal pattern is gone is
-    // invalid by 3.10.a3 — leaving it would orphan a jar and make the next
-    // forecast's plan read-back throw. Children are deleted before the patterns
-    // they reference.
+    /// <summary>[DELETES] Removes both patterns of a transfer, along with their Allocation Plan and any manual earmarks — used when the transfer itself is deleted.</summary>
+    /// <param name="transferId">The transfer whose patterns to delete.</param>
     public void DeleteByTransferId(int transferId)
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
+        // Children deleted before the patterns they reference. A savings
+        // plan whose goal pattern is gone is invalid by 3.10.a3 — leaving it
+        // behind would orphan a jar and make the next forecast's plan
+        // read-back throw.
         command.CommandText = """
             DELETE FROM ManualEarmarks WHERE FinanceId IN
                 (SELECT FinanceId FROM FinancialPatterns WHERE TransferId = $TransferId);
@@ -222,8 +212,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         command.ExecuteNonQuery();
     }
 
-    // Which account a pattern is filed under — so the UI can show it and
-    // pre-select it when editing. Null if the pattern doesn't exist.
+    /// <summary>[READS FILE] Looks up which account a pattern is filed under, so the Expense form can pre-select it when editing. Null if the pattern doesn't exist.</summary>
+    /// <param name="financeId">The pattern to look up.</param>
     public int? GetAccountId(int financeId)
     {
         using var connection = database.OpenConnection();
@@ -235,7 +225,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return result is null or DBNull ? null : Convert.ToInt32(result);
     }
 
-    // Backs the "an account still holding things can't be deleted" guard.
+    /// <summary>[READS FILE] Reports whether any pattern is still filed under an account — backs the "can't delete an account that's still holding things" guard.</summary>
+    /// <param name="accountId">The account to check.</param>
     public bool HasPatternsInAccount(int accountId)
     {
         using var connection = database.OpenConnection();
@@ -246,9 +237,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return Convert.ToInt64(command.ExecuteScalar()) > 0;
     }
 
-    // Checked before Delete rather than relying on a database-level foreign
-    // key (SQLite doesn't enforce FK constraints by default, and this way
-    // works regardless of when a given .db file was first created).
+    /// <summary>[READS FILE] Reports whether a pattern still has a linked savings plan. Checked before Delete, standing in for a database-level foreign key (SQLite doesn't enforce those by default).</summary>
+    /// <param name="financeId">The pattern to check.</param>
     public bool HasLinkedEarMarkPattern(int financeId)
     {
         using var connection = database.OpenConnection();
@@ -259,6 +249,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return (long)command.ExecuteScalar()! > 0;
     }
 
+    /// <summary>[DELETES] Removes a financial pattern.</summary>
+    /// <param name="financeId">The pattern to delete.</param>
     public void Delete(int financeId)
     {
         using var connection = database.OpenConnection();
@@ -268,6 +260,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         command.ExecuteNonQuery();
     }
 
+    /// <summary>[CALC] Builds a FinancialPattern from one row of a FinancialPatterns query result.</summary>
+    /// <param name="reader">The reader, positioned on the row to read.</param>
     private static FinancialPattern Read(Microsoft.Data.Sqlite.SqliteDataReader reader) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

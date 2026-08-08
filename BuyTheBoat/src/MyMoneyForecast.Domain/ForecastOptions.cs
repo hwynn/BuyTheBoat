@@ -9,8 +9,8 @@ public sealed record ForecastOptions
     public required IReadOnlyList<FinancialPattern> FinancialPatterns { get; init; }
     public required IReadOnlyList<EarMarkPattern> EarMarkPatterns { get; init; }
 
-    // User-created one-off jar adjustments (planning/09-manual-earmarks.md).
-    // Not `required`: defaults to none, so existing callers are unaffected.
+    // User-created one-off jar adjustments. Not `required`: defaults to
+    // none, so existing callers are unaffected.
     public IReadOnlyList<ManualEarmark> ManualEarmarks { get; init; } = [];
     public required decimal StartingBalance { get; init; }
     public required DateOnly AsOfDate { get; init; }
@@ -27,28 +27,27 @@ public sealed record ForecastOptions
 
     // The finance ids of patterns that are one half of a transfer. Storage
     // knows this (a TransferId column); the domain FinancialPattern
-    // deliberately does not carry it (planning/10 item 2-A keeps storage
-    // concerns off the type), so the caller passes the set in.
+    // deliberately does not carry it, so the caller passes the set in.
     //
-    // Used for one thing (planning/14 item A-1): a transfer's withdrawal
-    // reserves in the account it leaves, because per-account solvency is the
-    // point of accounts — but the household view must not count it as set
-    // aside, since the household is not down a cent. Empty means "no transfers",
-    // which is the correct behaviour for every caller that doesn't have any.
+    // Used for one thing: a transfer's withdrawal reserves in the account it
+    // leaves, because per-account solvency is the point of accounts — but the
+    // household view must not count it as set aside, since the household is
+    // not down a cent. Empty means "no transfers", which is the correct
+    // behaviour for every caller that doesn't have any.
     public IReadOnlySet<int> TransferWithdrawalFinanceIds { get; init; } = new HashSet<int>();
 
-    // The per-account breakdown (planning/10 item 4). When provided, the engine
-    // builds one AccountTransactionPage per entry — each its own silo with its
-    // own balance, cushion, and patterns — instead of a single "Primary" page.
-    // When null/empty, the flat fields above drive one combined account exactly
-    // as before, so the single-account API and its tests are unaffected.
+    // The per-account breakdown. When provided, the engine builds one
+    // AccountTransactionPage per entry — each its own silo with its own
+    // balance, cushion, and patterns — instead of a single "Primary" page.
+    // When null/empty, the flat fields above drive one combined account
+    // exactly as before, so the single-account API and its tests are
+    // unaffected.
     public IReadOnlyList<AccountForecastInput>? Accounts { get; init; }
 }
 
 // One account's slice of a forecast: its own seed balance and cushion, and the
 // patterns/earmarks/manual adjustments filed under it. A pattern belongs to an
-// account by being in this list — the pattern itself still carries no account
-// (planning/10 item 2-A); the caller does the filing.
+// account by being in this list — the pattern itself still carries no account.
 public sealed record AccountForecastInput
 {
     public required int AccountId { get; init; }

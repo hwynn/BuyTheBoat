@@ -1,13 +1,13 @@
 namespace MyMoneyForecast.Domain;
 
-// Everything "Change starting on a date" (planning/16, item 4) needs: the
-// pattern being changed, when the change takes effect, the new shape it takes
-// on from there, and — for an outflow with a savings plan — the jar balance
-// to carry across. CarriedOverJarBalance is supplied by the caller because a
-// pure domain factory has no forecast of its own to read a jar's value from;
-// the caller reads it off the CURRENT forecast at CutDate before calling this
-// (item 4-B — the same "read a jar's balance on a chosen day" the manual-
-// earmark dialog already does).
+// Everything "Change starting on a date" needs: the pattern being changed,
+// when the change takes effect, the new shape it takes on from there, and —
+// for an outflow with a savings plan — the jar balance to carry across.
+// CarriedOverJarBalance is supplied by the caller because a pure domain
+// factory has no forecast of its own to read a jar's value from; the caller
+// reads it off the current forecast at CutDate before calling this (the
+// same "read a jar's balance on a chosen day" the manual-earmark dialog
+// already does).
 public sealed record BreakOffRequest
 {
     public required FinancialPattern Predecessor { get; init; }
@@ -19,20 +19,20 @@ public sealed record BreakOffRequest
     public required decimal CarriedOverJarBalance { get; init; }
     public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
 
-    // planning/18 (C1): whether the successor's freshly-proposed plan should
-    // spread evenly when there's no clean income to pace against (an
-    // ordinary bill or goal) or reserve immediately in full (a transfer's
-    // withdrawal — see TransferBreakOffFactory, which sets this false).
-    // Irrelevant whenever the successor is genuinely recurring (multi-
-    // occurrence), which is unaffected either way.
+    // Whether the successor's freshly-proposed plan should spread evenly
+    // when there's no clean income to pace against (an ordinary bill or
+    // goal) or reserve immediately in full (a transfer's withdrawal — see
+    // TransferBreakOffFactory, which sets this false). Irrelevant whenever
+    // the successor is genuinely recurring (multi-occurrence), which is
+    // unaffected either way.
     public bool SpreadEvenlyWithNoIncome { get; init; } = true;
 }
 
 // The truncated predecessor plus everything the successor needs — the same
 // "one action, several linked domain objects" shape as OneTimeGoalFactory,
-// TransferFactory, and AllocationPlanProposer. No new persisted "link" type
-// (item 4-A, settled): the predecessor is simply bounded and stays in the
-// data as an ordinary ended pattern, the same as any other.
+// TransferFactory, and AllocationPlanProposer. No new persisted "link" type:
+// the predecessor is simply bounded and stays in the data as an ordinary
+// ended pattern, the same as any other.
 public sealed record BreakOffResult
 {
     public required FinancialPattern Predecessor { get; init; }
@@ -42,17 +42,16 @@ public sealed record BreakOffResult
     public required ManualEarmark? SuccessorStartingEarmark { get; init; }
 }
 
-// Everything a periodic RENEWAL of an "ongoing" pattern needs (planning/15's
-// deferred "ongoing" mechanism, worked through with the author 2026-07-29).
-// Deliberately narrower than BreakOffRequest: there is no SuccessorAmount or
+// Everything a periodic RENEWAL of an "ongoing" pattern needs. Deliberately
+// narrower than BreakOffRequest: there is no SuccessorAmount or
 // SuccessorSchedule-SHAPE field, because renewal changes NOTHING about the
 // pattern itself — Renew derives the amount, frequency, interval, and days
 // straight from the predecessor. SegmentYears is the one caller-supplied
 // number, since how far a renewed segment should reach is a scheduling
 // choice, not part of what the pattern IS — deliberately not hardcoded here,
-// so a rare, multi-year cadence and a short segment length aren't conflated
-// (author, 2026-07-29). That is the whole distinction from BreakOff: BreakOff
-// is for when the user changes something; Renew is for when nothing did.
+// so a rare, multi-year cadence and a short segment length aren't conflated.
+// That is the whole distinction from BreakOff: BreakOff is for when the user
+// changes something; Renew is for when nothing did.
 public sealed record RenewalRequest
 {
     public required FinancialPattern Predecessor { get; init; }
@@ -64,21 +63,19 @@ public sealed record RenewalRequest
     public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
 }
 
-// Design: planning/16, item 4 (settled 2026-07-29). Cuts a pattern at
-// CutDate: the predecessor's last day is the day before (PatternTruncation
-// handles the predecessor and its plan together — item 4-C's "parallel
-// split" is exactly that truncation, not a new primitive); the successor
-// starts exactly on CutDate as a genuine new FinanceId (item 4-A).
+// Cuts a pattern at CutDate: the predecessor's last day is the day before
+// (PatternTruncation handles the predecessor and its plan together — the
+// "parallel split" is exactly that truncation, not a new primitive); the
+// successor starts exactly on CutDate as a genuine new FinanceId.
 //
 // An outflow's successor gets a FRESHLY PROPOSED plan via
 // AllocationPlanProposer — never a copy of the predecessor's, since a
-// break-off's whole premise is that the old plan's sizing is now wrong
-// (item 4-C) — seeded with the carried-over jar balance (item 4-B). The
-// proposer is called with asOfDate = CutDate, not today: the successor's
-// plan starts contributing exactly when the successor itself starts,
-// deliberately not funding ahead of the cut (planning/16's note on this
-// choice). Income (Amount >= 0) never has a plan at all (Stage 1) and skips
-// straight to just the cut — no jar machinery runs (item 4-E).
+// break-off's whole premise is that the old plan's sizing is now wrong —
+// seeded with the carried-over jar balance. The proposer is called with
+// asOfDate = CutDate, not today: the successor's plan starts contributing
+// exactly when the successor itself starts, deliberately not funding ahead
+// of the cut. Income (Amount >= 0) never has a plan at all and skips
+// straight to just the cut — no jar machinery runs.
 public static class BreakOffFactory
 {
     /// <summary>[CALC] Ends a bill or paycheck on a chosen date and hands it off to a new one that continues from there with its own amount/schedule — "Change starting on a date." For a bill, the old savings plan is wound down and the new one is freshly proposed, carrying over whatever was already saved.</summary>
@@ -96,7 +93,7 @@ public static class BreakOffFactory
         if (request.SuccessorFinanceId == request.Predecessor.FinanceId)
         {
             throw new ArgumentException(
-                "The successor needs its own FinanceId — a break-off is a genuinely new identity, not an edit (item 4-A).",
+                "The successor needs its own FinanceId — a break-off is a genuinely new identity, not an edit.",
                 nameof(request));
         }
 
@@ -118,20 +115,20 @@ public static class BreakOffFactory
             Amount = request.SuccessorAmount,
             Priority = request.Predecessor.Priority,
             Mandatory = request.Predecessor.Mandatory,
-            // planning/18 (B12): a break-off is a change to amount/schedule,
-            // not to whether the pattern "keeps going" — carried over like
-            // every other identity field. Renew (below) depends on this: it
-            // is itself a BreakOff, and each renewed segment must keep
-            // qualifying for the next one.
+            // A break-off is a change to amount/schedule, not to whether
+            // the pattern "keeps going" — carried over like every other
+            // identity field. Renew (below) depends on this: it is itself a
+            // BreakOff, and each renewed segment must keep qualifying for
+            // the next one.
             AutoRenew = request.Predecessor.AutoRenew,
         });
 
         if (request.Predecessor.Amount >= 0m)
         {
-            // Income: the cut is the whole job (item 4-E). No jar, ever, so no
-            // plan to truncate or propose — PredecessorPlan is ignored here by
-            // design (it should always be null for income under Stage 1, but
-            // this path doesn't depend on that).
+            // Income: the cut is the whole job. No jar, ever, so no plan to
+            // truncate or propose — PredecessorPlan is ignored here by
+            // design (it should always be null for income, but this path
+            // doesn't depend on that).
             return new BreakOffResult
             {
                 Predecessor = truncated.Pattern,
@@ -216,13 +213,15 @@ public static class BreakOffFactory
         return result with { Successor = markedSuccessor };
     }
 
+    /// <summary>[CALC] Strips a "(renewed yyyy-MM-dd)" marker from a label, if it has one — so a fresh marker can be appended without stacking up prior ones.</summary>
+    /// <param name="label">The label to strip a marker from.</param>
     private static string WithoutPriorRenewalMarker(string label)
     {
         var markerIndex = label.IndexOf(" (renewed ", StringComparison.Ordinal);
         return markerIndex < 0 ? label : label[..markerIndex];
     }
 
-    /// <summary>[CALC] Finds whichever segment of a bill or paycheck is CURRENT — the one nothing has since superseded — starting from any segment in its history. Both BreakOff and Renew always reuse a predecessor's Source verbatim on the successor (item 4-A), so the current segment is simply whichever pattern sharing that Source has the latest Start; no dedicated link between segments is needed.</summary>
+    /// <summary>[CALC] Finds whichever segment of a bill or paycheck is CURRENT — the one nothing has since superseded — starting from any segment in its history. Both BreakOff and Renew always reuse a predecessor's Source verbatim on the successor, so the current segment is simply whichever pattern sharing that Source has the latest Start; no dedicated link between segments is needed.</summary>
     /// <param name="pattern">Any segment of the bill or paycheck — the current one, an old superseded one, or anything in between.</param>
     /// <param name="allPatterns">Every pattern to search — normally the same list already passed to BreakOff/Renew.</param>
     /// <returns>The pattern itself, if nothing has since changed or renewed it, or whichever later segment has.</returns>

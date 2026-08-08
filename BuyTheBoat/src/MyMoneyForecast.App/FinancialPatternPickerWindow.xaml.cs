@@ -5,27 +5,22 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// A reusable "pick one of my Bills/Paychecks/Goals" popup — planning/21
-// Philosophy 5/7 keeps every CREATE/EDIT form on its own permanent tab, but
-// SELECTING an existing FinancialPattern (to link something else to it, or
-// to switch which one another form is showing) is a different, smaller
-// action — a popup is the right shape for it, not a tab of its own.
+// A reusable "pick one of my Bills/Paychecks/Goals" popup — every CREATE/EDIT
+// form stays on its own permanent tab, but SELECTING an existing
+// FinancialPattern (to link something else to it, or to switch which one
+// another form is showing) is a different, smaller action — a popup is the
+// right shape for it, not a tab of its own.
 //
-// Source of truth is TransactionLogBook.AllFinancialPatterns() (the author's
-// own call): a plain repository read would also see every pattern with no
-// page-boundary limitation, but the forecast's own Book is meant to be the
-// canonical "everything the user has" source for this popup, not the
-// repository underneath it.
+// Source of truth is TransactionLogBook.AllFinancialPatterns(): a plain
+// repository read would also see every pattern with no page-boundary
+// limitation, but the forecast's own Book is meant to be the canonical
+// "everything the user has" source for this popup, not the repository
+// underneath it.
 //
 // Always excludes expired patterns (DatePattern.Until already passed) and
 // transfer-leg patterns — both built into this window, not something a
 // caller can turn off, since no second use case needing either has come up
-// yet (the author's own call, made explicitly rather than assumed).
-//
-// TODO (2026-08-05): not wired into any form yet — built and tested as a
-// standalone, reusable piece first, per the "small, verify, then move
-// outward" approach. EarmarkFormPanel's own instance picker (still a plain
-// ComboBox) is the obvious next caller, but that wiring is a separate step.
+// yet.
 public partial class FinancialPatternPickerWindow : Window
 {
     private sealed class Row(FinancialPattern pattern)

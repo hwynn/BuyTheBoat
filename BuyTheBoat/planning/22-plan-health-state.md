@@ -9,6 +9,20 @@ that grew too large to keep as a paragraph inside [21](21-form-architecture.md) 
 Nothing here is a settled spec ready to implement wholesale — treat each numbered section's own
 SETTLED/OPEN markers as the truth, not the existence of this document.
 
+**Note added 2026-08-08:** substantial work has landed since 2026-08-05 that isn't written up as its
+own numbered section here yet — `IsFirstOccurrencePending`/`FirstOccurrenceShortfall`
+(`PlanHealthState.cs`, `TransactionLogBookFactory`), the RRule preview's health highlighting wired to
+real data for the first time (`RecurrenceRuleEditor.SetHighlight`,
+`PlanHealthMessages.RRulePreviewCaption`/`UnderfundedReleaseHighlightLegend`), and the Summary
+chart's own third and fourth lines (the "proposed — live estimate" line and the One-off mode
+"addition" line). The reasoning for all of it lives in the code's own comments at each site (this
+codebase's established convention — search for "2026-08-07"/"2026-08-08" author-dated comments in
+`EarmarkFormPanel.xaml.cs`, `SummaryRegion.xaml.cs`, and `PlanHealthMessages.cs`) and in
+[`planning/mockups/settled-designs.html`](mockups/settled-designs.html)'s Earmark · 6/7 for the
+visual record. Not folded into this document's own section structure — left as a pointer rather than
+guessed at, since this document's own numbered-section format deserves the same care the rest of it
+got, not a rushed retrofit.
+
 **Reading list:** [21](21-form-architecture.md) (the form architecture this feeds into, especially its
 Earmark section), [14](14-stage1-allocation-model.md) (the milestone reset-at-release fix this all
 depends on), `PlanHealthState.cs` + the `PlanHealthState`-tagged tests in

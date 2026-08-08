@@ -1,8 +1,7 @@
 namespace MyMoneyForecast.Domain;
 
 // The pure deallocation math — the Q2 ("can I afford X?") engine's core,
-// implemented standalone and side-effect-free per Step 1 of
-// redesign/MyMoneyForecast/planning/07-deallocation-implementation-plan.md.
+// implemented standalone and side-effect-free.
 //
 // On a "deallocation day" the money committed to fund jars would exceed what's
 // actually in the account (the jars are bookkeeping over ONE real balance, not
@@ -24,12 +23,11 @@ namespace MyMoneyForecast.Domain;
 // examples + invariants and vectors mined from the proof workbook.
 public static class DeallocationCalculator
 {
-    // The deallocation-day test (06): free funds yesterday (c - Σfx) plus all
-    // of today's money movement (Σapx + au) lands below zero — spending
-    // outran free funds, so jars must give money back. Step 2 uses this to
-    // decide whether to call Deallocate at all; Deallocate itself assumes the
-    // caller already confirmed it (Nb1 is guaranteed < 0 on a deallocation
-    // day, so Step B only ever withdraws).
+    /// <summary>[CALC] Reports whether today is a deallocation day: yesterday's free funds plus all of today's money movement lands below zero, meaning spending outran free funds and jars must give money back. Step 2 uses this to decide whether to call Deallocate at all — Deallocate itself assumes the caller already confirmed it.</summary>
+    /// <param name="currentFunds">c — the balance carried into the day, always &gt;= 0.</param>
+    /// <param name="jars">Every fund jar's current state.</param>
+    /// <param name="pairedTransactions">ap — today's purchases tied to a specific goal jar.</param>
+    /// <param name="unpairedTransaction">au — today's spend not tied to any goal jar.</param>
     public static bool IsDeallocationDay(
         decimal currentFunds,
         IReadOnlyList<DeallocationJar> jars,
@@ -51,15 +49,11 @@ public static class DeallocationCalculator
         return currentFunds - jarTotal + pairedTotal + unpairedTransaction < 0m;
     }
 
-    // Compute the deallocation earmarks (paired p + balancing b) and how far,
-    // if at all, the balance goes into debt.
-    //
-    //   currentFunds        c   — the balance carried into the day, >= 0.
-    //   jars                per-jar (finance id, priority, balance f, existing
-    //                       earmark er+ei). Priority 0 = cushion (drained
-    //                       first); higher priority is drained later.
-    //   pairedTransactions  ap  — a goal's own purchase, pulling from its jar.
-    //   unpairedTransaction au  — the day's spend not tied to any goal jar.
+    /// <summary>[CALC] Computes the deallocation earmarks (paired + balancing) for every jar, and how far, if at all, the balance goes into debt.</summary>
+    /// <param name="currentFunds">c — the balance carried into the day, always &gt;= 0.</param>
+    /// <param name="jars">Per-jar state (finance id, priority, balance, existing earmarks). Priority 0 is the cushion, drained first; higher priority is drained later.</param>
+    /// <param name="pairedTransactions">ap — a goal's own purchase, pulling from its jar.</param>
+    /// <param name="unpairedTransaction">au — the day's spend not tied to any goal jar.</param>
     public static DeallocationResult Deallocate(
         decimal currentFunds,
         IReadOnlyList<DeallocationJar> jars,
@@ -89,8 +83,8 @@ public static class DeallocationCalculator
         }
 
         // Step B drains in three groups — cushion, then everything the user
-        // said they could skip, then everything they said they must pay
-        // (planning/14 item B-2, "absolute"). Priority orders WITHIN a group,
+        // said they could skip, then everything they said they must pay.
+        // Priority orders WITHIN a group,
         // lowest first, so an unskippable bill is never raided while a
         // skippable goal still holds money, whatever their priority numbers say.
         // Stable on the original position so equal priorities — which the domain
@@ -173,9 +167,8 @@ public static class DeallocationCalculator
         };
     }
 
-    // Which of the three drain groups a jar falls in (see the sort above).
-    // The cushion goes first by identity, not by its priority number, so it
-    // stays first no matter what the surrounding priorities are.
+    /// <summary>[CALC] Returns which of the three drain groups a jar falls in (see the sort in Deallocate). The cushion goes first by identity, not by its priority number, so it stays first no matter what the surrounding priorities are.</summary>
+    /// <param name="jar">The jar to classify.</param>
     private static int DrainGroup(DeallocationJar jar) => jar switch
     {
         { FinanceId: null } => 0, // the safety cushion — always drained first
@@ -188,6 +181,8 @@ public static class DeallocationCalculator
     // a single sentinel is enough to distinguish it from the numbered jars.
     private const int CushionKey = int.MinValue;
 
+    /// <summary>[CALC] Returns a dictionary-safe key for a jar — its own FinanceId, or a sentinel for the cushion, which shares the null finance id with every other cushion (though there's only ever one per snapshot).</summary>
+    /// <param name="jar">The jar to key.</param>
     private static int JarKey(DeallocationJar jar) => jar.FinanceId ?? CushionKey;
 }
 
@@ -204,8 +199,8 @@ public sealed record DeallocationJar(
     // today, summed. Any sign.
     decimal ExistingEarmark,
     // Whether the user said they could skip or delay what this jar is for —
-    // the meaning FinancialPattern.Mandatory took on in planning/14 item B.
-    // Skippable jars are drained before any unskippable one, whatever their
+    // the meaning FinancialPattern.Mandatory took on. Skippable jars are
+    // drained before any unskippable one, whatever their
     // priorities. Defaults to false ("I have to pay this"), matching both the
     // documented default for an expense and the pre-item-B behaviour, where
     // every jar sorted by priority alone.

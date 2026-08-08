@@ -6,35 +6,26 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// planning/21 "Form layout, top to bottom" (the general 3-region pattern) +
-// "Expense" content inventory, built 2026-08-05. Rebuilt from an earlier pass
-// that only ported the old CreateFinancialPatternWindow popup's fields
-// without the surrounding architecture — that pass shipped a form with no
-// instance-information-block, no characterization-field-block, one save
-// button instead of the settled two, and no feedback after a save (the
-// settled "clears itself automatically" rule was simply missing). This
-// version builds all three regions for real:
+// The Expense tab, built around the general 3-region form pattern this
+// project uses:
 //   1. Instance-information-block (top Border) — which Expense is loaded, a
 //      dirty indicator, Discard/Clear controls, and a "Change..." button
-//      (opens FinancialPatternPickerWindow, wired 2026-08-06) doubling as
-//      this form's edit entry point — the same shape every form's
-//      instance-info-block uses except Account's (the author's own call).
+//      (opens FinancialPatternPickerWindow) doubling as this form's edit
+//      entry point — the same shape every form's instance-info-block uses
+//      except Account's.
 //   2. Characterization-field-block (first GroupBox) — Direction, Repeats?,
 //      and a computed "Bill"/"Paycheck"/"Custom" label.
 //   3. Everything else (second GroupBox + the Due-date/Stops/RuleEditor
 //      region below it, contextual on Repeats?).
 //
-// TODO (2026-08-05): the break-off-mode toggle (existing, recurring
-// instances only) stays unwired,
-// matching its pre-existing "not wired into the app" status from before this
-// panel existed — also the author's call. Save/Save-and-Plan button
-// emphasis (muted-until-dirty, extra outline when the plan is meaningfully
-// affected, driven by the four plan-health states) is not built — ties to the
-// same "needs a live forecast" gap EarmarkFormPanel's Summary aside already
-// carries as its own TODO. "Keeps going" stays disabled (see its own note
-// below). The advanced hand-built-single-occurrence escape hatch planning/21
-// flags as "genuinely open, not resolved" is not built — a one-time Expense
-// only ever gets the plain Due-date field.
+// TODO: the break-off-mode toggle (existing, recurring instances only)
+// stays unwired. Save/Save-and-Plan button emphasis (muted-until-dirty,
+// extra outline when the plan is meaningfully affected, driven by the four
+// plan-health states) is not built — ties to the same "needs a live
+// forecast" gap EarmarkFormPanel's Summary aside already carries as its own
+// TODO. "Keeps going" stays disabled (see its own note below). The advanced
+// hand-built-single-occurrence escape hatch is not built — a one-time
+// Expense only ever gets the plain Due-date field.
 public partial class ExpenseFormPanel : UserControl
 {
     private enum LoadedMode { NewBill, NewPattern, Editing }
@@ -67,10 +58,9 @@ public partial class ExpenseFormPanel : UserControl
 
     // Computes (or returns the already-cached) live forecast on demand —
     // wired to MainWindow.EnsureForecast, which always succeeds rather than
-    // requiring the user to have pressed "Forecast" first (the author's own
-    // call: everything needed to compute one — the As-Of/Horizon pickers —
-    // already has a value at all times, so there's nothing to actually wait
-    // on the user for).
+    // requiring the user to have pressed "Forecast" first: everything
+    // needed to compute one (the As-Of/Horizon pickers) already has a value
+    // at all times, so there's nothing to actually wait on the user for.
     public Func<ForecastResult>? RequestForecast { get; set; }
 
     // (pattern, accountId, isNew, jumpToEarmark) — jumpToEarmark distinguishes
@@ -102,6 +92,11 @@ public partial class ExpenseFormPanel : UserControl
     }
 
     /// <summary>[UI] Supplies the existing patterns/accounts this panel reads from, which account each pattern is currently filed under, which finance ids are transfer legs (needed to open FinancialPatternPickerWindow, alongside RequestForecast), and every EarMarkPattern (so the Summary region can find this Expense's own linked plan, if it has one). Call before any Load* method, and again after every save.</summary>
+    /// <param name="existingPatterns">Every existing bill/paycheck pattern.</param>
+    /// <param name="accountIdByFinanceId">Finance id → the account it's currently filed under.</param>
+    /// <param name="accounts">Every account, to populate the account picker.</param>
+    /// <param name="transferFinanceIds">Finance ids that are transfer legs — excluded from the instance picker.</param>
+    /// <param name="earMarkPatterns">Every savings plan, so the Summary region can find this Expense's own linked plan.</param>
     public void SetContext(
         IReadOnlyList<FinancialPattern> existingPatterns,
         IReadOnlyDictionary<int, int> accountIdByFinanceId,
@@ -114,14 +109,11 @@ public partial class ExpenseFormPanel : UserControl
         _accounts = accounts;
         _transferFinanceIds = transferFinanceIds;
 
-        // BUG FOUND AND FIXED 2026-08-06 — same defect as EarmarkFormPanel's
-        // own SetContext (see its comment): keying straight off FinanceId
-        // throws the moment a goal has more than one EarMarkPattern (F27,
-        // planning/17 — a concurrent second funder, or a break-off/
-        // restructure chain), which would silently break this form's
-        // "Currently saved toward this" context for every Expense, not just
-        // the one with multiple plans, since SetContext would never finish.
-        // Same stopgap resolution: most-recently-started segment per goal.
+        // Grouped, not keyed straight off FinanceId — same reasoning as
+        // EarmarkFormPanel's own SetContext: a goal can have more than one
+        // EarMarkPattern (a concurrent second funder, or a break-off/
+        // restructure chain), so this keeps each goal's most-recently-
+        // started segment.
         _patternsByFinanceId = earMarkPatterns
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.Start).First());
@@ -187,6 +179,8 @@ public partial class ExpenseFormPanel : UserControl
     }
 
     /// <summary>[STEP] Loads an existing pattern for editing — FinanceId is fixed. Also reachable by picking it from this form's own instance picker, not just the list tab's "Edit Selected."</summary>
+    /// <param name="existing">The pattern to load for editing.</param>
+    /// <param name="currentAccountId">Which account it's currently filed under.</param>
     public void LoadPattern(FinancialPattern existing, int currentAccountId)
     {
         _isNew = false;
@@ -236,7 +230,8 @@ public partial class ExpenseFormPanel : UserControl
         ClearDirty();
     }
 
-    // Shared reset every Load* starts with.
+    /// <summary>[UI] Shared reset every Load* starts with.</summary>
+    /// <param name="selectedAccountId">Which account to preselect; defaults to the first when null.</param>
     private void ResetSharedFields(int? selectedAccountId)
     {
         ErrorText.Text = string.Empty;
@@ -261,20 +256,13 @@ public partial class ExpenseFormPanel : UserControl
         }
     }
 
-    // Description-or-Source fallback matches GoalOption's own convention
-    // elsewhere in this app (EarmarkFormPanel) — one consistent rule for
-    // "what do we call this pattern out loud" everywhere it's shown.
+    /// <summary>[UI] Description-or-Source fallback matches GoalOption's own convention elsewhere in this app (EarmarkFormPanel) — one consistent rule for "what do we call this pattern out loud" everywhere it's shown.</summary>
     private void UpdateSelectedInstanceText() =>
         SelectedInstanceText.Text = _loadedExisting is { } existing
             ? (string.IsNullOrWhiteSpace(existing.Description) ? existing.Source : existing.Description)
             : "— New Expense —";
 
-    // This Expense's own linked savings plan, shown read-only — the same
-    // Summary region Earmark shows, present even in the plain healthy state
-    // (the author's own call, 2026-08-06), not just surfaced through a
-    // warning. Reflects the loaded instance, not live field edits — the plan
-    // itself is only proposed at save time and edited on the Earmark tab, so
-    // there's nothing meaningfully live to react to here yet.
+    /// <summary>[UI] This Expense's own linked savings plan, shown read-only — the same Summary region Earmark shows, present even in the plain healthy state, not just surfaced through a warning. Reflects the loaded instance, not live field edits — the plan itself is only proposed at save time and edited on the Earmark tab, so there's nothing meaningfully live to react to here yet.</summary>
     private void UpdateSummary()
     {
         UpdateStatusIndicator();
@@ -321,20 +309,7 @@ public partial class ExpenseFormPanel : UserControl
             asideLine: "(fund jar state needs a live forecast — not wired in yet)");
     }
 
-    // planning/21's own settled status indicator (author, 2026-08-07: "one
-    // of the first things we made that health state class to handle"):
-    // which of the four plan-health states the linked savings plan is in,
-    // shown next to the save buttons — the label alone (PlanHealthMessages.
-    // ExpenseStatusLabel does the actual mapping), plus the same outline
-    // "Save and Plan" gets when the pending edit would meaningfully affect
-    // the linked plan (planning/21, "Save and Plan... gets an extra outline
-    // when the pending change is one that would meaningfully affect the
-    // linked plan"). Only the "linked plan is currently in a non-Healthy
-    // state" half of that trigger is built here — comparing the
-    // currently-typed fields against what's saved to catch an edit that
-    // would newly cause one of these states is a separate, more involved
-    // check (which fields even count is not settled anywhere), not
-    // silently assumed to be covered by this.
+    /// <summary>[UI] Which of the four plan-health states the linked savings plan is in, shown next to the save buttons (PlanHealthMessages.ExpenseStatusLabel does the actual mapping), plus the same outline "Save and Plan" gets when the pending edit would meaningfully affect the linked plan. Only the "linked plan is currently in a non-Healthy state" half of that trigger is built here — comparing the currently-typed fields against what's saved to catch an edit that would newly cause one of these states is a separate, more involved check, not silently assumed to be covered by this.</summary>
     private void UpdateStatusIndicator()
     {
         var health = _loadedExisting is { } existing
@@ -374,11 +349,7 @@ public partial class ExpenseFormPanel : UserControl
         UpdateModifiedIndicator();
     }
 
-    // Also gated on _initialized, not just _suppressEvents: a few fields
-    // carry XAML default values (PriorityTextBox's Text="5" is the one that
-    // actually fires) that raise their change event mid-InitializeComponent,
-    // before any Load* call has run to set _suppressEvents at all — without
-    // this, the form would read "unsaved changes" the instant it's built.
+    /// <summary>[UI] Also gated on _initialized, not just _suppressEvents: a few fields carry XAML default values (PriorityTextBox's Text="5" is the one that actually fires) that raise their change event mid-InitializeComponent, before any Load* call has run to set _suppressEvents at all — without this, the form would read "unsaved changes" the instant it's built.</summary>
     private void MarkDirtyIfNotSuppressed()
     {
         if (_initialized && !_suppressEvents)
@@ -392,9 +363,9 @@ public partial class ExpenseFormPanel : UserControl
         ModifiedIndicatorText.Visibility = _isDirty ? Visibility.Visible : Visibility.Collapsed;
         DiscardChangesButton.IsEnabled = _isDirty;
 
-        // The author's own rule: a save button looks active only when there
-        // are unsaved changes — a blank form or an unchanged loaded instance
-        // both read as "nothing to save" the same way.
+        // A save button looks active only when there are unsaved changes —
+        // a blank form or an unchanged loaded instance both read as
+        // "nothing to save" the same way.
         SaveAndSkipPlanningButton.IsEnabled = _isDirty;
         SaveAndPlanButton.IsEnabled = _isDirty;
 
@@ -405,8 +376,7 @@ public partial class ExpenseFormPanel : UserControl
         MessageBox.Show(Window.GetWindow(this), message, "Unsaved changes", MessageBoxButton.YesNo, MessageBoxImage.Warning)
             == MessageBoxResult.Yes;
 
-    // planning/21: "a 'clear the form' control — starts a brand new, blank
-    // instance. If unsaved edits exist, this asks for confirmation first."
+    /// <summary>[STEP] Starts a brand new, blank instance. If unsaved edits exist, this asks for confirmation first.</summary>
     private void OnClearClick(object sender, RoutedEventArgs e)
     {
         if (_isDirty && !ConfirmDiscard("Clear the form and lose your unsaved changes?"))
@@ -417,9 +387,7 @@ public partial class ExpenseFormPanel : UserControl
         LoadForNewPattern();
     }
 
-    // planning/21: "a 'discard unsaved edits' control must exist" — no
-    // confirmation called for (unlike Clear); the whole point of the button
-    // is discarding, so a second confirmation would be redundant.
+    /// <summary>[STEP] No confirmation called for (unlike Clear) — the whole point of the button is discarding, so a second confirmation would be redundant.</summary>
     private void OnDiscardChangesClick(object sender, RoutedEventArgs e) => ReloadCurrentInstance();
 
     private void ReloadCurrentInstance()
@@ -438,15 +406,7 @@ public partial class ExpenseFormPanel : UserControl
         }
     }
 
-    // Opens FinancialPatternPickerWindow — the same reusable "pick one of my
-    // Bills/Paychecks/Goals" popup every form's instance-info-block uses
-    // except Account's (the author's own call, 2026-08-06). Its own source
-    // of truth is the live forecast's TransactionLogBook, not a plain
-    // repository read, so it sees a pattern whose occurrences fall entirely
-    // outside the forecast's own window. RequestForecast always succeeds
-    // (the author's own call, 2026-08-06 — computing one on demand beats
-    // telling the user to go press a different button first), so there's no
-    // null/error branch to handle here at all.
+    /// <summary>[STEP] Opens FinancialPatternPickerWindow — the same reusable "pick one of my Bills/Paychecks/Goals" popup every form's instance-info-block uses except Account's. Its own source of truth is the live forecast's TransactionLogBook, not a plain repository read, so it sees a pattern whose occurrences fall entirely outside the forecast's own window. RequestForecast always succeeds, so there's no null/error branch to handle here at all.</summary>
     private void OnChangeInstanceClick(object sender, RoutedEventArgs e)
     {
         if (_isDirty && !ConfirmDiscard("Switch to a different Expense and lose your unsaved changes?"))
@@ -506,15 +466,7 @@ public partial class ExpenseFormPanel : UserControl
         MarkDirtyIfNotSuppressed();
     }
 
-    // Advanced mode (the author's own call, 2026-08-06). No _initialized
-    // guard needed — unlike the radios above, this checkbox has no XAML
-    // default value to fire early. Scoped narrowly to what's actually
-    // settled: planning/21's Advanced-mode section only ever designed
-    // Expense's own behavior, and even there left two things undecided
-    // ("Repeats? stops doing anything," exact wording TBD; the recurrence
-    // preview possibly getting replaced for a single-occurrence RRule) —
-    // neither of those is built here. This is a view preference, not data:
-    // it doesn't call MarkDirty.
+    /// <summary>[UI] No _initialized guard needed — unlike the radios above, this checkbox has no XAML default value to fire early. Two things remain undecided beyond what's built here: exact wording for "Repeats? stops doing anything," and whether the recurrence preview should be replaced for a single-occurrence RRule. A view preference, not data: doesn't call MarkDirty.</summary>
     private void OnAdvancedModeChanged(object sender, RoutedEventArgs e) =>
         RuleEditor.SetAdvancedMode(AdvancedModeCheckBox.IsChecked == true);
 
@@ -525,19 +477,13 @@ public partial class ExpenseFormPanel : UserControl
         UpdateCharacterizationText();
     }
 
-    // planning/14 item B-4: the skippable question only means something for
-    // money going OUT, so it disappears for income entirely.
+    /// <summary>[UI] The skippable question only means something for money going OUT, so it disappears for income entirely.</summary>
     private void UpdateSkippableVisibility() =>
         MandatoryPanel.Visibility = ExpenseRadioButton.IsChecked == true
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-    // planning/21 §2: reuses names already used elsewhere in the UI's own
-    // shortcut buttons. "Create Bill..." is the only named shortcut Expense
-    // has today, so "Bill" is the only non-Custom shape recognized on the
-    // expense side; "Paycheck" is offered on the income side even though no
-    // shortcut button is named that yet, matching the domain's own
-    // bill-vs-paycheck framing. Always shows something, never blank.
+    /// <summary>[UI] Reuses names already used elsewhere in the UI's own shortcut buttons. "Create Bill..." is the only named shortcut Expense has today, so "Bill" is the only non-Custom shape recognized on the expense side; "Paycheck" is offered on the income side even though no shortcut button is named that yet, matching the domain's own bill-vs-paycheck framing. Always shows something, never blank.</summary>
     private void UpdateCharacterizationText()
     {
         CharacterizationText.Text = ExpenseRadioButton.IsChecked == true
@@ -618,12 +564,12 @@ public partial class ExpenseFormPanel : UserControl
             var accountId = SelectedAccountId;
             var isNew = _isNew;
 
-            // planning/21: "the form clears itself automatically after a
-            // successful save." Done before invoking the callback, so it
-            // happens unconditionally even though the callback's own
-            // navigation (Forecast vs. Earmark) takes the user elsewhere —
-            // this Expense tab should read blank whichever way they arrived
-            // back at it next.
+            // The form clears itself automatically after a successful save.
+            // Done before invoking the callback, so it happens
+            // unconditionally even though the callback's own navigation
+            // (Forecast vs. Earmark) takes the user elsewhere — this
+            // Expense tab should read blank whichever way they arrived back
+            // at it next.
             LoadForNewPattern();
 
             PatternSaved?.Invoke(pattern, accountId, isNew, jumpToEarmark);
@@ -657,9 +603,8 @@ public partial class ExpenseFormPanel : UserControl
         return RuleEditor.Result ?? throw new InvalidOperationException("Fix the recurrence rule before continuing.");
     }
 
-    // planning/15 item D — the "when does this stop?" question, now shown
-    // for every repeating Expense (planning/21 Step 2), not only the old
-    // "Create Bill" shortcut. -------------------------------------------
+    // The "when does this stop?" question, shown for every repeating
+    // Expense, not only the old "Create Bill" shortcut. -------------------
 
     // _initialized guards all three of these against StopOnDateRadio's own
     // IsChecked="True" firing Checked synchronously mid-parse: by that point

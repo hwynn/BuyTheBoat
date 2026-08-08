@@ -1,10 +1,9 @@
 namespace MyMoneyForecast.Domain;
 
 // A real, observed movement of money — from a bank feed, exported statement,
-// or manual entry. PURE STUB in the current scope: nothing constructs one,
-// and BalanceSnapshot.ActualTransactions is always empty. It exists (per the
-// design author, 2026-07-10: "even as stubs") to mark exactly where
-// actual-transaction import lands and what pairing will key on.
+// or manual entry. A pure stub in the current scope: nothing constructs one,
+// and BalanceSnapshot.ActualTransactions is always empty. Exists to mark
+// where actual-transaction import will land and what pairing will key on.
 //
 // ASSUMED-PAIRING(import): every site tagged ASSUMED-PAIRING elsewhere in
 // this project is a place that currently pretends instances of this class

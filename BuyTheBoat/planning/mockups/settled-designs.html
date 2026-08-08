@@ -164,7 +164,7 @@
 
   <!-- ============ EARMARK — SAVINGS PLAN — HEALTHY ============ -->
   <section class="variant">
-    <div class="vhead"><span class="vnum">Earmark · 1</span><h2>Savings plan, healthy</h2><span class="intent">Baseline state — no plan-health content shows at all. Layout: Placement C (planning/21 Step 3 + planning/22 §6c) — Current jar state lives in the Summary aside, not its own box; Amount shares a column with the recurrence fields so the preview uses the freed-up space above them.</span></div>
+    <div class="vhead"><span class="vnum">Earmark · 1</span><h2>Savings plan, healthy</h2><span class="intent">Baseline state — no plan-health content shows at all. Layout: Placement C (planning/21 Step 3 + planning/22 §6c) — Current jar state lives in the Summary aside, not its own box; Amount shares a column with the recurrence fields so the preview uses the freed-up space above them. REVISED 2026-08-08: the Starting-point column was missing here — ShowFundStartPointRegion is the sole gate on it (settled 2026-08-07), so it always renders in Savings-plan mode, this state included.</span></div>
     <div class="stage"><div class="form">
       <div class="top-combined" style="grid-template-columns:1.2fr 1fr auto">
         <div class="top-half iib-half">
@@ -177,7 +177,12 @@
         </div>
         <div class="top-half"><button class="iib-btn ghost">Clear form</button></div>
       </div>
-      <div class="split">
+      <div class="split3">
+        <div class="startcol start-pad">
+          <div class="start-h">Starting point</div>
+          <div class="start-amt">$0.00</div>
+          <div class="start-date">savings plan started from 0</div>
+        </div>
         <div class="rest">
           <div class="grid3" style="margin-bottom:14px">
             <div class="fld"><label>Amount per occurrence</label><div class="box">$320.00</div></div>
@@ -244,7 +249,7 @@
 
   <!-- ============ EARMARK — SAVINGS PLAN — ALREADY MISSING (TODAY SHORT), ONE-TIME GOAL ============ -->
   <section class="variant">
-    <div class="vhead"><span class="vnum">Earmark · 2</span><h2>Savings plan, currently short (one-time goal)</h2><span class="intent">AlreadyMissing — today's jar reading below its milestone. Only the Summary aside changes; nothing else in the form differs from the healthy state.</span></div>
+    <div class="vhead"><span class="vnum">Earmark · 2</span><h2>Savings plan, currently short (one-time goal)</h2><span class="intent">AlreadyMissing — today's jar reading below its milestone. Only the Summary aside changes; nothing else in the form differs from the healthy state. REVISED 2026-08-08: Starting-point column added, same reason as Earmark · 1.</span></div>
     <div class="stage"><div class="form">
       <div class="top-combined" style="grid-template-columns:1.2fr 1fr auto">
         <div class="top-half iib-half">
@@ -257,7 +262,12 @@
         </div>
         <div class="top-half"><button class="iib-btn ghost">Clear form</button></div>
       </div>
-      <div class="split">
+      <div class="split3">
+        <div class="startcol start-pad">
+          <div class="start-h">Starting point</div>
+          <div class="start-amt">$0.00</div>
+          <div class="start-date">savings plan started from 0</div>
+        </div>
         <div class="rest">
           <div class="grid3" style="margin-bottom:14px">
             <div class="fld"><label>Amount per occurrence</label><div class="box">$320.00</div></div>
@@ -320,7 +330,7 @@
 
   <!-- ============ EARMARK — SAVINGS PLAN — CHRONIC SHORTFALL, REPEATING BILL ============ -->
   <section class="variant">
-    <div class="vhead"><span class="vnum">Earmark · 3</span><h2>Savings plan, chronic shortfall (repeating bill)</h2><span class="intent">WillMiss + IsChronicShortfall for a repeating pattern — the state where Summary and the RRule preview both carry content at once, and both reuse the exact same words on purpose.</span></div>
+    <div class="vhead"><span class="vnum">Earmark · 3</span><h2>Savings plan, chronic shortfall (repeating bill)</h2><span class="intent">WillMiss + IsChronicShortfall for a repeating pattern — the state where Summary and the RRule preview both carry content at once, and both reuse the exact same words on purpose. REVISED 2026-08-08: Starting-point column added, same reason as Earmark · 1.</span></div>
     <div class="stage"><div class="form">
       <div class="top-combined" style="grid-template-columns:1.2fr 1fr auto">
         <div class="top-half iib-half">
@@ -333,7 +343,12 @@
         </div>
         <div class="top-half"><button class="iib-btn ghost">Clear form</button></div>
       </div>
-      <div class="split">
+      <div class="split3">
+        <div class="startcol start-pad">
+          <div class="start-h">Starting point</div>
+          <div class="start-amt">$0.00</div>
+          <div class="start-date">savings plan started from 0</div>
+        </div>
         <div class="rest">
           <div class="grid3" style="margin-bottom:14px">
             <div class="fld"><label>Amount per occurrence</label><div class="box">$100.00</div></div>
@@ -422,7 +437,7 @@
 
   <!-- ============ EARMARK — SAVINGS PLAN — CURRENTLY OVERFUNDED ============ -->
   <section class="variant">
-    <div class="vhead"><span class="vnum">Earmark · 4</span><h2>Savings plan, currently overfunded</h2><span class="intent">CurrentlyOverfunded — the mirror of Earmark · 2. Same layout, opposite direction, "over" instead of "short" throughout.</span></div>
+    <div class="vhead"><span class="vnum">Earmark · 4</span><h2>Savings plan, currently overfunded</h2><span class="intent">CurrentlyOverfunded — the mirror of Earmark · 2. Same layout, opposite direction, "over" instead of "short" throughout. REVISED 2026-08-08: Starting-point column added, same reason as Earmark · 1.</span></div>
     <div class="stage"><div class="form">
       <div class="top-combined" style="grid-template-columns:1.2fr 1fr auto">
         <div class="top-half iib-half">
@@ -435,7 +450,12 @@
         </div>
         <div class="top-half"><button class="iib-btn ghost">Clear form</button></div>
       </div>
-      <div class="split">
+      <div class="split3">
+        <div class="startcol start-pad">
+          <div class="start-h">Starting point</div>
+          <div class="start-amt">$0.00</div>
+          <div class="start-date">savings plan started from 0</div>
+        </div>
         <div class="rest">
           <div class="grid3" style="margin-bottom:14px">
             <div class="fld"><label>Amount per occurrence</label><div class="box">$400.00</div></div>

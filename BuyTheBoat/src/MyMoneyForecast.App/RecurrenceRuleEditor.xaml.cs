@@ -16,26 +16,26 @@ public partial class RecurrenceRuleEditor : UserControl
     // assignment while the control is still being constructed.
     private bool _initialized;
 
-    // planning/15 item D: when a host form owns the "when does this stop?"
-    // question (the bill form), the built-in Ends controls are hidden and the
-    // end date is supplied from outside via SetHostEndDate instead of the radios.
+    // When a host form owns the "when does this stop?" question (the bill
+    // form), the built-in Ends controls are hidden and the end date is
+    // supplied from outside via SetHostEndDate instead of the radios.
     private bool _hostControlsEnd;
     private DateOnly? _hostUntil;
 
-    // planning/22 §6b, SETTLED 2026-08-05 — a host form can mark specific
-    // occurrences with an altered highlight color and show a short caption
-    // below the list (e.g. "Projected short," with the short occurrences
-    // highlighted). Both default to "nothing to flag," so every existing
-    // caller that never calls SetHighlight is unaffected.
+    // A host form can mark specific occurrences with an altered highlight
+    // color and show a short caption below the list (e.g. "Projected
+    // short," with the short occurrences highlighted). Both default to
+    // "nothing to flag," so every existing caller that never calls
+    // SetHighlight is unaffected.
     private IReadOnlyCollection<DateOnly> _highlightedDates = [];
     private string? _caption;
     private string? _legendText;
 
     private static readonly Brush ShortDateHighlightBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD9, 0xA0));
 
-    // The author's own call, 2026-08-06: the occurrence list defaults to
-    // showing only this many dates, with a toggle to see the rest — kept as
-    // a named constant specifically so it's easy to retune later.
+    // The occurrence list defaults to showing only this many dates, with a
+    // toggle to see the rest — kept as a named constant so it's easy to
+    // retune later.
     private const int DefaultVisibleOccurrenceCount = 5;
 
     private IReadOnlyList<DateOnly> _allOccurrences = [];
@@ -59,7 +59,10 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Marks specific occurrences with an altered highlight color, shows a short caption below the occurrence list (planning/22 §6b), and — since this control has no idea what a highlighted date actually represents, only that it's highlighted — a caller-supplied legend explaining what the highlight color means (author, 2026-08-08). An empty list, and null/blank text for either string, clears that piece back to the plain preview.</summary>
+    /// <summary>[UI] Marks specific occurrences with an altered highlight color, shows a short caption below the occurrence list, and — since this control has no idea what a highlighted date actually represents, only that it's highlighted — a caller-supplied legend explaining what the highlight color means. An empty list, and null/blank text for either string, clears that piece back to the plain preview.</summary>
+    /// <param name="dates">The occurrences to highlight.</param>
+    /// <param name="caption">A short caption shown below the occurrence list, or null to clear it.</param>
+    /// <param name="legendText">Explains what the highlight color means, or null to clear it.</param>
     public void SetHighlight(IReadOnlyCollection<DateOnly> dates, string? caption, string? legendText = null)
     {
         _highlightedDates = dates ?? [];
@@ -74,8 +77,8 @@ public partial class RecurrenceRuleEditor : UserControl
 
     public event EventHandler? ResultChanged;
 
-    // For edit mode — pre-fills the form from an existing rule instead of the
-    // today/+6-months defaults.
+    /// <summary>[STEP] For edit mode — pre-fills the form from an existing rule instead of the today/+6-months defaults.</summary>
+    /// <param name="rule">The existing rule to load.</param>
     public void LoadFrom(RecurrenceRule rule)
     {
         _initialized = false;
@@ -119,7 +122,7 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Undoes LetHostControlEndDate — restores the built-in "Ends" controls so the editor decides its own end date again. Needed now that a host form (ExpenseFormPanel) is one long-lived instance reused across every open rather than a fresh window each time: without this, switching from the bill form's "when does this stop?" question to any other mode would leave the Ends controls hidden for good.</summary>
+    /// <summary>[UI] Undoes LetHostControlEndDate — restores the built-in "Ends" controls so the editor decides its own end date again. Needed because a host form (ExpenseFormPanel) is one long-lived instance reused across every open rather than a fresh window each time: without this, switching from the bill form's "when does this stop?" question to any other mode would leave the Ends controls hidden for good.</summary>
     public void LetSelfControlEndDate()
     {
         if (!_hostControlsEnd)
@@ -138,7 +141,8 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Shows or hides the raw RRULE text box — hidden by default (the author's own call, 2026-08-06): it takes up space most editing doesn't need, and is meant to be revealed by a host's own "Advanced mode" checkbox rather than always being on screen.</summary>
+    /// <summary>[UI] Shows or hides the raw RRULE text box — hidden by default: it takes up space most editing doesn't need, and is meant to be revealed by a host's own "Advanced mode" checkbox rather than always being on screen.</summary>
+    /// <param name="isAdvanced">Whether to show the raw RRULE text box.</param>
     public void SetAdvancedMode(bool isAdvanced)
     {
         var visibility = isAdvanced ? Visibility.Visible : Visibility.Collapsed;
@@ -146,7 +150,8 @@ public partial class RecurrenceRuleEditor : UserControl
         RruleStringTextBox.Visibility = visibility;
     }
 
-    /// <summary>[UI] Lets a host inject its own field(s) at the top of this editor's own left column — e.g. Earmark's "Amount per occurrence," so the right-side preview can use the vertical space that would otherwise sit empty above the recurrence fields (settled-designs.html Earmark·1's Placement C, 2026-08-06). Null clears it back to nothing, same as before this existed — every other current caller (Expense, Transfer) is unaffected unless it calls this too.</summary>
+    /// <summary>[UI] Lets a host inject its own field(s) at the top of this editor's own left column — e.g. Earmark's "Amount per occurrence," so the right-side preview can use the vertical space that would otherwise sit empty above the recurrence fields. Null clears it back to nothing — every other current caller (Expense, Transfer) is unaffected unless it calls this too.</summary>
+    /// <param name="content">The element to inject, or null to clear it.</param>
     public void SetLeadingContent(UIElement? content)
     {
         LeadingContentHost.Content = content;
@@ -154,6 +159,7 @@ public partial class RecurrenceRuleEditor : UserControl
     }
 
     /// <summary>[UI] Sets the end date the host chose through its own stop question, refreshing the preview. Null leaves the rule incomplete until one is picked.</summary>
+    /// <param name="until">The end date the host chose, or null if none picked yet.</param>
     public void SetHostEndDate(DateOnly? until)
     {
         // No-op when unchanged: the host recomputes the end in response to
@@ -236,10 +242,7 @@ public partial class RecurrenceRuleEditor : UserControl
         ApplyLegend();
     }
 
-    // Colors whichever currently-realized CalendarDayButtons fall in
-    // _highlightedDates, and clears the color from any we previously set
-    // that are no longer in that set. A button we never touched is left
-    // alone, so the calendar's own "today"/selected styling isn't disturbed.
+    /// <summary>[UI] Colors whichever currently-realized CalendarDayButtons fall in _highlightedDates, and clears the color from any we previously set that are no longer in that set. A button we never touched is left alone, so the calendar's own "today"/selected styling isn't disturbed.</summary>
     private void ApplyHighlight()
     {
         if (!PreviewCalendar.IsLoaded)
@@ -262,23 +265,15 @@ public partial class RecurrenceRuleEditor : UserControl
         }
     }
 
-    // Shows at most DefaultVisibleOccurrenceCount dates unless the user has
-    // toggled "Show all" — the toggle button's own label carries the total
-    // count regardless of which state it's in, so that's visible even while
-    // collapsed.
+    /// <summary>[UI] Shows at most DefaultVisibleOccurrenceCount dates unless the user has toggled "Show all" — the toggle button's own label carries the total count regardless of which state it's in, so that's visible even while collapsed.</summary>
     private void UpdateOccurrencesDisplay()
     {
         var visible = _showAllOccurrences
             ? _allOccurrences
             : _allOccurrences.Take(DefaultVisibleOccurrenceCount);
 
-        // "dddd, MMMM d, yyyy" (original) -> "MMM d, yyyy" (2026-08-06,
-        // width pass — matched settled-designs.html's own "Feb 15, 2026,"
-        // no weekday) -> "ddd, MMM d, yyyy" (this pass, same day — the
-        // author asked for the weekday back: "It would be helpful if the
-        // dates ... said the name of the week they occurred on"). Abbreviated
-        // rather than the original's full weekday name, paired with the
-        // list column widening back up to fit it (see the XAML).
+        // Abbreviated weekday name ("ddd"), paired with the list column
+        // being wide enough to fit it (see the XAML).
         OccurrencesListBox.ItemsSource = visible
             .Select(date => date.ToString("ddd, MMM d, yyyy"))
             .ToList();
@@ -301,10 +296,7 @@ public partial class RecurrenceRuleEditor : UserControl
         UpdateOccurrencesDisplay();
     }
 
-    // Now only toggles the host-supplied caption's own visibility
-    // (planning/22 §6b's "Projected short," etc.) — the occurrence list's
-    // height is capped unconditionally instead (see the XAML), so this no
-    // longer needs to bound it itself.
+    /// <summary>[UI] Toggles the host-supplied caption's own visibility (e.g. "Projected short") — the occurrence list's height is capped unconditionally instead (see the XAML), so this doesn't need to bound it itself.</summary>
     private void ApplyCaption()
     {
         var hasCaption = !string.IsNullOrWhiteSpace(_caption);
@@ -312,11 +304,7 @@ public partial class RecurrenceRuleEditor : UserControl
         CaptionText.Visibility = hasCaption ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // Author, 2026-08-08: the color-key row beneath the caption — same
-    // on/off shape ApplyCaption already uses, own element since a caption
-    // ("Keeps falling short") and a legend ("highlighted = this release
-    // came up short") answer different questions and a host might supply
-    // one without the other.
+    /// <summary>[UI] The color-key row beneath the caption — same on/off shape ApplyCaption uses, own element since a caption ("Keeps falling short") and a legend ("highlighted = this release came up short") answer different questions and a host might supply one without the other.</summary>
     private void ApplyLegend()
     {
         var hasLegend = !string.IsNullOrWhiteSpace(_legendText);
@@ -342,8 +330,7 @@ public partial class RecurrenceRuleEditor : UserControl
         }
     }
 
-    // Frequency drives which fields are even meaningful: BYDAY only makes sense
-    // for Weekly, BYMONTHDAY only for Monthly/Yearly.
+    /// <summary>[UI] Frequency drives which fields are even meaningful: BYDAY only makes sense for Weekly, BYMONTHDAY only for Monthly/Yearly.</summary>
     private void UpdateFormVisibility()
     {
         var frequency = SelectedFrequency();

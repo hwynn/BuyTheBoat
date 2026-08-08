@@ -9,17 +9,11 @@ public sealed record TransferTruncationResult
 }
 
 // Ends a scheduled transfer on a chosen date, with no continuation — the
-// transfer analogue of PatternTruncation.EndOn (planning/16, item 16),
-// extended to transfers the same way BreakOffFactory was
-// (TransferBreakOffFactory, planning/16 § transfers). A transfer is three
-// linked things (planning/10 item 3): the Transfer record itself, the
-// withdrawal leg (and its savings plan, if it has one), and the deposit leg
-// (income, never has a plan). All three must end on the identical date, or
-// the project's own transfer-validation sweep would flag the drift.
-// Identified as a gap in planning/18 — ordinary bills get this mechanism for
-// free from PatternTruncation.EndOn serving both jobs (standalone truncation
-// and break-off's predecessor half); transfers only had the break-off half
-// (TransferBreakOffFactory), never the standalone one.
+// transfer analogue of PatternTruncation.EndOn. A transfer is three linked
+// things: the Transfer record itself, the withdrawal leg (and its savings
+// plan, if it has one), and the deposit leg (income, never has a plan). All
+// three must end on the identical date, or the project's own
+// transfer-validation sweep would flag the drift.
 public static class TransferTruncation
 {
     /// <summary>[CALC] Ends a scheduled transfer on a chosen date, with no continuation. Whatever was reserved for it becomes ordinary free balance again from that date on, the same as ending any other pattern.</summary>

@@ -1,10 +1,16 @@
 # 20 — The UI phase: inventory and clustering
 
-**Status: RAW INVENTORY EXPANDED 2026-07-30, not yet clustered by the author.** Stages 0–6 of the
+**Status: RAW INVENTORY EXPANDED 2026-07-30.** Stages 0–6 of the
 ["Adjusting the Plan" phase](13-adjusting-the-plan-charter.md) are design-complete (see the charter's
-status table). This document is the starting point for the next, separate effort: giving everything
+status table). This document was the starting point for the next, separate effort: giving everything
 that phase decided an actual screen. Not itself a numbered stage of that phase — this is where its
 output gets implemented.
+
+**Updated 2026-08-08 — the "not yet clustered" framing is stale.** The clustering happened, just not
+by rewriting this document — [21](21-form-architecture.md) took this inventory and ran with it, and
+Account/Expense/Earmark are all real, permanent form tabs now (see 21's own current status). This
+document's own raw material is still accurate as a historical inventory of what existed *before* that
+clustering; read it for that, not for what the UI looks like today.
 
 **Locked, out of scope — corrected 2026-07-30:** only the Forecast tab's **zoomed-out overview** and
 **selected-day** panels themselves — their contents, layout, and size

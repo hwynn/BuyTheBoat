@@ -19,7 +19,7 @@ public sealed record OneTimeGoalRequest
     // higher numbers = higher priority. This is what actually decides which
     // goals get funded first when money is short — not the timing below,
     // which is provisional at best once deallocation-driven reallocation
-    // exists (see redesign/MyMoneyForecast/planning/03-data-entry-uis.md).
+    // exists.
     public int Priority { get; init; } = 3;
 
     // Only meant to be user-controlled behind an "advanced" opt-in. The
@@ -41,6 +41,8 @@ public sealed record OneTimeGoal(FinancialPattern Goal, EarMarkPattern SavingsPl
 // class documentation.ods's own "boat" example models it.
 public static class OneTimeGoalFactory
 {
+    /// <summary>[CALC] Builds a one-time goal's FinancialPattern plus its savings plan (EarMarkPattern), splitting the amount needed evenly across installments from the start date to the due date.</summary>
+    /// <param name="request">The goal's description, amount, due date, and savings schedule.</param>
     public static OneTimeGoal Create(OneTimeGoalRequest request)
     {
         if (request.StartSavingDate >= request.DueDate)
@@ -61,7 +63,7 @@ public static class OneTimeGoalFactory
                 // The goal's only occurrence is its due date, but saving starts
                 // earlier — ActiveFrom stretches the goal's active span back to the
                 // save-start day so its savings plan (and jar) legitimately begin
-                // before the due date (planning/15, ActiveFrom).
+                // before the due date.
                 ActiveFrom = request.StartSavingDate,
             }),
             Amount = -request.AmountNeeded,
@@ -90,6 +92,10 @@ public static class OneTimeGoalFactory
         return new OneTimeGoal(goal, savingsPlan);
     }
 
+    /// <summary>[CALC] Builds the recurrence rule for a savings plan's own contribution schedule (weekly, every other week, or monthly).</summary>
+    /// <param name="start">When contributions begin.</param>
+    /// <param name="until">When contributions stop (the goal's due date).</param>
+    /// <param name="frequency">How often to contribute.</param>
     private static RecurrenceRule BuildSavingsDatePattern(DateOnly start, DateOnly until, SavingsFrequency frequency) =>
         frequency switch
         {

@@ -5,19 +5,17 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// TODO (2026-08-05): retired — MainWindow no longer opens this popup, having
-// switched to the permanent Expense tab (ExpenseFormPanel, planning/21
-// Philosophy 5/7) for all three of its old entry points ("Create Bill...",
-// "Add New (advanced)...", "Edit Selected..."). No remaining
-// `new CreateFinancialPatternWindow` call sites as of this note. Kept in the
-// tree rather than deleted in the same pass that orphaned it, so the change
-// is reviewable on its own; safe to delete once that's confirmed.
+// Retired — MainWindow no longer opens this popup, having switched to the
+// permanent Expense tab (ExpenseFormPanel) for all three of its old entry
+// points ("Create Bill...", "Add New (advanced)...", "Edit Selected...").
+// No remaining `new CreateFinancialPatternWindow` call sites. Kept in the
+// tree rather than deleted in the same pass that orphaned it, so the
+// change is reviewable on its own; safe to delete once that's confirmed.
 public partial class CreateFinancialPatternWindow : Window
 {
-    // (The old _mandatoryIsExplicit / _updatingMandatoryProgrammatically pair
-    // is gone with planning/14 item B-4: nothing auto-suggests an answer from
-    // the amount's sign any more, so there is no suggestion to stop overriding.
-    // The question is simply hidden when it doesn't apply.)
+    // Nothing auto-suggests Mandatory from the amount's sign any more, so
+    // there is no suggestion to stop overriding — the question is simply
+    // hidden when it doesn't apply.
 
     // Guards OnDirectionChanged against firing while still under construction:
     // ExpenseRadioButton's IsChecked="True" raises Checked synchronously
@@ -26,9 +24,9 @@ public partial class CreateFinancialPatternWindow : Window
     // _initialized guard.
     private bool _initialized;
 
-    // planning/15 item D: true only for the simple "Create Bill" form, which
-    // shows the "when does this stop?" question and drives the schedule
-    // editor's end date. False for the advanced/pattern and edit forms.
+    // True only for the simple "Create Bill" form, which shows the "when
+    // does this stop?" question and drives the schedule editor's end date.
+    // False for the advanced/pattern and edit forms.
     private bool _simpleBillMode;
 
     // FinanceId is an internal identifier — never shown or typed by the user
@@ -39,11 +37,10 @@ public partial class CreateFinancialPatternWindow : Window
 
     public FinancialPattern? CreatedPattern { get; private set; }
 
-    // Create mode: FinanceId is auto-assigned (max existing + 1).
-    // forcedMandatory, when set, hides the Mandatory checkbox and the
-    // Expense/Income question entirely and fixes both — used by the "Create
-    // Bill..." shortcut, where both answers are always the same and asking is
-    // just friction.
+    /// <summary>[STEP] Create mode: FinanceId is auto-assigned (max existing + 1).</summary>
+    /// <param name="existingPatterns">Every existing pattern, to compute the next free FinanceId.</param>
+    /// <param name="accounts">Every account, to populate the account picker.</param>
+    /// <param name="forcedMandatory">When set, hides the Mandatory checkbox and the Expense/Income question entirely and fixes both — used by the "Create Bill..." shortcut, where both answers are always the same and asking is just friction.</param>
     public CreateFinancialPatternWindow(IReadOnlyList<FinancialPattern> existingPatterns, IReadOnlyList<Account> accounts, bool? forcedMandatory = null)
     {
         InitializeComponent();
@@ -64,8 +61,8 @@ public partial class CreateFinancialPatternWindow : Window
             AmountLabel.Text = "Amount owed";
 
             // The simple "Create Bill" form (a mandatory expense) gets the
-            // "when does this stop?" question; the advanced/pattern form keeps
-            // the editor's raw end controls (planning/15 item D, ruling D-1).
+            // "when does this stop?" question; the advanced/pattern form
+            // keeps the editor's raw end controls.
             if (mandatory)
             {
                 EnableStopQuestion();
@@ -75,12 +72,10 @@ public partial class CreateFinancialPatternWindow : Window
         _initialized = true;
     }
 
-    // Edit mode: FinanceId is fixed — it's an internal identity, not a field
-    // the user should be able to change once other data (e.g. a linked
-    // EarMarkPattern) may already reference it. The existing Mandatory value
-    // is treated as an explicit choice, same as if the user just typed it —
-    // opening the edit window and adjusting the amount shouldn't silently
-    // flip it back to the direction-based suggestion.
+    /// <summary>[STEP] Edit mode: FinanceId is fixed — it's an internal identity, not a field the user should be able to change once other data (e.g. a linked EarMarkPattern) may already reference it. The existing Mandatory value is treated as an explicit choice, same as if the user just typed it — opening the edit window and adjusting the amount shouldn't silently flip it back to the direction-based suggestion.</summary>
+    /// <param name="existing">The pattern being edited.</param>
+    /// <param name="accounts">Every account, to populate the account picker.</param>
+    /// <param name="selectedAccountId">Which account the pattern is currently filed under.</param>
     public CreateFinancialPatternWindow(FinancialPattern existing, IReadOnlyList<Account> accounts, int selectedAccountId)
     {
         InitializeComponent();
@@ -105,7 +100,9 @@ public partial class CreateFinancialPatternWindow : Window
         _initialized = true;
     }
 
-    // Always populated and defaulted (never a blank/silent default) — item 2-B.
+    /// <summary>[UI] Always populated and defaulted, never a blank/silent default.</summary>
+    /// <param name="accounts">Every account to populate the picker with.</param>
+    /// <param name="selectedAccountId">Which account to preselect; defaults to the first when null.</param>
     private void PopulateAccounts(IReadOnlyList<Account> accounts, int? selectedAccountId)
     {
         AccountComboBox.ItemsSource = accounts;
@@ -130,11 +127,7 @@ public partial class CreateFinancialPatternWindow : Window
         UpdateSkippableVisibility();
     }
 
-    // planning/14 item B-4: the skippable question only means something for
-    // money going OUT, so it disappears for income entirely. This replaces the
-    // old behaviour where a Mandatory checkbox re-ticked itself as the
-    // direction changed — a question that doesn't apply is better hidden than
-    // silently answered.
+    /// <summary>[UI] The skippable question only means something for money going OUT, so it disappears for income entirely — better hidden than silently answered.</summary>
     private void UpdateSkippableVisibility() =>
         MandatoryPanel.Visibility = ExpenseRadioButton.IsChecked == true
             ? Visibility.Visible
@@ -186,7 +179,7 @@ public partial class CreateFinancialPatternWindow : Window
         }
     }
 
-    // planning/15 item D — the "when does this stop?" question ------------
+    // The "when does this stop?" question ------------------------------
 
     /// <summary>[UI] Reveals the "when does this stop?" question and hands the schedule editor its end date, so the editor's own Ends controls step aside (ruling D-1).</summary>
     private void EnableStopQuestion()

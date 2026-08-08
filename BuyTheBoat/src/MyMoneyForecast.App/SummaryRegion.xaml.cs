@@ -6,66 +6,28 @@ using System.Windows.Shapes;
 
 namespace MyMoneyForecast.App;
 
-// The Earmark form's Summary region (planning/22 §6c) — a narrative sentence,
-// a small line chart, and an aside, replacing what used to be separate Goal
-// detail / Current jar state / proposed-plan boxes (see settled-designs.html
-// for what this is meant to look like laid out). Compose the actual wording
-// with PlanHealthMessages before calling Load; this control only lays it out
-// and draws the chart, it doesn't decide what anything says — matches the
-// "region communicates X" job planning/22 §6 records for the Summary region:
-// what this savings plan is, the plan behind it, and how the trajectory
-// looks against the goal.
+// The Earmark form's Summary region — a narrative sentence, a small line
+// chart, and an aside, replacing what used to be separate Goal detail /
+// Current jar state / proposed-plan boxes. Compose the actual wording with
+// PlanHealthMessages before calling Load; this control only lays it out and
+// draws the chart, it doesn't decide what anything says.
 //
-// TODO (2026-08-05, iterative-build pass): this is a working first cut, not
-// the finished chart. Known gaps, left as TODOs rather than blocking on them:
-//  - Text label positioning (TextAt) approximates right-alignment from
-//    string length instead of measuring the rendered text — fine at the
-//    font size/amounts used so far, but a real fix once this is visible in
-//    the actual app.
-//
-// BUILT 2026-08-07 (author's own go-ahead): the two lines the TODO above
-// used to flag as missing now exist — ProposedTrajectory (Savings-plan
-// mode's own "proposed — rough, live estimate" line, settled-designs.html)
-// and AdditionAmount (One-off mode's own "+ $X today" line,
-// earmark-form-layout-mockups.html's own "Summary B"). Neither is ever
-// drawn together with the OTHER mode's own lines — see DrawChart's own
-// comments for exactly which combination each mode gets and why.
-//
-// WIRED 2026-08-07 (EarmarkFormPanel.UpdateSummary): reads real
-// PlanHealthState/FundJar data via PlanHealthMessages, in both Savings-plan
-// and One-off mode. One known, deliberate gap carried over from there, not
-// this control's own: Savings-plan mode shows the SAVED plan's real health,
-// not a live hypothetical of whatever amount/schedule is currently typed
-// but unsaved — that would need re-running the whole forecast with the
-// in-progress values substituted in, a bigger task than this pass. Item
-// 23-D's "everything derived reads live" holds for the Starting-point
-// region and this region's own narrative sentence (both read straight off
-// the form's current fields); it does NOT yet hold for the forecast-derived
-// health figures specifically — flagged, not silently glossed over.
-//
-// REVISED 2026-08-07 (author's own report: no visible milestone line for a
-// plan that's clearly contributing regularly): the "actual" and "milestone"
-// lines are now real, walked, stepped trajectories — not one point
-// extrapolated backward as a straight segment — matching the genuine
-// reset-and-climb shape settled-designs.html's own SVGs show for a
-// repeating pattern, and the steady step-up shape they show for a one-time
-// goal.
-//
-// REVISED AGAIN 2026-08-07 (same conversation, author's own follow-up: "it's
-// fine if expected amount in the past is simplified... but we really should
-// be able to see a proper sawtooth pattern for the milestone amount in days
-// before today"): the two lines are NOT symmetric, and shouldn't be treated
-// as one "trajectory" concept. ActualTrajectory stays split at Today and
-// always will be under this architecture — TransactionLogBookFactory only
-// ever cascades day-by-day balances forward from AsOfDate (planning/22 §7's
-// own "backward-history gap" — no historical BalanceRecord exists before
-// today), so before Today it's still the older straight-line placeholder
-// (one real point at each end, nothing real in between). MilestoneTrajectory
-// has NO such limit and now spans the whole plan, Start through the due
-// date: it's pure pattern math with no dependency on real transaction
-// history (TransactionLogBookFactory.ComputeMilestoneTrajectory's own header
-// comment has the full reasoning) — there was never an architectural reason
-// to withhold its pre-Today portion, only that nothing had computed it yet.
+// Known, deliberate gaps:
+//  - TextAt (below) approximates right-alignment from string length instead
+//    of measuring the rendered text — fine at the font size/amounts used so
+//    far.
+//  - Savings-plan mode shows the SAVED plan's real health, not a live
+//    hypothetical of whatever amount/schedule is currently typed but
+//    unsaved — that would need re-running the whole forecast with the
+//    in-progress values substituted in.
+//  - ActualTrajectory stays split at Today and always will under this
+//    architecture: TransactionLogBookFactory only ever cascades day-by-day
+//    balances forward from AsOfDate — no historical BalanceRecord exists
+//    before today — so before Today it's a straight-line placeholder (one
+//    real point at each end, nothing real in between). MilestoneTrajectory
+//    has no such limit and spans the whole plan, Start through the due
+//    date, since it's pure pattern math with no dependency on real
+//    transaction history.
 public partial class SummaryRegion : UserControl
 {
     private ChartData? _chart;
@@ -87,6 +49,7 @@ public partial class SummaryRegion : UserControl
         decimal? AdditionAmount);
 
     /// <summary>[UI] Shows a plain one-line placeholder instead of the chart/aside — for whenever there's genuinely nothing to summarize yet (no goal picked, no linked plan). The "Summary" GroupBox itself stays visible either way; only its content changes, so the region never just reads as accidentally blank.</summary>
+    /// <param name="message">The placeholder text to show.</param>
     public void Clear(string message)
     {
         NarrativeText.Text = message;
@@ -97,12 +60,20 @@ public partial class SummaryRegion : UserControl
     }
 
     /// <summary>[UI] Fills in the Summary region's narrative, chart, and aside. Pass already-composed wording (PlanHealthMessages) — this method only lays content out, it doesn't decide what anything says.</summary>
+    /// <param name="narrative">The composed narrative sentence for the top of the region.</param>
+    /// <param name="start">When the plan's savings window begins.</param>
+    /// <param name="asOfDate">Today's date, for the chart's Today marker.</param>
+    /// <param name="dueDate">The goal's due date.</param>
+    /// <param name="startAmount">What was already saved when the plan started.</param>
+    /// <param name="goalAmount">The full amount needed.</param>
     /// <param name="actualTrajectory">Real (Date, ExpectedAmount) samples from today through the due date or forecast horizon, whichever comes first — ordered. Empty when there's no forecast yet. Today-onward only; see this class's own header comment for why the segment before Today stays an approximation.</param>
-    /// <param name="milestoneTrajectory">Real (Date, MilestoneAmount) samples across the WHOLE plan, Start through the due date — no Today split, since this one doesn't need real transaction history. Empty when there's no plan. Drawn for every goal with a plan, one-time or repeating (settled-designs.html, superseding planning/22 §6c's older repeating-only description).</param>
-    /// <param name="peakDates">Which of the goal's own occurrence dates to label on the chart with their own gridline, most-recent-first from Start — empty for a one-time goal, which already has its single real due date labeled separately. Caller decides how many (planning/mockups/settled-designs.html's own "Earmark · 3" section labels 3); this control just draws whatever list it's given.</param>
+    /// <param name="milestoneTrajectory">Real (Date, MilestoneAmount) samples across the WHOLE plan, Start through the due date — no Today split, since this one doesn't need real transaction history. Empty when there's no plan. Drawn for every goal with a plan, one-time or repeating.</param>
+    /// <param name="asideLine">The aside's first line.</param>
+    /// <param name="asideSecondaryLine">The aside's optional second line, hidden when null or empty.</param>
+    /// <param name="peakDates">Which of the goal's own occurrence dates to label on the chart with their own gridline, most-recent-first from Start — empty for a one-time goal, which already has its single real due date labeled separately. Caller decides how many; this control just draws whatever list it's given.</param>
     /// <param name="highlightDate">One of peakDates (or Start-of-window's own first upcoming occurrence) to mark in the same color as the first-payment warning text, when that warning is showing — so the reader can tell which gridline it's about instead of guessing. Null when no such warning is showing.</param>
-    /// <param name="proposedTrajectory">Savings-plan mode's own "proposed — rough, live estimate" line (settled-designs.html): whatever's currently typed in Amount/Recurrence, computed via TransactionLogBookFactory.ComputeMilestoneTrajectory, no forecast needed. Pass empty in One-off mode (nothing there is proposing a new rate) — DrawChart falls back to drawing the real, saved ActualTrajectory instead; the two are never drawn together.</param>
-    /// <param name="additionAmount">One-off mode's own "+ $X today" line (earmark-form-layout-mockups.html's own "Summary B" — the extra detail that mode specifically needs): the signed amount the currently-typed one-off would add, drawn as ActualTrajectory shifted by this much from Today onward. Null in Savings-plan mode, or whenever nothing valid is typed yet.</param>
+    /// <param name="proposedTrajectory">Savings-plan mode's own "proposed — rough, live estimate" line: whatever's currently typed in Amount/Recurrence, computed via TransactionLogBookFactory.ComputeMilestoneTrajectory, no forecast needed. Pass empty in One-off mode (nothing there is proposing a new rate) — DrawChart falls back to drawing the real, saved ActualTrajectory instead; the two are never drawn together.</param>
+    /// <param name="additionAmount">One-off mode's own "+ $X today" line: the signed amount the currently-typed one-off would add, drawn as ActualTrajectory shifted by this much from Today onward. Null in Savings-plan mode, or whenever nothing valid is typed yet.</param>
     public void Load(
         string narrative,
         DateOnly start, DateOnly asOfDate, DateOnly dueDate,
@@ -131,11 +102,7 @@ public partial class SummaryRegion : UserControl
         DrawChart();
     }
 
-    // Simple, honest chart: a flat goal line, a straight line from the
-    // starting point to today (see the class-level TODO for why it isn't the
-    // real stepped trajectory yet), and a dashed "today" marker. Coordinates
-    // scale to whatever size the Canvas actually gets laid out at, so this
-    // re-runs on every SizeChanged, not just on Load.
+    /// <summary>[UI] Simple, honest chart: a flat goal line, a straight line from the starting point to today (see the class-level TODO for why it isn't the real stepped trajectory yet), and a dashed "today" marker. Coordinates scale to whatever size the Canvas actually gets laid out at, so this re-runs on every SizeChanged, not just on Load.</summary>
     private void DrawChart()
     {
         ChartCanvas.Children.Clear();
@@ -185,21 +152,17 @@ public partial class SummaryRegion : UserControl
         ChartCanvas.Children.Add(TextAt($"{chart.GoalAmount:C0} goal", width - rightMargin, goalY - 12, right: true, width));
         legendEntries.Add(("Goal", Brushes.Gray, true));
 
-        // Author, 2026-08-07: "that third chart line would be incredibly
-        // helpful" — Savings-plan mode's own "proposed — rough, live
-        // estimate" line (settled-designs.html) and One-off mode's own
-        // "Actual" line are mutually exclusive, never drawn together: the
-        // hierarchy-level distinction the author raised — the further down
-        // toward an isolated earmark event this form is looking, the more
-        // "what's actually saved right now" matters over "what would this
-        // proposed rate produce" — is exactly what decides which one a
-        // given call to Load even has data for (EarmarkFormPanel.UpdateSummary
-        // only ever builds a ProposedTrajectory in Savings-plan mode). Reuses
-        // the same SteelBlue solid treatment for both — settled-designs.html
-        // itself does (compare Earmark · 1's "Savings plan (proposed)" and
-        // Earmark · 5's "Fund jar (actual)", both var(--accent)) — since they
-        // occupy the same visual role (this savings plan's own progress) and
-        // are never on screen at the same time to be confused with each other.
+        // Savings-plan mode's own "proposed — rough, live estimate" line and
+        // One-off mode's own "Actual" line are mutually exclusive, never
+        // drawn together — the further down toward an isolated earmark
+        // event this form is looking, the more "what's actually saved right
+        // now" matters over "what would this proposed rate produce," which
+        // is exactly what decides which one a given call to Load even has
+        // data for (EarmarkFormPanel.UpdateSummary only ever builds a
+        // ProposedTrajectory in Savings-plan mode). Reuses the same
+        // SteelBlue solid treatment for both, since they occupy the same
+        // visual role (this savings plan's own progress) and are never on
+        // screen at the same time to be confused with each other.
         if (chart.ProposedTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline
@@ -258,17 +221,14 @@ public partial class SummaryRegion : UserControl
             legendEntries.Add(("Milestone (committed plan)", Brushes.MediumPurple, true));
         }
 
-        // Author, 2026-08-07: One-off mode's own extra line
-        // (earmark-form-layout-mockups.html's own "Summary B" — "the extra
-        // context this mode specifically needs") — the ActualTrajectory
-        // shape, shifted by the currently-typed one-off's own amount, from
-        // Today onward. Deliberately a plain parallel shift, not a
-        // recomputation through the real floor/deallocation rules — Summary
-        // B's own note: "it doesn't re-solve the regular contributions...
-        // changing the plan itself is a different action from adding a
-        // one-off." AdditionAmount already carries GetOneOffLiveDelta's own
-        // scope limit (0 for a date backdated before this goal's own most
-        // recent release — see that method's own TODO), so this simply
+        // One-off mode's own extra line — the ActualTrajectory shape,
+        // shifted by the currently-typed one-off's own amount, from Today
+        // onward. Deliberately a plain parallel shift, not a recomputation
+        // through the real floor/deallocation rules: it doesn't re-solve
+        // the regular contributions, since changing the plan itself is a
+        // different action from adding a one-off. AdditionAmount already
+        // carries GetOneOffLiveDelta's own scope limit (0 for a backdated
+        // date before this goal's most recent release), so this simply
         // won't offset in that one case rather than draw something wrong.
         if (chart.AdditionAmount is { } addition && chart.ActualTrajectory.Count > 0)
         {
@@ -282,17 +242,14 @@ public partial class SummaryRegion : UserControl
             legendEntries.Add(($"With today's addition ({(addition >= 0 ? "+" : string.Empty)}{addition:C0})", AdditionBrush, true));
         }
 
-        // Author, 2026-08-07: "I don't know what dates those actual peaks
-        // are on" — planning/mockups/settled-designs.html's own "Earmark ·
-        // 3" section already settled this (a labeled gridline at each
-        // period boundary), it just never made it into this control. Caller
-        // decides which dates and how many (empty for a one-time goal,
-        // which keeps the plain "Due {chart.DueDate}" label below instead
-        // — it already names a real, single due date, nothing to pick out
-        // of a row of repeats). WarningBrush matches
-        // StartingShortfallWarningText's own #FF9A4F08 (EarmarkFormPanel.xaml)
-        // — the same warning color already used for the first-payment
-        // warning text this gridline is meant to be found from.
+        // A labeled gridline at each period boundary the caller supplies.
+        // Empty for a one-time goal, which keeps the plain
+        // "Due {chart.DueDate}" label below instead — it already names a
+        // real, single due date, nothing to pick out of a row of repeats.
+        // WarningBrush matches StartingShortfallWarningText's own #FF9A4F08
+        // (EarmarkFormPanel.xaml) — the same warning color already used for
+        // the first-payment warning text this gridline is meant to be found
+        // from.
         foreach (var peakDate in chart.PeakDates)
         {
             var peakX = X(peakDate);
@@ -318,14 +275,11 @@ public partial class SummaryRegion : UserControl
             ChartCanvas.Children.Add(TextAt($"Due {chart.DueDate:MMM d}", width - rightMargin, topMargin + plotHeight + 4, right: true, width));
         }
 
-        // Author, 2026-08-07: "I didn't even notice the legend in the
-        // settled design. But yes, that would be helpful" — matches
-        // settled-designs.html's own .chart-legend row. Built from whichever
-        // lines actually got drawn above (legendEntries), not a fixed set —
-        // Savings-plan mode and One-off mode never show the same
-        // combination (see the Proposed/Actual mutual-exclusion comment
-        // above), so a fixed legend would either omit or fabricate an entry
-        // depending on mode.
+        // Built from whichever lines actually got drawn above
+        // (legendEntries), not a fixed set — Savings-plan mode and One-off
+        // mode never show the same combination (see the Proposed/Actual
+        // mutual-exclusion comment above), so a fixed legend would either
+        // omit or fabricate an entry depending on mode.
         foreach (var (label, color, dashed) in legendEntries)
         {
             var swatch = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 16, 0) };
@@ -344,13 +298,8 @@ public partial class SummaryRegion : UserControl
     private static readonly Brush WarningBrush = new SolidColorBrush(Color.FromRgb(0x9A, 0x4F, 0x08));
     private static readonly Brush AdditionBrush = new SolidColorBrush(Color.FromRgb(0xCC, 0x6D, 0x00));
 
-    // Turns a chronological list of (x, y) samples into a proper step —
-    // hold flat at the previous value until the next date, THEN jump —
-    // matching the mockups' own SVG path style (alternating H/V segments),
-    // not a smoothed ramp between real data points. A 2-point line has
-    // nothing to step, so it passes through unchanged (the Start-to-Today
-    // placeholder segment uses that path deliberately, staying a plain
-    // diagonal rather than a fabricated step).
+    /// <summary>[CALC] Turns a chronological list of (x, y) samples into a proper step — hold flat at the previous value until the next date, THEN jump — not a smoothed ramp between real data points. A 2-point line has nothing to step, so it passes through unchanged (the Start-to-Today placeholder segment uses that path deliberately, staying a plain diagonal rather than a fabricated step).</summary>
+    /// <param name="points">The chronological samples to step.</param>
     private static IReadOnlyList<Point> Stepped(IReadOnlyList<Point> points)
     {
         if (points.Count < 2)
@@ -368,20 +317,13 @@ public partial class SummaryRegion : UserControl
         return stepped;
     }
 
-    // TODO (2026-08-05): approximates right-alignment from string length
-    // instead of measuring the rendered TextBlock — see the class-level TODO.
-    //
-    // BUG FOUND AND FIXED (2026-08-07, author's own report: "'Today' —
-    // 'To' runs out of frame"): right's own branch clamped its left edge to
-    // Math.Max(0, ...) so long text can't run off the canvas's LEFT side;
-    // the other branch (used for "Today", and now the peak-date labels
-    // too) never had that same clamp. "Today" sits at whatever X the
-    // as-of date falls on, which is the chart's own left edge for any
-    // freshly-created plan (Start == today) — Canvas.Left came out
-    // negative, and WPF simply doesn't draw what's positioned off-canvas;
-    // that's the missing "To". Both branches now clamp to
-    // [0, canvasWidth - the text's own estimated width], so neither edge
-    // can run off the canvas regardless of where x falls.
+    /// <summary>[UI] TODO: approximates right-alignment from string length instead of measuring the rendered TextBlock — see the class-level TODO. Both branches clamp to [0, canvasWidth - the text's own estimated width], so neither edge can run off the canvas regardless of where x falls — "Today" in particular sits at the chart's own left edge for any freshly-created plan (Start == today), where an unclamped left coordinate would go negative and WPF simply wouldn't draw it.</summary>
+    /// <param name="text">The label text to place.</param>
+    /// <param name="x">The anchor x-coordinate.</param>
+    /// <param name="y">The top y-coordinate.</param>
+    /// <param name="right">Whether the text's right edge, rather than its center, anchors to x.</param>
+    /// <param name="canvasWidth">The chart's width, for clamping the text on-canvas.</param>
+    /// <param name="foreground">The text color; defaults to gray.</param>
     private static TextBlock TextAt(string text, double x, double y, bool right, double canvasWidth, Brush? foreground = null)
     {
         var block = new TextBlock { Text = text, FontSize = 10, Foreground = foreground ?? Brushes.Gray };

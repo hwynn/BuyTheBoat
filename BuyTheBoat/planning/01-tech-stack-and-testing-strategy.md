@@ -97,15 +97,12 @@ TDD still applies in the normal red-green-refactor sense at every layer — this
 
 ## Suggested build order
 
-Independent of language/storage choice, the natural build order is the one the dependency graph already gives you, since it's a genuine topological dependency order, not just a documentation convenience:
-
-1. Leaf classes with no dependencies — `FinancialPattern`, `EarMarkPattern`, `ActualTransaction`, `ExpectedTransaction`, `EarMarkEvent`, `BalanceSnapshot`, `FundJar` base rules (matches the `bg=green` test bundles in [05](../../06-assumption-dependency-graph.md#the-authors-test-bundling-plan): `3.T01`, `5.T1`, `6.T1`, `7.T01`).
-2. Single-page internal consistency — `AccountTransactionPage`'s own maintenance chain (Ch.9-16), which is the biggest chunk of real behavioral logic and where most of the four core questions actually get answered (`current_free_amount`, `FundJar.milestone_amount`).
-3. Cross-page flow — `TransactionLogBook`/pattern continuity across pages (Ch.17-19), which is genuinely the least-load-bearing part for the four core goals in the near term (you can answer "how much free money do I have" and "am I on track" from a single page before cross-page continuity is fully built).
-
-This also means: if time is short, **stopping after step 2 already gets you a program that answers Q1-Q3.** Q4 (goal readjustment) was already flagged in [04](../../04-project-goals-and-user-questions.md#q4--if-i-buy-x-anyway-how-do-i-readjust-my-goals) as needing new design work beyond what the assumptions ever specified, so it doesn't block on either step 1 or 2 being "done" in the old, strict sense.
-
-See [02-csharp-sqlite-build-plan.md](02-csharp-sqlite-build-plan.md) for how this got revised into a "walking skeleton" once C# + SQLite was chosen.
+*(Followed and completed — kept as a one-line record, not a to-do.)* The build order followed the
+dependency graph's topological order: leaf classes with no dependencies first (`FinancialPattern`,
+`EarMarkPattern`, `ActualTransaction`, `ExpectedTransaction`, `EarMarkEvent`, `BalanceSnapshot`,
+`FundJar` base rules), then single-page internal consistency (`AccountTransactionPage`'s
+maintenance chain — `current_free_amount`, `FundJar.milestone_amount`), then cross-page pattern
+continuity. All three stages are long since built.
 
 ## Open questions for you
 

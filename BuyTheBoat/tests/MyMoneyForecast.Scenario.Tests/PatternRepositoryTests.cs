@@ -249,7 +249,7 @@ public class PatternRepositoryTests : IDisposable
 
     // Simulates a database created before this stage: EarMarkPatterns keyed
     // on FinanceId alone. Reopening must rebuild it onto the composite key
-    // without losing the existing row (planning/17, item 8).
+    // without losing the existing row.
     [Fact]
     public void An_existing_database_on_the_old_single_key_schema_is_migrated_without_losing_data()
     {
@@ -271,6 +271,113 @@ public class PatternRepositoryTests : IDisposable
 
         all.ShouldHaveSingleItem();
         all[0].Amount.ShouldBe(-100m);
+    }
+
+    // A real database was found with ManualEarmarks still referencing
+    // "EarMarkPatterns_old_singlekey" — the transient table the single-key
+    // migration above renames the old EarMarkPatterns to before dropping it
+    // — left over from an earlier, incomplete migration run on that
+    // database. Reopening must detect that ManualEarmarks isn't correctly
+    // referencing FinancialPatterns (not just check for that one specific
+    // stale name) and repoint it, so it self-heals from any stale target,
+    // not only the one this was first written against.
+    [Fact]
+    public void A_manual_earmarks_table_referencing_a_stale_leftover_table_is_repointed_at_financial_patterns()
+    {
+        var goal = Bill(91, "Stale-reference goal");
+        _financialPatterns.Save(goal, accountId: 1);
+        _earMarkPatterns.Save(EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 91,
+                Amount = -50m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2027, 1, 1),
+                }),
+            },
+            goal));
+        RecreateManualEarmarksReferencingAStaleLeftoverTable();
+        InsertRawManualEarmarkRowThenDropTheStaleTable(financeId: 91, date: "2025-06-01", amount: "50");
+
+        // Reopening must not throw ("foreign key mismatch") and must read
+        // the earmark back correctly.
+        var reopenedFinancialPatterns = new FinancialPatternRepository(new PatternDatabase(_databasePath));
+        var reopenedEarMarkPatterns = new EarMarkPatternRepository(new PatternDatabase(_databasePath), reopenedFinancialPatterns);
+        var reopenedManualEarmarks = new ManualEarmarkRepository(new PatternDatabase(_databasePath), reopenedEarMarkPatterns);
+
+        var all = reopenedManualEarmarks.GetAll();
+
+        all.ShouldHaveSingleItem();
+        all[0].Amount.ShouldBe(50m);
+
+        // A plain SELECT tolerates a dangling FK reference — it's a WRITE
+        // that actually trips "foreign key mismatch". Saving a second entry
+        // proves the table was really migrated, not just readable by luck.
+        reopenedManualEarmarks.Save(ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = 91, Date = new DateOnly(2025, 7, 1), Amount = 25m },
+            reopenedEarMarkPatterns.GetAll()[0]));
+        reopenedManualEarmarks.GetAll().Count.ShouldBe(2);
+    }
+
+    private void RecreateManualEarmarksReferencingAStaleLeftoverTable()
+    {
+        SqliteConnection.ClearAllPools();
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder { DataSource = _databasePath }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        // The leftover table exists just long enough for the row insert
+        // below to pass FK validation, then gets dropped — matching the real
+        // sequence (rename, drop) that leaves ManualEarmarks referencing a
+        // table that's actually gone by the time this database reopens.
+        command.CommandText = """
+            CREATE TABLE EarMarkPatterns_old_singlekey (FinanceId INTEGER PRIMARY KEY);
+            INSERT INTO EarMarkPatterns_old_singlekey (FinanceId) VALUES (91);
+
+            DROP TABLE ManualEarmarks;
+            CREATE TABLE ManualEarmarks (
+                FinanceId INTEGER NOT NULL REFERENCES EarMarkPatterns_old_singlekey(FinanceId),
+                EarmarkDate TEXT NOT NULL,
+                Amount TEXT NOT NULL,
+                PRIMARY KEY (FinanceId, EarmarkDate)
+            );
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private void InsertRawManualEarmarkRowThenDropTheStaleTable(int financeId, string date, string amount)
+    {
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder { DataSource = _databasePath }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO ManualEarmarks (FinanceId, EarmarkDate, Amount)
+            VALUES ($FinanceId, $EarmarkDate, $Amount);
+            """;
+        command.Parameters.AddWithValue("$FinanceId", financeId);
+        command.Parameters.AddWithValue("$EarmarkDate", date);
+        command.Parameters.AddWithValue("$Amount", amount);
+        command.ExecuteNonQuery();
+
+        // FK enforcement blocks dropping a table a live FK still points at —
+        // switched off just for this drop to reach the end state a crashed
+        // real migration could actually leave behind.
+        using var pragmaOff = connection.CreateCommand();
+        pragmaOff.CommandText = "PRAGMA foreign_keys = OFF;";
+        pragmaOff.ExecuteNonQuery();
+
+        using var drop = connection.CreateCommand();
+        drop.CommandText = "DROP TABLE EarMarkPatterns_old_singlekey;";
+        drop.ExecuteNonQuery();
+
+        using var pragmaOn = connection.CreateCommand();
+        pragmaOn.CommandText = "PRAGMA foreign_keys = ON;";
+        pragmaOn.ExecuteNonQuery();
     }
 
     private void RecreateEarMarkPatternsOnTheOldSingleKeySchema()

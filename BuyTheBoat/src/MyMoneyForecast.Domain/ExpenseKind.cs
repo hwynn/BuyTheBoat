@@ -27,9 +27,9 @@ public enum ExpenseKind
 
 public static class ExpenseKindClassifier
 {
-    // `hasEarmark` = an EarMarkPattern exists for this pattern's finance id.
-    // The safety cushion has no FinancialPattern at all (finance_id = null),
-    // so callers handle it before classifying.
+    /// <summary>[CALC] Classifies a pattern as a Paycheck, Bill, OneTimeGoal, RepeatingGoal, or Discretionary expense — the vocabulary the forecast display branches its Q3 "am I on track?" treatment on.</summary>
+    /// <param name="pattern">The pattern to classify.</param>
+    /// <param name="hasEarmark">Whether an EarMarkPattern exists for this pattern's finance id. The safety cushion has no FinancialPattern at all (finance_id = null), so callers handle it before classifying.</param>
     public static ExpenseKind Classify(FinancialPattern pattern, bool hasEarmark)
     {
         if (pattern.Amount > 0m)

@@ -5,7 +5,7 @@ namespace MyMoneyForecast.App;
 
 // Schedules a transfer between two of the user's accounts. Presented as one
 // action; MyMoneyForecast turns it into a Transfer record plus two paired
-// withdrawal and deposit patterns (planning/10 item 3) — the window just collects the
+// withdrawal and deposit patterns — the window just collects the
 // from/to/amount/schedule and hands them back.
 public partial class CreateTransferWindow : Window
 {
@@ -14,12 +14,11 @@ public partial class CreateTransferWindow : Window
     public decimal Amount { get; private set; }
     public RecurrenceRule? DatePattern { get; private set; }
 
-    // Assumes at least two accounts exist — the caller checks that before
-    // opening, since a transfer needs two different accounts.
-    //
-    // The preselect arguments back the selected day's "Cover from another
-    // account" lever: it opens this already pointed at the short account for
-    // exactly the amount it is short, so the fix is one confirmation away.
+    /// <summary>[STEP] Assumes at least two accounts exist — the caller checks that before opening, since a transfer needs two different accounts. The preselect arguments back the selected day's "Cover from another account" lever: it opens this already pointed at the short account for exactly the amount it is short, so the fix is one confirmation away.</summary>
+    /// <param name="accounts">Every account, to populate the From/To pickers.</param>
+    /// <param name="preselectToAccountId">Account to preselect as the destination, if any.</param>
+    /// <param name="preselectAmount">Amount to preselect, if any.</param>
+    /// <param name="preselectDate">Schedule date to preselect as a one-off, if any.</param>
     public CreateTransferWindow(
         IReadOnlyList<Account> accounts,
         int? preselectToAccountId = null,

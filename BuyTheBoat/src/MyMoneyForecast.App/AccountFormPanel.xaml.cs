@@ -5,25 +5,21 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// planning/21 Philosophy 5/7, wired 2026-08-05: the permanent Account tab,
-// replacing the AccountWindow popup (kept in the tree, retired — see its own
-// TODO). Fields, captions and validation ported verbatim, including the
-// name-uniqueness check MainWindow used to run after ShowDialog() — moved in
-// here so a clash shows inline instead of a MessageBox, matching every other
-// permanent-tab form (EarmarkFormPanel included). AccountRepository's own
-// UNIQUE column is still the backstop (case-sensitive — no COLLATE NOCASE on
-// that column — matched here with StringComparison.Ordinal), not relied on
-// for the user-facing message.
+// The permanent Account tab, replacing the old AccountWindow popup. Fields,
+// captions and validation ported verbatim, including the name-uniqueness
+// check MainWindow used to run after ShowDialog() — moved in here so a
+// clash shows inline instead of a MessageBox, matching every other
+// permanent-tab form. AccountRepository's own UNIQUE column is still the
+// backstop (case-sensitive — no COLLATE NOCASE on that column — matched
+// here with StringComparison.Ordinal), not relied on for the user-facing
+// message.
 //
-// Dirty/has-content tracking wired 2026-08-06 (mirrors ExpenseFormPanel/
-// EarmarkFormPanel): IsPopulated means an existing account is loaded (this
-// form has no separate instance-picker — the author's own stated exception —
-// but the same "editing an existing thing" signal applies). IsDirty/
-// IsPopulated back MainWindow's tab-header styling and this form's own Save
-// button IsEnabled.
+// IsPopulated means an existing account is loaded — this form has no
+// separate instance-picker, but the same "editing an existing thing" signal
+// applies. IsDirty/IsPopulated back MainWindow's tab-header styling and
+// this form's own Save button IsEnabled.
 //
-// TODO (2026-08-05, iterative-build pass): planning/21's Account section also
-// settles two contextual helper regions this panel doesn't have yet —
+// TODO: two contextual helper regions this panel doesn't have yet —
 // "cushion currently held vs. target" (needs a live forecast read, editing
 // only) and "Referenced by: N Expenses, M Transfers" (editing only). Both
 // confirmed helpful, neither built; the plain three-field form below still
@@ -69,6 +65,7 @@ public partial class AccountFormPanel : UserControl
     public bool IsAdvancedMode => AdvancedModeCheckBox.IsChecked == true;
 
     /// <summary>[UI] Supplies the existing accounts this panel reads from. Call before any Load* method, and again after every save so the next new-account id and uniqueness check see current data.</summary>
+    /// <param name="existingAccounts">Every account currently saved.</param>
     public void SetContext(IReadOnlyList<Account> existingAccounts) => _existingAccounts = existingAccounts;
 
     /// <summary>[STEP] Blank form for "Add Account..." — the next id is computed the same way AccountRepository.NextId() does (max existing + 1).</summary>
@@ -86,6 +83,7 @@ public partial class AccountFormPanel : UserControl
     }
 
     /// <summary>[STEP] Loads an existing account for editing — Id is fixed, same as the old edit-mode constructor.</summary>
+    /// <param name="existing">The account to load for editing.</param>
     public void LoadExisting(Account existing)
     {
         _suppressEvents = true;
@@ -138,8 +136,8 @@ public partial class AccountFormPanel : UserControl
             return;
         }
 
-        // Ported from MainWindow's old post-ShowDialog check (item 2-B) — a
-        // rename must not collide with a different account's name either.
+        // Ported from MainWindow's old post-ShowDialog check — a rename
+        // must not collide with a different account's name either.
         if (_existingAccounts.Any(account => account.Id != _id && string.Equals(account.Name, name, StringComparison.Ordinal)))
         {
             ErrorText.Text = $"There's already an account called \"{name}\".";
@@ -154,11 +152,9 @@ public partial class AccountFormPanel : UserControl
             IdealSafetyCushion = cushion,
         });
 
-        // planning/21's instance-information-block rule ("the form clears
-        // itself automatically after a successful save"), applied here too —
+        // The form clears itself automatically after a successful save,
         // before invoking the callback, unconditional even though the
-        // callback's own navigation (Forecast tab, wired 2026-08-06) takes
-        // the user elsewhere.
+        // callback's own navigation takes the user elsewhere.
         LoadForNew();
         AccountSaved?.Invoke(account);
     }

@@ -3,15 +3,15 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.Persistence;
 
-// The rewrite's first persisted EVENT (everything else stored is patterns +
-// the balance row): user-created one-off jar adjustments — see
-// planning/09-manual-earmarks.md. The (FinanceId, EarmarkDate) primary key IS
-// the documented one-isolated-earmark-per-jar-per-day merge rule: saving onto
-// an occupied day replaces that day's manual amount.
+// User-created one-off jar adjustments. The (FinanceId, EarmarkDate) primary
+// key IS the documented one-isolated-earmark-per-jar-per-day merge rule:
+// saving onto an occupied day replaces that day's manual amount.
 public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPatternRepository earMarkPatterns)
 {
     private const string DateFormat = "yyyy-MM-dd";
 
+    /// <summary>[WRITES FILE] Creates a new manual earmark, or replaces the amount of the existing one on the same day.</summary>
+    /// <param name="earmark">The manual earmark to save.</param>
     public void Save(ManualEarmark earmark)
     {
         using var connection = database.OpenConnection();
@@ -29,27 +29,15 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
         command.ExecuteNonQuery();
     }
 
-    // Re-validates against the linked earmark pattern on the way out, same as
-    // ManualEarmark.Create going in — both paths go through the one place
-    // that enforces the pattern-span-is-jar-lifetime rule. A row whose
-    // pattern has since shrunk its span would throw here; Delete-with-pattern
-    // (below) prevents the orphan case, and span edits are the restructuring
-    // feature's concern.
-    //
-    // BUG FOUND AND FIXED 2026-08-06: this used to key its lookup dictionary
-    // by FinanceId alone (`.ToDictionary(pattern => pattern.FinanceId)`),
-    // which throws ("same key already added") the moment a finance id has
-    // more than one EarMarkPattern — exactly the shape planning/17 (F27)
-    // deliberately legalized (a second concurrent funder, or a break-off
-    // predecessor+successor pair). Any household combining a manual earmark
-    // with a concurrent second plan on the same goal would crash here.
-    // Grouped by FinanceId instead: the jar's real lifetime is the UNION of
-    // every plan sharing that finance id (same reasoning ManualEarmark.cs's
-    // own comment states for the single-plan case), so a stored earmark is
-    // validated against whichever sibling plan actually covers its date —
-    // not just whichever one happened to load first.
+    /// <summary>[READS FILE] Returns every manual (one-off) earmark, validated against its linked savings plan.</summary>
     public IReadOnlyList<ManualEarmark> GetAll()
     {
+        // Grouped by FinanceId, not keyed by it alone: a finance id can have
+        // more than one EarMarkPattern (a second concurrent funder, or a
+        // break-off predecessor+successor pair), so a stored earmark is
+        // validated against whichever sibling plan actually covers its
+        // date, not just whichever one happened to load first (see
+        // Concurrent_plans_on_the_same_goal_dont_crash_GetAll_and_validate_against_the_right_one).
         var plansByFinanceId = earMarkPatterns.GetAll()
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => group.ToList());
@@ -65,6 +53,14 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
             var financeId = reader.GetInt32(0);
             var date = DateOnly.ParseExact(reader.GetString(1), DateFormat, CultureInfo.InvariantCulture);
 
+            // Re-validates against the linked earmark pattern on the way
+            // out, same as ManualEarmark.Create going in — both paths go
+            // through the one place that enforces the
+            // pattern-span-is-jar-lifetime rule. A row whose pattern has
+            // since shrunk its span would throw here;
+            // EarMarkPatternRepository.Delete's own cascade prevents the
+            // orphan case, and span edits are the restructuring feature's
+            // own concern.
             if (!plansByFinanceId.TryGetValue(financeId, out var candidatePlans))
             {
                 throw new InvalidOperationException(
@@ -91,6 +87,9 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
         return earmarks;
     }
 
+    /// <summary>[DELETES] Removes one day's manual earmark.</summary>
+    /// <param name="financeId">Which fund the earmark is on.</param>
+    /// <param name="date">Which day's earmark to delete.</param>
     public void Delete(int financeId, DateOnly date)
     {
         using var connection = database.OpenConnection();

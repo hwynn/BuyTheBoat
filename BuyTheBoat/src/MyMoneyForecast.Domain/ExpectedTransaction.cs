@@ -7,10 +7,9 @@ namespace MyMoneyForecast.Domain;
 // normally created after the current date... If it has a finance_id, this is
 // a repeated expected transaction (even if it only happens once)."
 //
-// Restored to the rewrite (2026-07-10) so the engine reasons in terms of
-// these instead of raw occurrence counts — they are what the user's
-// intentions actually generate, and what real bank data will eventually be
-// paired against.
+// The engine reasons in terms of these instead of raw occurrence counts —
+// they are what the user's intentions actually generate, and what real
+// bank data will eventually be paired against.
 public sealed record ExpectedTransaction
 {
     // Which FinancialPattern generated this. Even a one-off goal has one —

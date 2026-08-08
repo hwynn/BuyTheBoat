@@ -10,6 +10,8 @@ public sealed class PatternDatabase
 {
     private readonly string _connectionString;
 
+    /// <summary>[WRITES FILE] Opens (creating if needed) the SQLite database at the given path, or the default location, and runs any pending schema migrations.</summary>
+    /// <param name="databasePath">Path to the database file; defaults to the app's standard LocalAppData location.</param>
     public PatternDatabase(string? databasePath = null)
     {
         var path = databasePath ?? DefaultDatabasePath();
@@ -23,11 +25,13 @@ public sealed class PatternDatabase
         Initialize();
     }
 
+    /// <summary>[CALC] Returns the app's standard database file path, under LocalAppData.</summary>
     public static string DefaultDatabasePath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "MyMoneyForecast",
         "mymoneyforecast.db");
 
+    /// <summary>[READS FILE] Opens a new connection to this database. One connection per operation — callers dispose it when done.</summary>
     public SqliteConnection OpenConnection()
     {
         var connection = new SqliteConnection(_connectionString);
@@ -35,9 +39,8 @@ public sealed class PatternDatabase
         return connection;
     }
 
-    // Sanity check for Import: confirms the chosen file is actually a
-    // MyMoneyForecast database (not some unrelated file the user picked)
-    // before it gets copied over the live one.
+    /// <summary>[READS FILE] Checks whether a file is actually a MyMoneyForecast database. Used before Import overwrites the live database with it, so the user doesn't accidentally wipe their data with an unrelated file.</summary>
+    /// <param name="path">The file to check.</param>
     public static bool LooksLikeValidDatabaseFile(string path)
     {
         try
@@ -58,11 +61,10 @@ public sealed class PatternDatabase
         }
     }
 
-    // Microsoft.Data.Sqlite keeps pooled native handles to a file open even
-    // after every SqliteConnection using it has been disposed. Import needs
-    // to overwrite the live file on disk, so the pool must be released first.
+    /// <summary>[CALC] Releases every pooled native SQLite connection handle. Called before Import overwrites the live database file — Microsoft.Data.Sqlite keeps pooled handles open even after every SqliteConnection using them has been disposed, which would otherwise block the overwrite.</summary>
     public static void ReleasePooledConnections() => SqliteConnection.ClearAllPools();
 
+    /// <summary>[WRITES FILE] Creates every table this app needs if they don't exist yet, then runs each schema migration in order. Idempotent — safe to run on every startup, on a fresh database or one already migrated by an earlier run.</summary>
     private void Initialize()
     {
         using var connection = OpenConnection();
@@ -146,38 +148,38 @@ public sealed class PatternDatabase
         EnsureColumn(connection, "EarMarkPatterns", "StartingAllocation", "TEXT NOT NULL DEFAULT '0'");
 
         // Which account each pattern is FILED UNDER. This is storage only — the
-        // domain FinancialPattern has no account property (see planning/10 item
-        // 2-A); a pattern belongs to an account by living in that account's
-        // page. Pages are never persisted, so this column is the only place
-        // that containment can be recorded and rebuilt from on load. The
-        // DEFAULT 1 *is* the migration: every pre-existing pattern files under
-        // the seeded "primary" account.
+        // domain FinancialPattern has no account property; a pattern belongs
+        // to an account by living in that account's page. Pages are never
+        // persisted, so this column is the only place that containment can
+        // be recorded and rebuilt from on load. The DEFAULT 1 *is* the
+        // migration: every pre-existing pattern files under the seeded
+        // "primary" account.
         EnsureColumn(connection, "FinancialPatterns", "AccountId", "INTEGER NOT NULL DEFAULT 1");
 
-        // Which transfer a pattern is a pattern of, if any (planning/10 item 3).
-        // NULL for ordinary user-created patterns; set for a transfer's two
-        // patterns, which are hidden from the pattern list and shown as one transfer
-        // instead. The engine still reads every pattern, patterns included.
+        // Which transfer a pattern is a pattern of, if any. NULL for ordinary
+        // user-created patterns; set for a transfer's two patterns, which are
+        // hidden from the pattern list and shown as one transfer instead. The
+        // engine still reads every pattern, transfer patterns included.
         EnsureColumn(connection, "FinancialPatterns", "TransferId", "INTEGER NULL");
 
-        // The ActiveFrom lead-in (planning/15): a nullable date on a pattern's
-        // rrule, earlier than its first occurrence, so a jar can exist before the
-        // pattern's occurrences begin. NULL for every pre-existing pattern — the
-        // migration is simply the absence of a value (no lead-in).
+        // The ActiveFrom lead-in: a nullable date on a pattern's rrule,
+        // earlier than its first occurrence, so a jar can exist before the
+        // pattern's occurrences begin. NULL for every pre-existing pattern —
+        // the migration is simply the absence of a value (no lead-in).
         EnsureColumn(connection, "FinancialPatterns", "ActiveFrom", "TEXT NULL");
         EnsureColumn(connection, "EarMarkPatterns", "ActiveFrom", "TEXT NULL");
         EnsureColumn(connection, "Transfers", "ActiveFrom", "TEXT NULL");
 
-        // The AutoRenew marker (planning/18, B12): set invisibly when the user
-        // answers "it just keeps going" at creation. DEFAULT 0 *is* the
-        // migration — every pre-existing pattern was created before this
-        // question existed, so none of them opted in.
+        // The AutoRenew marker: set invisibly when the user answers "it just
+        // keeps going" at creation. DEFAULT 0 *is* the migration — every
+        // pre-existing pattern was created before this question existed, so
+        // none of them opted in.
         EnsureColumn(connection, "FinancialPatterns", "AutoRenew", "INTEGER NOT NULL DEFAULT 0");
 
-        // planning/17, item 8 (F27/F29): more than one EarMarkPattern may now
-        // share a finance_id, so FinanceId alone can no longer be the table's
-        // key. Run after the EnsureColumn calls above so a pre-existing table
-        // already has every column before it's copied across.
+        // More than one EarMarkPattern may now share a finance_id, so
+        // FinanceId alone can no longer be the table's key. Run after the
+        // EnsureColumn calls above so a pre-existing table already has every
+        // column before it's copied across.
         EnsureEarMarkPatternsAllowMultiplePerFinanceId(connection);
 
         // A manual earmark is about the GOAL (the jar), not any one plan
@@ -188,10 +190,10 @@ public sealed class PatternDatabase
         // checked at prepare time regardless of PRAGMA foreign_keys).
         EnsureManualEarmarksReferenceFinancialPatterns(connection);
 
-        // One-time backfill for the restored 3.11.2.a2 front-half check
-        // (planning/15): a pre-existing goal whose savings plan starts before the
-        // goal's own Start had no ActiveFrom, which the restored check rejects on
-        // load. Give each such goal an ActiveFrom equal to its plan's Start —
+        // One-time backfill for the 3.11.2.a2 front-half check: a
+        // pre-existing goal whose savings plan starts before the goal's own
+        // Start had no ActiveFrom, which the check rejects on load. Give
+        // each such goal an ActiveFrom equal to its plan's Start —
         // matching what creation now sets. Dates are stored as yyyy-MM-dd TEXT, so
         // the string comparison sorts chronologically. Idempotent: only touches
         // rows still NULL, so re-running does nothing.
@@ -210,15 +212,17 @@ public sealed class PatternDatabase
         backfill.ExecuteNonQuery();
     }
 
-    // SQLite can't ALTER a primary key in place, so a database still on the
-    // old single-column key (FinanceId alone) is rebuilt: renamed aside,
-    // recreated with the composite key the CREATE TABLE statement above now
-    // declares, data copied across, old copy dropped. Checked via
-    // PRAGMA table_info rather than a version flag, so this is a no-op both
-    // on a fresh install (already created with the composite key) and on a
-    // database already migrated by an earlier run.
+    /// <summary>[WRITES FILE] Migrates the EarMarkPatterns table to its composite (FinanceId, StartDate) primary key, rebuilding the table if it's still on the old single-column key. Idempotent — a no-op on a fresh install or an already-migrated database.</summary>
+    /// <param name="connection">The open database connection to migrate.</param>
     private static void EnsureEarMarkPatternsAllowMultiplePerFinanceId(SqliteConnection connection)
     {
+        // SQLite can't alter a primary key in place, so this renames the
+        // old table aside, recreates it with the composite key the CREATE
+        // TABLE statement in Initialize() now declares, copies the data
+        // across, and drops the old copy. Checked via PRAGMA table_info
+        // rather than a version flag, so it's a no-op both on a fresh
+        // install (already created with the composite key) and on a
+        // database already migrated by an earlier run.
         var startDateIsPartOfPrimaryKey = false;
         using (var checkCommand = connection.CreateCommand())
         {
@@ -268,27 +272,19 @@ public sealed class PatternDatabase
         migrate.ExecuteNonQuery();
     }
 
-    // Checked via PRAGMA foreign_key_list rather than a version flag, so this
-    // is a no-op both on a fresh install (already created referencing
-    // FinancialPatterns) and on a database already migrated by an earlier run.
-    //
-    // BUG FOUND AND FIXED 2026-08-05: this used to check for a reference to
-    // the literal name "EarMarkPatterns" specifically, on the assumption that
-    // was the only stale value a pre-migration database could have. A real
-    // database was found still referencing "EarMarkPatterns_old_singlekey" —
-    // the transient rename-target EnsureEarMarkPatternsAllowMultiplePerFinanceId
-    // uses below — left over from some earlier, incomplete migration
-    // sequence, and dropped by the time that migration finished, so every
-    // later Initialize() saw a dangling reference this check never caught
-    // (SQLite rejects any statement touching ManualEarmarks once its
-    // referenced table doesn't exist, "checked at prepare time regardless of
-    // PRAGMA foreign_keys" — same class of error the comment below already
-    // describes, just from a second stale name nobody had hit yet). Inverted
-    // to check for the one thing that actually matters — does it already
-    // correctly reference FinancialPatterns — so it self-heals from *any*
-    // stale target, not just the specific one this was first written against.
+    /// <summary>[WRITES FILE] Repoints ManualEarmarks at FinancialPatterns if it isn't already, rebuilding the table if needed. Idempotent — a no-op on a fresh install or an already-migrated database.</summary>
+    /// <param name="connection">The open database connection to migrate.</param>
     private static void EnsureManualEarmarksReferenceFinancialPatterns(SqliteConnection connection)
     {
+        // Checked via PRAGMA foreign_key_list rather than a version flag,
+        // so it's a no-op both on a fresh install (already created
+        // referencing FinancialPatterns) and on a database already
+        // migrated by an earlier run. Checks for the one thing that
+        // actually matters — does it already correctly reference
+        // FinancialPatterns — so it self-heals from any stale target left
+        // behind by an interrupted migration, not just one specific name
+        // (see PatternRepositoryTests:
+        // A_manual_earmarks_table_referencing_a_stale_leftover_table_is_repointed_at_financial_patterns).
         var alreadyReferencesFinancialPatterns = false;
         using (var checkCommand = connection.CreateCommand())
         {
@@ -328,6 +324,11 @@ public sealed class PatternDatabase
         migrate.ExecuteNonQuery();
     }
 
+    /// <summary>[WRITES FILE] Adds a column to a table if it doesn't already exist — the general-purpose schema migration this project's column-level upgrades all go through.</summary>
+    /// <param name="connection">The open database connection to migrate.</param>
+    /// <param name="table">The table to check/alter.</param>
+    /// <param name="column">The column to add if missing.</param>
+    /// <param name="columnDefinition">The column's SQL type/constraints (everything after the column name in an ADD COLUMN clause).</param>
     private static void EnsureColumn(SqliteConnection connection, string table, string column, string columnDefinition)
     {
         var exists = false;

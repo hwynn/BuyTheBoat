@@ -111,15 +111,14 @@ public class ManualEarmarkRepositoryTests : IDisposable
     [Fact]
     public void Concurrent_plans_on_the_same_goal_dont_crash_GetAll_and_validate_against_the_right_one()
     {
-        // planning/17 (F27): more than one EarMarkPattern may now share a
-        // finance id (a second concurrent funder, or a break-off
-        // predecessor+successor). BUG FOUND 2026-08-06 while building seed
-        // data: GetAll() used to key its lookup dictionary by FinanceId
-        // alone, throwing "same key already added" the moment two plans
-        // shared one. Two non-overlapping segments here (like a real
-        // break-off) prove the fix does more than dodge the crash — it
-        // validates each earmark against whichever segment's own span
-        // actually covers its date, not just whichever loaded first.
+        // More than one EarMarkPattern may share a finance id (a second
+        // concurrent funder, or a break-off predecessor+successor).
+        // GetAll() used to key its lookup dictionary by FinanceId alone,
+        // throwing "same key already added" the moment two plans shared
+        // one. Two non-overlapping segments here (like a real break-off)
+        // prove the fix does more than dodge the crash — it validates each
+        // earmark against whichever segment's own span actually covers its
+        // date, not just whichever loaded first.
         var goal = FinancialPattern.Create(new FinancialPatternOptions
         {
             FinanceId = 2,

@@ -1,31 +1,47 @@
 # 10 — Multiple Accounts
 
-**Status:** design **COMPLETE** (2026-07-22) — items 1, 2, 3, 4 and 6 are settled below, and item 5's layouts are chosen (see [11-ui-design-and-decisions.md](11-ui-design-and-decisions.md)). This was the philosophy-3 "plan before you build" pass — see [design-philosophies.md](../../design-philosophies.md).
+**Status: DONE (design complete 2026-07-22, implementation complete 2026-07-23).** Items 1–4 and 6
+are settled below; item 5's chosen layouts are in
+[11-ui-design-and-decisions.md](11-ui-design-and-decisions.md). This was the philosophy-3 "plan
+before you build" pass — see [design-philosophies.md](../../design-philosophies.md).
 
-**Implementation COMPLETE (2026-07-23) — milestones 1–5 built and verified.** Solution builds clean (0 warnings), **147 tests green** (109 domain + 38 scenario); milestones 1–3 were driven end-to-end in the running app, and milestone 4's engine is proven by tests (the single-account path is byte-identical — all prior numbers held after the restructure).
+**What's built, milestones 1–5:**
 
-- **1 · Account foundation + management UI** — the `Account` type, `Accounts` table + `AccountRepository`, the seed migration ("primary", carrying the old single balance/cushion forward), and the Accounts tab. The Forecast tab's single balance/cushion inputs became a read-only "Across all accounts" summary; the forecast still runs on the household totals until item 4.
-- **2 · Filing patterns under accounts** — a storage-only `AccountId` column (domain `FinancialPattern` untouched), `Save(pattern, accountId)`, `GetAllByAccount()` regrouping into per-account lists, an always-visible account picker in the create/edit windows, and an Account column in the grid.
-- **3 · Transfers** — the `Transfer` type + `TransferFactory` (the paired withdrawal and deposit), the `Transfers` table + `TransferId` back-reference + `TransferRepository`, the Schedule-Transfer window + Transfers tab. The withdrawal and deposit are hidden from the pattern list but live in the engine (they are what move the money); deleting a transfer removes both; account-delete is guarded against both filed patterns and transfers.
-- **4 · Engine partition (domain)** — the single-account cascade was extracted into `BuildAccountPage`; `CreateForecast` now runs it once per account (from `ForecastOptions.Accounts`) and rolls the results up. `ForecastResult` gained `Accounts` (per-account pages + each account's first-short date) and `Household` (per-day summed free + set-aside, plus `ShortAccounts` / `AnyAccountShort` — the "enough in the right account" signal). The single-account path (no `Accounts`) synthesizes one "Primary" account, so its output is byte-identical and every prior test passed unchanged.
+1. **Account foundation + management UI** — the `Account` type, `Accounts` table +
+   `AccountRepository`, a seed migration ("primary", carrying the old single balance/cushion
+   forward), and the Accounts tab.
+2. **Filing patterns under accounts** — a storage-only `AccountId` column (domain
+   `FinancialPattern` untouched — see item 2 below for why), an always-visible account picker in
+   the create/edit windows.
+3. **Transfers** — the `Transfer` type + `TransferFactory` (paired withdrawal + deposit), the
+   Schedule-Transfer window + Transfers tab. Hidden from the pattern list but live in the engine.
+4. **Engine partition** — the single-account cascade extracted into `BuildAccountPage`, run once
+   per account and rolled up. `ForecastResult` gained `Accounts` (per-account) and `Household`
+   (summed totals + `AnyAccountShort`). The no-`Accounts` path synthesizes one "Primary" account,
+   so single-account output stayed byte-identical throughout.
+5. **Forecast views** — household calendar overview (per-day summed free/set-aside, attention tint
+   when *any* account is short); account-first selected-day (grouped two-pane, per-account
+   sections); a rich overview cell (labeled Total/Free, top event by name, per-account flow strip,
+   event count, ⚠+words warning) with an account filter; and the **"Cover from another account →"**
+   lever on a short account's jars-pane header — a pre-filled, one-time transfer for exactly the
+   shortfall. (Lives in the jars pane rather than the events pane because every account always
+   appears there, while the events pane only lists accounts with activity that day.)
 
-- **5 · Forecast views — core done and verified.** The App now feeds the engine per-account data (`BuildAccountInputs` → `ForecastOptions.Accounts`). The **overview** renders as the household calendar (per-day summed free + set-aside; a day's attention tint fires when *any* account is short — a synthesized household snapshot per day keeps `DayCellRow` unchanged). The **selected day** is account-first (grouped two-pane): both panes group by account under account headers, and the header names any short account next to the household free-to-spend. Driven end-to-end on a crafted two-account DB (Checking short on a $2,500 repair, Savings flush): the calendar flagged the short day, the header read "Checking short", household free was correct ($2,000), and both panes grouped correctly. 147 tests still green; single-account output unchanged.
+**Deferred (unresolved design choice):** the warning currently words only the definite **"short"**
+case. The chosen mockup also showed a **"thin"** state (free positive but low) with no defined
+threshold anywhere — deciding what "thin" means is a cascade/allocation question, not a rendering
+one, so it belongs with the cascade-tweaking work rather than being invented here.
 
-- **5b · Rich overview cell + account filter — done and verified (2026-07-23).** The calendar cell now matches mockup E: two **labeled** numbers (Total + Free), the day's **top event by name** (highest-priority expected transaction), an explicit **event count** top-right ("3 events" / "No events"), a per-account **flow strip** (letter + ↑ in / ↓ out / • none), and a **⚠ + words** warning. An **account filter** ("All accounts" + one entry per account) re-scopes every number; a day with no activity for the filtered account correctly goes inactive. Verified by driving the app: household Jul 24 `total $7,700 / free $6,700`, Jul 28 `total $3,200 / free $2,200, an account is short`; filtered to Checking the same days read `$2,700/$2,700` and `$200/$200`, and Savings-only days go faint. 147 tests still green.
-  - Fixed along the way: event-less cells were rendering bare "TOTAL"/"FREE" labels with no figures (noise) — the number row is now hidden on inactive days. The taller cell needed room, so the window is 820 tall, the selected-day pane 205, and the cell 86.
+**Known limitation:** the "Cover from another account →" button sits inside a WPF `GroupItem`
+header, whose automation peer drops header content — invisible to UIAutomation and screen readers.
+Renders and clicks correctly; worth revisiting for accessibility.
 
-- **5c · "Cover from another account →" lever — done and verified (2026-07-23).** A short account's group header in the selected day's **fund-jars** pane carries the fix: a button reading "Cover $800 from another account →" that opens the transfer form pointed **into** that account, **from** another one, for **exactly** the amount it is short, as a **one-time** transfer dated the short day. The user still presses Create — we surface the problem and make the fix easy, we don't move their money (philosophy 1). The lever lives in the jars pane because every account always appears there; the events pane only lists accounts that had activity that day, so a short account could have no header to hang it on. Creating the transfer re-runs the forecast, so the flag clears immediately.
-  - Verified end-to-end on a crafted DB (Checking short $800 on Jul 28): the lever appeared on Checking's header only, opened with Savings → Checking / 800 / `FREQ=YEARLY;UNTIL=20260728` (one occurrence), and after Create the day's warning cleared, the withdrawal and deposit showed as "Transfer from Savings" +$800 and "Transfer to Checking" −$800, and the household total was unchanged (a transfer moves money, it doesn't create any). 147 tests still green.
-  - Caught in review: the form's standing default is *monthly until +6 months*, so without an explicit one-time schedule the lever would have quietly signed the user up for $800 every month. It now pre-loads a single occurrence.
-  - Known limitation: WPF's `GroupItem` automation peer drops header content, so this button is invisible to UIAutomation (and to screen readers). It renders and clicks correctly — verified by screenshot and a coordinate click — but any future automated UI test cannot reach it. Worth revisiting for accessibility.
-
-**Milestone 5 is complete — the Forecast tab now matches the chosen mockups.** Everything in items 1–6 that was scoped for this phase is built and verified.
-
-**Deferred to the next phase (unresolved design choice):** the warning currently words only the definite **"short"** case. Mockup E also showed a **"thin"** state (free positive but low), which has no defined threshold anywhere — deciding what "thin" means is a cascade/allocation question, not a rendering one, so it belongs with the cascade-tweaking work rather than being invented here.
-
-> **Build/verify notes for future sessions:** `dotnet test` does not build the WPF App (build it explicitly before driving the app). Windows PowerShell 5.1 can't load the net10 assemblies, so craft test DBs with Python's `sqlite3` (raw SQL), not the domain types. Scripting DB cleanup: use `[System.IO.File]::Delete(...)`, not `Remove-Item` on a variable path (a safety guard blocks it).
-
-> **Build note for future sessions:** `dotnet test` does **not** build the WPF App project (it is not a dependency of the test projects), so App/XAML changes go uncompiled and the launched `.exe` will be stale. Build `src/MyMoneyForecast.App/MyMoneyForecast.App.csproj` (or the whole solution) explicitly before driving the app.
+> **Build/verify notes for future sessions:** `dotnet test` does **not** build the WPF App project
+> (it isn't a dependency of the test projects) — build `src/MyMoneyForecast.App/MyMoneyForecast.App.csproj`
+> (or the whole solution) explicitly before driving the app, or the launched `.exe` will be stale.
+> Windows PowerShell 5.1 can't load the net10 assemblies, so craft test DBs with Python's `sqlite3`
+> (raw SQL), not the domain types; for DB cleanup use `[System.IO.File]::Delete(...)`, not
+> `Remove-Item` on a variable path (a safety guard blocks it).
 
 Real people keep several bank accounts, each with its own balance; different bills pay from different accounts, and money moves between them (manually or on a schedule). The app currently models exactly one account — a single `CurrentBalance` row feeding a hardcoded `"Primary"` page. This is the plan to make it many.
 

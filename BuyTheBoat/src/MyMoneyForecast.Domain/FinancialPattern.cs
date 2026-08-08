@@ -19,10 +19,8 @@ public sealed record FinancialPatternOptions
     // DIVERGENCE(auto-renew): a marker set invisibly when the user answers
     // "it just keeps going" at creation — gates a still-unbuilt scheduled
     // check that silently renews the pattern (BreakOffFactory.Renew) instead
-    // of letting it end. A new property not in the documented model, same
-    // category as ActiveFrom. Never affects the rrule, the math, or
-    // occurrence generation; purely a flag for that future background check.
-    // planning/18 (B12).
+    // of letting it end. Never affects the rrule, the math, or occurrence
+    // generation; purely a flag for that future background check.
     public bool AutoRenew { get; init; }
 }
 
@@ -37,6 +35,9 @@ public sealed class FinancialPattern
     public string? Description { get; }
     public bool AutoRenew { get; }
 
+    /// <summary>[CALC] Builds a FinancialPattern from already-validated options.</summary>
+    /// <param name="options">The pattern's source, schedule, amount, and other fields.</param>
+    /// <param name="mandatory">The resolved Mandatory value (options.Mandatory, or defaulted from the amount's sign).</param>
     private FinancialPattern(FinancialPatternOptions options, bool mandatory)
     {
         FinanceId = options.FinanceId;
@@ -49,6 +50,8 @@ public sealed class FinancialPattern
         AutoRenew = options.AutoRenew;
     }
 
+    /// <summary>[CALC] Creates a bill, paycheck, or goal pattern, validating that the source name isn't blank.</summary>
+    /// <param name="options">The pattern's source, schedule, amount, and other fields.</param>
     public static FinancialPattern Create(FinancialPatternOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.Source))
@@ -61,7 +64,8 @@ public sealed class FinancialPattern
         return new FinancialPattern(options, mandatory);
     }
 
-    /// <summary>[CALC] A copy of this pattern whose date pattern is active from the given (earlier) date — so a plan and jar for it can begin before its first occurrence — with its occurrences and every other field unchanged.</summary>
+    /// <summary>[CALC] Returns a copy of this pattern whose date pattern is active from the given (earlier) date — so a plan and jar for it can begin before its first occurrence — with its occurrences and every other field unchanged.</summary>
+    /// <param name="activeFrom">The new, earlier active-from date.</param>
     public FinancialPattern WithActiveFrom(DateOnly activeFrom) => Create(new FinancialPatternOptions
     {
         FinanceId = FinanceId,
@@ -74,7 +78,8 @@ public sealed class FinancialPattern
         AutoRenew = AutoRenew,
     });
 
-    /// <summary>[CALC] A copy of this pattern ending on the given (earlier) date instead — every other field, including occurrences up to that date, unchanged. Used to end a pattern early (planning/16, items 4 and 16).</summary>
+    /// <summary>[CALC] Returns a copy of this pattern ending on the given (earlier) date instead — every other field, including occurrences up to that date, unchanged. Used to end a pattern early.</summary>
+    /// <param name="until">The new, earlier end date.</param>
     public FinancialPattern WithUntil(DateOnly until) => Create(new FinancialPatternOptions
     {
         FinanceId = FinanceId,

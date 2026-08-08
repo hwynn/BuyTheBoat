@@ -4,15 +4,14 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// Add or edit a single account. See planning/10-multiple-accounts.md, item 1
-// (identity, per-account balance, per-account cushion).
+// Add or edit a single account (identity, per-account balance, per-account
+// cushion).
 //
-// TODO (2026-08-05): retired — MainWindow no longer opens this popup, having
-// switched to the permanent Account tab (AccountFormPanel, planning/21
-// Philosophy 5/7). No remaining `new AccountWindow` call sites as of this
-// note. Kept in the tree rather than deleted in the same pass that orphaned
-// it, so the change is reviewable on its own; safe to delete once that's
-// confirmed.
+// Retired — MainWindow no longer opens this popup, having switched to the
+// permanent Account tab (AccountFormPanel). No remaining `new AccountWindow`
+// call sites. Kept in the tree rather than deleted in the same pass that
+// orphaned it, so the change is reviewable on its own; safe to delete once
+// that's confirmed.
 public partial class AccountWindow : Window
 {
     private readonly int _id;
