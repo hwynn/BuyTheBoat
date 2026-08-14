@@ -62,24 +62,26 @@ public static class PlanHealthMessages
             _ => null,
         };
 
-    /// <summary>[CALC] Flags *that* a repeating goal's shortfall recurs, gated on IsChronicShortfall plus an already-showing shortfall state — a modifier on an existing warning, not an independent announcement. TODO: the overfunded mirror of this was never settled — whether a repeating overfunded plan needs its own Summary-aside phrase (vs. just relying on the RRule preview's "Projected overfunded") is an open question; shipping the shortfall case now and returning null for the overfunded one.</summary>
+    /// <summary>[CALC] Flags *that* a repeating goal's shortfall or overfund recurs, gated on IsChronicShortfall/IsChronicOverfund plus the matching already-showing state — a modifier on an existing warning, not an independent announcement. Settled 2026-08-13: the overfunded mirror this TODO used to leave open is exactly what IsChronicOverfund now answers (found in the field via Storage Unit Rental — two concurrent plans permanently outpacing the goal read identically to a one-off surplus without it). This is CurrentlyOverfunded's own correct home, not a second one: "Current jar state" (planning/22 §6a) no longer exists as its own control — SummaryRegion.xaml.cs's own header comment records it being folded into Summary's aside, whose first line (AsideText) is exactly what CurrentJarStateLine/LiveJarStateLine populate. This method fills the SAME aside's second line (AsideSecondaryText) — one UI element, two fact slots — not a competing home the way briefly adding this category to RRulePreviewCaption (a genuinely different UI element, the RRule editor's own caption) actually was.</summary>
     /// <param name="state">The plan's current health state.</param>
-    // Candidate direction for later, NOT adopted — left as a comment rather than a
-    // live branch so it doesn't silently start firing before anyone decides it should:
-    //     PlanHealthCategory.CurrentlyOverfunded or PlanHealthCategory.WillBeOverfunded
-    //         => "Consistently ahead.",
     public static string? SummaryRecurringPhrase(PlanHealthState state)
     {
         var isShortfallState = state.MostImportantHealthState is PlanHealthCategory.AlreadyMissing or PlanHealthCategory.WillMiss;
-        return isShortfallState && state.IsChronicShortfall ? "Keeps falling short." : null;
+        if (isShortfallState && state.IsChronicShortfall)
+        {
+            return "Keeps falling short.";
+        }
+
+        var isOverfundState = state.MostImportantHealthState is PlanHealthCategory.CurrentlyOverfunded or PlanHealthCategory.WillBeOverfunded;
+        return isOverfundState && state.IsChronicOverfund ? "Consistently ahead." : null;
     }
 
-    /// <summary>[CALC] The RRule preview's own caption — generic ("Projected short/overfunded"), except the shortfall case splits on IsChronicShortfall and reuses SummaryRecurringPhrase's exact words rather than a new synonym. Null for Healthy/AlreadyMissing/CurrentlyOverfunded — this region only ever speaks for the future two.</summary>
+    /// <summary>[CALC] The RRule preview's own caption — generic ("Projected short/overfunded"), except each side splits on its own IsChronicShortfall/IsChronicOverfund and reuses SummaryRecurringPhrase's exact words rather than a new synonym. Null for Healthy/AlreadyMissing/CurrentlyOverfunded — this region only ever speaks for the future two (planning/22 §6b's own settled rule: "every one of the four non-Healthy categories has exactly one home... today's two in Current jar state[/Summary's own aside — the same UI element, see SummaryRecurringPhrase's own comment], the future two here"). Reverted 2026-08-13: briefly grew a CurrentlyOverfunded branch, which put that category in two homes at once — the actual bug (CurrentlyOverfunded's own aside-block wiring, via SummaryRecurringPhrase, was simply incomplete in one of the two forms) lived elsewhere; see that method's own comment for where "Consistently ahead" actually belongs.</summary>
     /// <param name="state">The plan's current health state.</param>
     public static string? RRulePreviewCaption(PlanHealthState state) => state.MostImportantHealthState switch
     {
         PlanHealthCategory.WillMiss => state.IsChronicShortfall ? "Keeps falling short" : "Projected short",
-        PlanHealthCategory.WillBeOverfunded => "Projected overfunded",
+        PlanHealthCategory.WillBeOverfunded => state.IsChronicOverfund ? "Consistently ahead" : "Projected overfunded",
         _ => null,
     };
 

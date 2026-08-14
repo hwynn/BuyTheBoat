@@ -5,6 +5,7 @@
     <Project Path="src/MyMoneyForecast.Persistence/MyMoneyForecast.Persistence.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/MyMoneyForecast.App.Tests/MyMoneyForecast.App.Tests.csproj" />
     <Project Path="tests/MyMoneyForecast.Domain.Tests/MyMoneyForecast.Domain.Tests.csproj" />
     <Project Path="tests/MyMoneyForecast.Scenario.Tests/MyMoneyForecast.Scenario.Tests.csproj" />
   </Folder>

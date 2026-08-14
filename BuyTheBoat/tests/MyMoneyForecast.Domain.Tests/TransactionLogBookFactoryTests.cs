@@ -705,6 +705,79 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void Two_concurrent_plans_summing_past_the_bills_own_rate_dont_let_the_milestone_accumulate_a_lifetime_surplus()
+    {
+        // Found in the field (2026-08-13, Storage Unit Rental): two
+        // concurrent EarMarkPatterns, $35 + $25 = $60/mo, against a $50/mo
+        // bill — genuinely $10/mo ahead. The initial-snapshot milestone used
+        // to take a "lifetime contributed minus lifetime withdrawn"
+        // shortcut that only resets correctly when a goal's plans exactly
+        // match its own rate — every OTHER cycle nets to zero and cancels
+        // out of the lifetime sum in that case, leaving just the current
+        // cycle's own residual. The moment the plans don't sum to the
+        // bill's own rate, every prior cycle leaves a real residual too,
+        // and the old shortcut let it accumulate across all 8 elapsed
+        // cycles into "$80 saved this cycle" instead of resetting the way
+        // Milestone_resets_after_each_release_instead_of_climbing_forever
+        // already established a repeating goal's milestone must. The jar's
+        // own real balance (ExpectedAmount) SHOULD keep growing — the money
+        // really is piling up, that isn't a bug — only the per-cycle pacing
+        // milestone needed fixing.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Storage Unit Rental",
+            Amount = -50m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2026, 1, 1),
+                Until = new DateOnly(2027, 12, 31),
+            }),
+        });
+        var largerPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -35m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2026, 1, 1),
+                    Until = new DateOnly(2027, 12, 31),
+                }),
+            },
+            bill);
+        var smallerPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -25m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [2],
+                    Start = new DateOnly(2026, 1, 2),
+                    Until = new DateOnly(2027, 12, 31),
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2026, 8, 13), // 8 cycles elapsed: Jan through Aug releases/contributions
+            horizonEndDate: new DateOnly(2026, 12, 31),
+            financialPatterns: [bill],
+            earMarkPatterns: [largerPlan, smallerPlan]));
+
+        var jar = SnapshotOn(result, new DateOnly(2026, 8, 13)).FundJars.Single(j => j.FinanceId == 1);
+        jar.ExpectedAmount.ShouldBe(80m); // the real jar genuinely holds 8 months' worth of the $10/mo surplus
+        jar.MilestoneAmount.ShouldBe(25m); // but only the $25 contributed since the Aug 1 release counts as "this cycle" — not the lifetime total
+    }
+
+    [Fact]
     public void IsChronicShortfall_is_true_when_the_plans_own_rate_cannot_cover_the_need()
     {
         // Same shape as the sibling GoalShortfall underfunding test: 100/month
@@ -755,6 +828,55 @@ public class TransactionLogBookFactoryTests
         state.UnderfundedReleaseDates.Count.ShouldBe(11);
         state.UnderfundedReleaseDates.ShouldContain(new DateOnly(2025, 2, 1));
         state.UnderfundedReleaseDates.ShouldContain(new DateOnly(2025, 12, 1));
+    }
+
+    [Fact]
+    public void IsChronicOverfund_is_true_when_the_plans_own_rate_permanently_exceeds_the_need()
+    {
+        // The excess-side mirror of the sibling IsChronicShortfall test
+        // above: 100/month needed, 150/month planned — the rate itself
+        // permanently outpaces the goal, not a one-off surplus. Same shape
+        // as Storage Unit Rental's own real bug (two concurrent plans
+        // together outpacing the bill), collapsed to a single plan here for
+        // a minimal repro.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 1),
+            }),
+        });
+        var overfundingPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 12, 31),
+            financialPatterns: [bill],
+            earMarkPatterns: [overfundingPlan]));
+
+        var state = result.PlanHealthStates.ShouldHaveSingleItem();
+        state.IsChronicOverfund.ShouldBeTrue();
+        state.IsChronicShortfall.ShouldBeFalse(); // never both at once — opposite sides of the same gap
     }
 
     [Fact]

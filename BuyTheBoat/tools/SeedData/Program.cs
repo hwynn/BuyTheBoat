@@ -396,6 +396,42 @@ manualEarmarks.Save(ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = 
 
 Console.WriteLine("Manual earmarks: +$200 on Trip to Japan (Jul 4), +$50 on Car Insurance (Mar 1), +$500 on Emergency Fund Top-up (day one, plain user decision), -$40 on Car Repair (recent withdrawal, forces AlreadyMissing)");
 
+// ---- planning/25 Item E/F manual-test scenarios (2026-08-13) --------------
+// Two bills built specifically to exercise editing-with-history through the
+// REAL UI, not just the automated tests: each already has real history
+// (occurrences well before asOfDate) and its own savings plan(s), so editing
+// a Critical field (amount/start_date/schedule) through the Expense form
+// should bring up EditingHistoryConfirmationWindow for real. Both plans fund
+// slightly AHEAD of their bill's own pace on purpose — a plan that exactly
+// matches its bill's due amount gets drained back to near $0 every cycle,
+// leaving nothing real to see get carried over or absorbed.
+
+// Item F (planning/25 — multiple existing EarMarkPatterns sharing a
+// finance_id): two concurrent funders. Edit the due date (e.g. the 1st ->
+// the 15th) and save — the schedule itself changing makes ConsolidationNeeded
+// true, so the popup should ANNOUNCE the combine rather than ask, and the
+// two plans should become one under a new finance id once saved.
+var storageUnit = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Storage Unit Rental", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -50m, Priority = 4, Mandatory = false });
+financialPatterns.Save(storageUnit, checking.Id);
+var storageUnitPlanA = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = storageUnit.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -35m }, storageUnit);
+earMarkPatterns.Save(storageUnitPlanA);
+var storageUnitPlanB = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = storageUnit.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 2)), Amount = -25m }, storageUnit);
+earMarkPatterns.Save(storageUnitPlanB);
+Console.WriteLine("Bill: Storage Unit Rental — TWO concurrent savings plans, real history since Jan 2026. To see Item F's forced consolidation: edit its due date (e.g. 1st -> 15th) and save.");
+
+// Item E (planning/25 — the retroactive-correction path's own narrowing):
+// one plan, plus a manual top-up dated well in the past so there's something
+// concrete to watch disappear. Edit the start date forward to today or
+// later (earlier isn't supported yet — a known, deliberate gap, see
+// FinancePatternSaveConfirmation.DetermineNarrowingPlanIfApplicable's own
+// TODO), save, and choose "Apply it everywhere" in the popup.
+var cloudStorage = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Cloud Storage Plan", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -12m, Priority = 2, Mandatory = false });
+financialPatterns.Save(cloudStorage, checking.Id);
+var cloudStoragePlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = cloudStorage.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -20m }, cloudStorage);
+earMarkPatterns.Save(cloudStoragePlan);
+manualEarmarks.Save(ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = cloudStorage.FinanceId, Date = new DateOnly(2026, 2, 1), Amount = 15m }, cloudStoragePlan));
+Console.WriteLine("Bill: Cloud Storage Plan — ONE savings plan, real history since Jan 2026, plus a manual +$15 top-up on Feb 1. To see Item E's narrowing: edit its start date forward to today or later, save, choose \"Apply it everywhere\" — the plan should narrow to match and the Feb 1 manual earmark should disappear from the Earmark grid.");
+
 // ---- Forecast tab pre-fill -------------------------------------------------
 
 currentBalance.Save(0m, asOfDate, horizonEndDate, 0m);
@@ -480,5 +516,7 @@ Console.WriteLine(cushionDippedDays.Count > 0
     ? $"Cushion dipped on {cushionDippedDays.Count} day(s) — first {cushionDippedDays[0].Date:yyyy-MM-dd} ({string.Join(", ", cushionDippedDays[0].CushionDippedAccounts)})"
     : "Cushion never dips below target in this window.");
 
+Console.WriteLine();
+Console.WriteLine("To test planning/25's new editing-with-history popup: Storage Unit Rental (Item F — edit the due date) and Cloud Storage Plan (Item E — edit the start date) on the Expense tab.");
 Console.WriteLine();
 Console.WriteLine("Done. Launch the app to see it populated.");

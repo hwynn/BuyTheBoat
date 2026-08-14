@@ -19,13 +19,25 @@ namespace MyMoneyForecast.App;
 //      region below it, contextual on Repeats?).
 //
 // TODO: the break-off-mode toggle (existing, recurring instances only)
-// stays unwired. Save/Save-and-Plan button emphasis (muted-until-dirty,
-// extra outline when the plan is meaningfully affected, driven by the four
-// plan-health states) is not built — ties to the same "needs a live
-// forecast" gap EarmarkFormPanel's Summary aside already carries as its own
-// TODO. "Keeps going" stays disabled (see its own note below). The advanced
-// hand-built-single-occurrence escape hatch is not built — a one-time
-// Expense only ever gets the plain Due-date field.
+// stays unwired. Save/Save-and-Plan button emphasis only covers half of
+// what UpdateStatusIndicator's own doc comment describes — the linked
+// plan's CURRENTLY-SAVED health outlines the button, but comparing the
+// live-typed fields against what's saved, to catch an edit that would
+// NEWLY cause a problem, is a separate, more involved check, still not
+// built. "Keeps going" stays disabled (see its own note below). The
+// advanced hand-built-single-occurrence escape hatch is not built — a
+// one-time Expense only ever gets the plain Due-date field.
+//
+// Summary region (2026-08-13): the aside ("Fund jar, today") and the
+// milestone/actual chart lines are wired for real now — RequestForecast
+// for an existing Expense with exactly one saved plan (live pattern math
+// as the fallback, same shape as EarmarkFormPanel's own UpdateSummary),
+// AllocationPlanProposer.Propose for a rough live PREVIEW when no plan
+// exists yet (matching what MainWindow.AutoCreateAllocationPlan would
+// actually create on Save, not a guess). More than one existing
+// EarMarkPattern shows the goal alone with an explanation instead of a
+// chart that might not match what a forced consolidation (planning/25
+// Item F) would actually produce — see UpdateSummary's own doc comment.
 public partial class ExpenseFormPanel : UserControl
 {
     private enum LoadedMode { NewBill, NewPattern, Editing }
@@ -50,11 +62,11 @@ public partial class ExpenseFormPanel : UserControl
     private FinancialPattern? _loadedExisting;
     private int _loadedAccountId;
 
-    private IReadOnlyList<FinancialPattern> _existingPatterns = [];
     private IReadOnlyDictionary<int, int> _accountIdByFinanceId = new Dictionary<int, int>();
     private IReadOnlyList<Account> _accounts = [];
     private IReadOnlySet<int> _transferFinanceIds = new HashSet<int>();
     private IReadOnlyDictionary<int, EarMarkPattern> _patternsByFinanceId = new Dictionary<int, EarMarkPattern>();
+    private IReadOnlyDictionary<int, int> _earmarkPatternCountByFinanceId = new Dictionary<int, int>();
 
     // Computes (or returns the already-cached) live forecast on demand —
     // wired to MainWindow.EnsureForecast, which always succeeds rather than
@@ -91,20 +103,17 @@ public partial class ExpenseFormPanel : UserControl
         _initialized = true;
     }
 
-    /// <summary>[UI] Supplies the existing patterns/accounts this panel reads from, which account each pattern is currently filed under, which finance ids are transfer legs (needed to open FinancialPatternPickerWindow, alongside RequestForecast), and every EarMarkPattern (so the Summary region can find this Expense's own linked plan, if it has one). Call before any Load* method, and again after every save.</summary>
-    /// <param name="existingPatterns">Every existing bill/paycheck pattern.</param>
+    /// <summary>[UI] Supplies the account/transfer/plan context this panel reads from — which account each existing pattern is currently filed under, which finance ids are transfer legs (needed to open FinancialPatternPickerWindow, alongside RequestForecast), and every EarMarkPattern (so the Summary region can find this Expense's own linked plan, if it has one). Call before any Load* method, and again after every save.</summary>
     /// <param name="accountIdByFinanceId">Finance id → the account it's currently filed under.</param>
     /// <param name="accounts">Every account, to populate the account picker.</param>
     /// <param name="transferFinanceIds">Finance ids that are transfer legs — excluded from the instance picker.</param>
     /// <param name="earMarkPatterns">Every savings plan, so the Summary region can find this Expense's own linked plan.</param>
     public void SetContext(
-        IReadOnlyList<FinancialPattern> existingPatterns,
         IReadOnlyDictionary<int, int> accountIdByFinanceId,
         IReadOnlyList<Account> accounts,
         IReadOnlySet<int> transferFinanceIds,
         IReadOnlyList<EarMarkPattern> earMarkPatterns)
     {
-        _existingPatterns = existingPatterns;
         _accountIdByFinanceId = accountIdByFinanceId;
         _accounts = accounts;
         _transferFinanceIds = transferFinanceIds;
@@ -117,6 +126,14 @@ public partial class ExpenseFormPanel : UserControl
         _patternsByFinanceId = earMarkPatterns
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.Start).First());
+
+        // How MANY plans each finance id has, not just the one above —
+        // UpdateSummary's own signal for "editing this could force a
+        // consolidation" (planning/25's Item F), which a single-plan preview
+        // can't predict the shape of.
+        _earmarkPatternCountByFinanceId = earMarkPatterns
+            .GroupBy(pattern => pattern.FinanceId)
+            .ToDictionary(group => group.Key, group => group.Count());
     }
 
     public int SelectedAccountId => (int)AccountComboBox.SelectedValue;
@@ -146,6 +163,7 @@ public partial class ExpenseFormPanel : UserControl
 
         UpdateSelectedInstanceText();
         UpdateSummary();
+        UpdateContinuityNote();
         _suppressEvents = false;
         ClearDirty();
     }
@@ -174,6 +192,7 @@ public partial class ExpenseFormPanel : UserControl
 
         UpdateSelectedInstanceText();
         UpdateSummary();
+        UpdateContinuityNote();
         _suppressEvents = false;
         ClearDirty();
     }
@@ -226,6 +245,7 @@ public partial class ExpenseFormPanel : UserControl
         UpdateDirectionDependentUi();
         UpdateSelectedInstanceText();
         UpdateSummary();
+        UpdateContinuityNote();
         _suppressEvents = false;
         ClearDirty();
     }
@@ -262,14 +282,16 @@ public partial class ExpenseFormPanel : UserControl
             ? (string.IsNullOrWhiteSpace(existing.Description) ? existing.Source : existing.Description)
             : "— New Expense —";
 
-    /// <summary>[UI] This Expense's own linked savings plan, shown read-only — the same Summary region Earmark shows, present even in the plain healthy state, not just surfaced through a warning. Reflects the loaded instance, not live field edits — the plan itself is only proposed at save time and edited on the Earmark tab, so there's nothing meaningfully live to react to here yet.</summary>
+    /// <summary>[UI] This Expense's own linked savings plan — the same Summary region Earmark shows, present even in the plain healthy state, not just surfaced through a warning. Four cases: no savings plan exists yet (brand new, or an existing Expense never given one) shows a live PROPOSED preview built from whatever's currently typed, exactly like Save would create it (see ShowProposedPreview); income never gets one; more than one existing EarMarkPattern already funds this Expense shows the goal alone with an explanation, since editing it could force planning/25's Item F consolidation and reshape the plan in a way this preview can't predict; exactly one existing plan shows the real thing, reading live off RequestForecast when a saved PlanHealthState/FundJar reading exists yet, live pattern math otherwise (same fallback shape as EarmarkFormPanel's own UpdateSummary).</summary>
     private void UpdateSummary()
     {
         UpdateStatusIndicator();
 
+        var typed = TryBuildPattern();
+
         if (_loadedExisting is not { } existing)
         {
-            Summary.Clear("Save this Expense to set up its savings plan.");
+            ShowProposedPreview(typed, isNew: true);
             return;
         }
 
@@ -281,32 +303,232 @@ public partial class ExpenseFormPanel : UserControl
 
         if (!_patternsByFinanceId.TryGetValue(existing.FinanceId, out var plan))
         {
-            Summary.Clear("No savings plan set up for this yet.");
+            ShowProposedPreview(typed ?? existing, isNew: false);
             return;
         }
 
         var goalAmount = Math.Abs(existing.Amount);
         var dueDate = existing.DatePattern.Until;
         var label = string.IsNullOrWhiteSpace(existing.Description) ? existing.Source : existing.Description;
+        var todayDate = DateOnly.FromDateTime(DateTime.Today);
+
+        if (_earmarkPatternCountByFinanceId.GetValueOrDefault(existing.FinanceId) > 1)
+        {
+            // More than one EarMarkPattern already funds this Expense —
+            // editing it goes through planning/25's Item F question, which
+            // can consolidate them into a single fresh plan. A chart built
+            // from just ONE of the existing plans would show a shape Save
+            // might not actually produce, so show the goal alone instead of
+            // guessing. See SummaryRegion.DrawChart: passing empty
+            // trajectories still draws the goal/Today lines, just none of
+            // the plan-progress ones.
+            Summary.Load(
+                $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.",
+                start: plan.DatePattern.Start,
+                asOfDate: todayDate,
+                dueDate: dueDate,
+                startAmount: 0m,
+                goalAmount: goalAmount,
+                actualTrajectory: [],
+                milestoneTrajectory: [],
+                asideLine: "Savings plan may need to be consolidated. We don't have a certain preview.");
+            return;
+        }
+
         var narrative =
             $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {Math.Abs(plan.Amount):C0} per occurrence, starting {plan.DatePattern.Start:MMM d, yyyy}.";
 
-        // TODO: same as EarmarkFormPanel's own note — the aside and the
-        // actual-balance line both stay placeholders until a live
-        // ForecastResult reaches this panel too. The milestone line COULD
-        // be wired already (TransactionLogBookFactory.ComputeMilestoneTrajectory
-        // needs no forecast, just the saved patterns this panel already has)
-        // — left for that same follow-up rather than done piecemeal here.
+        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
+            [plan], existing, plan.DatePattern.ActiveStart, dueDate, plan.StartingAllocation);
+
+        var forecast = RequestForecast?.Invoke();
+        var health = forecast?.PlanHealthStates.FirstOrDefault(p => p.FinanceId == existing.FinanceId);
+        var jar = forecast?.GetTimeline(existing.FinanceId)
+            .LastOrDefault(entry => entry.Date <= todayDate)?.Snapshot.FundJars
+            .FirstOrDefault(candidate => candidate.FinanceId == existing.FinanceId);
+
+        string asideLine;
+        string? asideSecondaryLine = null;
+        if (jar is not null && health is not null)
+        {
+            asideLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
+                ?? PlanHealthMessages.CurrentJarStateLine(jar, health);
+
+            // Same fallback chain EarmarkFormPanel's own Savings-plan-mode
+            // branch uses for the aside's second fact slot — the
+            // first-payment warning takes priority when both apply, since a
+            // payment about to fail is more time-sensitive than an ongoing
+            // rate problem. Only reachable once a real health reading
+            // exists — the live (no-forecast-yet) branch below has neither
+            // a saved PlanHealthState to read a first-occurrence projection
+            // from, nor a due-date-anchored Shortfall to test IsChronicShortfall/
+            // IsChronicOverfund against.
+            var isOneTime = existing.DatePattern.GetOccurrences().Count == 1;
+            asideSecondaryLine = PlanHealthMessages.FirstOccurrenceShortfallLine(
+                    health.IsFirstOccurrencePending, health.FirstOccurrenceShortfall, isOneTime)
+                ?? PlanHealthMessages.SummaryRecurringPhrase(health);
+        }
+        else
+        {
+            var (expected, milestone) = ComputeLiveJarAmounts([plan], existing, plan.StartingAllocation, todayDate);
+            asideLine = PlanHealthMessages.LiveJarStateLine(expected, milestone);
+        }
+
         Summary.Load(
             narrative,
             start: plan.DatePattern.Start,
-            asOfDate: DateOnly.FromDateTime(DateTime.Today),
+            asOfDate: todayDate,
             dueDate: dueDate,
             startAmount: plan.StartingAllocation,
             goalAmount: goalAmount,
-            actualTrajectory: [],
-            milestoneTrajectory: [],
-            asideLine: "(fund jar state needs a live forecast — not wired in yet)");
+            actualTrajectory: GetJarTrajectory(forecast, existing.FinanceId, dueDate),
+            milestoneTrajectory: milestoneTrajectory,
+            asideLine: asideLine,
+            asideSecondaryLine: asideSecondaryLine);
+    }
+
+    /// <summary>[UI] Shows whether this Expense continues an earlier segment, or has since been continued by a later one — break-offs/restructures (planning/25's Item C) create a genuinely new FinanceId, so it's easy to forget, looking at just this one row, that it's part of a longer chain. BreakOffFactory.FindPredecessor/FindSuccessor do the actual lookup (the same Source-reuse mechanism FindCurrentSegment already relies on); this just surfaces what they find. Hidden entirely for a brand-new, unsaved pattern (nothing to look up yet) and whenever neither applies — a pattern with no history reads exactly as it does today, no added noise.</summary>
+    private void UpdateContinuityNote()
+    {
+        if (_loadedExisting is not { } existing)
+        {
+            PredecessorNoteText.Visibility = Visibility.Collapsed;
+            SuccessorNoteText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var allPatterns = RequestForecast?.Invoke()?.Book.AllFinancialPatterns() ?? [];
+
+        if (BreakOffFactory.FindPredecessor(existing, allPatterns) is { } predecessor)
+        {
+            PredecessorNoteText.Text = $"This pattern continues an earlier one, which ran through {predecessor.DatePattern.Until:MMM d, yyyy}.";
+            PredecessorNoteText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            PredecessorNoteText.Visibility = Visibility.Collapsed;
+        }
+
+        if (BreakOffFactory.FindSuccessor(existing, allPatterns) is { } successor)
+        {
+            SuccessorNoteText.Text = $"This pattern is continued by a newer one, starting {successor.DatePattern.Start:MMM d, yyyy}.";
+            SuccessorNoteText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            SuccessorNoteText.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>[UI] The no-existing-plan case of UpdateSummary: proposes a hypothetical Allocation Plan from whatever's currently typed (or, for an already-saved Expense with nothing typed yet, its saved values) via the same AllocationPlanProposer.Propose call MainWindow.AutoCreateAllocationPlan uses at real save time — so this preview can never show a shape Save wouldn't actually produce. Falls back to a plain "not enough typed yet" placeholder whenever there's nothing valid to propose from (blank amount, no due date, income, or the account context isn't available yet).</summary>
+    /// <param name="pattern">The pattern to propose a plan for — null when nothing valid is typed yet.</param>
+    /// <param name="isNew">Whether this Expense hasn't been saved at all yet (changes only the placeholder's own wording).</param>
+    private void ShowProposedPreview(FinancialPattern? pattern, bool isNew)
+    {
+        if (pattern is null)
+        {
+            Summary.Clear(isNew
+                ? "Fill in an amount and schedule to preview its savings plan."
+                : "Fill in an amount to preview its savings plan.");
+            return;
+        }
+
+        if (pattern.Amount >= 0m)
+        {
+            Summary.Clear("Income doesn't need a savings plan.");
+            return;
+        }
+
+        if (TryProposePlan(pattern) is not { } proposal)
+        {
+            Summary.Clear(isNew
+                ? "Fill in an amount and schedule to preview its savings plan."
+                : "Fill in an amount to preview its savings plan.");
+            return;
+        }
+
+        var goalAmount = Math.Abs(pattern.Amount);
+        var dueDate = pattern.DatePattern.Until;
+        var label = string.IsNullOrWhiteSpace(pattern.Description) ? pattern.Source : pattern.Description;
+        var todayDate = DateOnly.FromDateTime(DateTime.Today);
+        var narrative =
+            $"We'd need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. This is a rough preview of the savings plan Save and Plan would set up — {Math.Abs(proposal.Plan.Amount):C0} per occurrence, starting {proposal.Plan.DatePattern.Start:MMM d, yyyy}.";
+
+        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
+            [proposal.Plan], pattern, proposal.Plan.DatePattern.ActiveStart, dueDate, proposal.Plan.StartingAllocation);
+        var (expected, milestone) = ComputeLiveJarAmounts([proposal.Plan], pattern, proposal.Plan.StartingAllocation, todayDate);
+
+        Summary.Load(
+            narrative,
+            start: proposal.Plan.DatePattern.Start,
+            asOfDate: todayDate,
+            dueDate: dueDate,
+            startAmount: proposal.Plan.StartingAllocation,
+            goalAmount: goalAmount,
+            actualTrajectory: [], // nothing saved yet — no real walked history to show
+            milestoneTrajectory: milestoneTrajectory,
+            asideLine: PlanHealthMessages.LiveJarStateLine(expected, milestone),
+            asideSecondaryLine: "Proposed — not saved yet");
+    }
+
+    /// <summary>[CALC] Proposes a hypothetical Allocation Plan for an outflow that doesn't have one yet — the same AllocationPlanProposer.Propose call MainWindow.AutoCreateAllocationPlan makes at real save time, scoped to the same account and excluding transfer legs the same way. Null whenever RequestForecast isn't wired yet, or the proposer itself rejects the pattern (defensive only — an outflow this method's own caller already confirmed has Amount &lt; 0 shouldn't actually reach that throw).</summary>
+    /// <param name="pattern">The (possibly not-yet-saved) outflow to propose a plan for.</param>
+    private ProposedAllocationPlan? TryProposePlan(FinancialPattern pattern)
+    {
+        var forecast = RequestForecast?.Invoke();
+        if (forecast is null)
+        {
+            return null;
+        }
+
+        var otherPatterns = forecast.Accounts
+            .FirstOrDefault(account => account.AccountId == SelectedAccountId)?.Page.FinancePatterns
+            .Where(p => !_transferFinanceIds.Contains(p.FinanceId))
+            .ToList() ?? [];
+
+        try
+        {
+            return AllocationPlanProposer.Propose(pattern, otherPatterns, DateOnly.FromDateTime(DateTime.Today));
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>[CALC] A live (ExpectedAmount, MilestoneAmount) reading for today, computed purely from a plan's own schedule, no forecast required — the exact mechanism EarmarkFormPanel's own GetLiveJarAmounts uses (see that method's own comment for the "why this is safe" walkthrough); duplicated here rather than shared since the two forms' surrounding context differs enough that a shared signature would need to serve callers with genuinely different data on hand.</summary>
+    /// <param name="patterns">Every EarMarkPattern funding the goal.</param>
+    /// <param name="goal">The goal being funded.</param>
+    /// <param name="startingTotal">What was already in the jar before this plan's own contributions began.</param>
+    /// <param name="asOfDate">Today's date, to read the live amounts as of.</param>
+    private static (decimal ExpectedAmount, decimal MilestoneAmount) ComputeLiveJarAmounts(
+        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, decimal startingTotal, DateOnly asOfDate)
+    {
+        var activeStart = patterns.Count > 0 ? patterns.Min(p => p.DatePattern.ActiveStart) : asOfDate;
+        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(patterns, goal, activeStart, asOfDate);
+        var liveMilestone = milestoneTrajectory.Count > 0 ? milestoneTrajectory[^1].MilestoneAmount : 0m;
+        var hasReleased = goal.DatePattern.GetOccurrences(activeStart, asOfDate).Count > 0;
+        var liveExpected = hasReleased ? liveMilestone : startingTotal + liveMilestone;
+        return (liveExpected, liveMilestone);
+    }
+
+    /// <summary>[CALC] The linked plan's real FundJar, walked day-by-day from today through `to` — the chart's "Fund jar (actual)" line. Same _forecast/GetTimeline lookup EarmarkFormPanel's own GetJarTrajectory uses; empty when RequestForecast isn't wired or this FinanceId hasn't reached the forecast yet.</summary>
+    /// <param name="forecast">The live forecast to read from, or null.</param>
+    /// <param name="financeId">Which goal's jar to walk.</param>
+    /// <param name="to">The end of the range to walk through.</param>
+    private static IReadOnlyList<(DateOnly Date, decimal ExpectedAmount)> GetJarTrajectory(ForecastResult? forecast, int financeId, DateOnly to)
+    {
+        if (forecast is null)
+        {
+            return [];
+        }
+
+        return forecast.GetTimeline(financeId)
+            .Where(entry => entry.Date <= to)
+            .Select(entry => (entry.Date, Jar: entry.Snapshot.FundJars.FirstOrDefault(candidate => candidate.FinanceId == financeId)))
+            .Where(entry => entry.Jar is not null)
+            .Select(entry => (entry.Date, entry.Jar!.ExpectedAmount))
+            .ToList();
     }
 
     /// <summary>[UI] Which of the four plan-health states the linked savings plan is in, shown next to the save buttons (PlanHealthMessages.ExpenseStatusLabel does the actual mapping), plus the same outline "Save and Plan" gets when the pending edit would meaningfully affect the linked plan. Only the "linked plan is currently in a non-Healthy state" half of that trigger is built here — comparing the currently-typed fields against what's saved to catch an edit that would newly cause one of these states is a separate, more involved check, not silently assumed to be covered by this.</summary>
@@ -332,8 +554,11 @@ public partial class ExpenseFormPanel : UserControl
         }
     }
 
-    private int NextFinanceId() =>
-        _existingPatterns.Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max() + 1;
+    // Shared with FinancePatternSaveConfirmation via the same TransactionLogBook
+    // method — 1 is the fallback for when RequestForecast isn't wired up yet
+    // (mirrors OnChangeInstanceClick's own null guard; RequestForecast always
+    // succeeds once the host has wired it, so this only matters pre-wiring).
+    private int NextFinanceId() => RequestForecast?.Invoke().Book.NextFinanceId() ?? 1;
 
     // The instance-information-block's controls ------------------------
 
@@ -534,33 +759,7 @@ public partial class ExpenseFormPanel : UserControl
         ErrorText.Text = string.Empty;
         try
         {
-            var rule = BuildRecurrenceRule();
-
-            if (!decimal.TryParse(AmountTextBox.Text, out var enteredAmount))
-            {
-                throw new InvalidOperationException("Amount must be a number.");
-            }
-
-            // The field is always a magnitude — Math.Abs guards against a
-            // stray "-" typed out of habit turning into a double-negative.
-            var magnitude = Math.Abs(enteredAmount);
-            var amount = ExpenseRadioButton.IsChecked == true ? -magnitude : magnitude;
-
-            var priority = int.TryParse(PriorityTextBox.Text, out var parsedPriority) ? parsedPriority : 0;
-
-            var pattern = FinancialPattern.Create(new FinancialPatternOptions
-            {
-                FinanceId = _financeId,
-                Source = SourceTextBox.Text,
-                DatePattern = rule,
-                Amount = amount,
-                Priority = priority,
-                // Income is never "unskippable" — the question is hidden for
-                // it, so don't let a stale radio state leak into the saved pattern.
-                Mandatory = ExpenseRadioButton.IsChecked == true && UnskippableRadioButton.IsChecked == true,
-                Description = string.IsNullOrWhiteSpace(DescriptionTextBox.Text) ? null : DescriptionTextBox.Text,
-            });
-
+            var pattern = BuildPattern();
             var accountId = SelectedAccountId;
             var isNew = _isNew;
 
@@ -572,11 +771,60 @@ public partial class ExpenseFormPanel : UserControl
             // at it next.
             LoadForNewPattern();
 
+            // The confirmation-and-consequence flow for planning/25's Items
+            // B/E/F runs inside PatternSaved's own handler (MainWindow.
+            // OnExpensePatternSaved constructs and runs a
+            // FinancePatternSaveConfirmation) — this panel hands off the raw,
+            // just-typed pattern and stays WPF/persistence-free itself.
             PatternSaved?.Invoke(pattern, accountId, isNew, jumpToEarmark);
         }
         catch (Exception ex)
         {
             ErrorText.Text = ex.Message;
+        }
+    }
+
+    /// <summary>[CALC] Builds a FinancialPattern from the currently-typed fields — the single source both Save and the live Summary preview build from, so the preview can never show something Save wouldn't actually produce. Throws InvalidOperationException/ArgumentException on anything not yet valid; see TryBuildPattern for the non-throwing counterpart.</summary>
+    private FinancialPattern BuildPattern()
+    {
+        var rule = BuildRecurrenceRule();
+
+        if (!decimal.TryParse(AmountTextBox.Text, out var enteredAmount))
+        {
+            throw new InvalidOperationException("Amount must be a number.");
+        }
+
+        // The field is always a magnitude — Math.Abs guards against a
+        // stray "-" typed out of habit turning into a double-negative.
+        var magnitude = Math.Abs(enteredAmount);
+        var amount = ExpenseRadioButton.IsChecked == true ? -magnitude : magnitude;
+
+        var priority = int.TryParse(PriorityTextBox.Text, out var parsedPriority) ? parsedPriority : 0;
+
+        return FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _financeId,
+            Source = SourceTextBox.Text,
+            DatePattern = rule,
+            Amount = amount,
+            Priority = priority,
+            // Income is never "unskippable" — the question is hidden for
+            // it, so don't let a stale radio state leak into the saved pattern.
+            Mandatory = ExpenseRadioButton.IsChecked == true && UnskippableRadioButton.IsChecked == true,
+            Description = string.IsNullOrWhiteSpace(DescriptionTextBox.Text) ? null : DescriptionTextBox.Text,
+        });
+    }
+
+    /// <summary>[CALC] The non-throwing counterpart to BuildPattern, for UpdateSummary's live preview — which recomputes on every keystroke and shouldn't surface an error for a form that's simply mid-edit (no due date picked yet, an unparsable amount, ...). Null means exactly that: not enough typed yet to know what's being proposed, not a real problem.</summary>
+    private FinancialPattern? TryBuildPattern()
+    {
+        try
+        {
+            return BuildPattern();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            return null;
         }
     }
 

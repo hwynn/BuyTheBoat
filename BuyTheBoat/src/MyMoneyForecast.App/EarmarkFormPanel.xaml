@@ -160,6 +160,19 @@
                             <local:RecurrenceRuleEditor x:Name="RuleEditor"/>
                         </DockPanel>
 
+                        <!-- Continuity note (2026-08-13, author's own request):
+                             break-offs/restructures create a genuinely new
+                             FinanceId, so it's easy to forget — looking at
+                             just this one plan — that it continues from, or
+                             is later continued by, another one. Both
+                             collapsed by default; UpdateContinuityNote
+                             (code-behind, called from inside UpdateSummary)
+                             shows whichever apply. Savings-plan mode only —
+                             this is the "recurrence fields" area the author
+                             asked for, and One-off mode has none. -->
+                        <TextBlock x:Name="PredecessorNoteText" Margin="0,4,0,0" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
+                        <TextBlock x:Name="SuccessorNoteText" Margin="0,4,0,0" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
+
                         <!-- "Already saved toward this goal" and "+ Add manual
                              earmark on this goal" are both omitted from the
                              layout entirely (2026-08-06, the author's own

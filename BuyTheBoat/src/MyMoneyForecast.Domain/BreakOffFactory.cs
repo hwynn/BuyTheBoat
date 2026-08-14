@@ -42,6 +42,43 @@ public sealed record BreakOffResult
     public required ManualEarmark? SuccessorStartingEarmark { get; init; }
 }
 
+// The multi-predecessor-plan break-off case (planning/25's Item F — more
+// than one EarMarkPattern already shares a finance_id, F27's relaxation of
+// 3.11.1.a1 — consolidating them, whether forced or chosen, into one fresh
+// successor plan). Otherwise identical to BreakOffRequest; PredecessorPlans
+// replaces the single, nullable PredecessorPlan. Still just ONE
+// CarriedOverJarBalance, not one per plan — a finance_id has exactly one
+// jar regardless of how many EarMarkPatterns feed it, so the caller reads
+// it the same single way BreakOffRequest's own field already documents
+// (F27/F34 — the jar-balance handoff already sums across every plan sharing
+// a finance_id before this request is even built).
+public sealed record MultiPlanBreakOffRequest
+{
+    public required FinancialPattern Predecessor { get; init; }
+    public required IReadOnlyList<EarMarkPattern> PredecessorPlans { get; init; }
+    public required DateOnly CutDate { get; init; }
+    public required int SuccessorFinanceId { get; init; }
+    public required decimal SuccessorAmount { get; init; }
+    public required RecurrenceRuleOptions SuccessorSchedule { get; init; }
+    public required decimal CarriedOverJarBalance { get; init; }
+    public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
+    public bool SpreadEvenlyWithNoIncome { get; init; } = true;
+}
+
+// PredecessorPlans replaces the single, nullable PredecessorPlan — every
+// surviving plan, truncated, none dropped. There's still exactly one
+// SuccessorPlan: Item F's own ruling is that consolidating N plans always
+// means ONE freshly-proposed successor, the same shape as an ordinary
+// single-plan break-off, never N successors.
+public sealed record MultiPlanBreakOffResult
+{
+    public required FinancialPattern Predecessor { get; init; }
+    public required IReadOnlyList<EarMarkPattern> PredecessorPlans { get; init; }
+    public required FinancialPattern Successor { get; init; }
+    public required EarMarkPattern? SuccessorPlan { get; init; }
+    public required ManualEarmark? SuccessorStartingEarmark { get; init; }
+}
+
 // Everything a periodic RENEWAL of an "ongoing" pattern needs. Deliberately
 // narrower than BreakOffRequest: there is no SuccessorAmount or
 // SuccessorSchedule-SHAPE field, because renewal changes NOTHING about the
@@ -83,26 +120,7 @@ public static class BreakOffFactory
     /// <returns>The now-bounded original pattern plus the new one that continues from the cut date, with its savings plan already set up.</returns>
     public static BreakOffResult BreakOff(BreakOffRequest request)
     {
-        if (request.CutDate <= request.Predecessor.DatePattern.Start)
-        {
-            throw new ArgumentException(
-                "The cut date must be after the pattern's own start — there has to be at least one day of history to preserve.",
-                nameof(request));
-        }
-
-        if (request.SuccessorFinanceId == request.Predecessor.FinanceId)
-        {
-            throw new ArgumentException(
-                "The successor needs its own FinanceId — a break-off is a genuinely new identity, not an edit.",
-                nameof(request));
-        }
-
-        if (request.SuccessorSchedule.Start != request.CutDate)
-        {
-            throw new ArgumentException(
-                "The successor's schedule must start exactly on the cut date.",
-                nameof(request));
-        }
+        ValidateCutBoundaries(request.Predecessor, request.CutDate, request.SuccessorFinanceId, request.SuccessorSchedule);
 
         var truncated = PatternTruncation.EndOn(request.Predecessor, request.PredecessorPlan, request.CutDate.AddDays(-1));
 
@@ -162,6 +180,74 @@ public static class BreakOffFactory
         };
     }
 
+    /// <summary>[CALC] The same break-off, when more than one EarMarkPattern already shares the predecessor's finance_id — planning/25's Item F, the consolidating case specifically (forced, or chosen): every surviving plan is truncated, and the successor still gets exactly one freshly-proposed plan, seeded from the one balance the finance_id's single jar actually holds. Keeping multiple plans separate under the new finance_id, instead of consolidating, is a different, not-yet-built mechanism — see FinancePatternSaveConfirmation's own TODO for that case.</summary>
+    /// <param name="request">The pattern being changed, every surviving plan, the cut date, the new amount/schedule, and the one jar balance to carry across.</param>
+    /// <returns>The now-bounded original pattern plus every one of its plans (each truncated), plus the new pattern that continues from the cut date, with one consolidated savings plan already set up.</returns>
+    public static MultiPlanBreakOffResult BreakOff(MultiPlanBreakOffRequest request)
+    {
+        ValidateCutBoundaries(request.Predecessor, request.CutDate, request.SuccessorFinanceId, request.SuccessorSchedule);
+
+        var predecessorLastDay = request.CutDate.AddDays(-1);
+        var truncatedPredecessor = request.Predecessor.WithUntil(predecessorLastDay);
+
+        // Each plan truncated the same way EndOn truncates a single one —
+        // reused per plan rather than duplicated. EndOn's own Plan is only
+        // ever null when its input plan is null; every entry here is a real
+        // plan, so the ! is never actually exercised.
+        var truncatedPlans = request.PredecessorPlans
+            .Select(plan => PatternTruncation.EndOn(request.Predecessor, plan, predecessorLastDay).Plan!)
+            .ToList();
+
+        var successor = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = request.SuccessorFinanceId,
+            Source = request.Predecessor.Source,
+            Description = request.Predecessor.Description,
+            DatePattern = RecurrenceRule.Create(request.SuccessorSchedule),
+            Amount = request.SuccessorAmount,
+            Priority = request.Predecessor.Priority,
+            Mandatory = request.Predecessor.Mandatory,
+            AutoRenew = request.Predecessor.AutoRenew,
+        });
+
+        if (request.Predecessor.Amount >= 0m)
+        {
+            // Income: same shortcut as the single-plan overload — no jar,
+            // ever, though in practice income never has more than one plan
+            // (it never has one at all) to begin with.
+            return new MultiPlanBreakOffResult
+            {
+                Predecessor = truncatedPredecessor,
+                PredecessorPlans = truncatedPlans,
+                Successor = successor,
+                SuccessorPlan = null,
+                SuccessorStartingEarmark = null,
+            };
+        }
+
+        var proposal = AllocationPlanProposer.Propose(
+            successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
+
+        var successorPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = proposal.Plan.FinanceId,
+                DatePattern = proposal.Plan.DatePattern,
+                Amount = proposal.Plan.Amount,
+                StartingAllocation = request.CarriedOverJarBalance,
+            },
+            proposal.Outflow);
+
+        return new MultiPlanBreakOffResult
+        {
+            Predecessor = truncatedPredecessor,
+            PredecessorPlans = truncatedPlans,
+            Successor = proposal.Outflow,
+            SuccessorPlan = successorPlan,
+            SuccessorStartingEarmark = proposal.StartingEarmark,
+        };
+    }
+
     /// <summary>[CALC] Extends an "ongoing" bill or paycheck further out on its renewal date — the amount, frequency, and days never change, only how far out it reaches. Leaves a plain "(renewed ...)" note on the new segment so the renewal is visible to anyone reading the pattern list, without adding a new field to the pattern itself.</summary>
     /// <param name="request">The pattern due for renewal, its renewal date, how many years the new segment should reach, and the jar balance to carry across — deliberately no amount or schedule-shape input, since renewal changes neither.</param>
     /// <returns>The now-bounded prior segment plus the new one that continues from the renewal date, with its savings plan already set up.</returns>
@@ -213,6 +299,35 @@ public static class BreakOffFactory
         return result with { Successor = markedSuccessor };
     }
 
+    /// <summary>[CALC] The three checks every BreakOff overload shares: a real cut boundary (at least one day of history to preserve), a genuinely new successor identity, and a successor schedule that starts exactly on the cut.</summary>
+    /// <param name="predecessor">The pattern being cut.</param>
+    /// <param name="cutDate">Where the cut lands.</param>
+    /// <param name="successorFinanceId">The id the successor would take on.</param>
+    /// <param name="successorSchedule">The successor's proposed schedule.</param>
+    private static void ValidateCutBoundaries(FinancialPattern predecessor, DateOnly cutDate, int successorFinanceId, RecurrenceRuleOptions successorSchedule)
+    {
+        if (cutDate <= predecessor.DatePattern.Start)
+        {
+            throw new ArgumentException(
+                "The cut date must be after the pattern's own start — there has to be at least one day of history to preserve.",
+                nameof(cutDate));
+        }
+
+        if (successorFinanceId == predecessor.FinanceId)
+        {
+            throw new ArgumentException(
+                "The successor needs its own FinanceId — a break-off is a genuinely new identity, not an edit.",
+                nameof(successorFinanceId));
+        }
+
+        if (successorSchedule.Start != cutDate)
+        {
+            throw new ArgumentException(
+                "The successor's schedule must start exactly on the cut date.",
+                nameof(successorSchedule));
+        }
+    }
+
     /// <summary>[CALC] Strips a "(renewed yyyy-MM-dd)" marker from a label, if it has one — so a fresh marker can be appended without stacking up prior ones.</summary>
     /// <param name="label">The label to strip a marker from.</param>
     private static string WithoutPriorRenewalMarker(string label)
@@ -231,4 +346,22 @@ public static class BreakOffFactory
             .Append(pattern) // always a candidate, even if the caller's list omits it
             .OrderByDescending(candidate => candidate.DatePattern.Start)
             .First();
+
+    /// <summary>[CALC] Finds the segment immediately BEFORE this one in a break-off/renewal chain — same Source-reuse lookup FindCurrentSegment uses, one direction: another pattern sharing this one's own Source whose own Until ends exactly the day before this one's own Start. Null when this pattern doesn't continue from an earlier one — either it's the first segment ever, or it was never part of a chain at all. Editing UIs use this to tell a user "this continues an existing pattern" without them having to remember the history themselves.</summary>
+    /// <param name="pattern">The segment to find a predecessor for.</param>
+    /// <param name="allPatterns">Every pattern to search — normally the same list already passed to BreakOff/Renew/FindCurrentSegment.</param>
+    public static FinancialPattern? FindPredecessor(FinancialPattern pattern, IReadOnlyList<FinancialPattern> allPatterns) =>
+        allPatterns.FirstOrDefault(candidate =>
+            candidate.Source == pattern.Source &&
+            candidate.FinanceId != pattern.FinanceId &&
+            candidate.DatePattern.Until.AddDays(1) == pattern.DatePattern.Start);
+
+    /// <summary>[CALC] Finds the segment immediately AFTER this one in a break-off/renewal chain — the mirror of FindPredecessor: another pattern sharing this one's own Source whose own Start begins exactly the day after this one's own Until. Null when this pattern hasn't since been continued by a later one — it's still the current segment (FindCurrentSegment would return it unchanged).</summary>
+    /// <param name="pattern">The segment to find a successor for.</param>
+    /// <param name="allPatterns">Every pattern to search — normally the same list already passed to BreakOff/Renew/FindCurrentSegment.</param>
+    public static FinancialPattern? FindSuccessor(FinancialPattern pattern, IReadOnlyList<FinancialPattern> allPatterns) =>
+        allPatterns.FirstOrDefault(candidate =>
+            candidate.Source == pattern.Source &&
+            candidate.FinanceId != pattern.FinanceId &&
+            candidate.DatePattern.Start == pattern.DatePattern.Until.AddDays(1));
 }

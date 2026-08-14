@@ -12,12 +12,14 @@ public class PatternRepositoryTests : IDisposable
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"mymoneyforecast-test-{Guid.NewGuid()}.db");
     private readonly FinancialPatternRepository _financialPatterns;
     private readonly EarMarkPatternRepository _earMarkPatterns;
+    private readonly ManualEarmarkRepository _manualEarmarks;
 
     public PatternRepositoryTests()
     {
         var database = new PatternDatabase(_databasePath);
         _financialPatterns = new FinancialPatternRepository(database);
         _earMarkPatterns = new EarMarkPatternRepository(database, _financialPatterns);
+        _manualEarmarks = new ManualEarmarkRepository(database, _earMarkPatterns);
     }
 
     [Fact]
@@ -245,6 +247,63 @@ public class PatternRepositoryTests : IDisposable
         var all = _earMarkPatterns.GetAll();
         all.Count.ShouldBe(1);
         all[0].Amount.ShouldBe(-125m);
+    }
+
+    // Moving a segment's own Start (PatternTruncation.StartOn, planning/25's
+    // Item E) isn't a plain Save — the composite (FinanceId, StartDate) key
+    // means Save at the new Start just inserts a second row rather than
+    // replacing the one at the old Start, since the key genuinely changed.
+    // This is the other half of that move: removing the stale row left
+    // behind, without disturbing a sibling segment or that sibling's own
+    // ManualEarmarks — unlike the FinanceId-only Delete above, which
+    // deliberately cascades to every ManualEarmark for the whole finance id.
+    [Fact]
+    public void Deleting_one_earmark_pattern_segment_by_its_start_date_leaves_its_sibling_and_that_siblings_manual_earmarks_alone()
+    {
+        var goal = Bill(83, "Two-segment goal");
+        _financialPatterns.Save(goal, accountId: 1);
+
+        var predecessor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 83,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 6, 1),
+                }),
+            },
+            goal);
+        var successor = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 83,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 7, 1),
+                    Until = new DateOnly(2027, 1, 1),
+                }),
+            },
+            goal);
+        _earMarkPatterns.Save(predecessor);
+        _earMarkPatterns.Save(successor);
+        _manualEarmarks.Save(ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = 83, Date = new DateOnly(2025, 8, 1), Amount = 20m },
+            successor)); // dated within the SURVIVING segment's own span
+
+        _earMarkPatterns.Delete(83, new DateOnly(2025, 1, 1)); // removes only the predecessor segment
+
+        var remaining = _earMarkPatterns.GetAll();
+        remaining.ShouldHaveSingleItem();
+        remaining[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1)); // the successor survives, untouched
+
+        _manualEarmarks.GetAll().ShouldHaveSingleItem(); // its manual earmark is untouched too — no cascade
     }
 
     // Simulates a database created before this stage: EarMarkPatterns keyed

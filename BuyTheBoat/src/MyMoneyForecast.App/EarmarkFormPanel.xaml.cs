@@ -1022,14 +1022,20 @@ public partial class EarmarkFormPanel : UserControl
         if (_selectedGoal is not { } goal)
         {
             Summary.Clear("Pick a goal above to see its savings plan summary.");
+            PredecessorNoteText.Visibility = Visibility.Collapsed;
+            SuccessorNoteText.Visibility = Visibility.Collapsed;
             return;
         }
 
         if (!_patternsByFinanceId.TryGetValue(goal.FinanceId, out var plan))
         {
             Summary.Clear("No savings plan yet for this goal — fill in the fields below to create one.");
+            PredecessorNoteText.Visibility = Visibility.Collapsed;
+            SuccessorNoteText.Visibility = Visibility.Collapsed;
             return;
         }
+
+        UpdateContinuityNote(goal, plan);
 
         var goalAmount = Math.Abs(goal.Amount);
         var dueDate = goal.DatePattern.Until;
@@ -1200,6 +1206,37 @@ public partial class EarmarkFormPanel : UserControl
             }
         }
 
+        // TODO(2026-08-13): the narrative above, and the chart's own
+        // "actual"/"proposed" lines, only ever describe THIS ONE
+        // EarMarkPattern (plan) — but the aside (asideLine/
+        // asideSecondaryLine) and the health figures behind it
+        // (IsChronicShortfall/IsChronicOverfund, GoalShortfall) are summed
+        // across every plan sharing this finance_id, concurrent funders
+        // included (patternsForMilestone, right above). Found via Storage
+        // Unit Rental in the field: two concurrent plans ($35 + $25) against
+        // a $50 bill — this one plan's own $35 narrative sat right next to a
+        // health verdict ("Consistently ahead") that only makes sense once
+        // you know a SECOND plan exists, which nothing here ever mentioned.
+        // Long-term handling undecided — showing every plan somehow, a
+        // combined chart, a plan picker, something else entirely — not
+        // scoped or designed yet. Short-term mitigation only, below: flag
+        // that another plan exists at all, without trying to describe or
+        // total what it's doing.
+        var hasConcurrentPlan = patternsForMilestone.Any(other =>
+            other.DatePattern.Start != plan.DatePattern.Start && // a different row, not this same plan read back
+            // Overlaps this plan's own active span — F27's "concurrent
+            // funder" shape, as opposed to a break-off/restructure chain's
+            // sequential segments, which never overlap by construction (a
+            // predecessor's own Until always ends the day before its
+            // successor's own Start — "connected at the start/end," not
+            // concurrent).
+            other.DatePattern.ActiveStart <= plan.DatePattern.Until &&
+            plan.DatePattern.ActiveStart <= other.DatePattern.Until);
+        if (hasConcurrentPlan)
+        {
+            narrative += " Another earmark pattern is allocating funds alongside this one.";
+        }
+
         // A committed-plan milestone line applies to every goal with a
         // savings plan, one-time or repeating.
         //
@@ -1225,6 +1262,40 @@ public partial class EarmarkFormPanel : UserControl
             highlightDate: highlightDate,
             proposedTrajectory: proposedTrajectory,
             additionAmount: additionAmount);
+    }
+
+    /// <summary>[UI] Shows whether this plan continues an earlier one, or has since been continued by a later one — a break-off's successor GOAL always gets a brand-new FinanceId, so its own freshly-proposed PLAN does too (BreakOffFactory.BreakOff never reuses a finance_id), which means the same finance_id scoping _patternsByFinanceId uses everywhere else in this file can't find a predecessor/successor plan — only the goal's own Source survives the cut (same reasoning as ExpenseFormPanel's own UpdateContinuityNote, one level down — a plan's chain identity rides on its goal's). Called from inside UpdateSummary once goal/plan are already resolved — its own two early-return branches clear both texts directly instead, since there's no plan (or no goal at all) to search a chain from. The XAML elements this sets live inside SavingsPlanPanel only (the "recurrence fields" area this was asked to squeeze into) — running this regardless of mode is harmless in One-off mode, since the note simply isn't visible while its own parent panel is collapsed.</summary>
+    /// <param name="goal">The currently-selected goal.</param>
+    /// <param name="plan">The goal's own currently-loaded savings plan.</param>
+    private void UpdateContinuityNote(FinancialPattern goal, EarMarkPattern plan)
+    {
+        var goalsByFinanceId = (_forecast?.Book.AllFinancialPatterns() ?? []).ToDictionary(candidate => candidate.FinanceId);
+        var allPlans = _forecast?.Book.AllEarMarkPatterns() ?? [];
+
+        bool SharesGoalSource(EarMarkPattern candidate) =>
+            candidate.FinanceId != plan.FinanceId &&
+            goalsByFinanceId.TryGetValue(candidate.FinanceId, out var candidateGoal) &&
+            candidateGoal.Source == goal.Source;
+
+        if (allPlans.FirstOrDefault(candidate => SharesGoalSource(candidate) && candidate.DatePattern.Until.AddDays(1) == plan.DatePattern.Start) is { } predecessor)
+        {
+            PredecessorNoteText.Text = $"This plan continues an earlier one, which ran through {predecessor.DatePattern.Until:MMM d, yyyy}.";
+            PredecessorNoteText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            PredecessorNoteText.Visibility = Visibility.Collapsed;
+        }
+
+        if (allPlans.FirstOrDefault(candidate => SharesGoalSource(candidate) && candidate.DatePattern.Start == plan.DatePattern.Until.AddDays(1)) is { } successor)
+        {
+            SuccessorNoteText.Text = $"This plan is continued by a newer one, starting {successor.DatePattern.Start:MMM d, yyyy}.";
+            SuccessorNoteText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            SuccessorNoteText.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>[CALC] Turns a repeating pattern's own Frequency/Interval into the cadence phrase the Summary narrative's opening line needs ("every 3 months", "every week") — same Daily/Weekly/Monthly/Yearly unit words RecurrenceRuleEditor.UpdateFormVisibility already uses for its own "Every N ___(s)" field label, just written out as a plain phrase instead of that label's "(s)" shorthand.</summary>

@@ -131,6 +131,14 @@ designed here** — parked per the author's own instruction, to be picked up lat
 sequence (most likely bundled with item E, "Break off vs. alter," since that's where implicit
 downstream changes are most consequential — not yet decided).
 
+**PICKED UP 2026-08-11 — see [planning/25](25-editing-patterns-with-history.md).** Landed bundled with
+item E, exactly as guessed above. A new assumption
+(`1.2.3.10.a5`, [03-assumptions-glossary.md, Ch.20](../../03-assumptions-glossary.md#chapter-20-editing-a-finance-pattern-with-existing-history))
+locks a `FinancialPattern`'s other properties once it has an expected transaction on or before the
+as-of date; a new standing UI rule requires a confirmation before a form save would alter, delete, or
+remake one anyway. The mechanism that satisfies both, once confirmed, turns out to be item 4's own
+`BreakOffFactory.BreakOff` ([16](16-stage3-break-off.md)) reused almost as-is — full design in 25.
+
 ---
 
 ## Item B — the isolated-earmark entry point — SETTLED 2026-08-06

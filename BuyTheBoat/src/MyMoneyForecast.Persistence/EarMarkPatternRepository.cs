@@ -96,4 +96,17 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
         command.Parameters.AddWithValue("$FinanceId", financeId);
         command.ExecuteNonQuery();
     }
+
+    /// <summary>[DELETES] Removes one savings plan segment — the one starting on a specific date — without touching any sibling segment sharing the same finance id, or that segment's own ManualEarmarks. Needed whenever a segment's own Start moves (PatternTruncation.StartOn): Save's own (FinanceId, StartDate) upsert key means saving the moved segment inserts a second row rather than replacing the original, since its StartDate no longer matches — this is the other half of that move, removing the stale row left at the old StartDate. Unlike the FinanceId-only Delete above, this deliberately does NOT cascade to ManualEarmarks — the caller has already decided which of those survive (the ones now on or after the new Start) and which don't.</summary>
+    /// <param name="financeId">Which goal or bill's savings plan this segment belongs to.</param>
+    /// <param name="startDate">Which segment to remove, by its own (now-stale) Start.</param>
+    public void Delete(int financeId, DateOnly startDate)
+    {
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM EarMarkPatterns WHERE FinanceId = $FinanceId AND StartDate = $StartDate;";
+        command.Parameters.AddWithValue("$FinanceId", financeId);
+        command.Parameters.AddWithValue("$StartDate", startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        command.ExecuteNonQuery();
+    }
 }

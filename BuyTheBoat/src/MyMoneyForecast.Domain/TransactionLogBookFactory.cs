@@ -439,7 +439,8 @@ public static class TransactionLogBookFactory
         {
             var financeId = group.Key;
             var goal = patternsById[financeId];
-            var contributed = group.Sum(earmark =>
+            var plans = group.ToList();
+            var contributed = plans.Sum(earmark =>
                     earmark.StartingAllocation
                     - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count)
                 // Manual adjustments already made on/before the as-of date
@@ -452,23 +453,39 @@ public static class TransactionLogBookFactory
             jarValues[financeId] = Math.Max(0m, contributed - withdrawn);
 
             // 3.13.5.4.a1, reset-at-release: milestone counts scheduled
-            // contributions since the goal's LAST release, not
-            // its lifetime total — otherwise a repeating goal's milestone climbs
-            // forever even though its jar returns to ~0 on every on-time payment
-            // (a $500/month loan paid on schedule would read "$500 short," then
-            // "$1,000 short," forever). Reusing `withdrawn` — already the exact
-            // total released to date, just above — turns the lifetime sum into
-            // "how much has accrued toward the current, not-yet-released cycle."
-            // Floored at 0 so a stream that has fallen behind reads as "nothing
-            // accrued yet this cycle" rather than a negative number that would
-            // flip the ExpectedAmount-vs-MilestoneAmount comparison backwards
-            // into looking overfunded. Deliberately does not carry a chronic,
-            // multi-cycle shortfall forward — GoalShortfall (the whole-span,
-            // never-resets metric) is what catches that; this is the per-cycle
-            // pacing signal.
-            milestones[financeId] = Math.Max(0m, group.Sum(earmark =>
-                    -earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count)
-                - withdrawn);
+            // contributions since the goal's LAST release, not its lifetime
+            // total — otherwise a repeating goal's milestone climbs forever
+            // even though its jar returns to ~0 on every on-time payment (a
+            // $500/month loan paid on schedule would read "$500 short," then
+            // "$1,000 short," forever). Deliberately does not carry a
+            // chronic, multi-cycle shortfall forward — GoalShortfall (the
+            // whole-span, never-resets metric) is what catches that; this is
+            // the per-cycle pacing signal.
+            //
+            // Fixed (2026-08-13): used to take a "lifetime contributed minus
+            // lifetime withdrawn" shortcut instead of an actual walk. That
+            // shortcut only equals "since the last release" when every prior
+            // cycle's own contributions exactly matched what got released —
+            // each such cycle then nets to zero and cancels out of the
+            // lifetime sum, leaving just the current cycle's own residual.
+            // The moment a goal's plans DON'T sum to its own rate (found via
+            // Storage Unit Rental in the field: two concurrent plans, $35 +
+            // $25, against a $50 bill), every prior cycle leaves a real
+            // residual too, and the shortcut silently accumulates it across
+            // every cycle instead of resetting — a stream running $10/month
+            // ahead of its bill read as "$80 saved" after 8 months instead
+            // of the ~$25 actually accrued since the last release (and the
+            // underfunded mirror image floors at 0 every cycle instead of
+            // showing what's genuinely accrued toward the current one).
+            // ComputeMilestoneTrajectory already walks this correctly
+            // (reset-at-release, proven by its own tests) — reused here for
+            // its last point rather than re-deriving a second, narrower
+            // formula. from is the earliest of this finance_id's own plans'
+            // ActiveStart, matching how a concurrent second funder is
+            // already handled everywhere else this needs an anchor date.
+            var earliestActiveStart = plans.Min(plan => plan.DatePattern.ActiveStart);
+            var milestoneTrajectory = ComputeMilestoneTrajectory(plans, goal, earliestActiveStart, asOfDate);
+            milestones[financeId] = milestoneTrajectory.Count > 0 ? milestoneTrajectory[^1].MilestoneAmount : 0m;
         }
 
         // The safety cushion (finance_id = null jar, priority 0) can't live in
@@ -985,6 +1002,15 @@ public static class TransactionLogBookFactory
                     * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, shortfall.DueDate).Count);
             var isChronicShortfall = shortfall.ShortfallAmount > 0m && plannedTotal < shortfall.AmountNeeded;
 
+            // IsChronicOverfund: the excess-side mirror, same plannedTotal —
+            // would this Savings Plan's own scheduled contributions,
+            // structurally, put in MORE than AmountNeeded? At most one of
+            // IsChronicShortfall/IsChronicOverfund is ever true: they test
+            // opposite sides of the same plannedTotal-vs-AmountNeeded
+            // comparison, gated on ShortfallAmount/OverfundedAmount, which
+            // are themselves Max(0, x)/Max(0, -x) of the same gap.
+            var isChronicOverfund = shortfall.OverfundedAmount > 0m && plannedTotal > shortfall.AmountNeeded;
+
             // The earliest date this financeId's own release actually came
             // up short, from the same forward-walk data IsWorthWarningAbout
             // already uses. Falls back to the due date only when the walk
@@ -1022,6 +1048,7 @@ public static class TransactionLogBookFactory
                 CurrentShortfallAmount = currentShortfall,
                 CurrentOverfundedAmount = currentOverfunded,
                 IsChronicShortfall = isChronicShortfall,
+                IsChronicOverfund = isChronicOverfund,
                 IsWorthWarningAbout = isWorthWarningAbout,
                 ProjectedShortfallStartDate = projectedShortfallStartDate,
                 MostImportantHealthState = DetermineMostImportantHealthState(

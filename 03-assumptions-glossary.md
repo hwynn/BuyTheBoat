@@ -1,6 +1,6 @@
 # Assumptions Glossary
 
-Every assumption below is reproduced **verbatim** from its source file (whitespace/indentation normalized for markdown readability only — no words, numbers, or punctuation changed). Each chapter is a direct excerpt, cited by source file and original line range, so you can go back and check it against the original at any time.
+Every assumption in **Parts I–III** below is reproduced **verbatim** from its source file (whitespace/indentation normalized for markdown readability only — no words, numbers, or punctuation changed). Each chapter is a direct excerpt, cited by source file and original line range, so you can go back and check it against the original at any time. **Part IV is different — new assumptions authored during the 2026 redesign, not verbatim reproductions of anything; see its own header note before relying on the "verbatim" claim for it.**
 
 This reproduces the assumption text from the `.txt` planning files (`a01.txt`/`a02.txt`/`a03.txt`), which carry prose descriptions the chart doesn't. Where a `.txt` requirement set differs from the same assumption's set in `assumptionChartSimpleLines.uxf`, the chart is authoritative (per `assumptionNotes.txt`) — the chart's box text is reproduced in [05-assumption-chart-full-text.md](05-assumption-chart-full-text.md) and the resulting graph in [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md). This document is the readable prose companion to those.
 
@@ -17,6 +17,7 @@ The `{...}` line lists the other assumption IDs (by their bare ID) that must hol
 - **Part I — Foundational class assumptions** *(source: `a02.txt`)*: [Ch.1 TransactionLogPage](#chapter-1-transactionlogpage) · [Ch.2 FinancialPattern](#chapter-2-financialpattern) · [Ch.3 EarMarkPattern](#chapter-3-earmarkpattern) · [Ch.4 ActualTransaction](#chapter-4-actualtransaction) · [Ch.5 ExpectedTransaction](#chapter-5-expectedtransaction) · [Ch.6 EarmarkEvent](#chapter-6-earmarkevent) · [Ch.7 BalanceSnapshot](#chapter-7-balancesnapshot) · [Ch.8 FundJar](#chapter-8-fundjar)
 - **Part II — AccountTransactionPage internal consistency** *(source: `a03.txt`)*: [Ch.9 Identity, bounds & top-level summary](#chapter-9-page-identity-bounds--top-level-maintenance-summary) · [Ch.10 Initial Snapshot](#chapter-10-initial-snapshot) · [Ch.11 Balance Record](#chapter-11-balance-record) · [Ch.12 full_amount & expected amounts](#chapter-12-balance_recordcfull_amount--expected-amounts) · [Ch.13 Fund Jars](#chapter-13-fund-jars) · [Ch.14 Actual Transactions](#chapter-14-actual-transactions) · [Ch.15 Expected Transactions](#chapter-15-expected-transactions) · [Ch.16 Earmarks](#chapter-16-earmarks)
 - **Part III — TransactionLogBook & cross-page consistency** *(source: `a01.txt`)*: [Ch.17 Pattern continuity across pages](#chapter-17-log_pages-finance-pattern--earmark-pattern-continuity-across-pages) · [Ch.18 Derived calcs & initial-snapshot inheritance](#chapter-18-accounttransactionpage-derived-calculations--initial-snapshot-inheritance) · [Ch.19 Expected/Actual pairing completeness](#chapter-19-expectedactual-transaction-pairing-completeness)
+- **Part IV — New assumptions added during the redesign (2026)** *(not verbatim — see its own header note)*: [Ch.20 Editing a finance pattern with existing history](#chapter-20-editing-a-finance-pattern-with-existing-history)
 - [Appendix A: Reduction & merge candidates](#appendix-a-reduction--merge-candidates)
 - [Appendix B: Use cases](#appendix-b-use-cases)
 - [Appendix C: Formatting quirks preserved as-is](#appendix-c-formatting-quirks-preserved-as-is)
@@ -661,6 +662,63 @@ ExpectedTransaction:
 		E.expected_date == self.paired_expected_date
 		E.finance_id == self.paired_finance_id
 ```
+
+---
+
+## Part IV — New assumptions added during the redesign (2026)
+
+**Unlike Parts I–III above, nothing in this part is a verbatim historical reproduction.** Every entry
+here was authored during the 2026 C# rewrite — a new rule the original 2020–2022 design never stated,
+added deliberately (design philosophy 3(b): a new departure from the original design needs a planning
+pass, not a silent one) and written in the same ID grammar and `{requirements} / -id: description`
+shape Parts I–III use, so the project keeps reasoning about it the same way
+([[feedback-design-in-class-documentation-terms]]). **Do not mistake anything in this part for
+`a01`/`a02`/`a03`/the chart, and don't apply Parts I–III's "reproduce verbatim, never correct" rule to
+it** — if wording, an ID, or a requirement set here ever needs fixing, fix it outright.
+
+Not yet reflected in [06-assumption-dependency-graph.md](06-assumption-dependency-graph.md) — that
+graph is mechanically regenerated from `assumptionChartSimpleLines.uxf` via `build_assumption_graph.py`,
+and nothing in this part has a source box in that chart to regenerate from. A hand-added node would be
+silently dropped the next time 06 is regenerated from the chart. Revisit if/when there's a real need to
+trace this assumption's place in the dependency order (e.g. once it's implemented).
+
+### Chapter 20: Editing a finance pattern with existing history
+
+*(Author, 2026-08-11. Full mechanism design — what satisfies this when the user wants more than an
+`end_date` change — is in [MyMoneyForecast/planning/25-editing-patterns-with-history.md](MyMoneyForecast/planning/25-editing-patterns-with-history.md), not here.)*
+
+```
+{4.1.a1, 7.1.a1}
+-1.2.3.10.a5: if an expected transaction with the finance pattern's finance_id exists on an expired
+page in the past, the finance pattern's start_date, amount, and date_pattern's recurrence (frequency/
+interval/by-day) may not change without going through the resolution this assumption requires;
+end_date, description, source, priority, and mandatory/skippable may always change freely, regardless
+of history.
+```
+> **Formal vs. practical wording.** "Expired page" is the intended long-term framing — it's why this
+> needs `TransactionLogBook`'s own scope rather than a bare `3.10.aX` — but
+> [05](MyMoneyForecast/planning/05-original-structure-restructure.md)'s divergence registry already
+> documents `Expired` as permanently `false` today (nothing persists across a forecast run to expire —
+> multi-page history is listed there as still-deferred work). Until real multi-page history exists,
+> the practically-equivalent, enforceable condition is: **the expected transaction's date is on or
+> before the as-of date.**
+>
+> **Scope, refined 2026-08-11 (author).** Originally worded as "only `end_date`" — narrowed once it
+> became clear most fields have no bearing on what this assumption actually protects. Only fields that
+> touch `ExpectedTransaction` identity/amount (`3.13.7.a1`/`3.13.7.a2`, `expected_amount` drawn from
+> `FinancialPattern.Amount`) or the linked `EarMarkPattern`'s span (`3.11.2.a2`) are restricted:
+> `start_date`, `amount`, and the recurrence shape. `end_date`, `description`, `source`, `priority`,
+> and `mandatory`/skippable were already settled elsewhere as plain, uniform, no-retroactive-effect
+> edits ([16, items B7/B8/B9 in the action catalog](MyMoneyForecast/planning/13b-user-action-catalog.md)) —
+> nothing ties them to anything this assumption exists to protect, so they stay unrestricted regardless
+> of history.
+>
+> **This is a default, never an unconditional lock or a hard block.** A user-confirmed override always
+> exists — a retroactive correction on the same `finance_id`, or breaking the pattern off into a new
+> one, preserving what already happened. **Both are always offered, even when the correction path
+> would orphan already-committed data** (author, 2026-08-11) — the user sees what would be destroyed
+> and decides; the system never removes an option on the user's behalf. See planning/25 for the
+> mechanism and what orphaned data resolves to under each path.
 
 ---
 

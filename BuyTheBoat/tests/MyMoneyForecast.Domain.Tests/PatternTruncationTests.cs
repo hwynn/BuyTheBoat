@@ -113,4 +113,92 @@ public class PatternTruncationTests
 
         Should.Throw<ArgumentException>(() => PatternTruncation.EndOn(bill, plan: null, new DateOnly(2025, 1, 1)));
     }
+
+    [Fact]
+    public void StartOn_moves_the_plans_start_forward_and_absorbs_the_prior_balance()
+    {
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var plan = MonthlyPlan(goal, -300m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+
+        var trimmed = PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 6, 15), absorbedBalance: 450m);
+
+        trimmed.DatePattern.Start.ShouldBe(new DateOnly(2025, 6, 15));
+        trimmed.StartingAllocation.ShouldBe(450m);
+    }
+
+    [Fact]
+    public void StartOn_adds_the_absorbed_balance_on_top_of_whatever_starting_allocation_already_existed()
+    {
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -300m,
+                StartingAllocation = 100m, // already carrying something in from an earlier break-off
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2026, 1, 1),
+                }),
+            },
+            goal);
+
+        var trimmed = PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 6, 15), absorbedBalance: 450m);
+
+        trimmed.StartingAllocation.ShouldBe(550m); // 100 already there + 450 newly absorbed, not a replacement
+    }
+
+    [Fact]
+    public void StartOn_leaves_the_recurrence_shape_amount_and_until_unchanged()
+    {
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var plan = MonthlyPlan(goal, -280m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+
+        var trimmed = PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 6, 15), absorbedBalance: 0m);
+
+        trimmed.FinanceId.ShouldBe(plan.FinanceId);
+        trimmed.Amount.ShouldBe(plan.Amount);
+        trimmed.DatePattern.Frequency.ShouldBe(plan.DatePattern.Frequency);
+        trimmed.DatePattern.ByMonthDay.ShouldBe(plan.DatePattern.ByMonthDay);
+        trimmed.DatePattern.Until.ShouldBe(plan.DatePattern.Until);
+    }
+
+    [Fact]
+    public void StartOn_clears_any_existing_lead_in_since_the_new_start_is_the_new_earliest_boundary()
+    {
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1))
+            .WithActiveFrom(new DateOnly(2024, 10, 1));
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -300m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2026, 1, 1),
+                    ActiveFrom = new DateOnly(2024, 10, 1), // was already saving ahead of its own Start
+                }),
+            },
+            goal);
+
+        var trimmed = PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 6, 15), absorbedBalance: 200m);
+
+        trimmed.DatePattern.ActiveFrom.ShouldBeNull();
+        trimmed.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 6, 15));
+    }
+
+    [Fact]
+    public void StartOn_rejects_a_new_start_that_isnt_after_the_plans_own_current_start()
+    {
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var plan = MonthlyPlan(goal, -300m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+
+        Should.Throw<ArgumentException>(() => PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 1, 1), absorbedBalance: 0m));
+    }
 }

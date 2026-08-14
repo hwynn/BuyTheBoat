@@ -197,6 +197,16 @@
 
                 <local:RecurrenceRuleEditor x:Name="RuleEditor" Margin="0,0,0,10"/>
 
+                <!-- Continuity note (2026-08-13, author's own request):
+                     break-offs/restructures create a genuinely new
+                     FinanceId, so it's easy to forget — looking at just
+                     this one row — that it continues from, or is later
+                     continued by, another pattern. Both collapsed by
+                     default; UpdateContinuityNote (code-behind) shows
+                     whichever apply. -->
+                <TextBlock x:Name="PredecessorNoteText" Margin="0,0,0,4" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
+                <TextBlock x:Name="SuccessorNoteText" Margin="0,0,0,10" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
+
                 <!-- The author's own call, 2026-08-06: this Expense's linked savings
                      plan, shown the same way Earmark shows its own — present even in
                      the plain healthy state, not only surfaced through a warning.

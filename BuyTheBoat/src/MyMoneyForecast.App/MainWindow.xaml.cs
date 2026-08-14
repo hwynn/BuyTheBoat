@@ -49,6 +49,17 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // TEMPORARY DIAGNOSTIC (2026-08-12) — remove once the empty-grids-on-
+        // launch report is resolved. File-based (not MessageBox) so this can
+        // be launched and inspected non-interactively. Logs at every step
+        // between opening the database and RefreshGrids populating the
+        // grids, to find exactly where a fresh read stops matching what's on
+        // disk.
+        Log("=== MainWindow constructor start ===");
+        Log($"PID: {Environment.ProcessId}, UserName: {Environment.UserName}");
+        var diagnosticPath = PatternDatabase.DefaultDatabasePath();
+        Log($"Resolved path: {diagnosticPath}, Exists: {File.Exists(diagnosticPath)}, Size: {(File.Exists(diagnosticPath) ? new FileInfo(diagnosticPath).Length : -1)}");
+
         var database = new PatternDatabase();
         _financialPatterns = new FinancialPatternRepository(database);
         _earMarkPatterns = new EarMarkPatternRepository(database, _financialPatterns);
@@ -57,11 +68,15 @@ public partial class MainWindow : Window
         _transfers = new TransferRepository(database, _financialPatterns);
         _manualEarmarks = new ManualEarmarkRepository(database, _earMarkPatterns);
 
+        Log($"Immediately after construction — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, EarMarkPatterns.GetAll().Count: {_earMarkPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
+
         // Item 6 migration: there is always at least one account. On the first
         // run after accounts landed, the old single balance/cushion becomes the
         // "primary" account, so nothing the user already entered is lost.
         var legacy = _currentBalance.GetCurrent();
         _accounts.EnsureDefaultAccount(legacy?.Balance ?? 0m, legacy?.IdealSafetyCushion ?? 0m);
+
+        Log($"After EnsureDefaultAccount — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
 
         // planning/21 Philosophy 5/7: the permanent Earmark tab persists
         // through these callbacks instead of a ShowDialog() == true check —
@@ -115,46 +130,7 @@ public partial class MainWindow : Window
             SwitchToTab("Forecast");
         };
         ExpenseForm.RequestForecast = EnsureForecast;
-        ExpenseForm.PatternSaved = (pattern, accountId, isNew, jumpToEarmark) =>
-        {
-            _financialPatterns.Save(pattern, accountId);
-            if (isNew)
-            {
-                AutoCreateAllocationPlan(pattern, accountId);
-            }
-
-            RefreshGrids();
-            RefreshExpenseFormContext();
-            RefreshEarmarkFormContext();
-
-            // planning/21's two settled save buttons: Save and Skip planning
-            // returns to Forecast; Save and Plan jumps to Earmark with this
-            // Expense's linked plan already loaded (Philosophy 6 — set
-            // programmatically, the instance picker never visibly opens). A
-            // real EarMarkPattern already exists by now regardless of which
-            // button was pressed (Stage 1's proposer runs at creation), so
-            // this should only miss for an edited pattern that never got one
-            // (e.g. Income, or a plan the user removed) — falls back to a
-            // blank Earmark form rather than guessing.
-            if (jumpToEarmark)
-            {
-                var plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
-                if (plan is not null)
-                {
-                    EarmarkForm.LoadPattern(plan, pattern);
-                }
-                else
-                {
-                    EarmarkForm.LoadForNewPattern();
-                }
-
-                SwitchToTab("Earmark");
-            }
-            else
-            {
-                SwitchToTab("Forecast");
-            }
-        };
+        ExpenseForm.PatternSaved = OnExpensePatternSaved;
 
         EarmarkForm.RequestForecast = EnsureForecast;
 
@@ -169,6 +145,23 @@ public partial class MainWindow : Window
         RefreshGrids();
         RefreshAccountsGrid();
         LoadSavedBalance();
+        Log("=== MainWindow constructor end ===");
+    }
+
+    // TEMPORARY DIAGNOSTIC (2026-08-12) — remove once the empty-grids-on-
+    // launch report is resolved.
+    private static readonly string DiagnosticLogPath = Path.Combine(Path.GetTempPath(), "mmf-diagnostic.log");
+
+    private static void Log(string message)
+    {
+        try
+        {
+            File.AppendAllText(DiagnosticLogPath, $"{DateTime.Now:HH:mm:ss.fff} {message}\n");
+        }
+        catch
+        {
+            // Diagnostic logging itself must never be why the app fails.
+        }
     }
 
     /// <summary>[UI] Snapshots the panel needs before every Load* call — repeated rather than held live, matching how CreateEarMarkPatternWindow/ManualEarmarkWindow always took a fresh snapshot at construction too.</summary>
@@ -185,7 +178,7 @@ public partial class MainWindow : Window
         var accountIdByFinanceId = _financialPatterns.GetAllByAccount()
             .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
             .ToDictionary(pair => pair.FinanceId, pair => pair.AccountId);
-        ExpenseForm.SetContext(_financialPatterns.GetAll(), accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll());
+        ExpenseForm.SetContext(accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll());
     }
 
     /// <summary>[STEP] Matches either a plain string Header (Forecast) or Tag (Account/Expense/Earmark, whose Header is a styled TextBlock — see MainWindow.xaml's own comment on why Tag carries the stable name).</summary>
@@ -1004,6 +997,10 @@ public partial class MainWindow : Window
         var financialPatterns = _financialPatterns.GetAll();
         var earMarkPatterns = _earMarkPatterns.GetAll();
 
+        // TEMPORARY DIAGNOSTIC (2026-08-12) — remove once the empty-grids-on-
+        // launch report is resolved.
+        Log($"RefreshGrids — financialPatterns.Count: {financialPatterns.Count}, earMarkPatterns.Count: {earMarkPatterns.Count}");
+
         // financeId -> the name of the account it's filed under, so the grid
         // can show where each bill/paycheck/goal lives — never a mystery.
         var accountNamesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
@@ -1160,6 +1157,95 @@ public partial class MainWindow : Window
         RefreshExpenseFormContext();
         ExpenseForm.LoadForNewBill();
         SwitchToTab("Expense");
+    }
+
+    /// <summary>[STEP] What ExpenseForm.PatternSaved calls (wired in the constructor) — planning/25's own migration target, now resolved: routes every Expense save through FinancePatternSaveConfirmation instead of a plain repository save, so a Critical edit against existing history goes through EditingHistoryConfirmationWindow first. AutoCreateAllocationPlan (Stage 1's own, older concern — a brand-new outflow always gets a proposed plan, regardless of anything planning/25 added) has to be called from two places below rather than once: Run()'s own NavigateToEarmarkForm callback fires before this method regains control, so for a new pattern going straight to Earmark, the plan has to be created inside that callback (and the plan this method was handed — computed before the plan existed — re-read afterward); for "Save and Skip planning," it happens here instead, after Run() returns.</summary>
+    /// <param name="pattern">The form's current field values — what the user typed, before any implicit break-off/correction Run() might apply.</param>
+    /// <param name="accountId">Which account the pattern is filed under.</param>
+    /// <param name="isNew">Whether this is a brand-new pattern (Stage 1's proposer should run) or an edit to an existing one.</param>
+    /// <param name="jumpToEarmark">True for "Save and Plan," false for "Save and Skip planning."</param>
+    private void OnExpensePatternSaved(FinancialPattern pattern, int accountId, bool isNew, bool jumpToEarmark)
+    {
+        var confirmation = new FinancePatternSaveConfirmation(
+            pattern.FinanceId,
+            pattern,
+            accountId,
+            userSkippedPlanning: !jumpToEarmark,
+            EnsureForecast,
+            new FinancePatternRepositories
+            {
+                FinancialPatterns = _financialPatterns,
+                EarMarkPatterns = _earMarkPatterns,
+                ManualEarmarks = _manualEarmarks,
+            })
+        {
+            ConfirmImplicitChanges = request =>
+            {
+                var confirmWindow = new EditingHistoryConfirmationWindow(request) { Owner = this };
+                var proceed = confirmWindow.ShowDialog() == true;
+                return new ImplicitChangeConfirmationAnswer
+                {
+                    Proceed = proceed,
+                    ChooseAlterPast = confirmWindow.ChooseAlterPast,
+                    ChooseConsolidation = confirmWindow.ChooseConsolidation,
+                    ChoseScalePatterns = confirmWindow.ChoseScalePatterns,
+                };
+            },
+            NavigateToEarmarkForm = plan =>
+            {
+                if (isNew)
+                {
+                    // Run()'s own AskWhichEarmarkPatternToOpen already ran
+                    // (before this callback did) and found nothing, since
+                    // the plan doesn't exist until AutoCreateAllocationPlan
+                    // creates it right here — re-read rather than trusting
+                    // the now-stale (null) plan parameter above.
+                    AutoCreateAllocationPlan(pattern, accountId);
+                    plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
+                }
+
+                RefreshGrids();
+                RefreshExpenseFormContext();
+                RefreshEarmarkFormContext();
+
+                if (plan is not null)
+                {
+                    // Looked up by the PLAN's own FinanceId, not pattern's —
+                    // after a break-off, plan belongs to the new successor,
+                    // and pattern is still the original, now-superseded values.
+                    var goal = _financialPatterns.GetByFinanceId(plan.FinanceId) ?? pattern;
+                    EarmarkForm.LoadPattern(plan, goal);
+                }
+                else
+                {
+                    EarmarkForm.LoadForNewPattern();
+                }
+
+                SwitchToTab("Earmark");
+            },
+        };
+
+        if (!confirmation.Run())
+        {
+            return; // user cancelled — nothing saved, stay on the Expense tab as-is
+        }
+
+        if (!jumpToEarmark)
+        {
+            // The NavigateToEarmarkForm callback above never fires for "Save
+            // and Skip planning" (Run() only invokes it when planning wasn't
+            // skipped) — same AutoCreateAllocationPlan-then-refresh sequence,
+            // just without any Earmark-tab navigation at the end.
+            if (isNew)
+            {
+                AutoCreateAllocationPlan(pattern, accountId);
+            }
+
+            RefreshGrids();
+            RefreshExpenseFormContext();
+            RefreshEarmarkFormContext();
+            SwitchToTab("Forecast");
+        }
     }
 
     /// <summary>[CALC] Every scheduled outflow reserves through its own Allocation Plan (Stage 1's allocation model — planning/14), proposed at creation from the current as-of date and the user's income. Income never gets one (A-1). The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed. Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this outflow's own account (planning/17, F33) — a paycheck filed under a different account never actually funds this one.</summary>

@@ -29,6 +29,20 @@ public sealed record PlanHealthState
     // gap. Only meaningful for a repeating pattern.
     public required bool IsChronicShortfall { get; init; }
 
+    // The excess-side mirror of IsChronicShortfall: whether this plan's own
+    // scheduled contributions structurally outpace what the goal actually
+    // needs — e.g. more than one EarMarkPattern funding the same goal,
+    // together contributing more per cycle than the goal's own amount — as
+    // opposed to happening to sit a little ahead today for a one-off
+    // reason. Distinguishes "this will keep reading as overfunded every
+    // cycle, permanently, until the plan itself changes" from "a genuinely
+    // transient surplus." Added 2026-08-13 (found via Storage Unit Rental
+    // in the field: two concurrent plans summing to more than the bill
+    // needed, permanently, which read identically to a one-off surplus
+    // until this existed). Only meaningful for a repeating pattern, same as
+    // IsChronicShortfall.
+    public required bool IsChronicOverfund { get; init; }
+
     // Whether a predicted shortfall or surplus is significant enough to
     // actually warn the user about, rather than a rounding-level blip.
     public required bool IsWorthWarningAbout { get; init; }

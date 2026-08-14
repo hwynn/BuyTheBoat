@@ -1,0 +1,216 @@
+using MyMoneyForecast.Domain;
+using Shouldly;
+
+namespace MyMoneyForecast.Domain.Tests;
+
+public class EarmarkConsolidationTests
+{
+    private static readonly DateOnly GoalStart = new(2025, 1, 1);
+    private static readonly DateOnly GoalEnd = new(2025, 4, 1);
+
+    // $300/month, four occurrences (Jan/Feb/Mar/Apr 1st) inside the window
+    // above — $1,200 total consumption, the number every test's own
+    // arithmetic is checked against.
+    private static FinancialPattern MonthlyGoal(int id = 1) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = id,
+            Source = $"goal{id}",
+            Amount = -300m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = GoalStart,
+                Until = GoalEnd,
+            }),
+        });
+
+    private static FinancialPattern MonthlyIncome(int dayOfMonth, DateOnly start, DateOnly until, int id = 100) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = id,
+            Source = $"income{id}",
+            Amount = 3000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [dayOfMonth],
+                Start = start,
+                Until = until,
+            }),
+        });
+
+    private static EarMarkPattern SurvivingPlan(
+        FinancialPattern goal, DateOnly start, DateOnly until, decimal startingAllocation = 0m, DateOnly? activeFrom = null) =>
+        EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [start.Day],
+                    Start = start,
+                    Until = until,
+                    ActiveFrom = activeFrom,
+                }),
+                Amount = -100m,
+                StartingAllocation = startingAllocation,
+            },
+            goal);
+
+    [Fact]
+    public void Single_income_paces_the_consolidated_plan_and_covers_the_full_window()
+    {
+        var goal = MonthlyGoal();
+        var income = MonthlyIncome(25, new DateOnly(2024, 6, 25), new DateOnly(2026, 1, 1));
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal, income],
+        });
+
+        // 3 paydays (Jan/Feb/Mar 25th — Apr 25th falls after GoalEnd) share
+        // the full $1,200: $400 each.
+        result.Start.ShouldBe(GoalStart);
+        result.End.ShouldBe(GoalEnd);
+        result.ConsolidatedPlan.Amount.ShouldBe(-400m);
+        result.ConsolidatedPlan.DatePattern.ByMonthDay.ShouldBe([25]);
+        result.ConsolidatedPlan.DatePattern.Start.ShouldBe(GoalStart);
+        result.ConsolidatedPlan.DatePattern.Until.ShouldBe(GoalEnd);
+    }
+
+    [Fact]
+    public void Start_is_the_earliest_surviving_plans_own_ActiveStart_not_its_literal_Start()
+    {
+        var goal = MonthlyGoal();
+        // A lead-in: the plan's own Start is Feb 1, but it was already active
+        // from Jan 1 (ActiveFrom) — the earlier date is what should count.
+        var plan = SurvivingPlan(goal, new DateOnly(2025, 2, 1), GoalEnd, activeFrom: GoalStart);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+        });
+
+        result.Start.ShouldBe(GoalStart);
+    }
+
+    [Fact]
+    public void Every_surviving_plans_own_StartingAllocation_reduces_the_total_needed()
+    {
+        var goal = MonthlyGoal();
+        var planA = SurvivingPlan(goal, GoalStart, GoalEnd, startingAllocation: 200m);
+        var planB = SurvivingPlan(goal, new DateOnly(2025, 2, 1), GoalEnd, startingAllocation: 100m);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [planA, planB],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal], // no income -> spreads on the goal's own monthly cadence
+        });
+
+        // $1,200 needed, minus $300 already banked ($200 + $100), spread
+        // across the goal's own 4 monthly occurrences: $225 each.
+        result.ConsolidatedPlan.Amount.ShouldBe(-225m);
+    }
+
+    [Fact]
+    public void A_manual_earmark_dated_inside_the_window_reduces_the_total_the_same_way_StartingAllocation_does()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+        var earmark = ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = new DateOnly(2025, 2, 10), Amount = 150m },
+            plan);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [earmark],
+            AllPatterns = [goal],
+        });
+
+        // $1,200 - $150 already contributed by hand, spread across 4 monthly
+        // occurrences: $262.50 each.
+        result.ConsolidatedPlan.Amount.ShouldBe(-262.5m);
+    }
+
+    [Fact]
+    public void No_single_clear_income_spreads_across_the_goals_own_occurrences_instead()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal], // no income pattern at all
+        });
+
+        result.ConsolidatedPlan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Monthly);
+        result.ConsolidatedPlan.Amount.ShouldBe(-300m); // $1,200 / 4 occurrences
+    }
+
+    [Fact]
+    public void More_than_one_income_stream_also_falls_back_to_spreading_on_the_goals_own_cadence()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+        var incomeA = MonthlyIncome(10, new DateOnly(2024, 1, 10), new DateOnly(2026, 1, 1), id: 100);
+        var incomeB = MonthlyIncome(25, new DateOnly(2024, 1, 25), new DateOnly(2026, 1, 1), id: 101);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal, incomeA, incomeB],
+        });
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-300m); // same as the no-income case, not paced to either income
+    }
+
+    [Fact]
+    public void Already_fully_banked_clamps_to_a_zero_contribution_rather_than_going_negative()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd, startingAllocation: 5_000m); // far more than the $1,200 needed
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+        });
+
+        result.ConsolidatedPlan.Amount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void Throws_when_there_are_no_surviving_plans_to_consolidate()
+    {
+        var goal = MonthlyGoal();
+
+        Should.Throw<ArgumentException>(() => EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+        }));
+    }
+}

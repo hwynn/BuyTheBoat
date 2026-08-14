@@ -34,4 +34,28 @@ public sealed record TransactionLogBook
 
         return byFinanceId.Values.ToList();
     }
+
+    /// <summary>[CALC] Returns the FinanceId to give a brand-new FinancialPattern — one higher than the largest FinanceId currently in use across the whole book, or 1 if there are none yet.</summary>
+    public int NextFinanceId() =>
+        AllFinancialPatterns().Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max() + 1;
+
+    /// <summary>[CALC] Returns every EarMarkPattern the user has, across every account and page — every segment of every Savings Plan, not deduped. More than one can legitimately share a FinanceId (F27's relaxation of 3.11.1.a1 — a Restructure/break-off chain's segments, or concurrent funders), so unlike AllFinancialPatterns this never collapses them down to one.</summary>
+    public IReadOnlyList<EarMarkPattern> AllEarMarkPatterns()
+    {
+        var patterns = new List<EarMarkPattern>();
+        foreach (var page in LogPages)
+        {
+            foreach (var accountPage in page.AccountPages.Values)
+            {
+                patterns.AddRange(accountPage.EarmarkPatterns);
+            }
+        }
+
+        return patterns;
+    }
+
+    /// <summary>[CALC] Returns every EarMarkPattern funding one specific goal or bill — the whole Savings Plan for that FinanceId, whether it's a single plan or several segments (sequential or concurrent).</summary>
+    /// <param name="financeId">Which goal or bill's Savings Plan to return.</param>
+    public IReadOnlyList<EarMarkPattern> EarMarkPatternsFor(int financeId) =>
+        AllEarMarkPatterns().Where(pattern => pattern.FinanceId == financeId).ToList();
 }
