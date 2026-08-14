@@ -26,6 +26,15 @@ public sealed record BreakOffRequest
     // the successor is genuinely recurring (multi-occurrence), which is
     // unaffected either way.
     public bool SpreadEvenlyWithNoIncome { get; init; } = true;
+
+    // planning/25's Item G: when the caller already asked the user which
+    // plan shape they wanted (AllocationPlanProposer.Propose's own default,
+    // ProposeSameSchedule, or ProposeSameAmount) and got a real answer, pass
+    // it here to use AS-IS instead of computing Propose's own default
+    // internally. Null (the ordinary case — no question was asked, or the
+    // user picked the default) falls back to the same internal Propose call
+    // this class has always made.
+    public ProposedAllocationPlan? ChosenSuccessorPlan { get; init; }
 }
 
 // The truncated predecessor plus everything the successor needs — the same
@@ -113,6 +122,15 @@ public sealed record RenewalRequest
 // exactly when the successor itself starts, deliberately not funding ahead
 // of the cut. Income (Amount >= 0) never has a plan at all and skips
 // straight to just the cut — no jar machinery runs.
+//
+// planning/25's Item G (2026-08-14, BreakOffRequest.ChosenSuccessorPlan
+// only — MultiPlanBreakOffRequest doesn't have this yet, deliberately: Item
+// G scopes to exactly one predecessor plan, where "which shape" is
+// unambiguous. The single-plan overload's own successor is always the
+// caller's chosen plan when supplied, still seeded with CarriedOverJarBalance
+// the same way either way — a chosen candidate's own StartingAllocation was
+// only ever a placeholder for sizing, never meant to survive into what
+// actually gets saved.
 public static class BreakOffFactory
 {
     /// <summary>[CALC] Ends a bill or paycheck on a chosen date and hands it off to a new one that continues from there with its own amount/schedule — "Change starting on a date." For a bill, the old savings plan is wound down and the new one is freshly proposed, carrying over whatever was already saved.</summary>
@@ -157,8 +175,8 @@ public static class BreakOffFactory
             };
         }
 
-        var proposal = AllocationPlanProposer.Propose(
-            successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
+        var proposal = request.ChosenSuccessorPlan
+            ?? AllocationPlanProposer.Propose(successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
 
         var successorPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions

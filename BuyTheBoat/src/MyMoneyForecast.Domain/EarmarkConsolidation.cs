@@ -30,6 +30,13 @@ namespace MyMoneyForecast.Domain;
 // this needs no forecast read, it carries none of NarrowSurvivingPlanIfNeeded's
 // own "can't safely read a balance from before the as-of date" limitation —
 // this mechanism is meant to reach into the past, and can.
+//
+// The StartingAllocation share of A carries forward onto the new plan
+// itself, not just into sizing its (smaller) Amount — otherwise that
+// already-banked money stops being counted anywhere the moment the old
+// plans' rows are deleted, leaving GoalShortfall short by exactly that much
+// even though the money never actually went anywhere (found 2026-08-14, via
+// a save-then-rebuild-the-forecast test in FinancePatternSaveConfirmationTests).
 public sealed record ConsolidationRequest
 {
     public required FinancialPattern Goal { get; init; }
@@ -92,6 +99,17 @@ public static class EarmarkConsolidation
                 // Negative = money moves INTO the jar, same sign convention
                 // AllocationPlanProposer's own paced/front-loaded shapes use.
                 Amount = -perOccurrence,
+                // Carries the surviving plans' own already-banked money
+                // forward onto the one plan that replaces them. Without
+                // this, that money is discounted correctly when SIZING
+                // total above but then never counted again anywhere — the
+                // old plans' rows are gone, and a fresh plan with
+                // StartingAllocation left at 0 doesn't remember they ever
+                // held it — leaving GoalShortfall short by exactly this much
+                // even though the money is still real. Found 2026-08-14 via
+                // FinancePatternSaveConfirmationTests' own
+                // save-then-rebuild-the-forecast shortfall check.
+                StartingAllocation = request.SurvivingPlans.Sum(plan => plan.StartingAllocation),
             },
             request.Goal);
 

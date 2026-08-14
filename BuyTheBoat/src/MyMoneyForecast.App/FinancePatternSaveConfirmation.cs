@@ -214,6 +214,26 @@ public sealed class FinancePatternSaveConfirmation
         decimal AbsorbedBalance,
         IReadOnlyList<DateOnly> OrphanedManualEarmarkDates);
 
+    // planning/25's Item G: the candidate plan shapes to offer alongside
+    // Propose's own default, worked out by DeterminePlanShapeCandidatesIfApplicable
+    // before anything is saved — same "read before PerformSave writes
+    // anything" reasoning as NarrowingPlan/ConsolidationPlan's own field
+    // comments. Empty means there's nothing to choose between (most edits,
+    // or a break-off with no existing plan to draw an alternative shape
+    // from) — Item G's own scope is exactly one existing plan; a goal with
+    // more than one gets no candidates here at all, deliberately (author,
+    // 2026-08-14: the concurrent case needs its own not-yet-built mechanism
+    // to continue both plans in unison, and shouldn't also offer a shape
+    // choice on top of that complexity).
+    private IReadOnlyList<PlanShapeCandidate> _planShapeCandidates = [];
+
+    // A candidate's own Label is display text only (not read by anything in
+    // this class) — the popup shows it, the user picks one, and whichever
+    // EarMarkPattern comes back as ChosenPlanShape is matched back to its
+    // own full ProposedAllocationPlan (StartingEarmark included) by
+    // reference in PerformSingleSuccessorBreakOff, not reconstructed.
+    public sealed record PlanShapeCandidate(string Label, ProposedAllocationPlan Plan);
+
     // Everything Item F needs to actually DO with the surviving plans once
     // more than one exists — both the IN-PLACE consolidation shape
     // (planning/25, "collapsing the existing plans in place under that same
@@ -322,6 +342,15 @@ public sealed class FinancePatternSaveConfirmation
     // above; not yet exercised by a test.
     public bool UserChoseScalePatterns { get; internal set; }
 
+    // planning/25's Item G: which of _planShapeCandidates the user picked,
+    // when there was a choice to make at all — null means "use Propose's
+    // own default," both when _planShapeCandidates was empty (nothing to
+    // choose between) and when the user was offered a choice and picked the
+    // default anyway. Matched back to its own full ProposedAllocationPlan by
+    // reference in PerformSingleSuccessorBreakOff. internal set — the same
+    // testing seam as UserChooseAlterPast above.
+    public EarMarkPattern? ChosenPlanShape { get; internal set; }
+
     // Whether the resulting plan (after whatever above has been resolved) is
     // worth suggesting a fix for — the Concerning popup's own trigger,
     // sourced from PlanHealthState.IsWorthWarningAbout. TODO: not computed
@@ -402,6 +431,12 @@ public sealed class FinancePatternSaveConfirmation
         // so at most one of _narrowingPlan/_consolidationPlan is ever set.
         DetermineConsolidationPlanIfApplicable();
 
+        // planning/25's Item G — same timing as the two Determine* calls
+        // just above, and mutually exclusive with _consolidationPlan the
+        // same way: this needs exactly one surviving plan, that needs more
+        // than one.
+        DeterminePlanShapeCandidatesIfApplicable();
+
         // Same "read before anything is saved" reasoning, but for a
         // completely different, unconditional invariant: end_date can
         // always change freely (planning/25 Item A's own carve-out — never
@@ -437,6 +472,7 @@ public sealed class FinancePatternSaveConfirmation
             UserChooseAlterPast = answer.ChooseAlterPast;
             UserChooseConsolidation = answer.ChooseConsolidation;
             UserChoseScalePatterns = answer.ChoseScalePatterns;
+            ChosenPlanShape = answer.ChosenPlanShape;
         }
 
         PerformSave();
@@ -604,6 +640,76 @@ public sealed class FinancePatternSaveConfirmation
             GetSavedPatternOrThrow().Amount);
     }
 
+    /// <summary>[READS FILE] planning/25's Item G: works out which alternative plan shapes — beyond AllocationPlanProposer.Propose's own default — are genuinely available for this break-off's successor, stored in _planShapeCandidates for BuildConfirmationRequest to show and PerformSingleSuccessorBreakOff to apply whichever gets chosen. Scoped to exactly one existing plan (see _planShapeCandidates' own field comment for why more than one gets nothing here at all). Runs regardless of what UserChooseAlterPast will turn out to be — not known yet when this runs, same "compute eagerly, apply conditionally" shape DetermineConsolidationPlanIfApplicable already uses — and simply goes unused if the retroactive-correction side is chosen instead, where no fresh plan ever gets proposed. internal for the same reason its siblings are — so a test can call this directly ahead of PerformSingleSuccessorBreakOff.</summary>
+    internal void DeterminePlanShapeCandidatesIfApplicable()
+    {
+        if (!IsChangeCritical || HasMultipleEarmarkPatterns)
+        {
+            return;
+        }
+
+        var forecast = _requestForecast();
+        var existingPlan = forecast.Book.EarMarkPatternsFor(_financeId).SingleOrDefault();
+        if (existingPlan is null)
+        {
+            return; // nothing to draw an alternative shape from — only the default exists
+        }
+
+        var saved = GetSavedPatternOrThrow();
+        var cutDate = forecast.AsOfDate;
+
+        // The same successor shape PerformSingleSuccessorBreakOff will build
+        // independently later, via the very same BuildSuccessorSchedule —
+        // identity fields (Source/Description/Priority/Mandatory/AutoRenew)
+        // carried over from the SAVED pattern, only Amount/schedule from the
+        // proposed edit. NextFinanceId() is safe to call again here: nothing
+        // gets saved between this and PerformSingleSuccessorBreakOff's own
+        // later call to it on this same Run(), so both see the same value.
+        var successor = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = forecast.Book.NextFinanceId(),
+            Source = saved.Source,
+            Description = saved.Description,
+            DatePattern = RecurrenceRule.Create(BuildSuccessorSchedule(cutDate)),
+            Amount = _proposedPattern.Amount,
+            Priority = saved.Priority,
+            Mandatory = saved.Mandatory,
+            AutoRenew = saved.AutoRenew,
+        });
+
+        var allPatterns = forecast.Book.AllFinancialPatterns();
+        var carriedOverJarBalance = JarBalanceOn(cutDate, _financeId);
+
+        // Safe here — nothing has been saved yet this Run(), so every
+        // ManualEarmark still validates against its own (unchanged) plan.
+        var manualEarmarks = _repositories.ManualEarmarks.GetAll()
+            .Where(earmark => earmark.FinanceId == _financeId)
+            .ToList();
+
+        var candidates = new List<PlanShapeCandidate>
+        {
+            new("Recommended", AllocationPlanProposer.Propose(successor, allPatterns, cutDate)),
+        };
+
+        if (AllocationPlanProposer.ProposeSameSchedule(successor, existingPlan, carriedOverJarBalance, manualEarmarks, allPatterns, cutDate) is { } sameSchedule)
+        {
+            candidates.Add(new("Keep the same schedule", sameSchedule));
+        }
+
+        if (AllocationPlanProposer.ProposeSameAmount(successor, existingPlan, carriedOverJarBalance, manualEarmarks, allPatterns, cutDate) is { } sameAmount)
+        {
+            candidates.Add(new("Keep the same amount", sameAmount));
+        }
+
+        // Both new methods already return null when their own result would
+        // be indistinguishable from the default — so more than one entry
+        // here means a real choice exists, never a choice of duplicates.
+        if (candidates.Count > 1)
+        {
+            _planShapeCandidates = candidates;
+        }
+    }
+
     /// <summary>[READS FILE] Works out whether any existing EarMarkPattern's own Until now exceeds the proposed pattern's — 3.11.2.a2 has to keep holding after ANY save, not just the ones this class already asks about — and if so, everything ApplyBackTruncationsIfNeeded needs to fix it: which plans exceed the new Until, and which ManualEarmarks now fall after it and need deleting. Stored in _backTruncations rather than acted on here, same "read before PerformSave writes anything" reasoning as DetermineNarrowingPlanIfApplicable's own note — reading ManualEarmarks after the goal's Until has already shortened would validate every row against the CURRENT (already-too-short) goal and throw on the very rows being identified. Runs unconditionally — unlike every other Determine*/condition here, this isn't gated on IsChangeCritical or HasMultipleEarmarkPatterns, since end_date shortening is exempt from needing to ASK (planning/25 Item A) but never exempt from needing the linked plan(s) kept valid. internal for the same reason DetermineConditions/DetermineNarrowingPlanIfApplicable are — so a test can call this directly ahead of ApplyBackTruncationsIfNeeded without needing Run()'s own confirmation step.</summary>
     internal void DetermineBackTruncationsIfApplicable()
     {
@@ -636,6 +742,7 @@ public sealed class FinancePatternSaveConfirmation
         HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns,
         ConsolidationNeeded = ConsolidationNeeded,
         IsAmountOnlyChange = _isAmountOnlyChange,
+        PlanShapeCandidates = _planShapeCandidates,
         Description = BuildDescription(),
     };
 
@@ -853,6 +960,16 @@ public sealed class FinancePatternSaveConfirmation
 
         var predecessorPlan = forecast.Book.EarMarkPatternsFor(_financeId).SingleOrDefault();
 
+        // planning/25's Item G — matched back to its own full
+        // ProposedAllocationPlan (StartingEarmark included) by reference,
+        // not reconstructed from ChosenPlanShape alone. Null whenever
+        // ChosenPlanShape is null (no choice was offered, or the default was
+        // picked) or doesn't match any candidate this same Run() actually
+        // offered (a stray value set outside the real flow) — either way,
+        // BreakOffFactory falls back to computing its own default.
+        var chosenSuccessorPlan = _planShapeCandidates
+            .FirstOrDefault(candidate => candidate.Plan.Plan == ChosenPlanShape)?.Plan;
+
         var result = BreakOffFactory.BreakOff(new BreakOffRequest
         {
             Predecessor = saved,
@@ -863,6 +980,7 @@ public sealed class FinancePatternSaveConfirmation
             SuccessorSchedule = BuildSuccessorSchedule(cutDate),
             CarriedOverJarBalance = predecessorPlan is null ? 0m : JarBalanceOn(cutDate, _financeId),
             AllPatterns = forecast.Book.AllFinancialPatterns(),
+            ChosenSuccessorPlan = chosenSuccessorPlan,
         });
 
         // The successor is now the current segment — post-save navigation
@@ -1051,13 +1169,21 @@ public sealed record ImplicitChangeConfirmationRequest
     public required bool HasMultipleEarmarkPatterns { get; init; }
     public required bool ConsolidationNeeded { get; init; }
     public required bool IsAmountOnlyChange { get; init; }
+
+    // planning/25's Item G — empty whenever there's nothing to choose
+    // between (most edits, multi-plan goals, or a break-off with no
+    // existing plan to draw an alternative shape from). A real popup shows
+    // each candidate's own Label and hands back whichever one's own Plan
+    // the user picked as ImplicitChangeConfirmationAnswer.ChosenPlanShape.
+    public required IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates { get; init; }
+
     public required string Description { get; init; }
 }
 
 // What the user (or, when nothing is wired up, DefaultConfirmationAnswer)
 // decided. Proceed = false cancels the whole save — Run() returns false and
 // stops before PerformSave, exactly as if Save had never been clicked. The
-// other three fields are meaningless when they don't apply (e.g.
+// other fields are meaningless when they don't apply (e.g.
 // ChooseConsolidation when HasMultipleEarmarkPatterns was false) — Run()
 // only ever reads the ones DetermineConditions says are actually in play.
 public sealed record ImplicitChangeConfirmationAnswer
@@ -1066,4 +1192,10 @@ public sealed record ImplicitChangeConfirmationAnswer
     public bool ChooseAlterPast { get; init; }
     public bool ChooseConsolidation { get; init; }
     public bool ChoseScalePatterns { get; init; }
+
+    // planning/25's Item G — one of the EarMarkPatterns offered via this
+    // same request's own PlanShapeCandidates, by reference, or null to use
+    // Propose's own default (whether because PlanShapeCandidates was empty,
+    // or the user was offered a choice and picked the default anyway).
+    public EarMarkPattern? ChosenPlanShape { get; init; }
 }

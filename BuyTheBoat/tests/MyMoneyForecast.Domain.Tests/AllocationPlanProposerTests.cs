@@ -94,6 +94,33 @@ public class AllocationPlanProposerTests
         result.Plan.Amount.ShouldBeGreaterThan(-600m);
     }
 
+    // Found 2026-08-14: the plan's contributions used to land on Wednesdays
+    // (asOfDate's own weekday) instead of the income's real Fridays — a
+    // silent phase loss from anchoring Start at asOfDate while copying
+    // income's own Frequency/Interval/ByDay (RFC 5545 then ties an omitted
+    // ByDay to DTSTART's own weekday, so the SAME implicit rule now resolved
+    // against the wrong day). Fixed via AlignedSchedule, which re-anchors at
+    // income's own next real payday instead — this test locks the dates in,
+    // where the sibling test above only ever checked Amount bounds.
+    [Fact]
+    public void Biweekly_income_against_a_monthly_bill_lands_contributions_on_real_paydays()
+    {
+        var income = BiweeklyIncome(1000m, new DateOnly(2025, 1, 3), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-600m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf);
+
+        var expectedPaydays = income.DatePattern.GetOccurrences(AsOf, bill.DatePattern.Until);
+        result.Plan.DatePattern.GetOccurrences().ShouldBe(expectedPaydays);
+
+        // The jar still reads as alive from AsOf onward (so a starting
+        // earmark, or the Summary chart's own "since when" reading, isn't
+        // stranded before the plan's own first real contribution) even
+        // though the first payday itself falls two days later.
+        result.Plan.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 3));
+        result.Plan.DatePattern.ActiveStart.ShouldBe(AsOf);
+    }
+
     [Fact]
     public void A_bill_due_before_the_first_payday_gets_a_full_starting_earmark()
     {
@@ -361,4 +388,134 @@ public class AllocationPlanProposerTests
         var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1), id: 1);
         Should.Throw<ArgumentException>(() => AllocationPlanProposer.ProposeEmpty(income, AsOf));
     }
+
+    // ---- ProposeSameSchedule ------------------------------------------------
+
+    [Fact]
+    public void ProposeSameSchedule_keeps_the_existing_plans_shape_and_solves_for_an_ideal_amount()
+    {
+        var goal = MonthlyBill(-1000m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 7, 1));
+        var existingPlan = BiweeklyPlan(goal, -50m, new DateOnly(2025, 1, 3), goal.DatePattern.Until);
+
+        var result = AllocationPlanProposer.ProposeSameSchedule(goal, existingPlan, carriedOverJarBalance: 0m, [], [goal], AsOf);
+
+        result.ShouldNotBeNull();
+        result!.Plan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Weekly);
+        result.Plan.DatePattern.Interval.ShouldBe(2);
+        // Same phase as the existing plan's own Friday cycle — not just "any
+        // biweekly schedule."
+        existingPlan.DatePattern.GetOccurrences().ShouldContain(result.Plan.DatePattern.Start);
+        result.Plan.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 3));
+        // $6,000 needed (6 monthly releases from the aligned Start through
+        // the due date), spread across 13 biweekly occurrences in that same
+        // window.
+        result.Plan.Amount.ShouldBe(-461.54m);
+    }
+
+    [Fact]
+    public void ProposeSameSchedule_carries_the_real_jar_balance_forward_not_the_existing_plans_own_stale_StartingAllocation()
+    {
+        // The existing plan's own StartingAllocation (999m) is a decoy — a
+        // stale snapshot from whenever this plan was first created, not what
+        // the jar holds today. carriedOverJarBalance (1,200m, enough on its
+        // own to fully fund the $1,200/year goal) is what should actually
+        // count, and should land unchanged on the new plan's own field too.
+        var goal = MonthlyBill(-100m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var existingPlan = BiweeklyPlan(goal, -10m, new DateOnly(2025, 1, 3), goal.DatePattern.Until, startingAllocation: 999m);
+
+        var result = AllocationPlanProposer.ProposeSameSchedule(goal, existingPlan, carriedOverJarBalance: 1200m, [], [goal], AsOf);
+
+        result.ShouldBeNull(); // already fully funded by the REAL balance, regardless of the decoy field
+    }
+
+    [Fact]
+    public void ProposeSameSchedule_returns_null_when_already_fully_funded()
+    {
+        var goal = MonthlyBill(-100m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 2, 1));
+        var existingPlan = BiweeklyPlan(goal, -10m, new DateOnly(2025, 1, 3), goal.DatePattern.Until);
+
+        var result = AllocationPlanProposer.ProposeSameSchedule(goal, existingPlan, carriedOverJarBalance: 1000m, [], [goal], AsOf);
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ProposeSameSchedule_returns_null_when_indistinguishable_from_the_default_proposal()
+    {
+        // Single clear income, no existing plan at all funding this goal yet
+        // (nothing banked, no manual earmarks) — the existing plan's own
+        // shape happens to already BE what Propose would build fresh.
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+        var defaultResult = AllocationPlanProposer.Propose(bill, [bill, income], AsOf);
+
+        var result = AllocationPlanProposer.ProposeSameSchedule(bill, defaultResult.Plan, carriedOverJarBalance: 0m, [], [bill, income], AsOf);
+
+        result.ShouldBeNull();
+    }
+
+    // ---- ProposeSameAmount ---------------------------------------------------
+
+    [Fact]
+    public void ProposeSameAmount_keeps_the_existing_plans_amount_and_solves_for_an_exact_fit_cadence()
+    {
+        var goal = MonthlyBill(-1000m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 7, 1));
+        var existingPlan = BiweeklyPlan(goal, -50m, new DateOnly(2025, 1, 3), goal.DatePattern.Until);
+
+        var result = AllocationPlanProposer.ProposeSameAmount(goal, existingPlan, carriedOverJarBalance: 0m, [], [goal], AsOf);
+
+        result.ShouldNotBeNull();
+        result!.Plan.Amount.ShouldBe(-50m); // unchanged
+        result.Plan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Daily);
+        // $7,000 needed (7 monthly releases from AsOf itself, which IS one of
+        // the goal's own occurrence dates here, through the due date) at $50
+        // each needs 140 occurrences; spread daily across the 181-day window
+        // lands the last one well short of the due date, not pressed against it.
+        result.Plan.DatePattern.GetOccurrences().Count.ShouldBe(140);
+        result.Plan.DatePattern.Interval.ShouldBe(1);
+        result.Plan.DatePattern.Start.ShouldBe(AsOf);
+        result.Plan.DatePattern.Until.ShouldBe(new DateOnly(2025, 5, 20));
+    }
+
+    [Fact]
+    public void ProposeSameAmount_returns_null_when_already_fully_funded()
+    {
+        var goal = MonthlyBill(-100m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 2, 1));
+        var existingPlan = BiweeklyPlan(goal, -10m, new DateOnly(2025, 1, 3), goal.DatePattern.Until);
+
+        var result = AllocationPlanProposer.ProposeSameAmount(goal, existingPlan, carriedOverJarBalance: 1000m, [], [goal], AsOf);
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ProposeSameAmount_returns_null_when_even_daily_contributions_cant_fit_in_time()
+    {
+        // $1 per occurrence, due tomorrow, needing $10,000 — no cadence at
+        // any frequency can reach that in one day.
+        var goal = MonthlyBill(-10_000m, AsOf.AddDays(1).Day, AsOf.AddDays(1), AsOf.AddDays(1));
+        var existingPlan = BiweeklyPlan(goal, -1m, goal.DatePattern.Start, goal.DatePattern.Until);
+
+        var result = AllocationPlanProposer.ProposeSameAmount(goal, existingPlan, carriedOverJarBalance: 0m, [], [goal], AsOf);
+
+        result.ShouldBeNull();
+    }
+
+    private static EarMarkPattern BiweeklyPlan(
+        FinancialPattern goal, decimal amount, DateOnly start, DateOnly until, decimal startingAllocation = 0m) =>
+        EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = amount,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Weekly,
+                    Interval = 2,
+                    Start = start,
+                    Until = until,
+                }),
+                StartingAllocation = startingAllocation,
+            },
+            goal);
 }

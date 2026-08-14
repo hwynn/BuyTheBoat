@@ -90,6 +90,62 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorPlan.StartingAllocation.ShouldBe(expectedCarriedOverBalance);
     }
 
+    // planning/25's Item G, new 2026-08-14: the existing plan's own shape
+    // (biweekly, not the bill's own monthly cadence) makes ProposeSameSchedule's
+    // candidate structurally distinct from Propose's own default (which, with
+    // no income pattern in this scenario, falls back to the bill's own
+    // monthly cadence) — proves the popup's own choice actually reaches the
+    // saved successor, not just that a candidate list gets built.
+    [Fact]
+    public void Item_G_a_chosen_plan_shape_candidate_is_the_one_that_actually_gets_saved()
+    {
+        var bill = Bill(1, "Storage Unit Rental", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        var existingPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = bill.FinanceId,
+                Amount = -30m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Weekly,
+                    Interval = 2,
+                    Start = new DateOnly(2025, 1, 3), // a Friday
+                    Until = bill.DatePattern.Until,
+                }),
+            },
+            bill);
+        _earMarkPatterns.Save(existingPlan);
+
+        var forecast = Forecast();
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.Start, bill.DatePattern.Until);
+
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            // The fake "popup" itself — reads the real candidates this Run()
+            // actually built, the same way a real one would, rather than a
+            // value the test just hands back blind.
+            request.PlanShapeCandidates.Count.ShouldBeGreaterThan(1);
+            var sameSchedule = request.PlanShapeCandidates.Single(c => c.Label == "Keep the same schedule");
+            return new ImplicitChangeConfirmationAnswer
+            {
+                Proceed = true,
+                ChooseAlterPast = false,
+                ChosenPlanShape = sameSchedule.Plan.Plan,
+            };
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        var successorPlan = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2); // NextFinanceId() with only id 1 in play
+        successorPlan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Weekly);
+        successorPlan.DatePattern.Interval.ShouldBe(2);
+        // Same phase as the existing plan's own Friday cycle, re-anchored —
+        // not the bill's own monthly cadence Propose's default would have used.
+        existingPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.Start);
+    }
+
     // 03's 1.2.3.10.a5 only restricts start_date/amount/recurrence shape —
     // description/source/priority/mandatory stay plain edits regardless of
     // history (planning/25's "Final field categorization" table). Changing
@@ -624,6 +680,165 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plans.ShouldAllBe(p => p.FinanceId == 1);
         plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 1, 1)).Amount.ShouldBe(-240m); // -180 x 4/3
         plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 1, 2)).Amount.ShouldBe(-160m); // -120 x 4/3
+    }
+
+    // The three tests below answer a different question than the three
+    // above: not "did the saved plan's own raw fields come out right" but
+    // "once that save actually lands and the forecast is rebuilt off it —
+    // the same way the Summary region or a fresh app launch would — does
+    // GoalShortfall agree that the concern is resolved." New 2026-08-14,
+    // prompted directly by the user's own question about testing whether a
+    // saved resolution actually satisfies what it was meant to fix.
+
+    // Mirrors the forced-consolidation test above, but starts genuinely
+    // underfunded ($720/year saved against the original $1,200/year need)
+    // rather than overfunded, and checks GoalShortfall instead of the plan's
+    // own raw Amount.
+    [Fact]
+    public void Consolidating_surviving_plans_resolves_the_goals_shortfall_once_the_forecast_is_rebuilt()
+    {
+        var goal = Bill(1, "Kitchen Remodel", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(goal, accountId: 1);
+        _earMarkPatterns.Save(Plan(goal, -40m, new DateOnly(2025, 1, 1), goal.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(goal, -20m, new DateOnly(2025, 1, 2), goal.DatePattern.Until));
+
+        var forecast = Forecast();
+        var baselineShortfall = forecast.GoalShortfalls.Single(s => s.FinanceId == 1);
+        // $1,300 needed (13 monthly releases, Jan 2025 - Jan 2026 inclusive)
+        // against $760 saved (the two plans' own occurrence counts differ —
+        // 13 vs. 12 — since the second one starts a day later, same "stagger
+        // by a day so the two rows don't collide on the same (FinanceId,
+        // Start) key" reason every multi-plan test in this file does this).
+        baselineShortfall.ShortfallAmount.ShouldBe(540m);
+
+        var editedGoal = Bill(1, goal.Source, -110m, goal.DatePattern.Start, goal.DatePattern.Until);
+
+        var confirmation = Confirmation(1, editedGoal, accountId: 1, forecast);
+        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer
+        {
+            Proceed = true,
+            ChooseAlterPast = true,
+            ChooseConsolidation = true,
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        // Not the plan's own raw Amount (the sibling test above already
+        // proves that lands right) — an independently rebuilt forecast, off
+        // what's actually in the repositories now, asked the same question
+        // the Summary region would.
+        var rebuiltForecast = Forecast();
+        var shortfall = rebuiltForecast.GoalShortfalls.Single(s => s.FinanceId == 1);
+        shortfall.ShortfallAmount.ShouldBe(0m);
+        shortfall.OverfundedAmount.ShouldBe(0m);
+    }
+
+    // The scaling-side counterpart. -156/-150 (rather than a rounder-looking
+    // pair) is deliberate: the two plans' occurrence counts over this
+    // 25-month goal come out to 25 and 24 respectively (same stagger-by-a-day
+    // reason as every multi-plan scenario in this file), and this is the pair
+    // that (a) sums to exactly the original goal's own $7,500 need — a clean
+    // zero-shortfall baseline — and (b) both stay whole cents after scaling
+    // by the same 4/3 ratio the sibling structural test above already proves
+    // the raw Amounts land on (156 x 4/3 = 208, 150 x 4/3 = 200), so no
+    // rounding remainder muddies the shortfall math either side of the edit.
+    // EarmarkScaling's own contract (see its header) is narrower than
+    // EarmarkConsolidation's — it preserves whatever funding ratio already
+    // existed rather than correcting a preexisting gap — so "still zero,"
+    // not "now zero," is the honest claim to test here.
+    [Fact]
+    public void Scaling_surviving_plans_preserves_the_goals_zero_shortfall_once_the_forecast_is_rebuilt()
+    {
+        var bill = Bill(1, "Furniture Fund", -300m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -156m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -150m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
+
+        var forecast = Forecast();
+        var baselineShortfall = forecast.GoalShortfalls.Single(s => s.FinanceId == 1);
+        baselineShortfall.ShortfallAmount.ShouldBe(0m); // confirms the scenario really does start clean
+        baselineShortfall.OverfundedAmount.ShouldBe(0m);
+
+        var editedBill = Bill(1, bill.Source, -400m, bill.DatePattern.Start, bill.DatePattern.Until);
+
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
+        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer
+        {
+            Proceed = true,
+            ChooseAlterPast = true,
+            ChooseConsolidation = false,
+            ChoseScalePatterns = true,
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        var rebuiltForecast = Forecast();
+        var shortfall = rebuiltForecast.GoalShortfalls.Single(s => s.FinanceId == 1);
+        shortfall.ShortfallAmount.ShouldBe(0m);
+        shortfall.OverfundedAmount.ShouldBe(0m);
+    }
+
+    // Found while building the two tests above, not asked for at the time —
+    // surfaced and fixed same-day, with the author's go-ahead. Same scenario
+    // shape as the first test above (same goal, same -100 -> -110 edit),
+    // except plan A now carries a StartingAllocation, the way a surviving
+    // plan born from an earlier break-off would. EarmarkConsolidation.Consolidate's
+    // own "A" term (StartingAllocation + manual earmarks already banked)
+    // correctly SIZES the new plan smaller to account for that money, but
+    // used to stop there — the new plan's own StartingAllocation was left at
+    // 0, so that already-banked money stopped being counted anywhere once
+    // the old plan's row was deleted, leaving a phantom shortfall equal to
+    // exactly the lost StartingAllocation. Fixed in EarmarkConsolidation.cs
+    // by carrying SurvivingPlans.Sum(p => p.StartingAllocation) forward onto
+    // the consolidated plan.
+    [Fact]
+    public void Consolidating_a_plan_with_a_starting_allocation_still_resolves_the_goals_shortfall()
+    {
+        var goal = Bill(1, "Home Office Setup", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(goal, accountId: 1);
+        _earMarkPatterns.Save(EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -60m,
+                DatePattern = Monthly(new DateOnly(2025, 1, 1), goal.DatePattern.Until),
+                // 280, not a rounder-looking 240: this plan's own 13
+                // occurrences x $60 = $780, the other plan's 12 x $20 = $240
+                // (same 13-vs-12 stagger as the sibling test above), so 280
+                // is the value that makes 280 + 780 + 240 land on exactly
+                // the goal's own $1,300 need — a clean zero-shortfall
+                // baseline, so the $1,300 -> $1,430 x edit below and the
+                // consolidation that follows are the ONLY things that can
+                // move ShortfallAmount off zero.
+                StartingAllocation = 280m, // e.g. carried over by an earlier break-off
+            },
+            goal));
+        _earMarkPatterns.Save(Plan(goal, -20m, new DateOnly(2025, 1, 2), goal.DatePattern.Until));
+
+        var forecast = Forecast();
+        var baselineShortfall = forecast.GoalShortfalls.Single(s => s.FinanceId == 1);
+        baselineShortfall.ShortfallAmount.ShouldBe(0m); // $280 + $780 + $240 = $1,300 — exactly funded before consolidating
+
+        var editedGoal = Bill(1, goal.Source, -110m, goal.DatePattern.Start, goal.DatePattern.Until);
+
+        var confirmation = Confirmation(1, editedGoal, accountId: 1, forecast);
+        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer
+        {
+            Proceed = true,
+            ChooseAlterPast = true,
+            ChooseConsolidation = true,
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        var rebuiltForecast = Forecast();
+        var shortfall = rebuiltForecast.GoalShortfalls.Single(s => s.FinanceId == 1);
+        // The $280 StartingAllocation now carries through untouched — what's
+        // left is a $0.02 remainder from BuildSchedule's own Math.Round
+        // spreading $1,150 across 13 occurrences ($88.46 x 13 = $1,149.98,
+        // 2 cents short of $1,150 on its own). Pre-existing, unrelated to
+        // the StartingAllocation fix above, and far too small to chase here.
+        shortfall.ShortfallAmount.ShouldBe(0.02m);
     }
 
     // ---- shared scenario-building helpers ----------------------------------

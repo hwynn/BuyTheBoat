@@ -46,7 +46,14 @@ public sealed class ManualEarmark
             throw new ArgumentException("Amount cannot be zero.", nameof(options));
         }
 
-        if (options.Date < pattern.DatePattern.Start || options.Date > pattern.DatePattern.Until)
+        // ActiveSpanContains (ActiveStart..Until), not the narrower Start..Until:
+        // ActiveStart already exists precisely so a jar can be considered alive
+        // — and so a manual earmark can land on it — before the pattern's own
+        // first occurrence (e.g. a lead-in set by AllocationPlanProposer's own
+        // asOfDate handling). Identical behavior to before whenever ActiveFrom
+        // is unset (ActiveStart falls back to Start in that case) — this only
+        // widens what validates, never narrows it.
+        if (!pattern.DatePattern.ActiveSpanContains(options.Date))
         {
             throw new ArgumentException(
                 "A manual earmark must fall within its earmark pattern's date span — the pattern's timeline is the fund jar's lifetime.",

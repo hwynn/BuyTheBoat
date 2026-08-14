@@ -46,15 +46,31 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 //  - "More than one income stream" is treated as shape C rather than an
 //    arbitrary post-income/pre-bill point; the front-loaded shape is a safe,
 //    if conservative, default and the user can edit it.
-//  - Shape A anchors the plan's DatePattern.Start at asOfDate and copies the
-//    income's recurrence fields. For calendar-anchored income (monthly on a
-//    day, weekly on a weekday) that lands exactly on paydays; for interval-
-//    anchored income (e.g. biweekly) the plan may be phase-shifted from the
-//    real paydays by a few days — the per-cycle AMOUNT is unaffected, which is
-//    what governs adequacy.
 //  - An income stream that ends before the bill does is not handled: the
 //    plan is bounded by min(income.Until, bill.Until), so occurrences past
 //    the income's end simply aren't funded and the shortfall reports them.
+//
+// ProposeSameSchedule/ProposeSameAmount (2026-08-14): two further methods for
+// re-proposing a plan against an EXISTING EarMarkPattern rather than
+// building one from scratch — planning/25's Item G (suggestions) is meant to
+// offer these alongside Propose's own default. Deliberately narrower
+// freedom than a user's own edits get (planning/26): these should always
+// still be genuinely ideal, so both return null — "don't offer this" —
+// whenever their own result wouldn't be, or would be indistinguishable from
+// Propose's own default. Shared alignment fix (AlignedSchedule, below):
+// copying a reference pattern's own Frequency/Interval/ByDay/ByMonthDay at a
+// NEW Start silently loses phase whenever the reference relied on RFC
+// 5545's implicit "omitted BYDAY defaults to DTSTART's own weekday" — found
+// 2026-08-14 as a live, confirmed bug in ProposePaced itself (below), not
+// just a risk for these two new methods. Both take carriedOverJarBalance as
+// its own parameter rather than reading existingPlan.StartingAllocation —
+// the author's own explicit direction: whatever plan gets created here must
+// carry the previous plan's own real, current funds forward, and
+// StartingAllocation is a static field frozen at whenever the existing plan
+// was first created, not a live reading. Same "carry the funds forward"
+// field BreakOffFactory already reads off the forecast for its own default
+// Propose-based successor (BreakOffRequest.CarriedOverJarBalance) — these
+// two methods now expect the same real number from their own caller.
 public static class AllocationPlanProposer
 {
     /// <summary>[CALC] Proposes a default Allocation Plan for a newly-created outflow — paced against a single clear income stream when one exists, or front-loaded/spread otherwise. See this class's own header for the three shapes.</summary>
@@ -103,6 +119,151 @@ public static class AllocationPlanProposer
         }
 
         return ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate, spreadEvenlyWithNoIncome);
+    }
+
+    /// <summary>[CALC] Proposes a plan that keeps the existing plan's own recurrence shape — frequency, interval, which weekday or month-day — re-anchored to today without losing phase, with a freshly-computed Amount sized to exactly cover what's left of the goal net of what's already banked. Null when there's nothing left to fund, when the existing shape has no occurrence left to re-anchor to inside the goal's own remaining window, or when the result wouldn't be meaningfully different from Propose's own default.</summary>
+    /// <param name="outflow">The goal being funded.</param>
+    /// <param name="existingPlan">The plan currently in effect, whose recurrence shape is preserved.</param>
+    /// <param name="carriedOverJarBalance">What the jar actually holds right now — read by the caller off the live forecast, same as BreakOffFactory's own field of the same name. NOT existingPlan's own StartingAllocation: that's a static field frozen at whenever the plan was first created, while this carries forward everything that's actually happened since (scheduled contributions, releases, prior manual earmarks) — the whole reason this method exists is to replace a plan that's had a real history, so a stale snapshot from its own creation would under- or over-state what's genuinely already banked.</param>
+    /// <param name="manualEarmarksForThisGoal">Every manual earmark tied to this goal, dated AFTER asOfDate and on or before the due date — earmarks on or before asOfDate are already folded into carriedOverJarBalance, so counting them again here would double them.</param>
+    /// <param name="allPatterns">Every pattern — passed through to Propose for the "is this actually different" check.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date — where the re-anchored schedule starts from.</param>
+    public static ProposedAllocationPlan? ProposeSameSchedule(
+        FinancialPattern outflow,
+        EarMarkPattern existingPlan,
+        decimal carriedOverJarBalance,
+        IReadOnlyList<ManualEarmark> manualEarmarksForThisGoal,
+        IReadOnlyList<FinancialPattern> allPatterns,
+        DateOnly asOfDate)
+    {
+        var dueDate = outflow.DatePattern.Until;
+        var alignedSchedule = AlignedSchedule(existingPlan.DatePattern, asOfDate, dueDate);
+        if (alignedSchedule is null || alignedSchedule.Start > dueDate)
+        {
+            return null;
+        }
+
+        try
+        {
+            var scheduleRule = RecurrenceRule.Create(alignedSchedule);
+            var occurrenceCount = scheduleRule.GetOccurrences().Count;
+            if (occurrenceCount == 0)
+            {
+                return null;
+            }
+
+            var totalReleases = Math.Abs(outflow.Amount)
+                * outflow.DatePattern.GetOccurrences(alignedSchedule.Start, dueDate).Count;
+            var alreadyBanked = carriedOverJarBalance
+                + manualEarmarksForThisGoal.Where(manual => manual.Date > asOfDate && manual.Date <= dueDate).Sum(manual => manual.Amount);
+            var totalNeeded = Math.Max(0m, totalReleases - alreadyBanked);
+
+            if (totalNeeded == 0m)
+            {
+                return null;
+            }
+
+            var plan = EarMarkPattern.Create(
+                new EarMarkPatternOptions
+                {
+                    FinanceId = outflow.FinanceId,
+                    DatePattern = scheduleRule,
+                    Amount = -Math.Round(totalNeeded / occurrenceCount, 2),
+                    StartingAllocation = carriedOverJarBalance,
+                },
+                outflow);
+
+            return MatchesDefaultProposal(plan, outflow, allPatterns, asOfDate)
+                ? null
+                : new ProposedAllocationPlan(outflow, plan, null);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>[CALC] Proposes a plan that keeps the existing plan's own Amount unchanged, on a freshly-computed cadence sized to exactly cover what's left of the goal net of what's already banked — evenly-spaced Daily-interval occurrences, not paced to any existing pattern, so there is no recurrence shape to lose phase on. Null when there's nothing left to fund, when even daily contributions of the existing Amount can't reach the target before the goal's own due date, or when the result wouldn't be meaningfully different from Propose's own default.</summary>
+    /// <param name="outflow">The goal being funded.</param>
+    /// <param name="existingPlan">The plan currently in effect, whose Amount is preserved.</param>
+    /// <param name="carriedOverJarBalance">What the jar actually holds right now — see ProposeSameSchedule's own parameter of the same name for why this is not existingPlan.StartingAllocation.</param>
+    /// <param name="manualEarmarksForThisGoal">Every manual earmark tied to this goal, dated AFTER asOfDate and on or before the due date — see ProposeSameSchedule's own parameter of the same name for why.</param>
+    /// <param name="allPatterns">Every pattern — passed through to Propose for the "is this actually different" check.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date — where the new schedule starts from.</param>
+    public static ProposedAllocationPlan? ProposeSameAmount(
+        FinancialPattern outflow,
+        EarMarkPattern existingPlan,
+        decimal carriedOverJarBalance,
+        IReadOnlyList<ManualEarmark> manualEarmarksForThisGoal,
+        IReadOnlyList<FinancialPattern> allPatterns,
+        DateOnly asOfDate)
+    {
+        var fixedAmount = Math.Abs(existingPlan.Amount);
+        if (fixedAmount == 0m)
+        {
+            return null; // nothing to solve a cadence for
+        }
+
+        var dueDate = outflow.DatePattern.Until;
+        var totalReleases = Math.Abs(outflow.Amount) * outflow.DatePattern.GetOccurrences(asOfDate, dueDate).Count;
+        var alreadyBanked = carriedOverJarBalance
+            + manualEarmarksForThisGoal.Where(manual => manual.Date > asOfDate && manual.Date <= dueDate).Sum(manual => manual.Amount);
+        var totalNeeded = Math.Max(0m, totalReleases - alreadyBanked);
+
+        if (totalNeeded == 0m)
+        {
+            return null;
+        }
+
+        var occurrencesNeeded = (int)Math.Ceiling(totalNeeded / fixedAmount);
+
+        RecurrenceRuleOptions schedule;
+        if (occurrencesNeeded <= 1)
+        {
+            schedule = new RecurrenceRuleOptions { Frequency = RecurrenceFrequency.Yearly, Start = asOfDate, Count = 1 };
+        }
+        else
+        {
+            // Evenly spaced, spanning the whole window — the last of the N
+            // occurrences lands on or before dueDate (floor division), never
+            // after. Daily/Interval sidesteps AlignedSchedule entirely: it
+            // has no implicit day-of-week/month-day to lose phase on.
+            var windowDays = dueDate.DayNumber - asOfDate.DayNumber;
+            var interval = windowDays / (occurrencesNeeded - 1);
+            if (interval < 1)
+            {
+                return null; // even daily contributions can't fit that many occurrences before the due date
+            }
+
+            schedule = new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Daily,
+                Interval = interval,
+                Start = asOfDate,
+                Count = occurrencesNeeded,
+            };
+        }
+
+        try
+        {
+            var plan = EarMarkPattern.Create(
+                new EarMarkPatternOptions
+                {
+                    FinanceId = outflow.FinanceId,
+                    DatePattern = RecurrenceRule.Create(schedule),
+                    Amount = -fixedAmount,
+                    StartingAllocation = carriedOverJarBalance,
+                },
+                outflow);
+
+            return MatchesDefaultProposal(plan, outflow, allPatterns, asOfDate)
+                ? null
+                : new ProposedAllocationPlan(outflow, plan, null);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     // The empty (declined) plan. When the user removes or declines the proposed
@@ -177,15 +338,21 @@ public static class AllocationPlanProposer
     {
         var perPayday = Math.Round(billAmount * billOccurrenceCount / paydayCount, 2);
 
-        var planPattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-        {
-            Frequency = income.DatePattern.Frequency,
-            Interval = income.DatePattern.Interval,
-            ByDay = income.DatePattern.ByDay,
-            ByMonthDay = income.DatePattern.ByMonthDay,
-            Start = asOfDate,
-            Until = planUntil,
-        });
+        // Fixed 2026-08-14 — was: Start = asOfDate here, blindly. Copying
+        // income's own Frequency/Interval/ByDay/ByMonthDay but anchoring at
+        // asOfDate instead of a real payday silently loses phase whenever
+        // income relies on RFC 5545's implicit "omitted BYDAY defaults to
+        // DTSTART's own weekday" (true for any interval-anchored income with
+        // no explicit ByDay, e.g. a biweekly paycheck) — confirmed live:
+        // income paydays Jan 3/17/31 (Fridays) vs. the old code's own plan
+        // landing Jan 1/15/29 (Wednesdays), same scenario as
+        // Biweekly_income_against_a_monthly_bill_paces_below_the_full_amount.
+        // AlignedSchedule (below) re-anchors at income's own next real payday
+        // instead. paydayCount > 0 already guarantees one exists on or after
+        // asOfDate within [asOfDate, planUntil], so this can't come back null.
+        var planPattern = RecurrenceRule.Create(
+            AlignedSchedule(income.DatePattern, asOfDate, planUntil)
+            ?? throw new InvalidOperationException("Unreachable: Propose already confirmed paydayCount > 0 in this window."));
 
         var plan = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -362,5 +529,48 @@ public static class AllocationPlanProposer
     {
         var occurrences = rule.GetOccurrences(from, rule.Until);
         return occurrences.Count > 0 ? occurrences[0] : null;
+    }
+
+    /// <summary>[CALC] Re-anchors a reference pattern's own recurrence shape at a new start date without losing phase — finds the reference's own next real occurrence on or after the desired date and uses THAT as the new Start, rather than the raw desired date itself. Safe even when the reference's ByDay/ByMonthDay was never set explicitly: RFC 5545 then implicitly ties an omitted BYDAY to DTSTART's own weekday, which a raw new Start would silently change out from under it (see ProposePaced's own header comment for the confirmed bug this fixes). Extends the reference's own Until first when the caller needs a later window than the reference itself currently reaches — the reference's SHAPE is what's being preserved, not its own current end date. When the aligned occurrence lands after desiredStart, sets ActiveFrom back to desiredStart — same reasoning as Propose's own outflow-preparation step — so the jar still reads as alive (and a starting earmark can still be dated) from desiredStart onward, not only from the first real contribution.</summary>
+    /// <param name="reference">The pattern whose recurrence shape (and phase) to preserve.</param>
+    /// <param name="desiredStart">Where the new schedule should start from, ideally.</param>
+    /// <param name="until">The new schedule's own end date.</param>
+    /// <returns>A schedule with the reference's own shape, anchored at the reference's nearest real occurrence on or after desiredStart — or null when the reference has no such occurrence within the window.</returns>
+    private static RecurrenceRuleOptions? AlignedSchedule(RecurrenceRule reference, DateOnly desiredStart, DateOnly until)
+    {
+        var extendedReference = until > reference.Until ? reference.WithUntil(until) : reference;
+        if (FirstOccurrenceOnOrAfter(extendedReference, desiredStart) is not { } alignedStart)
+        {
+            return null;
+        }
+
+        return new RecurrenceRuleOptions
+        {
+            Frequency = reference.Frequency,
+            Interval = reference.Interval,
+            ByDay = reference.ByDay,
+            ByMonthDay = reference.ByMonthDay,
+            Start = alignedStart,
+            ActiveFrom = alignedStart > desiredStart ? desiredStart : null,
+            Until = until,
+        };
+    }
+
+    /// <summary>[CALC] Whether a candidate plan is functionally identical to what Propose would build fresh for the same outflow — same Amount and the same recurrence shape. A candidate this close to the default isn't a meaningfully different option to offer alongside it.</summary>
+    /// <param name="candidate">The plan to compare.</param>
+    /// <param name="outflow">The outflow to compare it against Propose's own default for.</param>
+    /// <param name="allPatterns">Every pattern, passed through to Propose unchanged.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date, passed through to Propose unchanged.</param>
+    private static bool MatchesDefaultProposal(
+        EarMarkPattern candidate, FinancialPattern outflow, IReadOnlyList<FinancialPattern> allPatterns, DateOnly asOfDate)
+    {
+        var defaultPlan = Propose(outflow, allPatterns, asOfDate).Plan;
+        return candidate.Amount == defaultPlan.Amount
+            && candidate.DatePattern.Frequency == defaultPlan.DatePattern.Frequency
+            && candidate.DatePattern.Interval == defaultPlan.DatePattern.Interval
+            && candidate.DatePattern.Start == defaultPlan.DatePattern.Start
+            && candidate.DatePattern.Until == defaultPlan.DatePattern.Until
+            && candidate.DatePattern.ByDay.SequenceEqual(defaultPlan.DatePattern.ByDay)
+            && candidate.DatePattern.ByMonthDay.SequenceEqual(defaultPlan.DatePattern.ByMonthDay);
     }
 }

@@ -122,6 +122,12 @@ public class EarmarkConsolidationTests
         // $1,200 needed, minus $300 already banked ($200 + $100), spread
         // across the goal's own 4 monthly occurrences: $225 each.
         result.ConsolidatedPlan.Amount.ShouldBe(-225m);
+        // And that $300 doesn't just shrink the new plan's own Amount — it
+        // has to carry forward as the new plan's own StartingAllocation too,
+        // or GoalShortfall stops counting it anywhere the moment planA/planB's
+        // rows are gone (found 2026-08-14 via a save-then-rebuild-the-forecast
+        // test in FinancePatternSaveConfirmationTests, fixed here).
+        result.ConsolidatedPlan.StartingAllocation.ShouldBe(300m);
     }
 
     [Fact]
