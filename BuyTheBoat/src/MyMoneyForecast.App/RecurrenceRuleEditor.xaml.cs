@@ -41,6 +41,13 @@ public partial class RecurrenceRuleEditor : UserControl
     private IReadOnlyList<DateOnly> _allOccurrences = [];
     private bool _showAllOccurrences;
 
+    // RFC 5545 EXDATE — dates skipped even though the schedule would
+    // otherwise land on them (redesign/planning/26, "the glut case,"
+    // mechanism C). Maintained here regardless of whether
+    // ExcludedDatesSection is actually visible, same as every other schedule
+    // field — only the section's own Visibility is host-gated.
+    private List<DateOnly> _excludedDates = [];
+
     public RecurrenceRuleEditor()
     {
         InitializeComponent();
@@ -83,6 +90,7 @@ public partial class RecurrenceRuleEditor : UserControl
     {
         _initialized = false;
         _showAllOccurrences = false;
+        _excludedDates = rule.ExcludedDates.OrderBy(date => date).ToList();
 
         foreach (var item in FrequencyComboBox.Items.OfType<ComboBoxItem>())
         {
@@ -150,6 +158,9 @@ public partial class RecurrenceRuleEditor : UserControl
         RruleStringTextBox.Visibility = visibility;
     }
 
+    /// <summary>[UI] Reveals the "Skip specific dates" section — collapsed by default so Expense/Transfer, which don't offer this freedom, are unaffected. One-way: no matching "hide it again" exists yet, since nothing currently needs it.</summary>
+    public void ShowExcludedDatesEditor() => ExcludedDatesSection.Visibility = Visibility.Visible;
+
     /// <summary>[UI] Lets a host inject its own field(s) at the top of this editor's own left column — e.g. Earmark's "Amount per occurrence," so the right-side preview can use the vertical space that would otherwise sit empty above the recurrence fields. Null clears it back to nothing — every other current caller (Expense, Transfer) is unaffected unless it calls this too.</summary>
     /// <param name="content">The element to inject, or null to clear it.</param>
     public void SetLeadingContent(UIElement? content)
@@ -197,6 +208,11 @@ public partial class RecurrenceRuleEditor : UserControl
         UpdateFormVisibility();
         ErrorText.Text = string.Empty;
 
+        // Independent of whether the rest of the form is currently valid —
+        // what's already been skipped doesn't disappear just because the
+        // user is mid-edit on some other field.
+        ExcludedDatesListBox.ItemsSource = _excludedDates;
+
         try
         {
             var options = ReadOptionsFromForm();
@@ -218,6 +234,7 @@ public partial class RecurrenceRuleEditor : UserControl
 
             _allOccurrences = occurrences;
             UpdateOccurrencesDisplay();
+            UpdateExcludableOccurrences(rule);
 
             Result = rule;
         }
@@ -227,6 +244,7 @@ public partial class RecurrenceRuleEditor : UserControl
             PreviewCalendar.SelectedDates.Clear();
             _allOccurrences = [];
             UpdateOccurrencesDisplay();
+            ExcludableOccurrenceComboBox.ItemsSource = null;
             RruleStringTextBox.Text = string.Empty;
             ResolvedUntilText.Text = string.Empty;
             Result = null;
@@ -294,6 +312,46 @@ public partial class RecurrenceRuleEditor : UserControl
     {
         _showAllOccurrences = !_showAllOccurrences;
         UpdateOccurrencesDisplay();
+    }
+
+    /// <summary>[UI] Refreshes which dates the "Skip specific dates" picker offers — this schedule's own real occurrences, minus whichever are already skipped. Reads the RAW list (WithExcludedDates([])) rather than the already-filtered one Recalculate just computed, since a date already skipped is exactly the one thing that shouldn't be offered again.</summary>
+    /// <param name="rule">The just-built rule to read candidate dates from.</param>
+    private void UpdateExcludableOccurrences(RecurrenceRule rule)
+    {
+        var stillExcludable = rule.WithExcludedDates([]).GetOccurrences()
+            .Except(_excludedDates)
+            .ToList();
+
+        ExcludableOccurrenceComboBox.ItemsSource = stillExcludable;
+        if (stillExcludable.Count > 0)
+        {
+            ExcludableOccurrenceComboBox.SelectedIndex = 0;
+        }
+    }
+
+    /// <summary>[UI] Moves the picker's currently-selected date from "scheduled" to "skipped" and refreshes the preview — the button beside ExcludableOccurrenceComboBox.</summary>
+    private void OnSkipDateClick(object sender, RoutedEventArgs e)
+    {
+        if (ExcludableOccurrenceComboBox.SelectedItem is not DateOnly selected)
+        {
+            return;
+        }
+
+        _excludedDates = [.. _excludedDates, selected];
+        _excludedDates.Sort();
+        Recalculate();
+    }
+
+    /// <summary>[UI] Moves one date back from "skipped" to "scheduled" — the Restore button next to each row in ExcludedDatesListBox, reading which date via that row's own Tag.</summary>
+    private void OnRestoreExcludedDateClick(object sender, RoutedEventArgs e)
+    {
+        if (((Button)sender).Tag is not DateOnly toRestore)
+        {
+            return;
+        }
+
+        _excludedDates = _excludedDates.Where(date => date != toRestore).ToList();
+        Recalculate();
     }
 
     /// <summary>[UI] Toggles the host-supplied caption's own visibility (e.g. "Projected short") — the occurrence list's height is capped unconditionally instead (see the XAML), so this doesn't need to bound it itself.</summary>
@@ -418,6 +476,7 @@ public partial class RecurrenceRuleEditor : UserControl
             ByMonthDay = byMonthDay,
             Until = until,
             Count = count,
+            ExcludedDates = _excludedDates,
         };
     }
 

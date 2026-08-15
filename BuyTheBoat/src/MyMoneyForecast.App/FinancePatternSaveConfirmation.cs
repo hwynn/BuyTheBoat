@@ -252,6 +252,23 @@ public sealed class FinancePatternSaveConfirmation
         IReadOnlyList<EarMarkPattern> SurvivingPlans,
         IReadOnlyList<ManualEarmark> ManualEarmarksForThisGoal,
         IReadOnlyList<FinancialPattern> AllPatterns,
+        // The live jar as of today, read HERE rather than inside
+        // ConsolidateSurvivingPlansIfNeeded — 2026-08-15, found the hard way
+        // via two existing tests whose numbers shifted for the wrong reason
+        // (FinancePatternSaveConfirmationTests). This class's own header
+        // comment on DetermineConsolidationPlanIfApplicable used to say
+        // consolidation "needs no forecast-timing carve-out... neither
+        // downstream mechanism's own total is built from a day-by-day
+        // balance read" — true when it was written, no longer true once
+        // EarmarkConsolidation started reading a live jar for glut
+        // protection. Reading it late (inside ConsolidateSurvivingPlansIfNeeded,
+        // which runs AFTER PerformSave) would read the jar against the
+        // ALREADY-EDITED goal's own new schedule, not the one that actually
+        // produced whatever glut exists — exactly the "read after PerformSave
+        // writes" trap DetermineNarrowingPlanIfApplicable's own comment
+        // already warns about for a different field. Captured here instead,
+        // off the SAME pre-save forecast SurvivingPlans already reads.
+        FundJar? CurrentJar,
         // The saved (pre-edit) goal's own Amount — only EarmarkScaling.Scale
         // needs this, to compute the ratio the goal's own Amount just
         // changed by. Captured here for the same reason everything else in
@@ -612,7 +629,7 @@ public sealed class FinancePatternSaveConfirmation
         _narrowingPlan = new NarrowingPlan(plan, newActiveStart, absorbedBalance, orphanedDates);
     }
 
-    /// <summary>[READS FILE] Works out whether Item F's own multi-plan mechanisms (in-place consolidation, or amount-only scaling) would apply, and if so, everything either ConsolidateSurvivingPlansIfNeeded or ScaleSurvivingPlansIfNeeded needs to actually carry it out — stored in _consolidationPlan rather than acted on here. Runs regardless of what UserChooseAlterPast/UserChooseConsolidation/UserChoseScalePatterns will turn out to be — none is known yet when this runs — and simply goes unused on any path that doesn't end up needing it, the same "compute eagerly, apply conditionally" shape DetermineNarrowingPlanIfApplicable already uses. Unlike that method, needs no forecast-timing carve-out (no "before the as-of date" gap): neither downstream mechanism's own total is built from a day-by-day balance read, so it's safe to reach as far into the past as the surviving plans themselves do. internal for the same reason DetermineNarrowingPlanIfApplicable is — so a test can call this directly ahead of either downstream method.</summary>
+    /// <summary>[READS FILE] Works out whether Item F's own multi-plan mechanisms (in-place consolidation, or amount-only scaling) would apply, and if so, everything either ConsolidateSurvivingPlansIfNeeded or ScaleSurvivingPlansIfNeeded needs to actually carry it out — stored in _consolidationPlan rather than acted on here. Runs regardless of what UserChooseAlterPast/UserChooseConsolidation/UserChoseScalePatterns will turn out to be — none is known yet when this runs — and simply goes unused on any path that doesn't end up needing it, the same "compute eagerly, apply conditionally" shape DetermineNarrowingPlanIfApplicable already uses. Also reads today's own jar here (ConsolidationPlan.CurrentJar) for the identical reason DetermineNarrowingPlanIfApplicable reads ManualEarmarks here — EarmarkConsolidation's own glut protection (2026-08-15) needs a live balance read, and reading it after PerformSave would read it against the ALREADY-edited goal's new schedule, not the one that actually produced whatever glut exists. internal for the same reason DetermineNarrowingPlanIfApplicable is — so a test can call this directly ahead of either downstream method.</summary>
     internal void DetermineConsolidationPlanIfApplicable()
     {
         if (!IsChangeCritical || !HasMultipleEarmarkPatterns)
@@ -633,10 +650,15 @@ public sealed class FinancePatternSaveConfirmation
             .Where(earmark => earmark.FinanceId == _financeId)
             .ToList();
 
+        var currentJar = forecast.GetTimeline(_financeId)
+            .LastOrDefault(entry => entry.Date <= forecast.AsOfDate)?.Snapshot.FundJars
+            .FirstOrDefault(jar => jar.FinanceId == _financeId);
+
         _consolidationPlan = new ConsolidationPlan(
             survivingPlans,
             manualEarmarks,
             forecast.Book.AllFinancialPatterns(),
+            currentJar,
             GetSavedPatternOrThrow().Amount);
     }
 
@@ -1099,6 +1121,11 @@ public sealed class FinancePatternSaveConfirmation
             SurvivingPlans = plan.SurvivingPlans,
             ManualEarmarksForThisGoal = plan.ManualEarmarksForThisGoal,
             AllPatterns = plan.AllPatterns,
+            // Read back at DetermineConsolidationPlanIfApplicable time, not
+            // here — see ConsolidationPlan.CurrentJar's own field comment
+            // for why reading it live at this point (after PerformSave) is
+            // the wrong moment.
+            CurrentJar = plan.CurrentJar,
         });
 
         _repositories.EarMarkPatterns.Save(result.ConsolidatedPlan);
@@ -1129,16 +1156,16 @@ public sealed class FinancePatternSaveConfirmation
     /// <param name="date">The day to read the balance as of.</param>
     /// <param name="financeId">Which fund's balance to read.</param>
     /// <returns>The jar's ExpectedAmount on that day, or 0m for a day before the forecast's own timeline starts, or a FinanceId with no jar at all.</returns>
-    private decimal JarBalanceOn(DateOnly date, int financeId)
+    private decimal JarBalanceOn(DateOnly date, int financeId) => JarOn(date, financeId)?.ExpectedAmount ?? 0m;
+
+    /// <summary>[READS FILE] Reads a fund jar itself (not just its ExpectedAmount) as of a chosen day off the live forecast — JarBalanceOn's own sibling, for callers that also need MilestoneAmount/HasGlut/GlutSurplus, not just the raw balance.</summary>
+    /// <param name="date">The day to read the jar as of.</param>
+    /// <param name="financeId">Which fund's jar to read.</param>
+    /// <returns>The jar as of that day, or null for a day before the forecast's own timeline starts, or a FinanceId with no jar at all.</returns>
+    private FundJar? JarOn(DateOnly date, int financeId)
     {
         var entry = _requestForecast().GetTimeline(financeId).LastOrDefault(candidate => candidate.Date <= date);
-        if (entry is null)
-        {
-            return 0m;
-        }
-
-        var jar = entry.Snapshot.FundJars.FirstOrDefault(candidate => candidate.FinanceId == financeId);
-        return jar?.ExpectedAmount ?? 0m;
+        return entry?.Snapshot.FundJars.FirstOrDefault(candidate => candidate.FinanceId == financeId);
     }
 }
 

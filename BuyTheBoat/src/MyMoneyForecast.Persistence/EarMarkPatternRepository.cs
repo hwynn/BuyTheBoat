@@ -19,9 +19,9 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
         // starting on a different date.
         command.CommandText = """
             INSERT INTO EarMarkPatterns
-                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation)
+                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates)
             VALUES
-                ($FinanceId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $StartingAllocation)
+                ($FinanceId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $StartingAllocation, $ExcludedDates)
             ON CONFLICT(FinanceId, StartDate) DO UPDATE SET
                 Amount = excluded.Amount,
                 Frequency = excluded.Frequency,
@@ -30,7 +30,8 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
                 ByMonthDay = excluded.ByMonthDay,
                 UntilDate = excluded.UntilDate,
                 ActiveFrom = excluded.ActiveFrom,
-                StartingAllocation = excluded.StartingAllocation;
+                StartingAllocation = excluded.StartingAllocation,
+                ExcludedDates = excluded.ExcludedDates;
             """;
 
         command.Parameters.AddWithValue("$FinanceId", pattern.FinanceId);

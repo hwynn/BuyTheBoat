@@ -428,6 +428,56 @@ public class AllocationPlanProposerTests
         result.ShouldBeNull(); // already fully funded by the REAL balance, regardless of the decoy field
     }
 
+    // Mechanism-C follow-on (redesign/planning/26, "the glut case",
+    // 2026-08-15): unlike EarmarkConsolidation, ProposeSameSchedule/
+    // ProposeSameAmount needed no code change to protect a glut — the test
+    // right above this one already proves carriedOverJarBalance wins over a
+    // stale StartingAllocation field; this proves the stronger claim, that
+    // it's the REAL, forecast-computed balance (not a hand-picked number)
+    // that survives into the new plan's own StartingAllocation untouched,
+    // for a jar that's genuinely, verifiably glutted (not just "some decoy
+    // beaten by a bigger number").
+    [Fact]
+    public void ProposeSameSchedule_carries_a_real_forecast_glut_forward_into_the_new_plans_own_StartingAllocation()
+    {
+        var goal = MonthlyBill(-100m, 1, AsOf, new DateOnly(2025, 12, 1));
+        var existingPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -150m, // over-contributes every month — a real, structural glut
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = AsOf,
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            goal);
+
+        var forecast = TransactionLogBookFactory.CreateForecast(new ForecastOptions
+        {
+            FinancialPatterns = [goal],
+            EarMarkPatterns = [existingPlan],
+            ManualEarmarks = [],
+            StartingBalance = 10_000m,
+            AsOfDate = AsOf,
+            HorizonEndDate = new DateOnly(2025, 3, 31),
+        });
+        var jar = forecast.GetTimeline(goal.FinanceId).Last(entry => entry.Date <= AsOf).Snapshot.FundJars.Single(j => j.FinanceId == goal.FinanceId);
+        jar.HasGlut.ShouldBeTrue(); // a real, checked glut — not assumed
+
+        var result = AllocationPlanProposer.ProposeSameSchedule(goal, existingPlan, jar.ExpectedAmount, [], [goal], AsOf);
+
+        // Ten months still left after AsOf — the $50 glut discounts what's
+        // still owed but doesn't fully cover it, so this offers a real
+        // candidate rather than declining (ProposeSameSchedule_returns_null_
+        // when_already_fully_funded below covers the opposite case).
+        result.ShouldNotBeNull();
+        result!.Plan.StartingAllocation.ShouldBe(jar.ExpectedAmount); // the real glut, carried forward exactly, not eroded
+    }
+
     [Fact]
     public void ProposeSameSchedule_returns_null_when_already_fully_funded()
     {

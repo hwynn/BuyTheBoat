@@ -53,6 +53,223 @@ public class TransactionLogBookFactoryTests
     private static decimal CushionJar(BalanceSnapshot snapshot) =>
         snapshot.FundJars.Single(jar => jar.FinanceId is null).ExpectedAmount;
 
+    // Answers a real, asked question (2026-08-14): does a release reset
+    // ExpectedAmount to 0, or does it only subtract the goal's own
+    // per-occurrence amount, leaving any excess sitting in the jar? Only
+    // MilestoneAmount resets at release (3.13.5.4.a1) — ExpectedAmount just
+    // tracks net contributions minus releases, accurately, forever. A
+    // structural glut (contributing more than the goal needs every single
+    // cycle, not just a one-time head start) is never wiped by ordinary
+    // cascade behavior — it accumulates, cycle over cycle. The only real
+    // risk to a glut is the newer re-proposal mechanisms
+    // (EarmarkConsolidation/EarmarkScaling/ProposeSameSchedule/ProposeSameAmount)
+    // that explicitly treat "already banked" as one redistributable number —
+    // not anything in the base cascade itself.
+    [Fact]
+    public void A_structural_glut_accumulates_across_releases_instead_of_being_reset()
+    {
+        // Contributes MORE than the goal needs every single cycle — a
+        // permanent, structural glut, not a one-time head start.
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Rent",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 31),
+            }),
+            Amount = -100m,
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 31),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 3, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [plan]));
+
+        // $50 excess per cycle ($150 contributed - $100 released), growing
+        // by $50 every month rather than resetting — not reset to $0, and
+        // not reset back to just one cycle's own $50 either.
+        Jar(SnapshotOn(result, new DateOnly(2025, 1, 1)), goal.FinanceId).ShouldBe(50m);
+        Jar(SnapshotOn(result, new DateOnly(2025, 2, 1)), goal.FinanceId).ShouldBe(100m);
+        Jar(SnapshotOn(result, new DateOnly(2025, 3, 1)), goal.FinanceId).ShouldBe(150m);
+    }
+
+    // Mechanism C, end to end: proves an EarMarkPattern's own ExcludedDates
+    // (redesign/planning/26, "the glut case") actually suppresses a real
+    // contribution in a real forecast, not just in GetOccurrences' own unit
+    // tests (RecurrenceRuleTests) — every call site the cascade uses
+    // (TransactionLogBookFactory.cs line ~375, the repeated-earmark-event
+    // generation loop) reads DatePattern.GetOccurrences() the same way, so
+    // this is the one place the wiring could still have been missed.
+    [Fact]
+    public void An_excluded_date_produces_no_contribution_and_no_milestone_increment_in_a_real_forecast()
+    {
+        // A one-time goal due much later — no release lands inside the test
+        // window, so ExpectedAmount is a clean running total of whichever
+        // contributions actually fired, with nothing draining it back down
+        // to mask the difference. ActiveFrom stretches the goal's own active
+        // span back far enough for the plan below to start in January,
+        // same shape as the pause-case test above.
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Boat",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2025, 12, 25),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+            Amount = -1000m,
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 4, 1),
+                    ExcludedDates = [new DateOnly(2025, 3, 1)], // deliberately skipped
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 4, 30),
+            financialPatterns: [goal],
+            earMarkPatterns: [plan]));
+
+        // Jan + Feb + Apr = 3 real contributions, not 4 — March's own $100
+        // never happened, exactly as if that occurrence had never been
+        // scheduled at all. March 1 itself isn't queried here: with nothing
+        // scheduled that day (no contribution, no release), it's not a
+        // BalanceRecord key at all — same as any other ordinary non-event
+        // day — so April 1 landing on 300, not 400, is where the skipped
+        // contribution's absence actually shows up.
+        Jar(SnapshotOn(result, new DateOnly(2025, 1, 1)), goal.FinanceId).ShouldBe(100m);
+        Jar(SnapshotOn(result, new DateOnly(2025, 2, 1)), goal.FinanceId).ShouldBe(200m);
+        Jar(SnapshotOn(result, new DateOnly(2025, 4, 1)), goal.FinanceId).ShouldBe(300m);
+
+        // The milestone line is pure schedule math (3.13.5.4.a1) — proves it
+        // skips the excluded occurrence too, not just the real contribution.
+        var milestoneAtEnd = SnapshotOn(result, new DateOnly(2025, 4, 1)).FundJars
+            .Single(jar => jar.FinanceId == goal.FinanceId).MilestoneAmount;
+        milestoneAtEnd.ShouldBe(300m);
+    }
+
+    // Answers a real, asked question (2026-08-14): can a zero-amount
+    // EarMarkPattern hold an already-accumulated balance through a funding
+    // pause, then a THIRD plan resume real contributions afterward — three
+    // separate rows sharing one finance_id, sequential and non-overlapping,
+    // nothing deleted. Confirms both halves of "the money doesn't move
+    // during the pause" and "contributions pick back up cleanly after it,"
+    // using the exact mechanism AllocationPlanProposer.ProposeEmpty already
+    // relies on for its own "declined plan" case (Amount = 0, no other
+    // special casing) — not a new mechanism, a new use of an existing one.
+    [Fact]
+    public void A_zero_amount_plan_holds_a_balance_through_a_pause_then_a_third_plan_resumes_contributing()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Boat",
+            Description = "Boat",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                Start = new DateOnly(2026, 6, 15),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+            Amount = -3000m,
+        });
+
+        var contributingPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 6, 30),
+                }),
+            },
+            goal);
+
+        var pausePlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = 0m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 7, 1),
+                    Until = new DateOnly(2025, 12, 31),
+                }),
+            },
+            goal);
+
+        var resumedPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2026, 1, 1),
+                    Until = new DateOnly(2026, 6, 15),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2026, 6, 30),
+            financialPatterns: [goal],
+            earMarkPatterns: [contributingPlan, pausePlan, resumedPlan]));
+
+        // Mid-pause: frozen at whatever 6 real months already put in.
+        Jar(SnapshotOn(result, new DateOnly(2025, 9, 1)), goal.FinanceId).ShouldBe(600m);
+        // Still frozen right up to the pause's own last day.
+        Jar(SnapshotOn(result, new DateOnly(2025, 12, 1)), goal.FinanceId).ShouldBe(600m);
+        // Resumed contributions add on top of the held balance, not from 0.
+        Jar(SnapshotOn(result, new DateOnly(2026, 3, 1)), goal.FinanceId).ShouldBe(900m);
+    }
+
     [Fact]
     public void Single_pattern_projection_matches_the_known_1240_oracle()
     {
@@ -3033,5 +3250,174 @@ public class TransactionLogBookFactoryTests
 
         Jar(day, 1).ShouldBe(200m); // 700 + (−500)
         day.ExpectedFreeAmount.ShouldBe(0m);
+    }
+
+    // End to end: proves EarmarkConsolidation's own glut protection
+    // (CurrentJar/GlutSurplus, 2026-08-15) survives a real save-then-rebuild,
+    // not just Consolidate's own immediate return value. Same $100 goal /
+    // $150 plan shape as the structural-glut test above (reuses its
+    // already-verified $150-at-Mar-1 number), fed through consolidation and
+    // replayed from scratch as if the old plan's row had really been deleted
+    // and the new one saved in its place — exactly what
+    // FinancePatternSaveConfirmation.ConsolidateSurvivingPlansIfNeeded does.
+    [Fact]
+    public void An_existing_glut_survives_consolidation_spent_down_evenly_instead_of_erased()
+    {
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Rent",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 4, 1),
+            }),
+            Amount = -100m,
+        });
+        var oldPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 4, 1),
+                }),
+            },
+            goal);
+
+        // "Today" = Mar 1: the real jar already holds $150 more than its own
+        // milestone calls for (a genuine, verified glut — HasGlut is true).
+        var today = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 4, 30),
+            financialPatterns: [goal],
+            earMarkPatterns: [oldPlan]));
+        var currentJar = SnapshotOn(today, new DateOnly(2025, 3, 1)).FundJars.Single(j => j.FinanceId == goal.FinanceId);
+        currentJar.HasGlut.ShouldBeTrue();
+        currentJar.GlutSurplus.ShouldBe(150m);
+
+        var consolidation = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [oldPlan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+            CurrentJar = currentJar,
+        });
+
+        // $400 total need, minus the $150 glut = $250, spread across the
+        // goal's own 4 monthly occurrences: $62.50 each — noticeably less
+        // than the old plan's own $150/month, since part of what's still
+        // owed is already covered. Without the fix this would be $100/month
+        // (the old, unmodified B - A) and StartingAllocation would be $0.
+        consolidation.ConsolidatedPlan.Amount.ShouldBe(-62.5m);
+        consolidation.ConsolidatedPlan.StartingAllocation.ShouldBe(150m);
+
+        // Old plan "deleted", new consolidated plan saved in its place —
+        // replay from scratch, exactly as a real save would.
+        var rebuilt = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 4, 30),
+            financialPatterns: [goal],
+            earMarkPatterns: [consolidation.ConsolidatedPlan]));
+
+        // The $150 head start gets drawn down evenly to cover part of each
+        // remaining release, landing at exactly $0 right on the goal's own
+        // due date — spent down on schedule, not erased the instant the old
+        // plan's row disappeared (which, unfixed, would have replayed flat
+        // at $0 every single month instead: $100 in, $100 out, no memory of
+        // the $150 that was ever there).
+        Jar(SnapshotOn(rebuilt, new DateOnly(2025, 1, 1)), goal.FinanceId).ShouldBe(112.5m);
+        Jar(SnapshotOn(rebuilt, new DateOnly(2025, 2, 1)), goal.FinanceId).ShouldBe(75m);
+        Jar(SnapshotOn(rebuilt, new DateOnly(2025, 3, 1)), goal.FinanceId).ShouldBe(37.5m);
+        Jar(SnapshotOn(rebuilt, new DateOnly(2025, 4, 1)), goal.FinanceId).ShouldBe(0m);
+    }
+
+    // EarmarkScaling's own glut check, 2026-08-15 — unlike EarmarkConsolidation
+    // (above), Scale needed no code change: it never reads or discounts
+    // "already banked" money at all, only multiplies the ongoing rate by the
+    // same ratio the goal's own Amount changed by, leaving StartingAllocation
+    // and the schedule untouched (EarmarkScalingTests already covers that
+    // directly). This proves the CONSEQUENCE that reasoning predicts, with
+    // real numbers rather than trusting the argument alone: the same $100/
+    // $150 glutted shape from the structural-glut test above, scaled by the
+    // same ratio (2x) the goal itself doubles by, produces a jar whose own
+    // GlutSurplus scales by exactly that same ratio — proportionally
+    // identical, not smoothed away or distorted by the scale.
+    [Fact]
+    public void Scaling_a_glutted_plan_preserves_its_glut_proportionally()
+    {
+        var unscaledGoal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Rent",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                Start = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 31),
+            }),
+            Amount = -100m,
+        });
+        var unscaledPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = unscaledGoal.FinanceId,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 31),
+                }),
+            },
+            unscaledGoal);
+
+        var scaledGoal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Rent",
+            DatePattern = unscaledGoal.DatePattern,
+            Amount = -200m, // 2x
+        });
+        var scaledPlans = EarmarkScaling.Scale(new ScaleRequest
+        {
+            Goal = scaledGoal,
+            PreviousGoalAmount = unscaledGoal.Amount,
+            SurvivingPlans = [EarMarkPattern.Create(
+                new EarMarkPatternOptions
+                {
+                    FinanceId = scaledGoal.FinanceId,
+                    Amount = unscaledPlan.Amount,
+                    DatePattern = unscaledPlan.DatePattern,
+                },
+                scaledGoal)],
+        });
+        scaledPlans.Single().Amount.ShouldBe(-300m); // -150 x 2, EarmarkScalingTests' own math, reused as this test's setup
+
+        var unscaledResult = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m, asOfDate: new DateOnly(2025, 1, 1), horizonEndDate: new DateOnly(2025, 3, 31),
+            financialPatterns: [unscaledGoal], earMarkPatterns: [unscaledPlan]));
+        var scaledResult = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m, asOfDate: new DateOnly(2025, 1, 1), horizonEndDate: new DateOnly(2025, 3, 31),
+            financialPatterns: [scaledGoal], earMarkPatterns: scaledPlans));
+
+        var unscaledJar = SnapshotOn(unscaledResult, new DateOnly(2025, 3, 1)).FundJars.Single(j => j.FinanceId == unscaledGoal.FinanceId);
+        var scaledJar = SnapshotOn(scaledResult, new DateOnly(2025, 3, 1)).FundJars.Single(j => j.FinanceId == scaledGoal.FinanceId);
+
+        unscaledJar.HasGlut.ShouldBeTrue();
+        unscaledJar.GlutSurplus.ShouldBe(150m); // matches the structural-glut test above exactly
+        scaledJar.HasGlut.ShouldBeTrue();
+        scaledJar.GlutSurplus.ShouldBe(300m); // exactly 2x — proportionally identical, nothing lost or distorted
     }
 }

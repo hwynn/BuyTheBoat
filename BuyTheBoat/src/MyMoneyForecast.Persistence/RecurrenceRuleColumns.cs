@@ -4,13 +4,14 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.Persistence;
 
-// Shared between FinancialPatternRepository and EarMarkPatternRepository —
-// both tables store a RecurrenceRule using the same six columns.
+// Shared between FinancialPatternRepository, EarMarkPatternRepository, and
+// TransferRepository — all three tables store a RecurrenceRule using the same
+// seven columns.
 internal static class RecurrenceRuleColumns
 {
     private const string DateFormat = "yyyy-MM-dd";
 
-    /// <summary>[WRITES FILE] Adds a recurrence rule's six columns as SQL parameters, ready for an INSERT/UPDATE. Shared by FinancialPatternRepository and EarMarkPatternRepository, since both tables store a rule the same way.</summary>
+    /// <summary>[WRITES FILE] Adds a recurrence rule's seven columns as SQL parameters, ready for an INSERT/UPDATE. Shared by FinancialPatternRepository, EarMarkPatternRepository, and TransferRepository, since all three tables store a rule the same way.</summary>
     /// <param name="command">The command to add parameters to.</param>
     /// <param name="rule">The rule to serialize.</param>
     public static void AddParameters(SqliteCommand command, RecurrenceRule rule)
@@ -27,6 +28,11 @@ internal static class RecurrenceRuleColumns
             "$ActiveFrom",
             rule.ActiveFrom is { } activeFrom
                 ? activeFrom.ToString(DateFormat, CultureInfo.InvariantCulture)
+                : DBNull.Value);
+        command.Parameters.AddWithValue(
+            "$ExcludedDates",
+            rule.ExcludedDates.Count > 0
+                ? string.Join(',', rule.ExcludedDates.Select(date => date.ToString(DateFormat, CultureInfo.InvariantCulture)))
                 : DBNull.Value);
     }
 
@@ -55,6 +61,11 @@ internal static class RecurrenceRuleColumns
             ? (DateOnly?)null
             : DateOnly.ParseExact(activeFromText, DateFormat, CultureInfo.InvariantCulture);
 
+        var excludedDatesText = ReadNullableString(reader, "ExcludedDates");
+        var excludedDates = excludedDatesText is null
+            ? []
+            : excludedDatesText.Split(',').Select(text => DateOnly.ParseExact(text, DateFormat, CultureInfo.InvariantCulture)).ToList();
+
         return RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = frequency,
@@ -64,6 +75,7 @@ internal static class RecurrenceRuleColumns
             ByMonthDay = byMonthDay,
             Until = until,
             ActiveFrom = activeFrom,
+            ExcludedDates = excludedDates,
         });
     }
 

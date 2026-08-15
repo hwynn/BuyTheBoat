@@ -134,6 +134,41 @@
                 <ContentControl x:Name="LeadingContentHost" Grid.Column="2" Visibility="Collapsed"/>
             </Grid>
 
+            <!-- Skip specific dates (RFC 5545 EXDATE) — hidden unless a host
+                 calls ShowExcludedDatesEditor (today just the Earmark form's
+                 own savings-plan editor: redesign/planning/26-editing-an-
+                 earmark-pattern.md, "the glut case," mechanism C — a
+                 FinancialPattern's own real bill/paycheck events don't get
+                 this freedom). Picks FROM this schedule's own real
+                 occurrences rather than a freeform date field, so there's no
+                 way to "skip" a date that was never actually scheduled. -->
+            <StackPanel x:Name="ExcludedDatesSection" Margin="0,0,0,10" Visibility="Collapsed">
+                <TextBlock Text="Skip specific dates" FontWeight="Bold"/>
+                <TextBlock Text="Leave one of this schedule's own dates out — nothing gets generated for it, and whatever's already set aside stays right where it is."
+                           FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap" Margin="0,2,0,4"/>
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
+                    <ComboBox x:Name="ExcludableOccurrenceComboBox" Width="150">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding StringFormat='ddd, MMM d, yyyy'}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button x:Name="SkipDateButton" Content="Skip" Margin="6,0,0,0" Padding="10,2" Click="OnSkipDateClick"/>
+                </StackPanel>
+                <ListBox x:Name="ExcludedDatesListBox" MaxHeight="90">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel LastChildFill="True">
+                                <Button Content="Restore" DockPanel.Dock="Right" Padding="6,0" Margin="6,0,0,0"
+                                        Click="OnRestoreExcludedDateClick" Tag="{Binding}"/>
+                                <TextBlock Text="{Binding StringFormat='ddd, MMM d, yyyy'}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
+
             <!-- Hidden unless a host turns on Advanced mode (the author's own
                  call, 2026-08-06 — planning/21's Advanced-mode section, which
                  only ever covered Expense, is now settled on location

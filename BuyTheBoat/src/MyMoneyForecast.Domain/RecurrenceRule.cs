@@ -34,6 +34,18 @@ public sealed record RecurrenceRuleOptions
     // the pattern starts producing occurrences. Null = no lead-in. Never affects
     // occurrence generation; used only for span/containment checks.
     public DateOnly? ActiveFrom { get; init; }
+
+    // RFC 5545's own EXDATE — dates GetOccurrences skips even though the
+    // schedule would otherwise land on them (redesign/planning/26-editing-
+    // an-earmark-pattern.md, "the glut case," mechanism C). Deliberately NOT
+    // validated against Start/Until/the pattern's own real occurrences here —
+    // real EXDATE semantics treat a non-matching date as a harmless no-op,
+    // not an error, and every existing range-narrowing operation (WithUntil,
+    // PatternTruncation.EndOn, break-off's own predecessor truncation) would
+    // otherwise risk throwing the moment it shortened a pattern past an
+    // excluded date that used to be in range. Empty = nothing excluded, the
+    // default for every existing caller.
+    public IReadOnlyList<DateOnly> ExcludedDates { get; init; } = [];
 }
 
 // The chart-only rule found in redesign/05-assumption-dependency-graph.md
@@ -52,6 +64,7 @@ public sealed class RecurrenceRule
     public IReadOnlyList<int> ByMonthDay { get; }
     public DateOnly Until { get; }
     public DateOnly? ActiveFrom { get; }
+    public IReadOnlyList<DateOnly> ExcludedDates { get; }
 
     /// <summary>[CALC] The date this pattern counts as active from — its ActiveFrom lead-in if one is set, otherwise its own Start.</summary>
     public DateOnly ActiveStart => ActiveFrom ?? Start;
@@ -71,6 +84,7 @@ public sealed class RecurrenceRule
         ByMonthDay = ByMonthDay,
         Until = Until,
         ActiveFrom = activeFrom,
+        ExcludedDates = ExcludedDates,
     });
 
     /// <summary>[CALC] Returns a copy of this rule ending on the given date instead — Start, ActiveFrom, and everything else stay the same. Used to end a pattern early.</summary>
@@ -84,6 +98,21 @@ public sealed class RecurrenceRule
         ByMonthDay = ByMonthDay,
         Until = until,
         ActiveFrom = ActiveFrom,
+        ExcludedDates = ExcludedDates,
+    });
+
+    /// <summary>[CALC] Returns a copy of this rule with a new set of excluded dates (RFC 5545 EXDATE) — everything else, including the schedule itself, stays the same. Replaces the whole list rather than adding one at a time, so a caller removing a date doesn't need a separate method.</summary>
+    /// <param name="excludedDates">The complete new list of dates to skip.</param>
+    public RecurrenceRule WithExcludedDates(IReadOnlyList<DateOnly> excludedDates) => Create(new RecurrenceRuleOptions
+    {
+        Frequency = Frequency,
+        Start = Start,
+        Interval = Interval,
+        ByDay = ByDay,
+        ByMonthDay = ByMonthDay,
+        Until = Until,
+        ActiveFrom = ActiveFrom,
+        ExcludedDates = excludedDates,
     });
 
     /// <summary>[CALC] Builds a RecurrenceRule from already-validated options and a resolved (non-null) Until date.</summary>
@@ -98,6 +127,7 @@ public sealed class RecurrenceRule
         ByMonthDay = options.ByMonthDay;
         Until = resolvedUntil;
         ActiveFrom = options.ActiveFrom;
+        ExcludedDates = options.ExcludedDates;
         _pattern = BuildPattern(options with { Until = resolvedUntil, Count = null });
     }
 
@@ -201,7 +231,7 @@ public sealed class RecurrenceRule
     private static DateOnly ToDateOnly(Occurrence occurrence) =>
         DateOnly.FromDateTime(occurrence.Period.StartTime.Value);
 
-    /// <summary>[CALC] Returns every date this rule occurs on within a range. Always bounded — Until is always set by construction, so this never runs away.</summary>
+    /// <summary>[CALC] Returns every date this rule occurs on within a range, with ExcludedDates already left out. Always bounded — Until is always set by construction, so this never runs away.</summary>
     /// <param name="from">Start of the range to search; defaults to the rule's own Start.</param>
     /// <param name="to">End of the range to search; defaults to the rule's own Until.</param>
     public IReadOnlyList<DateOnly> GetOccurrences(DateOnly? from = null, DateOnly? to = null)
@@ -214,6 +244,16 @@ public sealed class RecurrenceRule
             Start = new CalDateTime(Start.Year, Start.Month, Start.Day),
             RecurrenceRule = _pattern,
         };
+
+        // EXDATE, RFC 5545's own way to skip specific dates without
+        // reshaping the rule itself — every caller of GetOccurrences (the
+        // forecast cascade, milestone trajectories, form previews) honors an
+        // exclusion automatically just by going through here, with nothing
+        // extra to wire up at any of those call sites.
+        foreach (var excluded in ExcludedDates)
+        {
+            calendarEvent.ExceptionDates.Add(new CalDateTime(excluded.Year, excluded.Month, excluded.Day));
+        }
 
         return calendarEvent
             .GetOccurrences(new CalDateTime(searchStart.Year, searchStart.Month, searchStart.Day))

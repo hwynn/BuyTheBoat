@@ -590,11 +590,20 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plans[0].FinanceId.ShouldBe(1);
         plans[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1)); // the earlier of the two surviving plans' own starts
         plans[0].DatePattern.Until.ShouldBe(goal.DatePattern.Until);
-        // Nothing was already banked (both plans' own StartingAllocation is
-        // 0, no manual earmarks) and no income to pace against, so the
-        // $1,200/year need spreads evenly across the goal's own 12 monthly
-        // occurrences — back to exactly the goal's own per-occurrence amount.
-        plans[0].Amount.ShouldBe(-100m);
+        // Value moved 2026-08-15 (was -100m) when EarmarkConsolidation
+        // started protecting a glut: the two surviving plans together
+        // contribute $110/month against this $100/month bill — a real,
+        // if incidental, $30 glut that had already accumulated by AsOf
+        // (Jun 15, MilestoneAmount=$20 vs ExpectedAmount=$60). No income to
+        // pace against, so the $1,200 need (the moved-to-the-15th schedule
+        // has only 12 occurrences left in the window, not the original
+        // 13 — the exact-100 coincidence before this fix depended on that
+        // matching occurrence count, not on there being no glut) minus the
+        // $30 glut spreads across those 12 occurrences: $97.50 each, not
+        // $100 — the plan asks for noticeably less, since part of what it
+        // still owes is already covered.
+        plans[0].Amount.ShouldBe(-97.5m);
+        plans[0].StartingAllocation.ShouldBe(30m); // the glut carried forward, not erased
     }
 
     // The retroactive-correction side's own mirror of
@@ -833,12 +842,25 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         var rebuiltForecast = Forecast();
         var shortfall = rebuiltForecast.GoalShortfalls.Single(s => s.FinanceId == 1);
-        // The $280 StartingAllocation now carries through untouched — what's
-        // left is a $0.02 remainder from BuildSchedule's own Math.Round
-        // spreading $1,150 across 13 occurrences ($88.46 x 13 = $1,149.98,
-        // 2 cents short of $1,150 on its own). Pre-existing, unrelated to
-        // the StartingAllocation fix above, and far too small to chase here.
-        shortfall.ShortfallAmount.ShouldBe(0.02m);
+        // Value moved 2026-08-15 (was 0.02m) for the same reason as the
+        // sibling test above: this plan's own $280 head start reads as
+        // "ahead of pace" by AsOf too ($60/month combined contribution
+        // against a $100/month bill inherently drains slower than it's
+        // consumed, so most of the $280 still shows as unconsumed surplus at
+        // Jun 15 — ExpectedAmount=$160 vs MilestoneAmount=$20,
+        // GlutSurplus=$140). That $140 now rides along on TOP of the
+        // existing $280 in the new plan's own StartingAllocation ($420,
+        // not $280) and is discounted out of the new $77.69/occurrence rate
+        // (not $88.46) the same way — algebraically a wash: seeding more and
+        // asking for less per occurrence cancels out in the final balance
+        // (proven directly, not assumed — TransactionLogBookFactoryTests'
+        // own An_existing_glut_survives_consolidation_spent_down_evenly_instead_of_erased
+        // replays this exact cancellation with real numbers), so only the
+        // SAME $0.02-ish pre-existing rounding remainder survives, landing
+        // one cent differently now that the per-occurrence rate itself is
+        // different. Still far too small to chase, still unrelated to either
+        // fix — a rounding artifact, not new behavior.
+        shortfall.ShortfallAmount.ShouldBe(0.03m);
     }
 
     // ---- shared scenario-building helpers ----------------------------------

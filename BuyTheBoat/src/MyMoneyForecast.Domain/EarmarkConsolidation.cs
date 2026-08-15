@@ -37,12 +37,37 @@ namespace MyMoneyForecast.Domain;
 // plans' rows are deleted, leaving GoalShortfall short by exactly that much
 // even though the money never actually went anywhere (found 2026-08-14, via
 // a save-then-rebuild-the-forecast test in FinancePatternSaveConfirmationTests).
+//
+// A also gained a glut term, 2026-08-15 (redesign/planning/26, "the glut
+// case"): A as originally derived only ever covered money OUTSIDE the
+// schedule being replaced (StartingAllocation + manual earmarks) — correct
+// for its own "no double-count against the contributions being replaced"
+// reasoning, but blind to a real risk that reasoning didn't anticipate. If a
+// surviving plan has been over-contributing (a genuine, deliberate glut —
+// FundJar.HasGlut), that surplus is REAL money sitting in the jar TODAY,
+// beyond what the plan's own "on pace" trajectory (MilestoneAmount) would
+// read — and this fold was about to silently un-count it: the new schedule's
+// total is computed purely from B - A with no memory of that surplus, so the
+// old plans' real over-funding would simply vanish once their rows are
+// deleted and replaced by a schedule sized as if the jar had only ever been
+// exactly on pace. CurrentJar.GlutSurplus (0 when not glutted, or the jar's
+// balance floored below MilestoneAmount) is added to A precisely to prevent
+// that — the new plan asks for exactly that much less, protecting the
+// surplus instead of erasing it.
 public sealed record ConsolidationRequest
 {
     public required FinancialPattern Goal { get; init; }
     public required IReadOnlyList<EarMarkPattern> SurvivingPlans { get; init; }
     public required IReadOnlyList<ManualEarmark> ManualEarmarksForThisGoal { get; init; }
     public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
+
+    // The live jar as of today (read by the caller off the current forecast
+    // — a pure domain function has no forecast of its own, same reasoning as
+    // BreakOffRequest.CarriedOverJarBalance). Null is tolerated (treated as
+    // "nothing glutted to protect") rather than required, matching how
+    // JarBalanceOn's own callers already default to 0m for a day the
+    // forecast's timeline doesn't cover yet.
+    public FundJar? CurrentJar { get; init; }
 }
 
 public sealed record ConsolidationResult
@@ -54,8 +79,8 @@ public sealed record ConsolidationResult
 
 public static class EarmarkConsolidation
 {
-    /// <summary>[CALC] Folds every surviving EarMarkPattern for one goal into a single freshly-sized plan, spanning from the earliest surviving plan's own start through the goal's own end — sized so its contributions exactly cover what the goal will consume in that window, net of what's already banked. Paces to a single clear income stream the same way AllocationPlanProposer's own paced shape does, or spreads evenly across the goal's own occurrences otherwise.</summary>
-    /// <param name="request">The goal, every surviving plan, the manual earmarks already dated for it, and every pattern (for income-stream detection).</param>
+    /// <summary>[CALC] Folds every surviving EarMarkPattern for one goal into a single freshly-sized plan, spanning from the earliest surviving plan's own start through the goal's own end — sized so its contributions exactly cover what the goal will consume in that window, net of what's already banked (including any protected glut surplus). Paces to a single clear income stream the same way AllocationPlanProposer's own paced shape does, or spreads evenly across the goal's own occurrences otherwise.</summary>
+    /// <param name="request">The goal, every surviving plan, the manual earmarks already dated for it, every pattern (for income-stream detection), and the live jar to check for a glut to protect.</param>
     /// <returns>The one consolidated plan, plus the window it was sized against.</returns>
     public static ConsolidationResult Consolidate(ConsolidationRequest request)
     {
@@ -83,7 +108,8 @@ public static class EarmarkConsolidation
         var alreadyBanked = request.SurvivingPlans.Sum(plan => plan.StartingAllocation)
             + request.ManualEarmarksForThisGoal
                 .Where(manual => manual.Date <= end)
-                .Sum(manual => manual.Amount);
+                .Sum(manual => manual.Amount)
+            + (request.CurrentJar?.GlutSurplus ?? 0m);
 
         // C = 0 (see this file's own header note) folds straight into this
         // subtraction rather than appearing as its own term.
@@ -109,7 +135,22 @@ public static class EarmarkConsolidation
                 // even though the money is still real. Found 2026-08-14 via
                 // FinancePatternSaveConfirmationTests' own
                 // save-then-rebuild-the-forecast shortfall check.
-                StartingAllocation = request.SurvivingPlans.Sum(plan => plan.StartingAllocation),
+                //
+                // GlutSurplus carries forward the SAME way, added 2026-08-15,
+                // for the identical reason — it was only just discounted out
+                // of `total` above, so it has to land somewhere the rebuilt
+                // forecast will still see it, or it's erased the moment the
+                // old plans' rows are gone, exactly like StartingAllocation
+                // would have been. Confirmed by replaying the actual numbers,
+                // not just by the symmetry: seeding the new schedule with the
+                // glut AND discounting its own ongoing rate by the same
+                // amount together spend the glut down evenly across the
+                // window's own remaining occurrences, landing at exactly 0
+                // right on schedule — the surplus is drawn on to lighten the
+                // ongoing ask, not thrown away
+                // (An_existing_glut_is_carried_forward_and_spent_down_evenly_not_erased).
+                StartingAllocation = request.SurvivingPlans.Sum(plan => plan.StartingAllocation)
+                    + (request.CurrentJar?.GlutSurplus ?? 0m),
             },
             request.Goal);
 

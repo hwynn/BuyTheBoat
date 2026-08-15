@@ -72,6 +72,13 @@ public partial class EarmarkFormPanel : UserControl
         SavingsPlanPanel.Children.Remove(AmountPanel);
         RuleEditor.SetLeadingContent(AmountPanel);
 
+        // Only the Earmark form gets this — a savings plan's own recurrence
+        // is an organizational construct the user has real freedom over
+        // (redesign/planning/26, "EarmarkPatterns aren't 'real' the way
+        // FinancialPatterns are"); Expense's bill/paycheck schedule doesn't
+        // offer it.
+        RuleEditor.ShowExcludedDatesEditor();
+
         AmountTextBox.TextChanged += (_, _) => { if (!_suppressEvents) { UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
         RuleEditor.ResultChanged += (_, _) => { if (!_suppressEvents) { UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
 
@@ -1152,7 +1159,10 @@ public partial class EarmarkFormPanel : UserControl
                 continuation = $"We plan to set aside {enteredAmount:C0} per occurrence, starting {start:MMM d, yyyy}.";
             }
 
-            narrative = enteredAmount > 0m ? $"{opening} {continuation}" : opening;
+            var contributionOccurrenceCount = RuleEditor.Result?.GetOccurrences().Count ?? 1;
+            narrative = PlanHealthMessages.IsPaused(enteredAmount, contributionOccurrenceCount)
+                ? $"{opening} {PlanHealthMessages.PausedFundingSentence}"
+                : enteredAmount > 0m ? $"{opening} {continuation}" : opening;
 
             // The chart's "proposed — rough, live estimate" line, computed
             // regardless of whether a saved PlanHealthState exists.

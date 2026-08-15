@@ -167,6 +167,86 @@ public class PatternRepositoryTests : IDisposable
         all[0].StartingAllocation.ShouldBe(5000m);
     }
 
+    // Mechanism C (redesign/planning/26, "the glut case") — mirrors the
+    // ActiveFrom round-trip pair below exactly (Financial_pattern_active_
+    // from_round_trips_through_sqlite / A_pattern_with_no_active_from_
+    // round_trips_as_null), same shared-column shape.
+    [Fact]
+    public void Earmark_pattern_excluded_dates_round_trip_through_sqlite()
+    {
+        var goal = Bill(1, "Rent fund");
+        _financialPatterns.Save(goal, accountId: 1);
+
+        var earmark = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2027, 1, 1),
+                    ExcludedDates = [new DateOnly(2025, 3, 1), new DateOnly(2025, 6, 1)],
+                }),
+            },
+            goal);
+        _earMarkPatterns.Save(earmark);
+
+        _earMarkPatterns.GetAll().Single().DatePattern.ExcludedDates
+            .ShouldBe([new DateOnly(2025, 3, 1), new DateOnly(2025, 6, 1)]);
+    }
+
+    [Fact]
+    public void An_earmark_pattern_with_no_excluded_dates_round_trips_as_empty()
+    {
+        var goal = Bill(1, "Rent fund");
+        _financialPatterns.Save(goal, accountId: 1);
+        _earMarkPatterns.Save(EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    Start = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2027, 1, 1),
+                }),
+            },
+            goal));
+
+        _earMarkPatterns.GetAll().Single().DatePattern.ExcludedDates.ShouldBeEmpty();
+    }
+
+    // Saving over an existing row (same FinanceId+Start) must REPLACE the
+    // excluded-dates list, not merge into it — a user removing a date they'd
+    // previously excluded has to actually see it gone.
+    [Fact]
+    public void Saving_an_earmark_pattern_again_replaces_its_excluded_dates_rather_than_merging_them()
+    {
+        var goal = Bill(1, "Rent fund");
+        _financialPatterns.Save(goal, accountId: 1);
+        var schedule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [1],
+            Start = new DateOnly(2025, 1, 1),
+            Until = new DateOnly(2027, 1, 1),
+        });
+
+        _earMarkPatterns.Save(EarMarkPattern.Create(
+            new EarMarkPatternOptions { FinanceId = 1, Amount = -100m, DatePattern = schedule.WithExcludedDates([new DateOnly(2025, 3, 1)]) },
+            goal));
+        _earMarkPatterns.Save(EarMarkPattern.Create(
+            new EarMarkPatternOptions { FinanceId = 1, Amount = -100m, DatePattern = schedule.WithExcludedDates([new DateOnly(2025, 6, 1)]) },
+            goal));
+
+        _earMarkPatterns.GetAll().Single().DatePattern.ExcludedDates.ShouldBe([new DateOnly(2025, 6, 1)]);
+    }
+
     // planning/17, item 8 (F27): more than one EarMarkPattern may now share a
     // finance_id (a "Restructure the plan" predecessor + successor) — keyed
     // on (FinanceId, StartDate), not FinanceId alone.

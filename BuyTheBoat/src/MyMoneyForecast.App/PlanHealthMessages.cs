@@ -115,6 +115,14 @@ public static class PlanHealthMessages
                 : $"{firstOccurrenceShortfall:C0} short for the first payment"
             : null;
 
+    /// <summary>[CALC] Whether a savings plan is a deliberate holding pattern (redesign/planning/26-editing-an-earmark-pattern.md, "the pause case") rather than an active contribution — nothing will actually land in the jar, either because the plan's own rule produces zero occurrences, or because every occurrence shares the pattern's one Amount at $0. True for either condition alone.</summary>
+    /// <param name="amount">The plan's own contribution amount — 0 means every occurrence contributes nothing.</param>
+    /// <param name="occurrenceCount">How many occurrences the plan's own rule actually produces.</param>
+    public static bool IsPaused(decimal amount, int occurrenceCount) => amount == 0m || occurrenceCount == 0;
+
+    /// <summary>[CALC] The Summary narrative's own replacement sentence for a paused plan (IsPaused) — reads as a deliberate pause instead of "$0" or a silently dropped continuation sentence.</summary>
+    public const string PausedFundingSentence = "Funding is currently paused, with nothing scheduled toward it.";
+
     /// <summary>[CALC] The Expense form's own compact status indicator, next to its save buttons — one of the four states the linked plan is in, or null (nothing shown) for Healthy. A deliberately different word pair (Underfunded/Overfunded, Currently/Projected) from the Earmark form's own "short"/"over" narrative vocabulary — two different registers for the same underlying states, both intentional: this is a compact status label, those are narrative sentences.</summary>
     /// <param name="category">Which health category the linked plan is in.</param>
     public static string? ExpenseStatusLabel(PlanHealthCategory category) => category switch

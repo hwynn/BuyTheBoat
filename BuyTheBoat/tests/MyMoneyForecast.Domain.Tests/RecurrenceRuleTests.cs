@@ -227,4 +227,106 @@ public class RecurrenceRuleTests
             ActiveFrom = new DateOnly(2025, 4, 1),
         }));
     }
+
+    [Fact]
+    public void Excluded_dates_are_left_out_of_generated_occurrences()
+    {
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [1],
+            Start = new DateOnly(2025, 1, 1),
+            Until = new DateOnly(2025, 4, 1),
+            ExcludedDates = [new DateOnly(2025, 3, 1)],
+        });
+
+        rule.GetOccurrences().ShouldBe([
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 2, 1),
+            new DateOnly(2025, 4, 1),
+        ]);
+    }
+
+    [Fact]
+    public void Multiple_excluded_dates_are_all_left_out_and_nothing_else_is_disturbed()
+    {
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [1],
+            Start = new DateOnly(2025, 1, 1),
+            Until = new DateOnly(2025, 7, 1),
+            ExcludedDates = [new DateOnly(2025, 3, 1), new DateOnly(2025, 5, 1)],
+        });
+
+        rule.GetOccurrences().ShouldBe([
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 2, 1),
+            new DateOnly(2025, 4, 1),
+            new DateOnly(2025, 6, 1),
+            new DateOnly(2025, 7, 1),
+        ]);
+    }
+
+    [Fact]
+    public void An_excluded_date_that_is_not_a_real_occurrence_is_a_harmless_no_op()
+    {
+        // Deliberate design choice, not an oversight — see ExcludedDates' own
+        // doc comment on RecurrenceRuleOptions: validating this would make
+        // WithUntil/truncation newly crash-prone the moment a shortened
+        // range left a stale excluded date behind.
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [1],
+            Start = new DateOnly(2025, 1, 1),
+            Until = new DateOnly(2025, 3, 1),
+            ExcludedDates = [new DateOnly(2025, 6, 15)], // outside the range, and never a real occurrence
+        });
+
+        rule.GetOccurrences().ShouldBe([
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 2, 1),
+            new DateOnly(2025, 3, 1),
+        ]);
+    }
+
+    [Fact]
+    public void WithExcludedDates_replaces_the_whole_list_and_leaves_everything_else_unchanged()
+    {
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [1],
+            Start = new DateOnly(2025, 1, 1),
+            Until = new DateOnly(2025, 4, 1),
+            ExcludedDates = [new DateOnly(2025, 2, 1)],
+        });
+
+        var updated = rule.WithExcludedDates([new DateOnly(2025, 3, 1)]);
+
+        updated.Start.ShouldBe(rule.Start);
+        updated.Until.ShouldBe(rule.Until);
+        updated.GetOccurrences().ShouldBe([
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 2, 1), // no longer excluded — the old list was replaced, not appended to
+            new DateOnly(2025, 4, 1),
+        ]);
+    }
+
+    [Fact]
+    public void WithUntil_and_WithActiveFrom_carry_excluded_dates_through_unchanged()
+    {
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [1],
+            Start = new DateOnly(2025, 3, 1),
+            Until = new DateOnly(2025, 8, 1),
+            ExcludedDates = [new DateOnly(2025, 4, 1)],
+        });
+
+        rule.WithUntil(new DateOnly(2025, 6, 1)).ExcludedDates.ShouldBe(rule.ExcludedDates);
+        rule.WithActiveFrom(new DateOnly(2025, 1, 1)).ExcludedDates.ShouldBe(rule.ExcludedDates);
+    }
 }

@@ -84,7 +84,8 @@ public sealed class PatternDatabase
                 StartDate TEXT NOT NULL,
                 UntilDate TEXT NOT NULL,
                 ActiveFrom TEXT NULL,
-                AutoRenew INTEGER NOT NULL DEFAULT 0
+                AutoRenew INTEGER NOT NULL DEFAULT 0,
+                ExcludedDates TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS EarMarkPatterns (
@@ -98,6 +99,7 @@ public sealed class PatternDatabase
                 UntilDate TEXT NOT NULL,
                 ActiveFrom TEXT NULL,
                 StartingAllocation TEXT NOT NULL DEFAULT '0',
+                ExcludedDates TEXT NULL,
                 PRIMARY KEY (FinanceId, StartDate)
             );
 
@@ -134,7 +136,8 @@ public sealed class PatternDatabase
                 ByMonthDay TEXT NULL,
                 StartDate TEXT NOT NULL,
                 UntilDate TEXT NOT NULL,
-                ActiveFrom TEXT NULL
+                ActiveFrom TEXT NULL,
+                ExcludedDates TEXT NULL
             );
             """;
         command.ExecuteNonQuery();
@@ -175,6 +178,19 @@ public sealed class PatternDatabase
         // pre-existing pattern was created before this question existed, so
         // none of them opted in.
         EnsureColumn(connection, "FinancialPatterns", "AutoRenew", "INTEGER NOT NULL DEFAULT 0");
+
+        // RFC 5545's own EXDATE: specific dates a schedule otherwise would
+        // land on, skipped anyway (redesign/planning/26, "the glut case,"
+        // mechanism C). NULL for every pre-existing pattern — the migration
+        // is simply the absence of any exclusion, same shape as ActiveFrom's
+        // own migration above. Only the Earmark form's own recurrence editor
+        // exposes a way to set this today; FinancialPatterns/Transfers carry
+        // the column for schema symmetry with the shared RecurrenceRule type
+        // (same reasoning as their own unused-so-far ActiveFrom column), not
+        // because either form offers a way to populate it yet.
+        EnsureColumn(connection, "FinancialPatterns", "ExcludedDates", "TEXT NULL");
+        EnsureColumn(connection, "EarMarkPatterns", "ExcludedDates", "TEXT NULL");
+        EnsureColumn(connection, "Transfers", "ExcludedDates", "TEXT NULL");
 
         // More than one EarMarkPattern may now share a finance_id, so
         // FinanceId alone can no longer be the table's key. Run after the
@@ -244,6 +260,11 @@ public sealed class PatternDatabase
             return;
         }
 
+        // Columns beyond the original single-key shape (ActiveFrom,
+        // StartingAllocation, ExcludedDates) are already guaranteed present
+        // on the old table by the EnsureColumn calls that ran before this —
+        // carried across explicitly here so a database still old enough to
+        // need this migration doesn't lose them in the rebuild.
         using var migrate = connection.CreateCommand();
         migrate.CommandText = """
             ALTER TABLE EarMarkPatterns RENAME TO EarMarkPatterns_old_singlekey;
@@ -259,12 +280,13 @@ public sealed class PatternDatabase
                 UntilDate TEXT NOT NULL,
                 ActiveFrom TEXT NULL,
                 StartingAllocation TEXT NOT NULL DEFAULT '0',
+                ExcludedDates TEXT NULL,
                 PRIMARY KEY (FinanceId, StartDate)
             );
 
             INSERT INTO EarMarkPatterns
-                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation)
-            SELECT FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation
+                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates)
+            SELECT FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates
             FROM EarMarkPatterns_old_singlekey;
 
             DROP TABLE EarMarkPatterns_old_singlekey;

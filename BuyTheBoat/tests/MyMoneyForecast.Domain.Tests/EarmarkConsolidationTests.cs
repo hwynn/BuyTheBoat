@@ -152,6 +152,80 @@ public class EarmarkConsolidationTests
         result.ConsolidatedPlan.Amount.ShouldBe(-262.5m);
     }
 
+    // Mechanism-C follow-on (redesign/planning/26, "the glut case",
+    // 2026-08-15): a surviving plan's real, already-accumulated glut counts
+    // toward "already banked" the same way StartingAllocation and a manual
+    // earmark already do — both in sizing the new rate AND carried forward
+    // onto the new plan's own StartingAllocation, or it would be discounted
+    // once here and then never counted again anywhere the instant the old
+    // plan's row is gone. See TransactionLogBookFactoryTests'
+    // An_existing_glut_survives_consolidation_spent_down_evenly_instead_of_erased
+    // for the real save-then-rebuild proof this unit-level number is backed by.
+    [Fact]
+    public void A_glutted_current_jar_reduces_the_total_the_same_way_StartingAllocation_does()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+        var currentJar = new FundJar { FinanceId = goal.FinanceId, CurrentAmount = null, ExpectedAmount = 200m, MilestoneAmount = 50m }; // GlutSurplus = 150
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+            CurrentJar = currentJar,
+        });
+
+        // $1,200 - $150 glut, spread across 4 monthly occurrences: $262.50
+        // each — identical arithmetic to the manual-earmark test above,
+        // proving the glut term is wired into the same place, not a
+        // parallel, easy-to-miss path.
+        result.ConsolidatedPlan.Amount.ShouldBe(-262.5m);
+        result.ConsolidatedPlan.StartingAllocation.ShouldBe(150m);
+    }
+
+    [Fact]
+    public void A_jar_with_no_glut_contributes_nothing_extra_beyond_StartingAllocation_and_manual_earmarks()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd, startingAllocation: 100m);
+        var currentJar = new FundJar { FinanceId = goal.FinanceId, CurrentAmount = null, ExpectedAmount = 30m, MilestoneAmount = 50m }; // behind, not glutted
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+            CurrentJar = currentJar,
+        });
+
+        // $1,200 - $100 StartingAllocation only — the behind-pace jar
+        // contributes $0 extra, not a negative discount.
+        result.ConsolidatedPlan.Amount.ShouldBe(-275m);
+        result.ConsolidatedPlan.StartingAllocation.ShouldBe(100m);
+    }
+
+    [Fact]
+    public void A_null_current_jar_behaves_exactly_like_no_glut_to_protect()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd, startingAllocation: 100m);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+            CurrentJar = null, // every pre-2026-08-15 caller — backward compatible
+        });
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-275m);
+        result.ConsolidatedPlan.StartingAllocation.ShouldBe(100m);
+    }
+
     [Fact]
     public void No_single_clear_income_spreads_across_the_goals_own_occurrences_instead()
     {
