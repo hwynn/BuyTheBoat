@@ -389,6 +389,53 @@ public class AllocationPlanProposerTests
         Should.Throw<ArgumentException>(() => AllocationPlanProposer.ProposeEmpty(income, AsOf));
     }
 
+    // Mechanism-C follow-on (redesign/planning/26, "the glut case," 2026-08-15)
+    // — a detail the author flagged early on ("keep the glut as an up-front
+    // earmark event should be a valid option... we might need an optional
+    // parameter on the propose functions to handle that") that got set aside
+    // while building mechanism C and only surfaced again when asked to track
+    // it down. Propose's own candidate never carried a caller-supplied
+    // balance forward before this — BreakOffFactory.BreakOff already
+    // overrides StartingAllocation with the real one regardless of which
+    // Item G candidate gets chosen, but the "Recommended" candidate the
+    // picker itself shows the user, before a choice is even made, silently
+    // read $0 there. Same class of bug as EarmarkFormLivePreviewTests'
+    // findings — a preview that doesn't match what actually gets saved.
+    [Fact]
+    public void Propose_carries_a_supplied_balance_forward_as_StartingAllocation_paced_shape()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf, carriedOverJarBalance: 500m);
+
+        result.Plan.StartingAllocation.ShouldBe(500m);
+        result.Plan.Amount.ShouldBe(-300m); // unaffected — same rate as the no-balance case above
+    }
+
+    [Fact]
+    public void Propose_carries_a_supplied_balance_forward_as_StartingAllocation_front_loaded_shape()
+    {
+        // No income pattern at all -> front-loaded shape, the other of
+        // Propose's two internal paths (both go through WithStartingAllocation).
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill], AsOf, carriedOverJarBalance: 500m);
+
+        result.Plan.StartingAllocation.ShouldBe(500m);
+    }
+
+    [Fact]
+    public void Propose_defaults_to_zero_StartingAllocation_exactly_like_before_this_parameter_existed()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf); // carriedOverJarBalance omitted
+
+        result.Plan.StartingAllocation.ShouldBe(0m);
+    }
+
     // ---- ProposeSameSchedule ------------------------------------------------
 
     [Fact]

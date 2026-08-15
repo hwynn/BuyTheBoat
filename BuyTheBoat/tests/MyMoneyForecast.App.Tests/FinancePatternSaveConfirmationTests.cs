@@ -146,6 +146,56 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         existingPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.Start);
     }
 
+    // Mechanism-C follow-on (redesign/planning/26, "the glut case,"
+    // 2026-08-15) — a detail flagged early in that thread ("keep the glut as
+    // an up-front earmark event should be a valid option") that got set
+    // aside while building mechanism C and only surfaced again later. Before
+    // the fix, the "Recommended" candidate's own preview always read
+    // StartingAllocation = 0, even though BreakOffFactory.BreakOff already
+    // unconditionally overrides it with the real carried-over balance once
+    // any candidate is actually saved — a live preview-vs-saved mismatch,
+    // the same class of bug EarmarkFormLivePreviewTests already found
+    // elsewhere. Explicitly chooses "Recommended" (by the same object
+    // reference the candidate itself carried) so this exercises
+    // DeterminePlanShapeCandidatesIfApplicable's own fixed construction, not
+    // just BreakOff's already-correct fallback override.
+    [Fact]
+    public void Item_G_the_Recommended_candidates_own_preview_matches_what_actually_gets_saved_for_StartingAllocation()
+    {
+        var bill = Bill(1, "Storage Unit Rental", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        // Over-contributes every month, so a real, verifiable balance has
+        // built up by AsOf — the exact scenario this fix protects.
+        _earMarkPatterns.Save(Plan(bill, -150m, bill.DatePattern.Start, bill.DatePattern.Until));
+
+        var forecast = Forecast();
+        var realCarriedOverBalance = forecast.GetTimeline(1)
+            .Last(entry => entry.Date <= AsOf).Snapshot.FundJars.Single(j => j.FinanceId == 1).ExpectedAmount;
+        realCarriedOverBalance.ShouldBeGreaterThan(0m); // confirms this scenario actually exercises the fix, not a $0 no-op
+
+        var editedBill = Bill(1, bill.Source, -120m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
+
+        EarMarkPattern? recommendedPreview = null;
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            var recommended = request.PlanShapeCandidates.Single(c => c.Label == "Recommended").Plan.Plan;
+            recommendedPreview = recommended;
+            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChooseAlterPast = false, ChosenPlanShape = recommended };
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        var savedSuccessor = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2); // NextFinanceId() with only id 1 in play
+
+        // The whole point: what the picker showed BEFORE the user chose
+        // anything matches what actually landed in storage — not $0 in the
+        // preview with the real balance only appearing after the fact.
+        recommendedPreview.ShouldNotBeNull();
+        recommendedPreview!.StartingAllocation.ShouldBe(realCarriedOverBalance);
+        savedSuccessor.StartingAllocation.ShouldBe(realCarriedOverBalance);
+    }
+
     // 03's 1.2.3.10.a5 only restricts start_date/amount/recurrence shape —
     // description/source/priority/mandatory stay plain edits regardless of
     // history (planning/25's "Final field categorization" table). Changing

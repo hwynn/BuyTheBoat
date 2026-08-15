@@ -78,11 +78,13 @@ public static class AllocationPlanProposer
     /// <param name="allPatterns">Every other pattern, to look for a single clear income stream to pace against.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the plan starts contributing from.</param>
     /// <param name="spreadEvenlyWithNoIncome">Whether a single-occurrence outflow with no clear income spreads evenly across the remaining time (the default) or reserves the full amount immediately — pass false for a transfer's withdrawal, which stays plain with no adaptive behavior.</param>
+    /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added 2026-08-15 specifically so Item G's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. See planning/26's own "the glut case" for why protecting that balance matters.</param>
     public static ProposedAllocationPlan Propose(
         FinancialPattern outflow,
         IReadOnlyList<FinancialPattern> allPatterns,
         DateOnly asOfDate,
-        bool spreadEvenlyWithNoIncome = true)
+        bool spreadEvenlyWithNoIncome = true,
+        decimal carriedOverJarBalance = 0m)
     {
         if (outflow.Amount >= 0m)
         {
@@ -114,11 +116,38 @@ public static class AllocationPlanProposer
 
             if (paydayCount > 0 && billOccurrenceCount > 0)
             {
-                return ProposePaced(preparedOutflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate);
+                return WithStartingAllocation(
+                    ProposePaced(preparedOutflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate),
+                    carriedOverJarBalance);
             }
         }
 
-        return ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate, spreadEvenlyWithNoIncome);
+        return WithStartingAllocation(
+            ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate, spreadEvenlyWithNoIncome),
+            carriedOverJarBalance);
+    }
+
+    /// <summary>[CALC] Applies a carried-over balance to an already-built proposal's own plan, as its StartingAllocation — a no-op (the exact same instance back) when there's nothing to carry over, so every caller that never passes one gets byte-for-byte the same result as before this parameter existed. Deliberately does NOT touch MaybeStartingEarmark's own separate one-off top-up (ProposePaced's own Shape A can still propose one on top of a nonzero StartingAllocation applied here) — that method only ever reasons about SCHEDULE TIMING (does the plan's own first contribution land late), not about whether a big enough carried-over balance already covers the gap on its own. Narrow, flagged rather than fixed: the two could theoretically double up for a goal that both has a single clear income stream funding it AND is being re-proposed with a real carried-over balance AND has its very next bill due before the next payday — teaching MaybeStartingEarmark about dollar-sufficiency, not just timing, is a bigger change than this fix is about.</summary>
+    /// <param name="proposal">The already-built proposal to apply the balance to.</param>
+    /// <param name="carriedOverJarBalance">What to carry forward as the plan's own StartingAllocation.</param>
+    private static ProposedAllocationPlan WithStartingAllocation(ProposedAllocationPlan proposal, decimal carriedOverJarBalance)
+    {
+        if (carriedOverJarBalance == 0m)
+        {
+            return proposal;
+        }
+
+        var planWithBalance = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = proposal.Plan.FinanceId,
+                DatePattern = proposal.Plan.DatePattern,
+                Amount = proposal.Plan.Amount,
+                StartingAllocation = carriedOverJarBalance,
+            },
+            proposal.Outflow);
+
+        return proposal with { Plan = planWithBalance };
     }
 
     /// <summary>[CALC] Proposes a plan that keeps the existing plan's own recurrence shape — frequency, interval, which weekday or month-day — re-anchored to today without losing phase, with a freshly-computed Amount sized to exactly cover what's left of the goal net of what's already banked. Null when there's nothing left to fund, when the existing shape has no occurrence left to re-anchor to inside the goal's own remaining window, or when the result wouldn't be meaningfully different from Propose's own default.</summary>

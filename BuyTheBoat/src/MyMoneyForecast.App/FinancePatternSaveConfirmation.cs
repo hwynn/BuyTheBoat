@@ -710,7 +710,15 @@ public sealed class FinancePatternSaveConfirmation
 
         var candidates = new List<PlanShapeCandidate>
         {
-            new("Recommended", AllocationPlanProposer.Propose(successor, allPatterns, cutDate)),
+            // carriedOverJarBalance passed through here too (2026-08-15) —
+            // without it, this candidate's own preview read StartingAllocation
+            // = 0 even when a real balance/glut existed, understating what
+            // BreakOffFactory.BreakOff would actually save if the user picked
+            // it anyway (that method already applies the real balance
+            // unconditionally, regardless of which candidate is chosen — see
+            // its own header comment). Same real number "Keep the same
+            // schedule"/"Keep the same amount" below already show.
+            new("Recommended", AllocationPlanProposer.Propose(successor, allPatterns, cutDate, carriedOverJarBalance: carriedOverJarBalance)),
         };
 
         if (AllocationPlanProposer.ProposeSameSchedule(successor, existingPlan, carriedOverJarBalance, manualEarmarks, allPatterns, cutDate) is { } sameSchedule)
