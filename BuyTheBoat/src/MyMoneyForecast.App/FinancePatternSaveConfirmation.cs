@@ -218,13 +218,15 @@ public sealed class FinancePatternSaveConfirmation
     // Propose's own default, worked out by DeterminePlanShapeCandidatesIfApplicable
     // before anything is saved — same "read before PerformSave writes
     // anything" reasoning as NarrowingPlan/ConsolidationPlan's own field
-    // comments. Empty means there's nothing to choose between (most edits,
-    // or a break-off with no existing plan to draw an alternative shape
-    // from) — Item G's own scope is exactly one existing plan; a goal with
-    // more than one gets no candidates here at all, deliberately (author,
-    // 2026-08-14: the concurrent case needs its own not-yet-built mechanism
-    // to continue both plans in unison, and shouldn't also offer a shape
-    // choice on top of that complexity).
+    // comments. Empty means there's nothing to choose between (most edits, a
+    // break-off with no existing plan to draw an alternative shape from, or
+    // a genuinely concurrent set of existing plans — F27's shape, e.g. two
+    // household partners — which needs its own not-yet-built mechanism to
+    // continue both plans in unison, and shouldn't also offer a shape choice
+    // on top of that complexity, author 2026-08-14). A sequential chain of
+    // existing plans (RestructureFactory) is no longer excluded just for
+    // having more than one row — RestructureFactory.FindCurrentPlan tells
+    // the two cases apart.
     private IReadOnlyList<PlanShapeCandidate> _planShapeCandidates = [];
 
     // A candidate's own Label is display text only (not read by anything in
@@ -449,9 +451,11 @@ public sealed class FinancePatternSaveConfirmation
         DetermineConsolidationPlanIfApplicable();
 
         // planning/25's Item G — same timing as the two Determine* calls
-        // just above, and mutually exclusive with _consolidationPlan the
-        // same way: this needs exactly one surviving plan, that needs more
-        // than one.
+        // just above. No longer mutually exclusive with _consolidationPlan
+        // the way it once was (2026-08-16): a sequential multi-plan
+        // predecessor can populate both, since which one actually gets
+        // acted on depends on UserChooseAlterPast, decided later — only a
+        // genuinely concurrent set leaves this one empty.
         DeterminePlanShapeCandidatesIfApplicable();
 
         // Same "read before anything is saved" reasoning, but for a
@@ -662,19 +666,19 @@ public sealed class FinancePatternSaveConfirmation
             GetSavedPatternOrThrow().Amount);
     }
 
-    /// <summary>[READS FILE] planning/25's Item G: works out which alternative plan shapes — beyond AllocationPlanProposer.Propose's own default — are genuinely available for this break-off's successor, stored in _planShapeCandidates for BuildConfirmationRequest to show and PerformSingleSuccessorBreakOff to apply whichever gets chosen. Scoped to exactly one existing plan (see _planShapeCandidates' own field comment for why more than one gets nothing here at all). Runs regardless of what UserChooseAlterPast will turn out to be — not known yet when this runs, same "compute eagerly, apply conditionally" shape DetermineConsolidationPlanIfApplicable already uses — and simply goes unused if the retroactive-correction side is chosen instead, where no fresh plan ever gets proposed. internal for the same reason its siblings are — so a test can call this directly ahead of PerformSingleSuccessorBreakOff.</summary>
+    /// <summary>[READS FILE] planning/25's Item G: works out which alternative plan shapes — beyond AllocationPlanProposer.Propose's own default — are genuinely available for this break-off's successor, stored in _planShapeCandidates for BuildConfirmationRequest to show and PerformSingleSuccessorBreakOff/PerformMultiPlanBreakOff to apply whichever gets chosen. Runs regardless of what UserChooseAlterPast will turn out to be — not known yet when this runs, same "compute eagerly, apply conditionally" shape DetermineConsolidationPlanIfApplicable already uses — and simply goes unused if the retroactive-correction side is chosen instead, where no fresh plan ever gets proposed. internal for the same reason its siblings are — so a test can call this directly ahead of PerformSingleSuccessorBreakOff.</summary>
     internal void DeterminePlanShapeCandidatesIfApplicable()
     {
-        if (!IsChangeCritical || HasMultipleEarmarkPatterns)
+        if (!IsChangeCritical)
         {
             return;
         }
 
         var forecast = _requestForecast();
-        var existingPlan = forecast.Book.EarMarkPatternsFor(_financeId).SingleOrDefault();
+        var existingPlan = RestructureFactory.FindCurrentPlan(forecast.Book.EarMarkPatternsFor(_financeId));
         if (existingPlan is null)
         {
-            return; // nothing to draw an alternative shape from — only the default exists
+            return; // nothing to draw an alternative shape from — no plan at all, or a genuinely concurrent set
         }
 
         var saved = GetSavedPatternOrThrow();
@@ -1037,7 +1041,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] The more-than-one-existing-plan case of Item C's break-off, when Item F's own question resolves to consolidating them (forced by ConsolidationNeeded, or chosen via UserChooseConsolidation): every surviving plan is truncated, and the successor still gets exactly one freshly-proposed plan, seeded from the finance_id's one combined jar balance. Otherwise identical to PerformSingleSuccessorBreakOff — see that method for the cut-date note.</summary>
+    /// <summary>[WRITES FILE] The more-than-one-existing-plan case of Item C's break-off, when Item F's own question resolves to consolidating them (forced by ConsolidationNeeded, or chosen via UserChooseConsolidation): every surviving plan is truncated, and the successor still gets exactly one freshly-proposed plan (or the user's own chosen shape, when Item G offered one), seeded from the finance_id's one combined jar balance. Otherwise identical to PerformSingleSuccessorBreakOff — see that method for the cut-date note.</summary>
     private void PerformMultiPlanBreakOff()
     {
         var saved = GetSavedPatternOrThrow();
@@ -1045,6 +1049,15 @@ public sealed class FinancePatternSaveConfirmation
         var cutDate = forecast.AsOfDate;
 
         var predecessorPlans = forecast.Book.EarMarkPatternsFor(_financeId);
+
+        // planning/25's Item G — same lookup PerformSingleSuccessorBreakOff
+        // already does: matched back to its own full ProposedAllocationPlan
+        // by reference, not reconstructed from ChosenPlanShape alone. Null
+        // whenever no choice was offered (a genuinely concurrent set) or the
+        // default was picked — either way, BreakOff falls back to its own
+        // internal Propose call.
+        var chosenSuccessorPlan = _planShapeCandidates
+            .FirstOrDefault(candidate => candidate.Plan.Plan == ChosenPlanShape)?.Plan;
 
         var result = BreakOffFactory.BreakOff(new MultiPlanBreakOffRequest
         {
@@ -1056,6 +1069,7 @@ public sealed class FinancePatternSaveConfirmation
             SuccessorSchedule = BuildSuccessorSchedule(cutDate),
             CarriedOverJarBalance = JarBalanceOn(cutDate, _financeId),
             AllPatterns = forecast.Book.AllFinancialPatterns(),
+            ChosenSuccessorPlan = chosenSuccessorPlan,
         });
 
         // Same reasoning as PerformSingleSuccessorBreakOff's own note: the

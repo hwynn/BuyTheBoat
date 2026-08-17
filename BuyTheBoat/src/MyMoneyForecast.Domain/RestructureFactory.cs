@@ -155,4 +155,32 @@ public static class RestructureFactory
             },
         });
     }
+
+    /// <summary>[CALC] Finds whichever EarMarkPattern is current among several sharing one finance_id, the way BreakOffFactory.FindCurrentSegment resolves a FinancialPattern chain — feeds a break-off's own alternative plan-shape candidates. Returns null for a genuinely concurrent set, not just an empty one — active spans overlapping means there's no single "current" plan to pick.</summary>
+    /// <param name="plans">Every EarMarkPattern sharing one finance_id.</param>
+    /// <returns>The plan with the latest Start, or null when the list is empty or any two plans' own active spans overlap.</returns>
+    public static EarMarkPattern? FindCurrentPlan(IReadOnlyList<EarMarkPattern> plans)
+    {
+        if (plans.Count == 0)
+        {
+            return null;
+        }
+
+        // Any two plans whose active spans overlap means this is a genuinely
+        // concurrent set (F27), not a sequential chain — nothing here is
+        // "the" current one, so bail before picking anything.
+        for (var i = 0; i < plans.Count; i++)
+        {
+            for (var j = i + 1; j < plans.Count; j++)
+            {
+                if (plans[i].DatePattern.ActiveStart <= plans[j].DatePattern.Until &&
+                    plans[j].DatePattern.ActiveStart <= plans[i].DatePattern.Until)
+                {
+                    return null;
+                }
+            }
+        }
+
+        return plans.OrderByDescending(plan => plan.DatePattern.Start).First();
+    }
 }

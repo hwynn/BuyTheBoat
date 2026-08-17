@@ -72,6 +72,16 @@ public sealed record MultiPlanBreakOffRequest
     public required decimal CarriedOverJarBalance { get; init; }
     public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
     public bool SpreadEvenlyWithNoIncome { get; init; } = true;
+
+    // planning/25's Item G, extended here 2026-08-16 to match
+    // BreakOffRequest's own field of the same name: when the predecessor's
+    // several surviving plans turn out to be a genuine sequential chain
+    // (RestructureFactory.FindCurrentPlan finds one, not a concurrent set),
+    // the caller can offer the same "keep the same schedule/amount" choice
+    // this overload previously never had a way to receive. Null (the
+    // ordinary case) falls back to the same internal Propose call this class
+    // has always made.
+    public ProposedAllocationPlan? ChosenSuccessorPlan { get; init; }
 }
 
 // PredecessorPlans replaces the single, nullable PredecessorPlan — every
@@ -123,14 +133,15 @@ public sealed record RenewalRequest
 // of the cut. Income (Amount >= 0) never has a plan at all and skips
 // straight to just the cut — no jar machinery runs.
 //
-// planning/25's Item G (2026-08-14, BreakOffRequest.ChosenSuccessorPlan
-// only — MultiPlanBreakOffRequest doesn't have this yet, deliberately: Item
-// G scopes to exactly one predecessor plan, where "which shape" is
-// unambiguous. The single-plan overload's own successor is always the
-// caller's chosen plan when supplied, still seeded with CarriedOverJarBalance
-// the same way either way — a chosen candidate's own StartingAllocation was
-// only ever a placeholder for sizing, never meant to survive into what
-// actually gets saved.
+// planning/25's Item G (2026-08-14, BreakOffRequest.ChosenSuccessorPlan;
+// extended 2026-08-16 to MultiPlanBreakOffRequest's own field of the same
+// name, once RestructureFactory.FindCurrentPlan made "which shape" answerable
+// even when the predecessor's own plans are a sequential chain rather than
+// exactly one row). Either overload's own successor is the caller's chosen
+// plan when supplied, still seeded with CarriedOverJarBalance the same way
+// either way — a chosen candidate's own StartingAllocation was only ever a
+// placeholder for sizing, never meant to survive into what actually gets
+// saved.
 public static class BreakOffFactory
 {
     /// <summary>[CALC] Ends a bill or paycheck on a chosen date and hands it off to a new one that continues from there with its own amount/schedule — "Change starting on a date." For a bill, the old savings plan is wound down and the new one is freshly proposed, carrying over whatever was already saved.</summary>
@@ -243,8 +254,8 @@ public static class BreakOffFactory
             };
         }
 
-        var proposal = AllocationPlanProposer.Propose(
-            successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
+        var proposal = request.ChosenSuccessorPlan
+            ?? AllocationPlanProposer.Propose(successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
 
         var successorPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions

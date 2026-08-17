@@ -254,4 +254,45 @@ public class RestructureFactoryTests
             SuccessorSchedule = MonthlyFrom(cutDate, new DateOnly(2028, 1, 1)), // past the goal's own Until
         }));
     }
+
+    // planning/24's own Item-G gap, fixed 2026-08-16: FindCurrentPlan is what
+    // lets DeterminePlanShapeCandidatesIfApplicable tell a genuine sequential
+    // chain apart from F27's concurrent-funder shape.
+    [Fact]
+    public void FindCurrentPlan_picks_the_plan_with_the_latest_start_among_a_sequential_chain()
+    {
+        var goal = Goal(-5_000m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var earlier = Plan(-100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), goal);
+        var current = Plan(-150m, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1), goal);
+
+        RestructureFactory.FindCurrentPlan([earlier, current]).ShouldBe(current);
+    }
+
+    [Fact]
+    public void FindCurrentPlan_returns_null_when_two_plans_own_active_spans_overlap()
+    {
+        // F27's own concurrent-funder shape (e.g. two household partners) —
+        // both plans genuinely active at once, so there's no single
+        // "current" one to pick.
+        var goal = Goal(-5_000m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var partnerOne = Plan(-100m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1), goal);
+        var partnerTwo = Plan(-50m, new DateOnly(2025, 1, 2), new DateOnly(2027, 1, 1), goal);
+
+        RestructureFactory.FindCurrentPlan([partnerOne, partnerTwo]).ShouldBeNull();
+    }
+
+    [Fact]
+    public void FindCurrentPlan_returns_null_for_an_empty_list()
+    {
+        RestructureFactory.FindCurrentPlan([]).ShouldBeNull();
+    }
+
+    [Fact]
+    public void FindCurrentPlan_returns_the_only_plan_when_theres_just_one()
+    {
+        var goal = Goal(-5_000m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var onlyPlan = Plan(-100m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1), goal);
+
+        RestructureFactory.FindCurrentPlan([onlyPlan]).ShouldBe(onlyPlan);
+    }
 }

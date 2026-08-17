@@ -196,6 +196,110 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         savedSuccessor.StartingAllocation.ShouldBe(realCarriedOverBalance);
     }
 
+    // planning/24's own Item-G gap, fixed 2026-08-16: a Savings Plan that's
+    // already been restructured once (two sequential EarMarkPatterns sharing
+    // one finance_id — an earlier, since-superseded segment plus the one
+    // that's actually current) used to disable Item G entirely, since
+    // HasMultipleEarmarkPatterns bailed before any candidate was ever built,
+    // even though exactly one segment is genuinely current.
+    // RestructureFactory.FindCurrentPlan is what tells this apart from a
+    // concurrent set (the regression test right below). Proves candidates
+    // build from the CURRENT segment's own shape specifically, not the
+    // superseded one, and that the chosen one actually gets saved.
+    [Fact]
+    public void Item_G_candidates_build_from_the_current_segment_of_an_already_restructured_plan()
+    {
+        var bill = Bill(1, "Storage Unit Rental", -50m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        // Matches the bill's own original rate exactly, so no meaningful
+        // glut or shortfall builds up before the restructure — an earlier,
+        // since-superseded segment.
+        _earMarkPatterns.Save(Plan(bill, -50m, bill.DatePattern.Start, new DateOnly(2025, 3, 31)));
+        var currentPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = bill.FinanceId,
+                Amount = -20m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Weekly,
+                    Interval = 2,
+                    Start = new DateOnly(2025, 4, 4), // a Friday
+                    Until = bill.DatePattern.Until,
+                }),
+            },
+            bill);
+        _earMarkPatterns.Save(currentPlan);
+
+        var forecast = Forecast();
+        // A large jump, not just a bump — guarantees the goal's own
+        // remaining need vastly exceeds whatever's already banked, so
+        // ProposeSameSchedule/ProposeSameAmount have real work to do
+        // regardless of the exact pre-edit balance.
+        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.Start, bill.DatePattern.Until);
+
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            var sameSchedule = request.PlanShapeCandidates.Single(c => c.Label == "Keep the same schedule");
+            return new ImplicitChangeConfirmationAnswer
+            {
+                Proceed = true,
+                ChooseAlterPast = false,
+                // Amount-only change, so ConsolidationNeeded is naturally
+                // false (that row is meant to be feasible to keep separate)
+                // — has to be chosen explicitly to reach PerformMultiPlanBreakOff
+                // at all, same as any other multi-plan break-off.
+                ChooseConsolidation = true,
+                ChosenPlanShape = sameSchedule.Plan.Plan,
+            };
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        var successorPlan = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2); // NextFinanceId() with only id 1 in play
+        successorPlan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Weekly);
+        successorPlan.DatePattern.Interval.ShouldBe(2);
+        // Same phase as the current segment's own Friday cycle, re-anchored —
+        // not the superseded segment's own $80 rate, and not the bill's own
+        // monthly cadence Propose's default would have used.
+        currentPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.Start);
+    }
+
+    // Regression lock, 2026-08-16: the fix above must not reach into F27's
+    // own concurrent-funder case, where the author's own ruling (planning/25's
+    // Item G closing note) says no shape choice should be offered at all —
+    // "it'll already be complicated enough" once the not-yet-built
+    // size-both-plans-in-unison mechanism exists.
+    [Fact]
+    public void Item_G_still_offers_no_candidates_for_a_genuinely_concurrent_predecessor()
+    {
+        var bill = Bill(1, "Storage Unit Rental", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        // Two concurrent funders (F27), staggered by a day, both active
+        // across nearly the whole range — same shape this file's own
+        // A_break_off_with_multiple_surviving_plans_kept_separate_is_a_safe_no_op_for_now
+        // already uses for the concurrent case.
+        _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
+
+        var forecast = Forecast();
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.Start, bill.DatePattern.Until);
+
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
+        ImplicitChangeConfirmationRequest? capturedRequest = null;
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            capturedRequest = request;
+            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChooseAlterPast = false, ChooseConsolidation = true };
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        capturedRequest.ShouldNotBeNull();
+        capturedRequest!.PlanShapeCandidates.ShouldBeEmpty();
+    }
+
     // 03's 1.2.3.10.a5 only restricts start_date/amount/recurrence shape —
     // description/source/priority/mandatory stay plain edits regardless of
     // history (planning/25's "Final field categorization" table). Changing

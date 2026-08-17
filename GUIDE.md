@@ -10,6 +10,19 @@ A map of every design/planning document in this rework, in **descending order of
 
 So "05" means two different documents depending on the folder — **always mind the path.**
 
+**Before touching any form's UI** — every form (Account/Expense/Earmark today, Transfer once it
+exists) is broken into regions, and each region has its own settled goal recorded in
+[design-philosophies.md](design-philosophies.md) (Philosophy 4 especially) and in
+[planning/21](MyMoneyForecast/planning/21-form-architecture.md) /
+[22](MyMoneyForecast/planning/22-plan-health-state.md) /
+[23](MyMoneyForecast/planning/23-form-behavior.md) — layout and content, the Earmark form's own
+per-region content, and behavior/defaults, respectively. **Re-read the specific section for the
+region you're about to touch immediately before writing the code** — not from memory of an earlier
+read in this same session, which is exactly the gap that let past UI code drift from its own settled
+design (see [[feedback-reground-in-source-before-building]] in `memory/`). This is a standing rule,
+not a one-time pointer to today's three docs specifically: if a form gains a new doc later, checking
+that form's own region goals first is still the rule.
+
 ---
 
 ## Tier 1 — Orientation (read first if you are new to the project)
@@ -37,6 +50,7 @@ So "05" means two different documents depending on the folder — **always mind 
 - **[MyMoneyForecast/planning/24-app-layer-known-gaps.md](MyMoneyForecast/planning/24-app-layer-known-gaps.md)** — new 2026-08-08, a living registry for specific behavioral gaps found in App-layer (xaml.cs) code while trimming overly-narrative comments, parked here since `MyMoneyForecast.App` has no test project to pin them down with. Check only when you need one of these gaps' full story, or once an App-layer test project exists.
 - **[MyMoneyForecast/planning/25-editing-patterns-with-history.md](MyMoneyForecast/planning/25-editing-patterns-with-history.md)** — Items A–F built and wired (Item F has 3 of 4 keep-separate/consolidate combinations), Item G proposed-only. Its own protection is scoped to editing a `FinancialPattern` specifically — see its 2026-08-14 scope note before assuming it covers more.
 - **[MyMoneyForecast/planning/26-editing-an-earmark-pattern.md](MyMoneyForecast/planning/26-editing-an-earmark-pattern.md)** — **NOT STARTED, deliberately parked** (2026-08-14) until after 25's own work is fully handled. Records the author's own direction for a future pass at editing an `EarMarkPattern` directly (freedom by default, protect a jar's real `ExpectedAmount`, a not-yet-designed "defer allocation on purpose" want) — read before starting that future cycle, not before.
+- **[MyMoneyForecast/planning/27-editing-within-a-patterns-chain.md](MyMoneyForecast/planning/27-editing-within-a-patterns-chain.md)** — **OPEN, the currently active thread (started 2026-08-16).** Rules for a change to one segment of a break-off/renewal chain cascading to (or needing reconciliation against) the segments that continue it — a real, confirmed gap (see [24](MyMoneyForecast/planning/24-app-layer-known-gaps.md)) that the author ruled must be settled, for `FinancialPattern` chains first and then the analogous `EarMarkPattern`-chain question, **before** returning to 25's own still-open "avoid forcing consolidation" thread. Read this before 25's own Item F for now — it's ahead of 25 in the queue, not a footnote to it.
 
 ## Tier 4 — The original assumptions (look things up; don't read cover-to-cover)
 
