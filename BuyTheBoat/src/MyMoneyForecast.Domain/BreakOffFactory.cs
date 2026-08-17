@@ -349,10 +349,21 @@ public static class BreakOffFactory
                 nameof(successorFinanceId));
         }
 
-        if (successorSchedule.Start != cutDate)
+        // Checks ActiveStart (Start-or-ActiveFrom), not raw Start, since
+        // 2026-08-17: a Weekly successor's own Start may need to land on
+        // the reference pattern's own next real occurrence rather than
+        // literally on cutDate, to keep its cadence from silently drifting
+        // (FinancePatternSaveConfirmation.BuildSuccessorSchedule's own
+        // comment has the full reasoning) — ActiveFrom = cutDate in that
+        // case is what actually represents "no gap, no overlap" against the
+        // truncated predecessor, the same invariant this check has always
+        // enforced, just read off the field that's now sometimes doing that
+        // job instead of Start itself.
+        var successorActiveStart = successorSchedule.ActiveFrom ?? successorSchedule.Start;
+        if (successorActiveStart != cutDate)
         {
             throw new ArgumentException(
-                "The successor's schedule must start exactly on the cut date.",
+                "The successor's own active span must start exactly on the cut date.",
                 nameof(successorSchedule));
         }
     }
@@ -393,4 +404,163 @@ public static class BreakOffFactory
             candidate.Source == pattern.Source &&
             candidate.FinanceId != pattern.FinanceId &&
             candidate.DatePattern.Start == pattern.DatePattern.Until.AddDays(1));
+
+    /// <summary>[CALC] Whether two FinancialPatterns sharing a Source have overlapping active spans — unlike EarMarkPattern's own F27 concurrent-funder shape, nothing in this project designs for two FinancialPatterns sharing a Source and overlapping on purpose (FindPredecessor/FindSuccessor only ever match STRICTLY contiguous dates), but FinancialPattern.Create itself validates no such thing, so a caller building the fuller "every other same-Source pattern" list (not just FindPredecessor/FindSuccessor's own strict match) needs this guard for the same reason RestructureFactory.SpansOverlap exists — an overlapping pattern must never be mistaken for a sequential chain neighbor and absorbed/cascaded onto.</summary>
+    /// <returns>True when the two patterns' own active spans (ActiveStart–Until) share any day.</returns>
+    public static bool SpansOverlap(FinancialPattern a, FinancialPattern b) =>
+        a.DatePattern.ActiveStart <= b.DatePattern.Until && b.DatePattern.ActiveStart <= a.DatePattern.Until;
+
+    /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27, Phase 1) for a segment's own Until moving, against every other FinancialPattern sharing its Source — the neighbor a growing Until reaches into shrinks or expands to match; one reached far enough to be fully overtaken is absorbed instead (its own FinanceId ceases to exist entirely — see the class-level note on what a caller still owes it), and the walk keeps going in case it reaches even further. Mirrors RestructureFactory.ExtendUntil's own shape exactly, one level up — no goal parameter needed here (a FinancialPattern has no parent to validate against, unlike EarMarkPattern).</summary>
+    /// <param name="current">The segment being saved, with its own Until about to change.</param>
+    /// <param name="otherPatterns">Every other FinancialPattern sharing the same Source.</param>
+    /// <param name="newUntil">The proposed new Until.</param>
+    /// <returns>The segment's own updated shape, whichever later segments get absorbed (if any, ordered earliest first), and whichever one segment needs its own Start moved to stay contiguous (if any).</returns>
+    public static FinancialChainBoundaryResult ExtendUntil(FinancialPattern current, IReadOnlyList<FinancialPattern> otherPatterns, DateOnly newUntil)
+    {
+        if (newUntil < current.DatePattern.Start)
+        {
+            throw new ArgumentException("The new Until can't be before the pattern's own Start.", nameof(newUntil));
+        }
+
+        var laterPatterns = otherPatterns
+            .Where(pattern => pattern.DatePattern.Start > current.DatePattern.Start)
+            .OrderBy(pattern => pattern.DatePattern.Start)
+            .ToList();
+
+        var absorbed = new List<FinancialPattern>();
+        FinancialPattern? neighbor = null;
+
+        // Walks forward through the chain in date order, absorbing every
+        // later segment the new Until reaches all the way through and
+        // continuing past it in case the reach goes further still. Stops at
+        // the first one it doesn't fully reach — that one gets its own
+        // Start moved to newUntil + 1 to stay contiguous, whether that means
+        // it shrinks (Until grew into it) or grows (Until shrank away from
+        // it); nothing beyond that one is touched at all.
+        foreach (var pattern in laterPatterns)
+        {
+            if (newUntil >= pattern.DatePattern.Until)
+            {
+                absorbed.Add(pattern);
+                continue;
+            }
+
+            neighbor = pattern.WithStart(newUntil.AddDays(1));
+            break;
+        }
+
+        return new FinancialChainBoundaryResult { Current = current.WithUntil(newUntil), Absorbed = absorbed, AdjustedNeighbor = neighbor };
+    }
+
+    /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27, Phase 1) for a segment's own Start moving, against every other FinancialPattern sharing its Source — the mirror of ExtendUntil, walking backward through earlier segments instead.</summary>
+    /// <param name="current">The segment being saved, with its own Start about to change.</param>
+    /// <param name="otherPatterns">Every other FinancialPattern sharing the same Source.</param>
+    /// <param name="newStart">The proposed new Start.</param>
+    /// <returns>The segment's own updated shape, whichever earlier segments get absorbed (if any, ordered latest first), and whichever one segment needs its own Until moved to stay contiguous (if any).</returns>
+    public static FinancialChainBoundaryResult ExtendStart(FinancialPattern current, IReadOnlyList<FinancialPattern> otherPatterns, DateOnly newStart)
+    {
+        if (newStart > current.DatePattern.Until)
+        {
+            throw new ArgumentException("The new Start can't be after the pattern's own Until.", nameof(newStart));
+        }
+
+        // <= , not < : current.DatePattern.Start here is already the NEW,
+        // proposed Start (every caller passes it as both current and
+        // newStart) — a neighbor whose own Start lands EXACTLY on newStart
+        // is still a real absorb candidate (the loop's own newStart <=
+        // pattern.DatePattern.Start check below would say so), so filtering
+        // it out here with a strict < silently dropped that exact-boundary
+        // case entirely. Found 2026-08-17 while writing this method's own
+        // app-layer test — RestructureFactory.ExtendStart had the identical,
+        // already-latent bug, fixed there too the same pass.
+        var earlierPatterns = otherPatterns
+            .Where(pattern => pattern.DatePattern.Start <= current.DatePattern.Start)
+            .OrderByDescending(pattern => pattern.DatePattern.Start)
+            .ToList();
+
+        var absorbed = new List<FinancialPattern>();
+        FinancialPattern? neighbor = null;
+
+        // Mirror of ExtendUntil's own walk, going backward through earlier
+        // segments instead — same absorb-then-nudge shape, same "stop at the
+        // first one not fully reached" rule.
+        foreach (var pattern in earlierPatterns)
+        {
+            if (newStart <= pattern.DatePattern.Start)
+            {
+                absorbed.Add(pattern);
+                continue;
+            }
+
+            neighbor = pattern.WithUntil(newStart.AddDays(-1));
+            break;
+        }
+
+        return new FinancialChainBoundaryResult { Current = current.WithStart(newStart), Absorbed = absorbed, AdjustedNeighbor = neighbor };
+    }
+
+    /// <summary>[CALC] Applies a segment's own newly-edited Amount and recurrence shape to every later same-Source segment — planning/27's "cascade forward" choice for a FinancialPattern chain (Phase 1), the default when Amount or shape changes. Each later segment keeps its own Start/Until/Priority/Mandatory/Description/AutoRenew; only Amount and shape (Frequency/Interval/ByDay/ByMonthDay) change. Mirrors RestructureFactory.CascadeForward exactly, one level up.</summary>
+    /// <param name="newShape">The edited segment's own new recurrence shape — only Frequency/Interval/ByDay/ByMonthDay are read from it, not its Start/Until.</param>
+    /// <param name="newAmount">The edited segment's own new Amount.</param>
+    /// <param name="laterPatterns">Every later segment in the same chain (Start after the segment being edited).</param>
+    /// <returns>One freshly-built segment per entry in laterPatterns, in the same order, each carrying the new Amount and shape forward.</returns>
+    public static IReadOnlyList<FinancialPattern> CascadeForward(RecurrenceRule newShape, decimal newAmount, IReadOnlyList<FinancialPattern> laterPatterns) =>
+        laterPatterns
+            .Select(pattern => FinancialPattern.Create(new FinancialPatternOptions
+            {
+                FinanceId = pattern.FinanceId,
+                Source = pattern.Source,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = newShape.Frequency,
+                    Interval = newShape.Interval,
+                    ByDay = newShape.ByDay,
+                    ByMonthDay = newShape.ByMonthDay,
+                    Start = pattern.DatePattern.Start,
+                    Until = pattern.DatePattern.Until,
+                    ActiveFrom = pattern.DatePattern.ActiveFrom,
+                    ExcludedDates = pattern.DatePattern.ExcludedDates,
+                }),
+                Amount = newAmount,
+                Priority = pattern.Priority,
+                Mandatory = pattern.Mandatory,
+                Description = pattern.Description,
+                AutoRenew = pattern.AutoRenew,
+            }))
+            .ToList();
+
+    /// <summary>[CALC] Applies a segment's own newly-edited Priority/Mandatory/Description/AutoRenew to every later same-Source segment — planning/27's own reopened "trivial fields" question (round 3 of the fourth relationship's small questions), a FinancialPattern-only mechanism with no EarMarkPattern equivalent (EarMarkPattern has none of these fields). Structurally the same shape as CascadeForward, but for the OTHER field group — Amount/shape/Start/Until all stay each later segment's own.</summary>
+    /// <param name="current">The edited segment — its own new Priority/Mandatory/Description/AutoRenew are what gets copied forward.</param>
+    /// <param name="laterPatterns">Every later segment in the same chain.</param>
+    /// <returns>One freshly-built segment per entry in laterPatterns, in the same order, each carrying the new trivial-field values forward.</returns>
+    public static IReadOnlyList<FinancialPattern> CascadeTrivialFieldsForward(FinancialPattern current, IReadOnlyList<FinancialPattern> laterPatterns) =>
+        laterPatterns
+            .Select(pattern => FinancialPattern.Create(new FinancialPatternOptions
+            {
+                FinanceId = pattern.FinanceId,
+                Source = pattern.Source,
+                DatePattern = pattern.DatePattern,
+                Amount = pattern.Amount,
+                Priority = current.Priority,
+                Mandatory = current.Mandatory,
+                Description = current.Description,
+                AutoRenew = current.AutoRenew,
+            }))
+            .ToList();
+}
+
+// What ExtendUntil/ExtendStart (Phase 1) need the caller to actually carry
+// out — mirrors RestructureFactory's own ChainBoundaryResult exactly, one
+// level up. Deliberately silent on what an absorbed segment's own FinanceId
+// takes with it: unlike EarMarkPattern-level absorption, absorbing a whole
+// FinancialPattern genuinely orphans everything under its own now-gone
+// FinanceId — its own EarMarkPattern chain (if any) and every ManualEarmark
+// tied to it — since a pure domain function has no repository access to
+// delete any of that itself. A caller with real data (FinancePatternSaveConfirmation)
+// decides what to do with each entry in Absorbed once this returns.
+public sealed record FinancialChainBoundaryResult
+{
+    public required FinancialPattern Current { get; init; }
+    public required IReadOnlyList<FinancialPattern> Absorbed { get; init; }
+    public FinancialPattern? AdjustedNeighbor { get; init; }
 }

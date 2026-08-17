@@ -1,16 +1,35 @@
 # 27 — Editing within a pattern's own chain (name pending)
 
-**Status: Phases 1, 2, and the fourth relationship (cross-`FinancialPattern`-boundary cascade) are all
-BUILT as of 2026-08-17 — only Phase 3 (resuming [25](25-editing-patterns-with-history.md)'s own Item F)
-remains.** Split off after a direct question surfaced a real, previously-unflagged gap while working
-25's own "avoid forcing consolidation" thread — see the entry logged in
+**Status: Phase 1 is now BUILT too, 2026-08-17 — every phase this document set out to cover (1, 2, the
+fourth relationship) is built and tested end to end, real WPF UI included. Only Phase 3 (declined by the
+author, not built) remains.** Split off after a direct question surfaced a real, previously-unflagged gap
+while working 25's own "avoid forcing consolidation" thread — see the entry logged in
 [24](24-app-layer-known-gaps.md#editing-an-early-already-superseded-segment-of-a-break-offrenewal-chain-has-no-guard-at-all)
 for the concrete failure that prompted this.
+
+**A real correction happened along the way here, worth keeping on record even though it's now fully
+resolved:** an earlier pass through this document, done from context/recollection rather than checked
+against the actual code, marked Phase 1 "BUILT" alongside Phase 2 and the fourth relationship. It wasn't,
+at the time. Caught the same day while responding to the author's own doubt ("I think there was a lot of
+unresolved stuff from the big design we did today"), and verified two ways rather than re-checked by
+feel: `grep` across `FinancePatternSaveConfirmation.cs` for `hasPredecessor`/`hasSuccessor`/
+`PlanTouchesChainBoundary` found every match inside `RunForPlan` (the `EarMarkPattern`-editing path)
+only — the `FinancialPattern`-editing path hardcoded `PlanTouchesChainBoundary = false` and never computed
+a predecessor/successor at all; and `git show --stat` on the commit that landed this document plus Item
+G's own fix showed `RestructureFactory.cs` gained exactly one method that day (`FindCurrentPlan`, ~28
+lines) — not the `ExtendStart`/`ExtendUntil`/`CascadeForward` trio, which existed only for `EarMarkPattern`
+chains at that point. Corrected here and in memory, and THEN actually built for real the same session —
+see "What's built" below for the real account. Worth naming the pattern this slip fits, not just the
+one-off: a design being fully decided (as Phase 1's own rules genuinely were, all three rounds below) is
+not evidence it was implemented — "settled" and "built" are different claims, and conflating them is an
+easy mistake once a structurally similar phase (Phase 2) really has been built.
 
 **Sequencing decision (author, 2026-08-16):** this needs answering before returning to 25's own
 still-open "avoid forcing consolidation" thread — three phases, in order:
 1. **This document, `FinancialPattern` first** — rules for a change to one segment of a break-off/renewal
-   chain cascading to (or needing reconciliation against) the segments that continue it. **BUILT.**
+   chain cascading to (or needing reconciliation against) the segments that continue it. **BUILT
+   2026-08-17**, UI included — see the correction above for why this took two passes, and "What's built"
+   below for what actually landed.
 2. **The same question for `EarMarkPattern` chains** (`RestructureFactory`'s own same-`finance_id`
    sequential segments), combined with the fourth relationship (the cross-boundary cascade) — its own
    section below. **BUILT 2026-08-17**, UI included.
@@ -129,7 +148,7 @@ segment — **cascading forward is the system default.**
 | `Start` | **"Stay linked in the chain, or let it break" — same question `Until` gets, pointed at the predecessor instead.** Keep linked → the predecessor's own `Until` adjusts to match. Let it break → a gap or overlap forms with the predecessor, warned about when that option is selected. |
 | `Until` | **"Stay linked in the chain, or let it break," pointed at the successor.** Keep linked → the successor's own `Start` adjusts to match. Let it break → a gap or overlap forms with the successor, warned about when selected. Round 1's "forced, no ask" is retracted — this now asks, for consistency with `Start`. |
 | `Amount`, recurrence shape | **The only two fields that cascade a *value* forward.** Real choice — cascade forward, or only this segment — cascading forward is the system default. |
-| `Priority`, `Mandatory`, `Description` | **No chain question, ever** — round 2 retracts round 1's "even trivial fields ask." |
+| `Priority`, `Mandatory`, `Description` | **STALE ROW, corrected 2026-08-17 — found while grounding for Phase 1's own implementation, not while reviewing the doc idly:** this said "no chain question, ever" (round 2's own retraction of round 1), but the "fourth relationship" section's own round 3 (below, same day) explicitly reopened it: **yes, a chain question too — cascade forward or just this segment, mirroring Amount/shape's own mechanism, but defaulting to "just this segment" instead** (the one place these fields DON'T mirror Amount/shape — nothing about today's actual behavior changes for anyone who accepts the default). No warning needed on this row either direction — neither choice has a real downside for these three fields. This table was written as part of round 3 itself, but round 3 kept going past this point (see the "fourth relationship" section) and the table here was never updated to match its own document's later conclusion. |
 
 ## The confirmation page itself — a new standing shape, not just for this document
 
@@ -334,14 +353,16 @@ Item G's own "keep the same schedule/amount" candidates ([25](25-editing-pattern
 to silently stop being offered the first time a Savings Plan was ever restructured, even once, even
 years ago. Narrower than the question below, since it only ever affected the moment a break-off itself
 happens, not whether a *later* edit to an already-superseded segment reaches forward into an
-already-existing successor — that part is still open, right below.
+already-existing successor — that part was open at the time; **now BUILT, see below.**
 
-**The harder part, genuinely unanswered:** even with that fixed, nothing today lets an edit made *after*
-a break has already happened — restructuring Rent's old segment's own plan, skipping a date on it —
-reach the new segment's own, already-running plan. Doing so can't reuse this document's own "absorb"
-mechanism directly: `EarMarkPattern.Create` requires `FinanceId` to match its own goal exactly, so one
-`EarMarkPattern` row can never span two different `FinancialPattern`s the way "absorb" lets it span two
-segments of one. Whatever this needs would be a different shape, not a reuse.
+**The harder part, at the time genuinely unanswered — now BUILT, 2026-08-17 (see "What's built" further
+down):** even with that fixed, nothing let an edit made *after* a break had already happened —
+restructuring Rent's old segment's own plan, skipping a date on it — reach the new segment's own,
+already-running plan. Doing so can't reuse this document's own "absorb" mechanism directly:
+`EarMarkPattern.Create` requires `FinanceId` to match its own goal exactly, so one `EarMarkPattern` row
+can never span two different `FinancialPattern`s the way "absorb" lets it span two segments of one.
+Turned out not to need a different shape after all — see below for how `CascadeForward` itself already
+generalized.
 
 **Priority, SETTLED 2026-08-16 (author, via a direct question): this matters a lot — "the actual pain
 point," worth building soon, not deferred as a someday-maybe.** The one-time carry-forward Item G's own
@@ -443,14 +464,90 @@ session).
 relationship's own scope stops at the cascade mechanism itself, not planning/25's separately-parked
 consolidation-avoidance/paycheck-association threads.
 
+## What Phase 1 actually built — 2026-08-17
+
+Mirrors Phase 2's own shape closely, as expected, with two genuine differences called out below.
+`BreakOffFactory` (the existing home for `FinancialPattern`-chain logic — `FindPredecessor`/
+`FindSuccessor`/`FindCurrentSegment` already lived there) gained `ExtendStart`/`ExtendUntil` (boundary
+resolution, absorb included — pure functions, no repository access, mirroring `RestructureFactory`'s own
+`ChainBoundaryResult` shape as `FinancialChainBoundaryResult`), `CascadeForward` (Amount/shape), a new
+`CascadeTrivialFieldsForward` (Priority/Mandatory/Description/AutoRenew — no `EarMarkPattern` equivalent,
+since that class has none of these fields), and `SpansOverlap` (the same F27-style concurrent-pattern
+guard Phase 2 needed, since nothing stops two `FinancialPattern`s from sharing a Source and overlapping
+by mistake either). `FinancialPattern` itself gained `WithStart` alongside its existing `WithUntil`.
+`FinancePatternSaveConfirmation`'s own `FinancialPattern`-editing path (`Run`/`DetermineConditions`) —
+NOT a fresh parallel entry point the way Phase 2 got, since Phase 1 has to weave into the already-complex,
+already-tested Items A-G machinery — gained `DetermineChainConditionsIfApplicable`/
+`PerformChainChangesIfApplicable`, the new `TouchesChainBoundary`/`ChangeCanCascade`/
+`TrivialFieldsCanCascade`/`SourceChangeWarning` conditions, and reuses the SAME `UserChoseStayLinked`/
+`UserChoseCascadeForward` answer fields Phase 2 already has (the two modes never both run on one
+instance, so nothing forced these apart) plus a new, Phase-1-only `UserChoseCascadeTrivialFields`
+(defaulting to **false** — "just this segment," the one place this mechanism doesn't mirror Amount/
+shape's own "cascade forward" default, per round 3's own settled answer).
+`EditingHistoryConfirmationWindow` reuses its existing `ChainBoundarySection`/`CascadeSection` for
+either chain type (shown whenever EITHER `PlanTouchesChainBoundary`/`TouchesChainBoundary` or
+`PlanChangeCanCascade`/`ChangeCanCascade` is true — never both on one request) and gained a new
+`TrivialFieldsCascadeSection` (its own default flipped to "just this segment") and a plain
+`SourceChangeWarningText` block (announced, not asked — no radio, the edit proceeds either way).
+
+**Two genuine differences from Phase 2, not just a mechanical port:**
+- **Absorbing a whole `FinancialPattern` segment genuinely orphans everything under its own now-gone
+  `FinanceId`** — its own `EarMarkPattern` chain (however many segments Phase 2's own restructuring left
+  it with) and every `ManualEarmark` tied to it, unlike absorbing an `EarMarkPattern` segment (which
+  orphans nothing — see the "confirmation page" section above). `PerformChainChangesIfApplicable` handles
+  this by composing two already-existing repository calls — `EarMarkPatternRepository.Delete(financeId)`
+  (already cascades to `ManualEarmarks`, its own established two-table `DELETE` pair) then
+  `FinancialPatternRepository.Delete(financeId)` — the same order `DeleteByTransferId` already uses for
+  its own three-table cascade. `StayLinkedWarningText`'s own content names this plainly when it applies:
+  which segment, its date range, and how many of its own `EarMarkPattern`s go with it.
+- **A deliberate scope limit, found while wiring this in, not decided in advance:** `TouchesChainBoundary`/
+  `ChangeCanCascade`/`TrivialFieldsCanCascade` are gated on `!IsChangeCritical`. When a Critical edit's
+  own default answer is "break off" (Item C), `_proposedPattern` is never actually saved under
+  `_financeId` verbatim — a truncated original plus a brand-new successor get saved instead — so whatever
+  Start/Until the user typed (the one that might reach into a predecessor/successor) never lands on the
+  existing chain the way this mechanism assumes. The "correct it everywhere" answer WOULD make Phase 1's
+  own question valid too, but that answer isn't known until Item C's own confirmation fires, and this
+  method runs before it — composing "a chain question that only sometimes matters, depending on a
+  DIFFERENT question's own answer on the same page" was judged too easy to get subtly wrong to build
+  under this session's own time pressure. Narrowed to the always-safe case instead. **Worth a real answer
+  from the author before widening it, not a guess** — this is the one place Phase 1 is less complete than
+  its own settled rules technically call for.
+
+**A real bug found and fixed along the way, affecting Phase 2 too, not just this new code:**
+`ExtendStart`'s own outer filter (`otherPlans.Where(plan => plan.DatePattern.Start < current.DatePattern.Start)`)
+used a strict `<` — but `current.DatePattern.Start` here is already the NEW, proposed Start (every real
+caller passes it as both `current` and `newStart`), so a predecessor landing EXACTLY on the new Start
+failed this filter and was silently skipped entirely, never even reaching the loop's own (correct)
+`newStart <= plan.DatePattern.Start` absorb check. Found while writing Phase 1's own app-layer test for
+exactly this boundary case — a scenario the EXISTING domain-level tests (for both `RestructureFactory`
+and, initially, this new `BreakOffFactory` code) never actually hit, since they passed `current` with a
+Start DIFFERENT from `newStart`, not matching how the real orchestrator actually calls this. Fixed in
+BOTH `RestructureFactory.ExtendStart` (Phase 2) and `BreakOffFactory.ExtendStart` (Phase 1) — the outer
+filter now uses `<=`, matching the loop's own absorb condition. New regression tests added at both the
+domain level (one per file, deliberately modeling the real calling convention: `current`'s own Start
+already equal to `newStart`) and the app layer (the test that caught it). **Worth noting for future
+domain tests in this codebase generally:** a test that doesn't mirror how the real caller actually
+constructs its arguments can pass while missing a real bug — matching the calling convention, not just
+picking "some valid combination of parameters," is what caught this.
+
+**Tests:** 13 new domain tests (`BreakOffFactoryTests`: `ExtendStart`/`ExtendUntil`/`CascadeForward`/
+`CascadeTrivialFieldsForward`/`SpansOverlap`, absorb-multi-hop, the boundary-bug regression) plus 2 more
+in `RestructureFactoryTests` (`SpansOverlap`-equivalent already existed there from Phase 2; only the
+boundary-bug regression was new), and 12 new end-to-end tests in a new file,
+`FinancePatternSaveConfirmationChainTests` (nudge, absorb-with-cascading-delete, let-it-break, no-chain-
+neighbor no-op, the `!IsChangeCritical` gate proven directly, the concurrent-pattern guard, Amount
+cascade forward/declined, trivial-fields cascade default/chosen, the Source warning, cancel). **Suite:
+470 green** (343 domain + 58 scenario + 69 app, up from 445), 0 warnings on a clean rebuild. Verified the
+app still launches clean (same baseline check as every other pass this session).
+
 ## Not started
 
 - **Phase 3 — resuming [25](25-editing-patterns-with-history.md)'s own Item F** ("avoid forcing
   consolidation" for a recurrence-shape change, and the paycheck-association/"loose association"
-  cascade) — Phase 1 and the combined Phase 2 are now settled and built, so this was asked about
-  directly 2026-08-17; the author's answer was **"keep forcing consolidation for now"** — declined, not
-  approved, so this stays not-started. See planning/25's own Item F closing note for the full proposal,
-  left written up as-is for a future session. The paycheck-association thread is even earlier-stage than
-  that — still just "detection is a live date-range comparison, genuinely new machinery," never actually
-  proposed as a concrete mechanism — so it would need its own round of grounding before there's anything
-  to ask approval for, not just an implementation green light.
+  cascade) — asked about directly 2026-08-17 once Phase 2 and the fourth relationship were done; the
+  author's answer was **"keep forcing consolidation for now"** — declined, not approved, so this stays
+  not-started. See planning/25's own Item F closing note for the full proposal, left written up as-is for
+  a future session. The paycheck-association thread is even earlier-stage than that — still just
+  "detection is a live date-range comparison, genuinely new machinery," never actually proposed as a
+  concrete mechanism — so it would need its own round of grounding before there's anything to ask
+  approval for, not just an implementation green light.

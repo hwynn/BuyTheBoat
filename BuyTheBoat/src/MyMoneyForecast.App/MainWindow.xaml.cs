@@ -165,7 +165,7 @@ public partial class MainWindow : Window
         var accountIdByFinanceId = _financialPatterns.GetAllByAccount()
             .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
             .ToDictionary(pair => pair.FinanceId, pair => pair.AccountId);
-        ExpenseForm.SetContext(accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll());
+        ExpenseForm.SetContext(accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll(), _financialPatterns.GetAll());
     }
 
     /// <summary>[STEP] Matches either a plain string Header (Forecast) or Tag (Account/Expense/Earmark, whose Header is a styled TextBlock — see MainWindow.xaml's own comment on why Tag carries the stable name).</summary>
@@ -1167,6 +1167,8 @@ public partial class MainWindow : Window
             })
         {
             ConfirmImplicitChanges = ShowEditingHistoryConfirmation,
+            ShowSuggestion = ShowConcerningSuggestion,
+            PickEarmarkPattern = PickEarmarkPatternToOpen,
             NavigateToEarmarkForm = plan =>
             {
                 if (isNew)
@@ -1278,7 +1280,24 @@ public partial class MainWindow : Window
             ChoseScalePatterns = confirmWindow.ChoseScalePatterns,
             ChoseStayLinked = confirmWindow.ChoseStayLinked,
             ChoseCascadeForward = confirmWindow.ChoseCascadeForward,
+            ChoseCascadeTrivialFields = confirmWindow.ChoseCascadeTrivialFields,
+            ChoseToRepaceBills = confirmWindow.ChoseToRepaceBills,
         };
+    }
+
+    /// <summary>[UI] The Concerning popup's own minimal, real form (2026-08-17) — a plain MessageBox naming the plan health concern FinancePatternSaveConfirmation.AskForSuggestions already worked out, matching this project's existing acknowledge-only MessageBox convention (see e.g. OnDeleteAccountClick's own "can't delete" case) rather than a bespoke Window. Deliberately not the elaborate strategy-picker planning/25 describes and defers — see ShowSuggestion's own field comment on FinancePatternSaveConfirmation for why.</summary>
+    /// <param name="message">The plain-language plan-health sentence to show — PlanHealthMessages.CurrentJarStateLine's own output, unchanged.</param>
+    private void ShowConcerningSuggestion(string message)
+    {
+        MessageBox.Show(this, message, "Worth a look", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    /// <summary>[UI] AskWhichEarmarkPatternToOpen's own real disambiguation, built 2026-08-17 — shows EarmarkPatternPickerWindow and returns whichever plan the user picked. Cancelling the picker (SelectedPlan stays null) falls back to the first plan in the list rather than opening nothing at all — Save has already committed by the time this runs, so there's always a real plan to land on somewhere, and refusing to pick one would only strand the user on whatever tab they started from.</summary>
+    /// <param name="plans">Every EarMarkPattern surviving for the goal — always more than one; AskWhichEarmarkPatternToOpen's own gate never calls this otherwise.</param>
+    private EarMarkPattern? PickEarmarkPatternToOpen(IReadOnlyList<EarMarkPattern> plans)
+    {
+        var picker = new EarmarkPatternPickerWindow(plans) { Owner = this };
+        return picker.ShowDialog() == true ? picker.SelectedPlan : plans[0];
     }
 
     /// <summary>[CALC] Every scheduled outflow reserves through its own Allocation Plan (Stage 1's allocation model — planning/14), proposed at creation from the current as-of date and the user's income. Income never gets one (A-1). The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed. Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this outflow's own account (planning/17, F33) — a paycheck filed under a different account never actually funds this one.</summary>

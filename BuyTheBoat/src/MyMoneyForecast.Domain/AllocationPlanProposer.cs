@@ -71,6 +71,24 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 // field BreakOffFactory already reads off the forecast for its own default
 // Propose-based successor (BreakOffRequest.CarriedOverJarBalance) — these
 // two methods now expect the same real number from their own caller.
+//
+// IsPacedAgainst/FindPlansPacedAgainst (2026-08-17): a first, DETECTION-ONLY
+// piece of planning's own "loose association" thread (redesign/memory's own
+// project_next_phase.md, 2026-08-16/17 blocks) — finding which of a
+// household's EXISTING plans were paced against a given income, since
+// nothing in EarMarkPatternOptions stores that link. Built as the exact
+// converse of ProposePaced's own forward construction: every occurrence of
+// a genuinely-paced plan lands on one of the income's own real paydays, by
+// construction, so checking for that live is the natural inverse. A
+// deliberately narrow first pass, not a settled definition — flagged in
+// both methods' own doc comments and in project_next_phase.md as my own
+// grounded heuristic. UPDATE 2026-08-17, same day: the suggestion/cascade
+// this was built to support is now real too —
+// FinancePatternSaveConfirmation.PerformPaycheckAssociationCascadeIfApplicable
+// re-Proposes each invalidated plan (via this same class's own Propose) once
+// the user opts in through EditingHistoryConfirmationWindow's own new row.
+// These two detection methods are still exactly the heuristic described
+// above; only the orchestration around them changed.
 public static class AllocationPlanProposer
 {
     /// <summary>[CALC] Proposes a default Allocation Plan for a newly-created outflow — paced against a single clear income stream when one exists, or front-loaded/spread otherwise. See this class's own header for the three shapes.</summary>
@@ -348,6 +366,56 @@ public static class AllocationPlanProposer
         return new ProposedAllocationPlan(preparedOutflow, plan, null);
     }
 
+    // 2026-08-17: the first piece of "loose association" (planning's own
+    // paycheck-cascade thread) — detecting an EXISTING plan's association
+    // with an income, not proposing a new one. No stored link exists
+    // anywhere in EarMarkPatternOptions for this; IsPacedAgainst re-derives
+    // it live by checking the same relationship ProposePaced builds going
+    // forward. This is a first-pass heuristic (see its own comment below for
+    // what it does and doesn't catch), not a settled definition — it exists
+    // so a future "your paycheck changed, want to re-pace these bills too?"
+    // suggestion has something to detect candidates with. That suggestion
+    // itself, and any cascade/orchestration around it, is NOT built here.
+
+    /// <summary>[CALC] Reports whether a plan's own schedule coincides with an income's own paydays — the inverse of ProposePaced's own forward construction, for finding an association no stored link records.</summary>
+    /// <param name="plan">The plan to check.</param>
+    /// <param name="income">The candidate income stream to check it against.</param>
+    public static bool IsPacedAgainst(EarMarkPattern plan, FinancialPattern income)
+    {
+        if (income.Amount <= 0m)
+        {
+            return false; // not actually income
+        }
+
+        var planDates = plan.DatePattern.GetOccurrences();
+        if (planDates.Count == 0)
+        {
+            return false; // nothing to compare — never "paced" by construction
+        }
+
+        // Every one of the plan's own occurrences must land on one of the
+        // income's own paydays — the exact converse of AlignedSchedule's own
+        // forward construction (copies income's Frequency/Interval/ByDay/
+        // ByMonthDay, re-anchored at one of income's own real occurrences).
+        // A plan ProposePaced actually built satisfies this by construction,
+        // so this also catches a hand-edited plan that still lines up — and
+        // correctly misses a same-shape-but-different-phase stream (e.g. two
+        // biweekly incomes paying on alternating weeks) that a bare shape
+        // comparison alone would not. Requiring EVERY occurrence to match,
+        // not just most, is the strictest reading and the safest starting
+        // point; how much drift (a skipped date, a one-off manual edit)
+        // should still count as "still paced against it" is an open
+        // question this doesn't attempt to answer.
+        var paydays = income.DatePattern.GetOccurrences(plan.DatePattern.Start, plan.DatePattern.Until).ToHashSet();
+        return planDates.All(paydays.Contains);
+    }
+
+    /// <summary>[CALC] Finds which of a household's plans are paced against the given income — IsPacedAgainst applied across every plan, for offering a suggestion after the income itself changes.</summary>
+    /// <param name="income">The income stream whose associated plans to find.</param>
+    /// <param name="allPlans">Every EarMarkPattern in the household to check.</param>
+    public static IReadOnlyList<EarMarkPattern> FindPlansPacedAgainst(FinancialPattern income, IReadOnlyList<EarMarkPattern> allPlans) =>
+        allPlans.Where(plan => IsPacedAgainst(plan, income)).ToList();
+
     /// <summary>[CALC] Shape A: builds a plan with one contribution per payday, sized so the window's contributions equal the window's bill consumption.</summary>
     /// <param name="outflow">The outflow being funded.</param>
     /// <param name="income">The single income stream to pace against.</param>
@@ -560,12 +628,12 @@ public static class AllocationPlanProposer
         return occurrences.Count > 0 ? occurrences[0] : null;
     }
 
-    /// <summary>[CALC] Re-anchors a reference pattern's own recurrence shape at a new start date without losing phase — finds the reference's own next real occurrence on or after the desired date and uses THAT as the new Start, rather than the raw desired date itself. Safe even when the reference's ByDay/ByMonthDay was never set explicitly: RFC 5545 then implicitly ties an omitted BYDAY to DTSTART's own weekday, which a raw new Start would silently change out from under it (see ProposePaced's own header comment for the confirmed bug this fixes). Extends the reference's own Until first when the caller needs a later window than the reference itself currently reaches — the reference's SHAPE is what's being preserved, not its own current end date. When the aligned occurrence lands after desiredStart, sets ActiveFrom back to desiredStart — same reasoning as Propose's own outflow-preparation step — so the jar still reads as alive (and a starting earmark can still be dated) from desiredStart onward, not only from the first real contribution.</summary>
+    /// <summary>[CALC] Re-anchors a reference pattern's own recurrence shape at a new start date without losing phase — finds the reference's own next real occurrence on or after the desired date and uses THAT as the new Start, rather than the raw desired date itself. Safe even when the reference's ByDay/ByMonthDay was never set explicitly: RFC 5545 then implicitly ties an omitted BYDAY to DTSTART's own weekday, which a raw new Start would silently change out from under it (see ProposePaced's own header comment for the confirmed bug this fixes). Also the only safe way to re-anchor an Interval > 1 Weekly rule at all, even with an EXPLICIT ByDay: confirmed empirically 2026-08-17 (RecurrenceRuleTests.Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere) that "every Nth week" is counted from DTSTART's own calendar week regardless of ByDay, so a raw new Start can land a whole interval-step off even when the weekday itself is spelled out. Extends the reference's own Until first when the caller needs a later window than the reference itself currently reaches — the reference's SHAPE is what's being preserved, not its own current end date. When the aligned occurrence lands after desiredStart, sets ActiveFrom back to desiredStart — same reasoning as Propose's own outflow-preparation step — so the jar still reads as alive (and a starting earmark can still be dated) from desiredStart onward, not only from the first real contribution. Public since 2026-08-17: FinancePatternSaveConfirmation.BuildSuccessorSchedule reuses this directly for a break-off successor's own Weekly schedule, rather than duplicating the logic — see that method's own comment for why a break-off successor needed the exact same fix.</summary>
     /// <param name="reference">The pattern whose recurrence shape (and phase) to preserve.</param>
     /// <param name="desiredStart">Where the new schedule should start from, ideally.</param>
     /// <param name="until">The new schedule's own end date.</param>
     /// <returns>A schedule with the reference's own shape, anchored at the reference's nearest real occurrence on or after desiredStart — or null when the reference has no such occurrence within the window.</returns>
-    private static RecurrenceRuleOptions? AlignedSchedule(RecurrenceRule reference, DateOnly desiredStart, DateOnly until)
+    public static RecurrenceRuleOptions? AlignedSchedule(RecurrenceRule reference, DateOnly desiredStart, DateOnly until)
     {
         var extendedReference = until > reference.Until ? reference.WithUntil(until) : reference;
         if (FirstOccurrenceOnOrAfter(extendedReference, desiredStart) is not { } alignedStart)

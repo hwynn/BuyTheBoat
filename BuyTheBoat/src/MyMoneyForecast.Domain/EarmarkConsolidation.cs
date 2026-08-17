@@ -90,7 +90,23 @@ public static class EarmarkConsolidation
                 "At least one surviving plan is required to consolidate.", nameof(request));
         }
 
-        var start = request.SurvivingPlans.Min(plan => plan.DatePattern.ActiveStart);
+        // Clamped forward to the goal's own ActiveStart when it lands
+        // later, 2026-08-17 — found while widening ConsolidationNeeded to
+        // also force this mechanism for a start_date change, not just a
+        // recurrence-shape one: this method was only ever exercised
+        // against a goal whose own Start never moved, so the consolidated
+        // plan's own Start (the earliest surviving plan's own, unclamped)
+        // could land BEFORE the goal's newly-moved-forward one, which
+        // EarMarkPattern.Create's own validation rejects outright. Safe to
+        // clamp with no effect on the money math: GetOccurrences already
+        // self-clamps to the goal's own real Start regardless of how early
+        // a lower bound it's asked from, so releaseCount below is
+        // identical either way — only the constructed plan's own Start
+        // field needed fixing, not anything it's sized against.
+        var earliestSurvivingStart = request.SurvivingPlans.Min(plan => plan.DatePattern.ActiveStart);
+        var start = earliestSurvivingStart > request.Goal.DatePattern.ActiveStart
+            ? earliestSurvivingStart
+            : request.Goal.DatePattern.ActiveStart;
         var end = request.Goal.DatePattern.Until;
 
         var releaseCount = request.Goal.DatePattern.GetOccurrences(start, end).Count;

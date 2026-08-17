@@ -598,6 +598,114 @@ public class AllocationPlanProposerTests
         result.ShouldBeNull();
     }
 
+    // ---- IsPacedAgainst / FindPlansPacedAgainst -------------------------------
+    // 2026-08-17: these two methods are the detection primitive; the actual
+    // cascade that consumes them (FinancePatternSaveConfirmation.
+    // PerformPaycheckAssociationCascadeIfApplicable) is covered by its own
+    // end-to-end tests instead — FinancePatternSaveConfirmationPaycheckAssociationTests.cs
+    // in MyMoneyForecast.App.Tests. See these two methods' own doc comments
+    // in AllocationPlanProposer.cs for what "paced against" means here.
+
+    [Fact]
+    public void IsPacedAgainst_is_true_for_a_plan_ProposePaced_actually_built()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf);
+
+        AllocationPlanProposer.IsPacedAgainst(result.Plan, income).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsPacedAgainst_is_true_for_a_hand_built_plan_whose_occurrences_all_land_on_paydays()
+    {
+        // Never went through Propose at all — same monthly shape and day as
+        // the income, over a window fully inside the income's own, so every
+        // one of the plan's own dates genuinely is one of the income's own
+        // paydays. Proves this is a real date-coincidence check, not just
+        // recognizing Propose's own output by construction.
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1));
+        var plan = MonthlyPlan(goal, -300m, 25, new DateOnly(2025, 1, 25), new DateOnly(2025, 11, 25));
+
+        AllocationPlanProposer.IsPacedAgainst(plan, income).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsPacedAgainst_is_false_when_the_plan_has_its_own_unrelated_schedule()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1));
+        var plan = MonthlyPlan(goal, -300m, 15, new DateOnly(2025, 1, 15), new DateOnly(2025, 11, 15));
+
+        AllocationPlanProposer.IsPacedAgainst(plan, income).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsPacedAgainst_is_false_for_two_same_shape_streams_paying_on_different_phases()
+    {
+        // Both biweekly, same Interval — but the plan's own Start is offset
+        // one week from the income's, so the two schedules alternate and
+        // never land on the same date. A bare shape comparison (Frequency +
+        // Interval) would wrongly call this paced; the real date-coincidence
+        // check correctly doesn't.
+        var income = BiweeklyIncome(1000m, new DateOnly(2025, 1, 3), new DateOnly(2026, 1, 1));
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1));
+        var plan = BiweeklyPlan(goal, -150m, new DateOnly(2025, 1, 10), new DateOnly(2025, 11, 10));
+
+        AllocationPlanProposer.IsPacedAgainst(plan, income).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsPacedAgainst_is_false_when_the_candidate_income_is_actually_an_outflow()
+    {
+        var notIncome = MonthlyBill(-3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1), id: 2);
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1));
+        var plan = MonthlyPlan(goal, -300m, 25, new DateOnly(2025, 1, 25), new DateOnly(2025, 11, 25));
+
+        AllocationPlanProposer.IsPacedAgainst(plan, notIncome).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsPacedAgainst_is_false_when_the_plan_has_no_occurrences_of_its_own()
+    {
+        // Pinned to the 31st but boxed into a window with no 31st in it —
+        // legitimate per RecurrenceRule.Create (occurrence count isn't
+        // validated at construction), and a real edge case for a check built
+        // on "every occurrence must match": vacuously true is the wrong
+        // answer for a plan that never actually contributes anything.
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1));
+        var plan = MonthlyPlan(goal, -300m, 31, new DateOnly(2025, 2, 1), new DateOnly(2025, 2, 28));
+
+        AllocationPlanProposer.IsPacedAgainst(plan, income).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void FindPlansPacedAgainst_returns_only_the_plans_that_coincide_with_the_given_income()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var pacedGoal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1), id: 1);
+        var pacedPlan = MonthlyPlan(pacedGoal, -300m, 25, new DateOnly(2025, 1, 25), new DateOnly(2025, 11, 25));
+        var unrelatedGoal = MonthlyBill(-50m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1), id: 2);
+        var unrelatedPlan = MonthlyPlan(unrelatedGoal, -50m, 15, new DateOnly(2025, 1, 15), new DateOnly(2025, 11, 15));
+
+        var result = AllocationPlanProposer.FindPlansPacedAgainst(income, [pacedPlan, unrelatedPlan]);
+
+        result.ShouldBe([pacedPlan]);
+    }
+
+    [Fact]
+    public void FindPlansPacedAgainst_returns_empty_when_none_of_the_plans_match()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var goal = MonthlyBill(-50m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 1));
+        var unrelatedPlan = MonthlyPlan(goal, -50m, 15, new DateOnly(2025, 1, 15), new DateOnly(2025, 11, 15));
+
+        AllocationPlanProposer.FindPlansPacedAgainst(income, [unrelatedPlan]).ShouldBeEmpty();
+    }
+
     private static EarMarkPattern BiweeklyPlan(
         FinancialPattern goal, decimal amount, DateOnly start, DateOnly until, decimal startingAllocation = 0m) =>
         EarMarkPattern.Create(
@@ -613,6 +721,23 @@ public class AllocationPlanProposerTests
                     Until = until,
                 }),
                 StartingAllocation = startingAllocation,
+            },
+            goal);
+
+    private static EarMarkPattern MonthlyPlan(
+        FinancialPattern goal, decimal amount, int dayOfMonth, DateOnly start, DateOnly until) =>
+        EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = amount,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [dayOfMonth],
+                    Start = start,
+                    Until = until,
+                }),
             },
             goal);
 }

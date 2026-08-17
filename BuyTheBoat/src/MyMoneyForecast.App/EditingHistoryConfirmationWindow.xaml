@@ -12,18 +12,45 @@
         </StackPanel>
 
         <StackPanel>
-            <!-- Item E's own choice — visible only when IsChangeCritical. -->
+            <!-- Item E's own choice — visible only when IsChangeCritical.
+                 AlterPastConsequenceText names the SPECIFIC savings-plan
+                 consequence (absorbed balance, deleted manual earmarks) of
+                 the "apply everywhere" option, per planning/25's own "show
+                 the consequence, not just a yes/no" requirement — shown
+                 only while that option is the one currently selected,
+                 mirroring ChainBoundarySection's own "warning escalates
+                 with the currently-selected option" pattern. BreakOffRadio,
+                 the default, has nothing under it: breaking off never
+                 orphans anything on its own (a fresh successor, nothing
+                 deleted). -->
             <StackPanel x:Name="AlterPastSection" Margin="0,0,0,14">
                 <TextBlock Text="How should this apply?" FontWeight="Bold" Margin="0,0,0,6"/>
                 <RadioButton x:Name="BreakOffRadio" GroupName="AlterPast" IsChecked="True" Margin="0,0,0,4"
-                             Content="Only from today forward — keep past history as it was"/>
+                             Content="Only from today forward — keep past history as it was" Checked="OnAlterPastChoiceChanged"/>
                 <RadioButton x:Name="AlterPastRadio" GroupName="AlterPast"
-                             Content="Apply it everywhere, including past transactions"/>
+                             Content="Apply it everywhere, including past transactions" Checked="OnAlterPastChoiceChanged"/>
+                <TextBlock x:Name="AlterPastConsequenceText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="20,4,0,0"/>
             </StackPanel>
 
+            <!-- Item E's own narrowing limitation — announced, not asked;
+                 visible only when NarrowingLimitationWarning is non-empty
+                 (a retroactive correction whose own new boundary couldn't
+                 be applied to the savings plan for a known reason). Built
+                 2026-08-17 to replace what used to be total silence here —
+                 see FinancePatternSaveConfirmation.NarrowingLimitationWarning's
+                 own field comment. -->
+            <TextBlock x:Name="NarrowingLimitationWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,14"/>
+
             <!-- Item F's own ask — visible only when there's a real choice
-                 (more than one savings plan, and the schedule itself isn't
-                 forcing consolidation). -->
+                 (more than one savings plan, and the schedule/start date
+                 isn't forcing consolidation). ConsolidationCaveatText warns
+                 ahead of the choice, not tied to either radio, that a
+                 break-off (Item E's own AlterPastSection above) always
+                 combines plans regardless of what's picked here — found
+                 2026-08-17: "keep separate" through a break-off was never
+                 built and used to silently save nothing at all, fixed to
+                 fall back to combining instead, which makes this caveat
+                 necessary so that fallback is never a surprise. -->
             <StackPanel x:Name="ConsolidationAskSection" Margin="0,0,0,14">
                 <TextBlock Text="It has more than one savings plan. What do you want to do?" FontWeight="Bold" Margin="0,0,0,6"/>
                 <RadioButton x:Name="KeepSeparateRadio" GroupName="Consolidation" IsChecked="True" Margin="0,0,0,4"
@@ -31,15 +58,29 @@
                 <RadioButton x:Name="ConsolidateRadio" GroupName="Consolidation" Content="Combine them into one"/>
                 <CheckBox x:Name="ScaleCheckBox" Margin="20,6,0,0"
                           Content="Also update each plan's amount to match the new total"/>
+                <TextBlock x:Name="ConsolidationCaveatText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,6,0,0"/>
             </StackPanel>
 
-            <!-- Item F's forced case — announced, not asked. -->
-            <TextBlock x:Name="ConsolidationForcedText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic"
-                       Text="Because the schedule itself is changing, its savings plans will be combined into one."/>
+            <!-- Item F's forced case — announced, not asked. Text supplied
+                 by the request (ConsolidationForcedReason) rather than a
+                 static string since 2026-08-17, when the trigger widened to
+                 also cover a start_date change, not just a recurrence-shape
+                 one — see FinancePatternSaveConfirmation.DescribeConsolidationForcedReason's
+                 own doc comment. -->
+            <TextBlock x:Name="ConsolidationForcedText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic"/>
 
-            <!-- planning/27's own "stay linked or break" question, for a
-                 savings-plan Start/Until edit that touches a real chain
-                 neighbor — visible only when PlanTouchesChainBoundary. Each
+            <!-- planning/27's own Source row (Phase 1 only — no EarMarkPattern
+                 equivalent): "warn, don't block." Announced, not asked — there's
+                 no choice on this row, the edit proceeds either way; visible
+                 only when SourceChangeWarning is non-empty. -->
+            <TextBlock x:Name="SourceChangeWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,14"/>
+
+            <!-- planning/27's own "stay linked or break" question — shared by
+                 both chain types (a savings-plan Start/Until edit touching an
+                 EarMarkPattern-chain neighbor, PlanTouchesChainBoundary, or a
+                 bill/paycheck Start/Until edit touching a FinancialPattern-
+                 chain neighbor, TouchesChainBoundary — the two never both
+                 apply to one request). Each
                  radio gets its own warning slot right below it, text supplied
                  by the request (StayLinkedWarning/LetItBreakWarning) and
                  shown only while that option is the one currently selected
@@ -73,6 +114,44 @@
                              Content="Apply it going forward too"/>
                 <RadioButton x:Name="JustThisPlanRadio" GroupName="Cascade"
                              Content="Only this segment"/>
+            </StackPanel>
+
+            <!-- Phase 1's own third question (planning/27, "fourth
+                 relationship" round 3) — no EarMarkPattern equivalent, since
+                 EarMarkPattern has no Priority/Mandatory/Description/AutoRenew.
+                 Visible only when TrivialFieldsCanCascade. Unlike CascadeSection
+                 above, defaults to "just this segment" — the one place this
+                 mechanism doesn't mirror Amount/shape's own default. No
+                 warning needed either direction; neither choice has a real
+                 downside for these fields. -->
+            <StackPanel x:Name="TrivialFieldsCascadeSection" Margin="0,0,0,14">
+                <TextBlock Text="This also changes details like priority, mandatory, or description. Update later segments too?" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock x:Name="TrivialFieldsCascadeDescriptionText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,6"/>
+                <RadioButton x:Name="JustThisSegmentTrivialRadio" GroupName="TrivialFieldsCascade" IsChecked="True" Margin="0,0,0,4"
+                             Content="Only this segment"/>
+                <RadioButton x:Name="CascadeTrivialFieldsRadio" GroupName="TrivialFieldsCascade"
+                             Content="Apply it going forward too"/>
+            </StackPanel>
+
+            <!-- The paycheck-association cascade (2026-08-17) — visible only
+                 when PacedBillsCanCascade: at least one OTHER pattern's
+                 currently-active savings plan was paced against this
+                 income's OLD schedule and no longer is.
+                 PacedBillsCascadeDescriptionText names which bill(s), per
+                 the settled "singly for one associated bill or as a
+                 combined 'update all' option for several" language. Unlike
+                 CascadeSection above, defaults to NOT updating — "offered
+                 as a suggestion (not forced)," the settled language this
+                 mechanism is named for; no warning needed either direction,
+                 since declining just leaves an existing, still-valid plan
+                 as it already was. -->
+            <StackPanel x:Name="PacedBillsCascadeSection" Margin="0,0,0,14">
+                <TextBlock Text="Your paycheck's schedule changed. Update its associated savings plan(s) too?" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock x:Name="PacedBillsCascadeDescriptionText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,6"/>
+                <RadioButton x:Name="RepaceBillsRadio" GroupName="PacedBillsCascade" Margin="0,0,0,4"
+                             Content="Update them to match the new schedule"/>
+                <RadioButton x:Name="LeaveBillsAloneRadio" GroupName="PacedBillsCascade" IsChecked="True"
+                             Content="Leave them as they are"/>
             </StackPanel>
         </StackPanel>
     </DockPanel>

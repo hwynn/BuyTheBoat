@@ -91,4 +91,18 @@ public sealed class FinancialPattern
         Description = Description,
         AutoRenew = AutoRenew,
     });
+
+    /// <summary>[CALC] Returns a copy of this pattern starting on the given date instead — every other field unchanged. Used by BreakOffFactory's own chain-boundary resolution (planning/27) when "stay linked" needs to nudge a predecessor's own Start forward, or a successor's own Start backward, to stay contiguous. Safe the same way RecurrenceRule.WithStart itself is — Start plays no part in building the underlying recurrence pattern, only Frequency/Interval/ByDay/ByMonthDay/Until/Count do.</summary>
+    /// <param name="start">The new Start date.</param>
+    public FinancialPattern WithStart(DateOnly start) => Create(new FinancialPatternOptions
+    {
+        FinanceId = FinanceId,
+        Source = Source,
+        DatePattern = DatePattern.WithStart(start),
+        Amount = Amount,
+        Priority = Priority,
+        Mandatory = Mandatory,
+        Description = Description,
+        AutoRenew = AutoRenew,
+    });
 }

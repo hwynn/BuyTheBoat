@@ -1,16 +1,23 @@
 # 25 — Editing a finance pattern with existing history
 
-**Status: OPEN — started 2026-08-11.** A new problem surfaced outside the "Adjusting the Plan" phase's
-original 0–6 stage sequence (all design-complete, see [13](13-adjusting-the-plan-charter.md)) — during
-the same UI-implementation stretch that produced [21](21-form-architecture.md)/[22](22-plan-health-state.md)/[23](23-form-behavior.md),
-the same way those three did. Items A–F below are all SETTLED, including F's own feasibility test, and
-the Trivial/Critical/Concerning field categorization is SETTLED — see "Final field categorization"
-below. Only the UI-depth work (popup content/layout, the specific strategies) remains — see "Still
-open" at the bottom. **Item F's own in-place consolidation (2026-08-13) and amount-only scaling
-(2026-08-14) mechanisms — two of the four keep-separate/consolidate combinations — are now BUILT too**
-— see Item F's own updated closing note for exactly which two remain open. **Item G, added 2026-08-13,
-is now BUILT too (2026-08-14), for the single-plan break-off case** — see its own closing note for the
-multi-plan scoping decision and what's still just placeholder popup content.
+**Status: MOSTLY BUILT — started 2026-08-11, last updated 2026-08-17.** A new problem surfaced outside the
+"Adjusting the Plan" phase's original 0–6 stage sequence (all design-complete, see
+[13](13-adjusting-the-plan-charter.md)) — during the same UI-implementation stretch that produced
+[21](21-form-architecture.md)/[22](22-plan-health-state.md)/[23](23-form-behavior.md), the same way those
+three did. Items A–F below are all SETTLED, including F's own feasibility test, and the
+Trivial/Critical/Concerning field categorization is SETTLED — see "Final field categorization" below.
+**Item F's own in-place consolidation (2026-08-13) and amount-only scaling (2026-08-14) mechanisms are
+BUILT.** The other two keep-separate/consolidate combinations (break-off side; a `start_date`-only
+retroactive correction) are **NOT built as real "keep separate" mechanisms — instead, both were found
+2026-08-17 to have been silently doing nothing at all (one didn't even save the edit itself), and were
+fixed to always consolidate as a safety fallback, not the intended final answer.** The real feature —
+letting the user genuinely keep those plans separate too — is still open; see
+`redesign/memory/project_next_phase.md`'s own "OPEN QUESTIONS FOR THE AUTHOR" section (added 2026-08-17)
+for the specific, still-unresolved shape of it. **Item G is BUILT** (2026-08-14, single-plan break-off
+case; 2026-08-16, multi-plan). **The Concerning popup (`AskForSuggestions`) and Item E's own "show the
+specific consequence" — both listed under "Still open" below for years — are now BUILT too, 2026-08-17**,
+though the Concerning popup is deliberately minimal, not the full strategy-picker described in "Still
+open" — see that section for exactly what's still missing there.
 
 **The problem in one paragraph:** editing a `FinancialPattern` through the ordinary Expense form can,
 today, retroactively rewrite already-occurred history — nothing before the as-of date is a locked
@@ -478,15 +485,18 @@ explicitly rather than baked into one word.
 
 ## Still open
 
-- **The confirmation popups' own content and layout.** Sketched in conversation, not designed as UI
-  yet: Critical fires regardless of which Save button is pressed; Concerning fires only on "Save and
-  Plan," offering a `PlanHealthState`-sourced problem summary plus a strategy picker (one default
-  suggested set, or none — no per-field toggles) that pre-fills the Earmark form's fields as
-  Suggested/Working-state values ([23, item A1-a](23-form-behavior.md#a1-does-what-a-form-shows-match-whats-saved)
-  and [item A6](23-form-behavior.md#a6-the-reset-to-saved-control--settled-2026-08-06)). "Save and
-  Skip Planning" on a Concerning change saves straight through with no popup — `GoalShortfall`/
-  `PlanHealthState`'s existing passive warning is the whole fallback, matching
-  [19](19-stage6-warnings-levers-shortcuts.md)'s own "trust the user to notice" ruling for states 3/4.
+- **The Concerning popup's own FULL content and layout — a minimal, real version is BUILT, 2026-08-17.**
+  `AskForSuggestions`/`ShowSuggestion` now fires on "Save and Plan" (never on "Save and Skip Planning",
+  matching the ruling below) and shows a plain `PlanHealthMessages`-sourced sentence via a `MessageBox` —
+  the SAME wording the Earmark form's own passive Summary aside already uses. **What's still open, exactly
+  as this entry originally described:** the strategy picker itself (one default suggested set, or none —
+  no per-field toggles) that pre-fills the Earmark form's fields as Suggested/Working-state values
+  ([23, item A1-a](23-form-behavior.md#a1-does-what-a-form-shows-match-whats-saved) and
+  [item A6](23-form-behavior.md#a6-the-reset-to-saved-control--settled-2026-08-06)) — today's popup only
+  ever acknowledges, it never offers a fix to apply. "Save and Skip Planning" on a Concerning change still
+  saves straight through with no popup — `GoalShortfall`/`PlanHealthState`'s existing passive warning is
+  the whole fallback, matching [19](19-stage6-warnings-levers-shortcuts.md)'s own "trust the user to
+  notice" ruling for states 3/4.
 - **The specific strategies** offered in that picker ("start from scratch but save faster," "maintain
   current funds and pace, but change amount," etc.) — explicitly deferred by the author to a later
   pass. **The candidate-generating machinery for this is now built, 2026-08-14** (`AllocationPlanProposer.ProposeSameSchedule`/

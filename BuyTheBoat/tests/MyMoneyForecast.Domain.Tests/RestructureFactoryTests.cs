@@ -491,6 +491,27 @@ public class RestructureFactoryTests
         result.Current.StartingAllocation.ShouldBe(20m);
     }
 
+    // Deliberately matches how the real caller (FinancePatternSaveConfirmation)
+    // actually invokes this — current's own Start is ALREADY newStart (every
+    // real call passes current.DatePattern.Start as newStart directly), not
+    // some other value like the test above uses. Found 2026-08-17: with
+    // current.Start already equal to newStart, a predecessor landing on that
+    // EXACT same date used to fail the (buggy) `plan.Start < current.Start`
+    // filter and get silently skipped instead of absorbed, even though the
+    // loop's own `newStart <= plan.Start` check would have said to absorb it.
+    [Fact]
+    public void ExtendStart_absorbs_a_predecessor_landing_exactly_on_the_new_start_when_current_already_reflects_it()
+    {
+        var predecessor = Plan(-80m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31), ChainGoal);
+        var editedCurrent = Plan(-100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), ChainGoal); // own Start already moved to Jan 1
+
+        var result = RestructureFactory.ExtendStart(editedCurrent, [predecessor], ChainGoal, new DateOnly(2025, 1, 1));
+
+        result.Absorbed.ShouldHaveSingleItem();
+        result.Absorbed[0].ShouldBe(predecessor);
+        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+    }
+
     [Fact]
     public void ExtendStart_rejects_a_new_start_after_the_plans_own_until()
     {

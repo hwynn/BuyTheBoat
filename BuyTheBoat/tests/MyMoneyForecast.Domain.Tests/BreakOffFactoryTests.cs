@@ -5,13 +5,14 @@ namespace MyMoneyForecast.Domain.Tests;
 
 public class BreakOffFactoryTests
 {
-    private static FinancialPattern MonthlyBill(decimal amount, int dayOfMonth, DateOnly start, DateOnly until, int id = 1, bool autoRenew = false) =>
+    private static FinancialPattern MonthlyBill(decimal amount, int dayOfMonth, DateOnly start, DateOnly until, int id = 1, bool autoRenew = false, string? source = null, int priority = 0, string? description = "Rent") =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
             FinanceId = id,
-            Source = $"bill{id}",
-            Description = "Rent",
+            Source = source ?? $"bill{id}",
+            Description = description,
             Amount = amount,
+            Priority = priority,
             AutoRenew = autoRenew,
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
@@ -887,5 +888,186 @@ public class BreakOffFactoryTests
         var allPatterns = new[] { brokenOff.Predecessor, brokenOff.Successor };
 
         BreakOffFactory.FindSuccessor(brokenOff.Successor, allPatterns).ShouldBeNull();
+    }
+
+    // planning/27's Phase 1 — the FinancialPattern-level mirror of
+    // RestructureFactory's own ExtendUntil/ExtendStart/CascadeForward, built
+    // for EarMarkPattern chains first. Same shared-Source chain shape
+    // BreakOff/FindPredecessor/FindSuccessor already use above, just testing
+    // the boundary-resolution and cascade mechanisms directly instead.
+
+    [Fact]
+    public void SpansOverlap_is_true_for_two_same_source_patterns_whose_spans_overlap()
+    {
+        var a = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+        var b = MonthlyBill(-1_800m, 1, new DateOnly(2025, 5, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent");
+
+        BreakOffFactory.SpansOverlap(a, b).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void SpansOverlap_is_false_for_two_strictly_contiguous_same_source_patterns()
+    {
+        var a = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+        var b = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent");
+
+        BreakOffFactory.SpansOverlap(a, b).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void ExtendUntil_nudges_a_successors_own_start_when_it_doesnt_fully_reach()
+    {
+        var current = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+        var successor = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent");
+
+        var result = BreakOffFactory.ExtendUntil(current, [successor], new DateOnly(2025, 8, 15));
+
+        result.Current.DatePattern.Until.ShouldBe(new DateOnly(2025, 8, 15));
+        result.Absorbed.ShouldBeEmpty();
+        result.AdjustedNeighbor.ShouldNotBeNull();
+        result.AdjustedNeighbor!.FinanceId.ShouldBe(2); // in-place update — FinanceId never changes
+        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 8, 16));
+        result.AdjustedNeighbor!.DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31)); // unchanged
+        result.AdjustedNeighbor!.Amount.ShouldBe(-1_800m); // unchanged — this is a boundary nudge, not a cascade
+    }
+
+    [Fact]
+    public void ExtendUntil_absorbs_the_successor_entirely_when_it_fully_reaches()
+    {
+        var current = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+        var successor = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 9, 30), id: 2, source: "Rent");
+
+        var result = BreakOffFactory.ExtendUntil(current, [successor], new DateOnly(2025, 12, 31));
+
+        result.Current.DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31));
+        result.Absorbed.ShouldHaveSingleItem();
+        result.Absorbed[0].FinanceId.ShouldBe(2);
+        result.AdjustedNeighbor.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ExtendUntil_absorption_walks_through_multiple_segments()
+    {
+        var current = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31), id: 1, source: "Rent");
+        var second = MonthlyBill(-1_700m, 1, new DateOnly(2025, 4, 1), new DateOnly(2025, 6, 30), id: 2, source: "Rent");
+        var third = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 9, 30), id: 3, source: "Rent");
+        var fourth = MonthlyBill(-1_900m, 1, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 31), id: 4, source: "Rent");
+
+        var result = BreakOffFactory.ExtendUntil(current, [second, third, fourth], new DateOnly(2025, 11, 15));
+
+        result.Absorbed.Select(p => p.FinanceId).ShouldBe([2, 3]);
+        result.AdjustedNeighbor.ShouldNotBeNull();
+        result.AdjustedNeighbor!.FinanceId.ShouldBe(4);
+        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 11, 16));
+    }
+
+    [Fact]
+    public void ExtendStart_nudges_a_predecessors_own_until_when_it_doesnt_fully_reach()
+    {
+        var current = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent");
+        var predecessor = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+
+        var result = BreakOffFactory.ExtendStart(current, [predecessor], new DateOnly(2025, 5, 15));
+
+        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 5, 15));
+        result.Absorbed.ShouldBeEmpty();
+        result.AdjustedNeighbor.ShouldNotBeNull();
+        result.AdjustedNeighbor!.FinanceId.ShouldBe(1);
+        result.AdjustedNeighbor!.DatePattern.Until.ShouldBe(new DateOnly(2025, 5, 14));
+        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1)); // unchanged
+    }
+
+    [Fact]
+    public void ExtendStart_absorbs_the_predecessor_entirely_when_it_fully_reaches()
+    {
+        var current = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent");
+        var predecessor = MonthlyBill(-1_600m, 1, new DateOnly(2025, 4, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+
+        var result = BreakOffFactory.ExtendStart(current, [predecessor], new DateOnly(2025, 1, 1));
+
+        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+        result.Absorbed.ShouldHaveSingleItem();
+        result.Absorbed[0].FinanceId.ShouldBe(1);
+        result.AdjustedNeighbor.ShouldBeNull();
+    }
+
+    // Deliberately matches how the real caller (FinancePatternSaveConfirmation)
+    // actually invokes this — current's own Start is ALREADY newStart (every
+    // real call passes current.DatePattern.Start as newStart directly), not
+    // some other value like the test above uses. Found 2026-08-17: with
+    // current.Start already equal to newStart, a predecessor landing on that
+    // EXACT same date used to fail the (buggy) `pattern.Start < current.Start`
+    // filter and get silently skipped instead of absorbed, even though the
+    // loop's own `newStart <= pattern.Start` check would have said to absorb
+    // it — the same bug RestructureFactory.ExtendStart had, fixed there too.
+    [Fact]
+    public void ExtendStart_absorbs_a_predecessor_landing_exactly_on_the_new_start_when_current_already_reflects_it()
+    {
+        var predecessor = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31), id: 1, source: "Rent");
+        var editedCurrent = MonthlyBill(-1_800m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent"); // own Start already moved to Jan 1
+
+        var result = BreakOffFactory.ExtendStart(editedCurrent, [predecessor], new DateOnly(2025, 1, 1));
+
+        result.Absorbed.ShouldHaveSingleItem();
+        result.Absorbed[0].FinanceId.ShouldBe(1);
+        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+    }
+
+    [Fact]
+    public void ExtendUntil_throws_when_the_new_until_is_before_the_patterns_own_start()
+    {
+        var current = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+
+        Should.Throw<ArgumentException>(() => BreakOffFactory.ExtendUntil(current, [], new DateOnly(2024, 12, 31)));
+    }
+
+    [Fact]
+    public void ExtendStart_throws_when_the_new_start_is_after_the_patterns_own_until()
+    {
+        var current = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+
+        Should.Throw<ArgumentException>(() => BreakOffFactory.ExtendStart(current, [], new DateOnly(2025, 7, 1)));
+    }
+
+    [Fact]
+    public void CascadeForward_applies_the_new_amount_and_shape_to_later_segments_keeping_their_own_dates()
+    {
+        var successor = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent", priority: 3, description: "Rent (raised)");
+        var editedShape = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [15], // moved from the 1st to the 15th
+            Start = new DateOnly(2025, 1, 1),
+            Until = new DateOnly(2025, 6, 30),
+        });
+
+        var result = BreakOffFactory.CascadeForward(editedShape, -1_650m, [successor]);
+
+        result.ShouldHaveSingleItem();
+        result[0].FinanceId.ShouldBe(2);
+        result[0].Amount.ShouldBe(-1_650m);
+        result[0].DatePattern.ByMonthDay.ShouldBe([15]);
+        result[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1)); // its own, untouched
+        result[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31)); // its own, untouched
+        result[0].Priority.ShouldBe(3); // its own, untouched — cascade never touches trivial fields
+        result[0].Description.ShouldBe("Rent (raised)"); // its own, untouched
+    }
+
+    [Fact]
+    public void CascadeTrivialFieldsForward_applies_priority_mandatory_description_autorenew_keeping_everything_else()
+    {
+        var edited = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent", priority: 9, autoRenew: true, description: "Rent — landlord raised it");
+        var successor = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent", priority: 2, autoRenew: false, description: "Rent");
+
+        var result = BreakOffFactory.CascadeTrivialFieldsForward(edited, [successor]);
+
+        result.ShouldHaveSingleItem();
+        result[0].FinanceId.ShouldBe(2);
+        result[0].Priority.ShouldBe(9);
+        result[0].AutoRenew.ShouldBeTrue();
+        result[0].Description.ShouldBe("Rent — landlord raised it");
+        result[0].Amount.ShouldBe(-1_800m); // its own, untouched
+        result[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1)); // its own, untouched
+        result[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31)); // its own, untouched
     }
 }

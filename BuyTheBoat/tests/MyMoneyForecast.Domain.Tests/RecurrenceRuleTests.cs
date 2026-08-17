@@ -329,4 +329,37 @@ public class RecurrenceRuleTests
         rule.WithUntil(new DateOnly(2025, 6, 1)).ExcludedDates.ShouldBe(rule.ExcludedDates);
         rule.WithActiveFrom(new DateOnly(2025, 1, 1)).ExcludedDates.ShouldBe(rule.ExcludedDates);
     }
+
+    // Found 2026-08-17 while fixing BuildSuccessorSchedule's own phase-drift
+    // bug: an explicit ByDay does NOT, by itself, protect a Weekly rule's
+    // own Interval > 1 cadence from drifting when Start is pinned to a date
+    // that isn't itself part of the original series. RFC 5545's "every Nth
+    // week" is counted from DTSTART's own calendar week — pinning Start at
+    // 2025-06-15 (a Sunday, in the "wrong" week relative to a series
+    // anchored 2025-01-03) lands the very first occurrence a full week late
+    // (2025-06-27) even with the correct weekday spelled out explicitly.
+    // Locks this in as a real, permanent regression test — not scratch code
+    // — since it's the reason BuildSuccessorSchedule's own fix couldn't
+    // just add an explicit ByDay and call it done.
+    [Fact]
+    public void Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere()
+    {
+        var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Weekly,
+            Interval = 2,
+            ByDay = [DayOfWeek.Friday],
+            Start = new DateOnly(2025, 6, 15), // Sunday — not itself part of the Jan-3-anchored series
+            Until = new DateOnly(2025, 12, 31),
+        });
+
+        // The CORRECT continuation of a biweekly-Friday series anchored
+        // 2025-01-03 is 2025-06-20, 2025-07-04, ... — pinning Start away
+        // from the series lands a week later instead.
+        rule.GetOccurrences().Take(3).ToList().ShouldBe([
+            new DateOnly(2025, 6, 27),
+            new DateOnly(2025, 7, 11),
+            new DateOnly(2025, 7, 25),
+        ]);
+    }
 }

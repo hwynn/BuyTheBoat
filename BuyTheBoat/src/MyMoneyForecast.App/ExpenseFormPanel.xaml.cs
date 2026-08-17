@@ -68,6 +68,14 @@ public partial class ExpenseFormPanel : UserControl
     private IReadOnlyDictionary<int, EarMarkPattern> _patternsByFinanceId = new Dictionary<int, EarMarkPattern>();
     private IReadOnlyDictionary<int, int> _earmarkPatternCountByFinanceId = new Dictionary<int, int>();
 
+    // planning/15/16's own "silent redirect" ruling (opening any segment of
+    // a break-off/renewal chain for editing always lands on the CURRENT one)
+    // — designed but never wired in until now (planning/24's own logged
+    // gap). Needed here, not just at each caller, since LoadPattern below is
+    // the one place both entry points (the grid's Edit button and this
+    // form's own instance picker) funnel through.
+    private IReadOnlyList<FinancialPattern> _allPatterns = [];
+
     // Computes (or returns the already-cached) live forecast on demand —
     // wired to MainWindow.EnsureForecast, which always succeeds rather than
     // requiring the user to have pressed "Forecast" first: everything
@@ -103,20 +111,23 @@ public partial class ExpenseFormPanel : UserControl
         _initialized = true;
     }
 
-    /// <summary>[UI] Supplies the account/transfer/plan context this panel reads from — which account each existing pattern is currently filed under, which finance ids are transfer legs (needed to open FinancialPatternPickerWindow, alongside RequestForecast), and every EarMarkPattern (so the Summary region can find this Expense's own linked plan, if it has one). Call before any Load* method, and again after every save.</summary>
+    /// <summary>[UI] Supplies the account/transfer/plan context this panel reads from — which account each existing pattern is currently filed under, which finance ids are transfer legs (needed to open FinancialPatternPickerWindow, alongside RequestForecast), every EarMarkPattern (so the Summary region can find this Expense's own linked plan, if it has one), and every FinancialPattern (so LoadPattern can silently redirect a stale, already-superseded segment to its own current one). Call before any Load* method, and again after every save.</summary>
     /// <param name="accountIdByFinanceId">Finance id → the account it's currently filed under.</param>
     /// <param name="accounts">Every account, to populate the account picker.</param>
     /// <param name="transferFinanceIds">Finance ids that are transfer legs — excluded from the instance picker.</param>
     /// <param name="earMarkPatterns">Every savings plan, so the Summary region can find this Expense's own linked plan.</param>
+    /// <param name="allPatterns">Every FinancialPattern — LoadPattern's own BreakOffFactory.FindCurrentSegment redirect needs the full chain to search, not just the one pattern being loaded.</param>
     public void SetContext(
         IReadOnlyDictionary<int, int> accountIdByFinanceId,
         IReadOnlyList<Account> accounts,
         IReadOnlySet<int> transferFinanceIds,
-        IReadOnlyList<EarMarkPattern> earMarkPatterns)
+        IReadOnlyList<EarMarkPattern> earMarkPatterns,
+        IReadOnlyList<FinancialPattern> allPatterns)
     {
         _accountIdByFinanceId = accountIdByFinanceId;
         _accounts = accounts;
         _transferFinanceIds = transferFinanceIds;
+        _allPatterns = allPatterns;
 
         // Grouped, not keyed straight off FinanceId — same reasoning as
         // EarmarkFormPanel's own SetContext: a goal can have more than one
@@ -197,49 +208,55 @@ public partial class ExpenseFormPanel : UserControl
         ClearDirty();
     }
 
-    /// <summary>[STEP] Loads an existing pattern for editing — FinanceId is fixed. Also reachable by picking it from this form's own instance picker, not just the list tab's "Edit Selected."</summary>
-    /// <param name="existing">The pattern to load for editing.</param>
-    /// <param name="currentAccountId">Which account it's currently filed under.</param>
+    /// <summary>[STEP] Loads an existing pattern for editing — FinanceId is fixed. Also reachable by picking it from this form's own instance picker, not just the list tab's "Edit Selected." planning/15/16's own "silent redirect" ruling: opening an old, already-superseded segment of a break-off/renewal chain always lands on the CURRENT one instead — no warning, no escape hatch, matching what was designed but never wired in until now (planning/24).</summary>
+    /// <param name="existing">The pattern picked to load for editing — may be redirected to a later segment sharing its own Source.</param>
+    /// <param name="currentAccountId">Which account the PICKED pattern is currently filed under — re-resolved against the redirected pattern's own FinanceId instead, on the (rare) chance a chain crosses accounts.</param>
     public void LoadPattern(FinancialPattern existing, int currentAccountId)
     {
+        var current = BreakOffFactory.FindCurrentSegment(existing, _allPatterns);
+        if (current.FinanceId != existing.FinanceId)
+        {
+            currentAccountId = _accountIdByFinanceId.GetValueOrDefault(current.FinanceId, currentAccountId);
+        }
+
         _isNew = false;
-        _financeId = existing.FinanceId;
+        _financeId = current.FinanceId;
         _loadedMode = LoadedMode.Editing;
-        _loadedExisting = existing;
+        _loadedExisting = current;
         _loadedAccountId = currentAccountId;
         _suppressEvents = true;
 
         ResetSharedFields(selectedAccountId: currentAccountId);
-        SourceTextBox.Text = existing.Source;
-        DescriptionTextBox.Text = existing.Description;
-        PriorityTextBox.Text = existing.Priority.ToString();
-        AmountTextBox.Text = Math.Abs(existing.Amount).ToString(CultureInfo.InvariantCulture);
+        SourceTextBox.Text = current.Source;
+        DescriptionTextBox.Text = current.Description;
+        PriorityTextBox.Text = current.Priority.ToString();
+        AmountTextBox.Text = Math.Abs(current.Amount).ToString(CultureInfo.InvariantCulture);
 
         DirectionPanel.Visibility = Visibility.Visible;
-        ExpenseRadioButton.IsChecked = existing.Amount < 0;
-        IncomeRadioButton.IsChecked = existing.Amount >= 0;
-        UnskippableRadioButton.IsChecked = existing.Mandatory;
-        SkippableRadioButton.IsChecked = !existing.Mandatory;
+        ExpenseRadioButton.IsChecked = current.Amount < 0;
+        IncomeRadioButton.IsChecked = current.Amount >= 0;
+        UnskippableRadioButton.IsChecked = current.Mandatory;
+        SkippableRadioButton.IsChecked = !current.Mandatory;
 
         // Same "how many occurrences" check ExpenseKind already uses to tell
         // a one-time goal from a repeating one.
-        var isOneTime = existing.DatePattern.GetOccurrences().Count == 1;
+        var isOneTime = current.DatePattern.GetOccurrences().Count == 1;
         OneTimeRadioButton.IsChecked = isOneTime;
         RepeatingRadioButton.IsChecked = !isOneTime;
         UpdateRepeatsVisibility();
 
         if (isOneTime)
         {
-            DueDatePicker.SelectedDate = existing.DatePattern.Start.ToDateTime(TimeOnly.MinValue);
+            DueDatePicker.SelectedDate = current.DatePattern.Start.ToDateTime(TimeOnly.MinValue);
         }
         else
         {
-            RuleEditor.LoadFrom(existing.DatePattern);
+            RuleEditor.LoadFrom(current.DatePattern);
             StopOnDateRadio.IsChecked = true;
             StopPaidOffRadio.IsChecked = false;
             UpdateStopMode();
-            RuleEditor.SetHostEndDate(existing.DatePattern.Until);
-            StopEndDatePicker.SelectedDate = existing.DatePattern.Until.ToDateTime(TimeOnly.MinValue);
+            RuleEditor.SetHostEndDate(current.DatePattern.Until);
+            StopEndDatePicker.SelectedDate = current.DatePattern.Until.ToDateTime(TimeOnly.MinValue);
         }
 
         UpdateDirectionDependentUi();

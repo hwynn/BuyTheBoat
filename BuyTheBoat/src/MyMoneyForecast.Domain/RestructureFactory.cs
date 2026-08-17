@@ -269,8 +269,17 @@ public static class RestructureFactory
             throw new ArgumentException("The new Start can't be after the plan's own Until.", nameof(newStart));
         }
 
+        // <= , not < : current.DatePattern.Start here is already the NEW,
+        // proposed Start (every caller passes it as both current and
+        // newStart) — a neighbor whose own Start lands EXACTLY on newStart
+        // is still a real absorb candidate (the loop's own newStart <=
+        // plan.DatePattern.Start check below would say so), so filtering it
+        // out here with a strict < silently dropped that exact-boundary
+        // case entirely. Found 2026-08-17 while building Phase 1's own
+        // mirror of this method and hitting the case directly; fixed here
+        // too since the same bug was already latent in this, the original.
         var earlierPlans = otherPlans
-            .Where(plan => plan.DatePattern.Start < current.DatePattern.Start)
+            .Where(plan => plan.DatePattern.Start <= current.DatePattern.Start)
             .OrderByDescending(plan => plan.DatePattern.Start)
             .ToList();
 
