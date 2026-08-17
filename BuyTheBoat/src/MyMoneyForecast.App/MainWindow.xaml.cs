@@ -81,20 +81,7 @@ public partial class MainWindow : Window
         // planning/21 Philosophy 5/7: the permanent Earmark tab persists
         // through these callbacks instead of a ShowDialog() == true check —
         // this panel owns no repository itself.
-        EarmarkForm.PatternSaved = pattern =>
-        {
-            _earMarkPatterns.Save(pattern);
-            RefreshGrids();
-            RefreshEarmarkFormContext();
-            if (_lastForecast is { } shown)
-            {
-                RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
-            }
-
-            // planning/21: Earmark's own save "returns to the Forecast tab —
-            // no onward hop from there to anywhere else."
-            SwitchToTab("Forecast");
-        };
+        EarmarkForm.PatternSaved = OnEarmarkPatternSaved;
         EarmarkForm.ManualEarmarksSaved = (saved, deleted) =>
         {
             foreach (var earmark in saved)
@@ -1179,18 +1166,7 @@ public partial class MainWindow : Window
                 ManualEarmarks = _manualEarmarks,
             })
         {
-            ConfirmImplicitChanges = request =>
-            {
-                var confirmWindow = new EditingHistoryConfirmationWindow(request) { Owner = this };
-                var proceed = confirmWindow.ShowDialog() == true;
-                return new ImplicitChangeConfirmationAnswer
-                {
-                    Proceed = proceed,
-                    ChooseAlterPast = confirmWindow.ChooseAlterPast,
-                    ChooseConsolidation = confirmWindow.ChooseConsolidation,
-                    ChoseScalePatterns = confirmWindow.ChoseScalePatterns,
-                };
-            },
+            ConfirmImplicitChanges = ShowEditingHistoryConfirmation,
             NavigateToEarmarkForm = plan =>
             {
                 if (isNew)
@@ -1246,6 +1222,63 @@ public partial class MainWindow : Window
             RefreshEarmarkFormContext();
             SwitchToTab("Forecast");
         }
+    }
+
+    /// <summary>[STEP] What EarmarkForm.PatternSaved calls (wired in the constructor) — planning/27's own migration target, now resolved: routes every Savings-plan save through FinancePatternSaveConfirmation's EarMarkPattern-editing constructor instead of a plain repository save, so a Start/Until edit that touches a chain neighbor, or an Amount/schedule edit with later segments to carry it to, goes through EditingHistoryConfirmationWindow first.</summary>
+    /// <param name="pattern">The form's current field values — what the user typed, before any stay-linked/cascade resolution Run() might apply.</param>
+    /// <param name="savedStart">The plan's own Start as it's actually saved today, or the same as pattern's own Start for a brand-new plan (EarmarkFormPanel's own _loadedPlanStart).</param>
+    private void OnEarmarkPatternSaved(EarMarkPattern pattern, DateOnly savedStart)
+    {
+        var goal = _financialPatterns.GetByFinanceId(pattern.FinanceId)
+            ?? throw new InvalidOperationException(
+                $"No FinancialPattern found for finance_id {pattern.FinanceId} — a savings plan's own goal should always exist by the time it's saved.");
+
+        var confirmation = new FinancePatternSaveConfirmation(
+            pattern,
+            savedStart,
+            goal,
+            EnsureForecast,
+            new FinancePatternRepositories
+            {
+                FinancialPatterns = _financialPatterns,
+                EarMarkPatterns = _earMarkPatterns,
+                ManualEarmarks = _manualEarmarks,
+            })
+        {
+            ConfirmImplicitChanges = ShowEditingHistoryConfirmation,
+        };
+
+        if (!confirmation.Run())
+        {
+            return; // user cancelled — nothing saved, form was already cleared (EarmarkFormPanel.SaveSavingsPlan's own unconditional clear) but the tab stays as-is
+        }
+
+        RefreshGrids();
+        RefreshEarmarkFormContext();
+        if (_lastForecast is { } shown)
+        {
+            RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
+        }
+
+        // planning/21: Earmark's own save "returns to the Forecast tab —
+        // no onward hop from there to anywhere else."
+        SwitchToTab("Forecast");
+    }
+
+    /// <summary>[STEP] Shows EditingHistoryConfirmationWindow and maps its result back into an answer — shared by both the Expense and Earmark save paths' own ConfirmImplicitChanges wiring, since the window (and the full set of fields worth reading back) is the same either way; each request's own fields decide which sections the window actually shows.</summary>
+    private ImplicitChangeConfirmationAnswer ShowEditingHistoryConfirmation(ImplicitChangeConfirmationRequest request)
+    {
+        var confirmWindow = new EditingHistoryConfirmationWindow(request) { Owner = this };
+        var proceed = confirmWindow.ShowDialog() == true;
+        return new ImplicitChangeConfirmationAnswer
+        {
+            Proceed = proceed,
+            ChooseAlterPast = confirmWindow.ChooseAlterPast,
+            ChooseConsolidation = confirmWindow.ChooseConsolidation,
+            ChoseScalePatterns = confirmWindow.ChoseScalePatterns,
+            ChoseStayLinked = confirmWindow.ChoseStayLinked,
+            ChoseCascadeForward = confirmWindow.ChoseCascadeForward,
+        };
     }
 
     /// <summary>[CALC] Every scheduled outflow reserves through its own Allocation Plan (Stage 1's allocation model — planning/14), proposed at creation from the current as-of date and the user's income. Income never gets one (A-1). The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed. Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this outflow's own account (planning/17, F33) — a paycheck filed under a different account never actually funds this one.</summary>

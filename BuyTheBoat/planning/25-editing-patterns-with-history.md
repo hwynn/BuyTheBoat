@@ -22,9 +22,26 @@ exist.
 **Scope note, found 2026-08-14 — read before assuming this document's protection is broader than it
 is:** everything below is about editing a `FinancialPattern` (the goal/bill itself) through the Expense
 form. Editing the `EarMarkPattern` (the savings plan *funding* that goal) through the Earmark form is a
-completely separate save path — `EarmarkFormPanel.SaveSavingsPlan` → `MainWindow`'s
-`EarmarkForm.PatternSaved` handler → a plain `_earMarkPatterns.Save(pattern)` — with none of Items B–G's
-machinery anywhere in it. Changing a plan's own `Amount` retroactively re-rates its *entire* history the
+completely separate save path, with none of Items B–G's machinery anywhere in it — Items B-G are about
+protecting a `FinancialPattern`'s own already-occurred history, and nothing built for a `EarMarkPattern`
+edit asks that same question, under either save path described below.
+
+**Updated 2026-08-16 — the save path itself changed, but not in a way that touches this gap.**
+`EarmarkFormPanel.SaveSavingsPlan` → `MainWindow`'s `EarmarkForm.PatternSaved` handler is no longer a
+bare `_earMarkPatterns.Save(pattern)` — it now goes through `FinancePatternSaveConfirmation`'s own
+second, EarMarkPattern-editing constructor (see [27](27-editing-within-a-patterns-chain.md), BUILT). But
+that mechanism's two questions ("stay linked or break," "cascade forward or not") are scoped to a plan's
+relationship with its own chain *siblings* (other `EarMarkPattern`s sharing the same `finance_id`) — they
+only fire when `hasPredecessor`/`hasSuccessor` is true. They are not a B–G-style "you're about to
+retroactively rewrite already-occurred history" guard, and were never designed as one. So for exactly the
+scenario this note originally called out — a single, unchained plan (no predecessor, no successor) —
+**the gap described below is completely unchanged**: an `Amount` edit still re-rates the plan's *entire*
+history the next time the forecast rebuilds, silently, the instant Save is clicked, with no question asked
+at all (`PlanChangeCanCascade` stays false with no successor to cascade to). Only a plan that's *part of a
+chain* now gets asked anything, and even then the question is about its neighbors going forward, not about
+its own past.
+
+Changing a plan's own `Amount` retroactively re-rates its *entire* history the
 next time the forecast rebuilds, silently, the instant Save is clicked, no matter how much real history
 sits behind it. Confirmed with real numbers in
 `EarmarkFormLivePreviewTests.Editing_a_savings_plans_own_amount_retroactively_rerates_its_whole_history_with_no_protection`:
@@ -306,12 +323,17 @@ exactly what they were, still valid against the now-edited goal"* — and nothin
 actually depends on amount being the only field that can change; it depends only on the plan's own row
 being left alone, which is equally available for a shape-only edit.
 
-**PROPOSED, not yet built or confirmed with the author:** extend the same no-op treatment — no new
-domain mechanism, just widening the existing gate — to a recurrence-shape change with no accompanying
-`start_date` change, on the retroactive-correction side specifically (same `finance_id`, Item E's
-"correct it everywhere"). Concretely: `ConsolidationNeeded` stops being unconditionally true whenever
-`_recurrenceShapeChanged` alone is the trigger; the user gets *asked*, same as every other Critical
-field, instead of being told; choosing to keep plans separate runs the existing
+**PROPOSED 2026-08-16; asked directly and DECLINED FOR NOW, 2026-08-17 (author, via
+[27](27-editing-within-a-patterns-chain.md)'s own "keep going on open items" check-in, once Phase 1/2/the
+fourth relationship were all closed out and this was the only remaining ready-to-ask item) — "keep
+forcing consolidation for now."** Not a rejection of the reasoning above, which stands — just not
+something to build today. Left written up exactly as it was, in case a future session picks it back up;
+don't re-propose without checking here first. The proposal itself, unbuilt: extend the same no-op
+treatment — no new domain mechanism, just widening the existing gate — to a recurrence-shape change with
+no accompanying `start_date` change, on the retroactive-correction side specifically (same `finance_id`,
+Item E's "correct it everywhere"). Concretely: `ConsolidationNeeded` stops being unconditionally true
+whenever `_recurrenceShapeChanged` alone is the trigger; the user gets *asked*, same as every other
+Critical field, instead of being told; choosing to keep plans separate runs the existing
 (currently-TODO, amount-only-shaped) no-op branch in `PerformImplicitEarmarkChanges`, generalized to
 also cover this case rather than left gated to `_isAmountOnlyChange` alone.
 

@@ -36,6 +36,44 @@
             <!-- Item F's forced case — announced, not asked. -->
             <TextBlock x:Name="ConsolidationForcedText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic"
                        Text="Because the schedule itself is changing, its savings plans will be combined into one."/>
+
+            <!-- planning/27's own "stay linked or break" question, for a
+                 savings-plan Start/Until edit that touches a real chain
+                 neighbor — visible only when PlanTouchesChainBoundary. Each
+                 radio gets its own warning slot right below it, text supplied
+                 by the request (StayLinkedWarning/LetItBreakWarning) and
+                 shown only while that option is the one currently selected
+                 AND there's a real consequence to name — mirroring the
+                 row-based design's own "contextual warning under the
+                 dangerous option" rule, and its own "the warning escalates
+                 with the consequence, the default option doesn't change"
+                 case (a plain nudge has nothing under it at all). -->
+            <StackPanel x:Name="ChainBoundarySection" Margin="0,0,0,14">
+                <TextBlock Text="This plan is part of a chain. Should it stay connected to its neighbor?" FontWeight="Bold" Margin="0,0,0,6"/>
+                <RadioButton x:Name="StayLinkedRadio" GroupName="ChainBoundary" IsChecked="True" Margin="0,0,0,4"
+                             Content="Keep it linked — adjust the neighboring segment to match" Checked="OnChainBoundaryChoiceChanged"/>
+                <TextBlock x:Name="StayLinkedWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="20,0,0,4"/>
+                <RadioButton x:Name="LetChainBreakRadio" GroupName="ChainBoundary"
+                             Content="Let the chain break" Checked="OnChainBoundaryChoiceChanged"/>
+                <TextBlock x:Name="ChainBreakWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="20,4,0,0"/>
+            </StackPanel>
+
+            <!-- planning/27's own "cascade forward or not" question, for a
+                 savings-plan Amount/schedule edit with later segments to
+                 carry it to — visible only when PlanChangeCanCascade.
+                 Defaults to cascading forward, the settled system default.
+                 CascadeDescriptionText is a plain, always-shown description
+                 (not a warning tied to one option — neither choice here is
+                 destructive), naming the direct edit's own range and how far
+                 cascading would reach, per round 2 of the small questions. -->
+            <StackPanel x:Name="CascadeSection" Margin="0,0,0,14">
+                <TextBlock Text="This change could also apply to later segments in the chain. What do you want to do?" FontWeight="Bold" Margin="0,0,0,6"/>
+                <TextBlock x:Name="CascadeDescriptionText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,6"/>
+                <RadioButton x:Name="CascadeForwardRadio" GroupName="Cascade" IsChecked="True" Margin="0,0,0,4"
+                             Content="Apply it going forward too"/>
+                <RadioButton x:Name="JustThisPlanRadio" GroupName="Cascade"
+                             Content="Only this segment"/>
+            </StackPanel>
         </StackPanel>
     </DockPanel>
 </Window>

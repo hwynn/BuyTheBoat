@@ -26,10 +26,18 @@ detail.
 [planning/25](25-editing-patterns-with-history.md)'s own scope note (added 2026-08-14, prompted by
 `EarmarkFormLivePreviewTests.Editing_a_savings_plans_own_amount_retroactively_rerates_its_whole_history_with_no_protection`)
 found that editing an `EarMarkPattern` through the Earmark form has none of Items B–G's protection —
-`EarmarkFormPanel.SaveSavingsPlan` → `MainWindow`'s `EarmarkForm.PatternSaved` → a plain
+at the time, `EarmarkFormPanel.SaveSavingsPlan` → `MainWindow`'s `EarmarkForm.PatternSaved` → a plain
 `_earMarkPatterns.Save(pattern)`, no confirmation, nothing. That raised an open question: intentional
 scope boundary, or a real gap? The author's answer, same day: a real gap worth addressing eventually,
 but not now.
+
+**Still true as of 2026-08-16, despite an unrelated change to that same save path:**
+[planning/27](27-editing-within-a-patterns-chain.md) has since given that handler a real
+`FinancePatternSaveConfirmation` of its own — but its two questions are scoped to a plan's relationship
+with its own chain siblings, not a B–G-style guard against rewriting that plan's *own* past. For a
+single, unchained plan specifically, nothing has changed: no confirmation, nothing. See planning/25's
+own 2026-08-16 update to its scope note for the full distinction — this document's own scope (below)
+is unaffected by planning/27's work.
 
 ## Vocabulary, reaffirmed (not new)
 

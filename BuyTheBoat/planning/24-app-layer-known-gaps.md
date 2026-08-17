@@ -146,3 +146,42 @@ row exists. Narrower than the bigger cross-`FinancialPattern`-boundary question 
 [27](27-editing-within-a-patterns-chain.md) — this only fixes the moment a break-off itself happens, not
 whether a later edit to an already-superseded segment should reach forward into an already-existing
 successor's own plan.
+
+### A concurrent EarMarkPattern could be silently truncated, absorbed, or amount-overwritten by an unrelated plan's edit — FIXED 2026-08-16
+
+**Fix:** extracted `RestructureFactory.SpansOverlap(a, b)` from `FindCurrentPlan`'s own existing pairwise
+overlap check (one shared definition instead of a second copy) and used it to filter
+`FinancePatternSaveConfirmation.RunForPlan`'s own `otherPlans` *before* `hasPredecessor`/`hasSuccessor`
+are computed — the same filtered list already flows into `PerformEarmarkSave`'s own
+`predecessors`/`successors`, so one fix protects both the confirmation ask and the actual mutation. 6 new
+regression tests: 4 direct `SpansOverlap` cases (`RestructureFactoryTests`) plus 2 end-to-end
+(`FinancePatternSaveConfirmationEarmarkTests`) proving a concurrent plan survives an unrelated edit
+completely untouched — and that `ConfirmImplicitChanges` is never even invoked — under both the boundary
+and cascade paths. 429 tests green (up from 423), 0 warnings.
+
+**Where (as originally found):** `FinancePatternSaveConfirmation.RunForPlan`
+(`src/MyMoneyForecast.App/FinancePatternSaveConfirmation.cs`); found 2026-08-16 while grounding the
+[27](27-editing-within-a-patterns-chain.md) UI-wiring work in source before writing it, the same
+discipline [[feedback-reground-in-source-before-building]] calls for — not via a user report.
+
+**The gap:** `hasPredecessor`/`hasSuccessor` compared only `Start` against the plan being saved, with no
+check for whether the "neighbor" actually forms a sequential chain versus being a genuinely concurrent,
+overlapping plan (F27 — e.g. the "Storage Unit Rental" seed scenario's own two household-partner
+funders). A concurrent plan with a differing `Start` satisfied the same check a real chain neighbor
+would. Left unguarded: extending `Until`/`Start` on one concurrent plan into its partner's own
+overlapping span would silently truncate or fully absorb (delete) the partner via
+`RestructureFactory.ExtendUntil`/`ExtendStart` — neither of which has any concept of "this isn't really a
+successor," they just do what they're told — and an `Amount` edit could silently overwrite the partner's
+own independent rate via `CascadeForward`, under the "cascade forward" default. Directly violates
+planning/27's own settled rule that concurrent plans "must NOT get the same treatment as a sequential
+chain." The underlying mechanism (`ExtendUntil`/`ExtendStart`/`CascadeForward`) was built and tested
+correctly against sequential scenarios only, earlier in the same session — this failure mode was inert
+(`RunForPlan` had no real caller yet) until the UI-wiring work below made it reachable from an actual save
+for the first time, which is why it surfaced now rather than when the mechanism was first built.
+
+**How to reproduce (pre-fix):** seed a goal with two `EarMarkPattern`s under one `finance_id` whose active
+spans overlap (e.g. Jan 1 – Dec 31 and Mar 1 – Aug 31). Load the wider one and shrink its own `Until` to,
+say, Jun 30 — still inside the narrower plan's own span. Pre-fix, `hasSuccessor` was true (the narrower
+plan's `Start` is later), so `PlanTouchesChainBoundary` fired and the default "stay linked" answer called
+`ExtendUntil`, which rewrote the narrower, unrelated plan's own `Start` to Jul 1 — silently dropping its
+Mar–Jun coverage.

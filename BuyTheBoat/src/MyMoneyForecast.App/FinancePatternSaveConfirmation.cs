@@ -172,6 +172,23 @@ public sealed class FinancePatternSaveConfirmation
     private readonly Func<ForecastResult> _requestForecast;
     private readonly FinancePatternRepositories _repositories;
 
+    // planning/27's own EarMarkPattern-editing entry point (the other
+    // constructor, below) — set instead of the FinancialPattern-editing
+    // fields above, never both. Run() branches on this being non-null
+    // before touching anything above it, so _proposedPattern/_financeId/
+    // _accountId above just carry real, harmless values in this mode
+    // (_proposedPattern doubles as "the goal" — see that constructor's own
+    // comment) rather than needing a null-check added to every one of their
+    // many existing, already-tested call sites.
+    private readonly EarMarkPattern? _proposedPlan;
+
+    // The (FinanceId, Start) this plan is actually saved under today, if it
+    // already exists — distinct from _proposedPlan's own Start, since Start
+    // itself is one of the two fields this whole mechanism can change.
+    // Needed to find the saved row at all; EarMarkPattern's own persistence
+    // key is the composite (FinanceId, StartDate).
+    private readonly DateOnly _earmarkSavedStart;
+
     // Internal bookkeeping only, not one of the nine named properties — which
     // specific fields changed (used to build the confirmation popup's own
     // plain-language description) and whether Amount changed with neither
@@ -376,6 +393,28 @@ public sealed class FinancePatternSaveConfirmation
     // yet.
     public bool ChangeWarrantsSuggestions { get; private set; }
 
+    // planning/27's own EarMarkPattern-chain questions — only ever computed
+    // by RunForPlan (the other constructor's own entry point); stay false
+    // for an ordinary FinancialPattern-editing instance. Set together: a
+    // save can touch a boundary, be cascade-eligible, both, or neither.
+    public bool PlanTouchesChainBoundary { get; private set; }
+    public bool PlanChangeCanCascade { get; private set; }
+
+    // The user's answer to "stay linked in the chain, or let it break" —
+    // meaningless unless PlanTouchesChainBoundary is true. internal set — a
+    // testing seam, same reasoning as UserChooseAlterPast above. No
+    // explicit default was ever settled the way cascading forward's was —
+    // true (stay linked) is this class's own reasoned choice, matching the
+    // one option that's never destructive on its own, not something stated
+    // outright.
+    public bool UserChoseStayLinked { get; internal set; } = true;
+
+    // The user's answer to "cascade forward, or just this plan" —
+    // meaningless unless PlanChangeCanCascade is true. Defaults to true —
+    // SETTLED, cascading forward is the system default. internal set, same
+    // testing-seam reasoning as above.
+    public bool UserChoseCascadeForward { get; internal set; } = true;
+
     // The overall Trivial/Critical/Concerning categorization's own top-level
     // flag: true when this save needs to go through the
     // confirmation-and-choice flow at all. Kept as its own property, distinct
@@ -408,6 +447,30 @@ public sealed class FinancePatternSaveConfirmation
         _repositories = repositories;
     }
 
+    /// <summary>[CALC] Builds the orchestrator for an EarmarkFormPanel save click instead of an Expense one — planning/27's own "stay linked or break" and "cascade forward or not" questions for a same-finance_id EarMarkPattern chain. Call Run to actually do the work, same as the other constructor.</summary>
+    /// <param name="proposedPlan">The form's current field values for the savings plan — what would be saved if nothing here needs to ask anything first.</param>
+    /// <param name="savedStart">The Start this plan is actually saved under today, or the same as proposedPlan's own Start for a brand-new plan.</param>
+    /// <param name="goal">The FinancialPattern this savings plan funds.</param>
+    /// <param name="requestForecast">Live-forecast accessor — reaches the rest of the same-finance_id chain.</param>
+    /// <param name="repositories">The three repositories needed for whatever this class ends up writing.</param>
+    public FinancePatternSaveConfirmation(
+        EarMarkPattern proposedPlan,
+        DateOnly savedStart,
+        FinancialPattern goal,
+        Func<ForecastResult> requestForecast,
+        FinancePatternRepositories repositories)
+    {
+        _financeId = goal.FinanceId;
+        _navigationFinanceId = goal.FinanceId;
+        _proposedPattern = goal; // doubles as "the goal" in this mode — see this class's own field comment
+        _accountId = 0; // unused in this mode — no FinancialPattern save happens
+        UserSkippedPlanning = true; // unused in this mode — no onward navigation, mirrors Earmark's own single save button
+        _proposedPlan = proposedPlan;
+        _earmarkSavedStart = savedStart;
+        _requestForecast = requestForecast;
+        _repositories = repositories;
+    }
+
     // Invoked once Run() decides navigation should happen — matches this
     // project's existing PatternSaved/AccountSaved/ManualEarmarksSaved
     // callback idiom (set by MainWindow) rather than giving this class a
@@ -433,6 +496,14 @@ public sealed class FinancePatternSaveConfirmation
     /// <returns>False if the user cancelled out of the confirmation — nothing was saved, exactly as if Save had never been clicked. True otherwise, including every case where nothing needed asking at all.</returns>
     public bool Run()
     {
+        // The other constructor's own mode — a completely separate entry
+        // point, never touching any of the FinancialPattern-editing logic
+        // below it.
+        if (_proposedPlan is not null)
+        {
+            return RunForPlan();
+        }
+
         DetermineConditions();
 
         // Has to happen here — before ConfirmImplicitChanges even fires,
@@ -512,6 +583,402 @@ public sealed class FinancePatternSaveConfirmation
 
         return true;
     }
+
+    /// <summary>[STEP] The EarMarkPattern-editing entry point (planning/27) — resolves "stay linked or break" for a Start/Until change and "cascade forward or not" for an Amount/shape change against the rest of the same-finance_id chain, then saves. Mirrors Run()'s own overall shape (work out what's needed, confirm, then act) for a savings plan instead of the goal itself.</summary>
+    /// <returns>False if the user cancelled out of the confirmation — nothing was saved. True otherwise, including when nothing needed asking at all.</returns>
+    private bool RunForPlan()
+    {
+        var proposedPlan = _proposedPlan!;
+        var goal = _proposedPattern; // doubles as "the goal" in this mode — see this class's own field comment
+        var forecast = _requestForecast();
+        var allPlansForGoal = forecast.Book.EarMarkPatternsFor(goal.FinanceId);
+        var saved = allPlansForGoal.FirstOrDefault(plan => plan.DatePattern.Start == _earmarkSavedStart);
+
+        if (saved is null)
+        {
+            // A brand-new plan — nothing to compare against, so no chain
+            // question to ask, the same way DetermineConditions treats a
+            // brand-new FinancialPattern.
+            _repositories.EarMarkPatterns.Save(proposedPlan);
+            return true;
+        }
+
+        // F27 allows two shapes for more than one EarMarkPattern under one
+        // finance_id: a genuine sequential chain (RestructureFactory), or
+        // concurrent, overlapping funders — a different, still only
+        // partially built case that planning/27 explicitly settled must NOT
+        // get chain-boundary/cascade treatment. Filtering to
+        // !SpansOverlap(plan, saved) here — before hasPredecessor/hasSuccessor
+        // are even computed — is what keeps a concurrent plan (e.g. the
+        // Storage Unit Rental seed scenario's own two funders) from being
+        // mistaken for a sequential neighbor and absorbed/cascaded-onto by
+        // PerformEarmarkSave below, which trusts this same filtered list.
+        var otherPlans = allPlansForGoal
+            .Where(plan => plan.DatePattern.Start != saved.DatePattern.Start && !RestructureFactory.SpansOverlap(plan, saved))
+            .ToList();
+        var hasPredecessor = otherPlans.Any(plan => plan.DatePattern.Start < saved.DatePattern.Start);
+        var hasSuccessor = otherPlans.Any(plan => plan.DatePattern.Start > saved.DatePattern.Start);
+
+        var startChanged = saved.DatePattern.Start != proposedPlan.DatePattern.Start;
+        var untilChanged = saved.DatePattern.Until != proposedPlan.DatePattern.Until;
+        var amountOrShapeChanged = saved.Amount != proposedPlan.Amount
+            || saved.DatePattern.Frequency != proposedPlan.DatePattern.Frequency
+            || saved.DatePattern.Interval != proposedPlan.DatePattern.Interval
+            || !saved.DatePattern.ByDay.SequenceEqual(proposedPlan.DatePattern.ByDay)
+            || !saved.DatePattern.ByMonthDay.SequenceEqual(proposedPlan.DatePattern.ByMonthDay);
+
+        // planning/27's "fourth relationship" — only relevant once this
+        // plan is the LAST one in its OWN finance_id's chain (!hasSuccessor):
+        // does the GOAL ITSELF (a FinancialPattern) have a break-off
+        // successor under a different finance_id, and does THAT segment
+        // have a real "current" plan of its own to cascade onto? Composing
+        // two already-built lookups that have never been composed across
+        // this boundary before (BreakOffFactory.FindSuccessor, then
+        // RestructureFactory.FindCurrentPlan on the far side) — never
+        // computed at all when hasSuccessor is true, since a same-finance_id
+        // successor always takes priority (forward-only means cascading
+        // through this plan's OWN chain first; the cross-boundary reach only
+        // matters once that chain has nowhere further to go).
+        FinancialPattern? crossBoundaryGoal = null;
+        EarMarkPattern? crossBoundaryTarget = null;
+        if (!hasSuccessor)
+        {
+            crossBoundaryGoal = BreakOffFactory.FindSuccessor(goal, forecast.Book.AllFinancialPatterns());
+            if (crossBoundaryGoal is { } successorGoal)
+            {
+                // FindCurrentPlan itself returns null for a genuinely
+                // concurrent set on the far side — correctly no different
+                // than any other "which plan is current" lookup elsewhere in
+                // this document; no special leniency for the cross-boundary
+                // case (planning/27, settled).
+                crossBoundaryTarget = RestructureFactory.FindCurrentPlan(forecast.Book.EarMarkPatternsFor(successorGoal.FinanceId));
+            }
+        }
+
+        PlanTouchesChainBoundary = (startChanged && hasPredecessor) || (untilChanged && hasSuccessor);
+        PlanChangeCanCascade = amountOrShapeChanged && (hasSuccessor || crossBoundaryTarget is not null);
+
+        if (PlanTouchesChainBoundary || PlanChangeCanCascade)
+        {
+            var request = BuildEarmarkConfirmationRequest(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal);
+            var answer = ConfirmImplicitChanges?.Invoke(request) ?? DefaultEarmarkConfirmationAnswer();
+            if (!answer.Proceed)
+            {
+                return false;
+            }
+
+            UserChoseStayLinked = answer.ChoseStayLinked;
+            UserChoseCascadeForward = answer.ChoseCascadeForward;
+        }
+
+        PerformEarmarkSave(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal);
+        return true;
+    }
+
+    /// <summary>[WRITES FILE] Carries out whatever RunForPlan decided — resolves the chain boundary (stay linked, via RestructureFactory.ExtendStart/ExtendUntil, or left broken) and the cascade (same-finance_id via RestructureFactory.CascadeForward, cross-boundary via the same function pointed at the far side's own goal, or just this plan), deletes any ManualEarmark a shrinking span just orphaned, then saves.</summary>
+    /// <param name="proposedPlan">The form's current field values.</param>
+    /// <param name="saved">The plan as it's actually saved today.</param>
+    /// <param name="otherPlans">Every other EarMarkPattern sharing the same finance_id.</param>
+    /// <param name="goal">The goal this Savings Plan funds.</param>
+    /// <param name="crossBoundaryTarget">planning/27's "fourth relationship" — the current EarMarkPattern on the far side of a FinancialPattern-level break-off, or null when there's no successor goal, no plan on it yet, or its own plans are a genuinely concurrent set with no single "current" one.</param>
+    /// <param name="crossBoundaryGoal">The far side's own goal — required to validate crossBoundaryTarget's cascaded replacement, since it belongs to a different finance_id than goal above.</param>
+    private void PerformEarmarkSave(
+        EarMarkPattern proposedPlan, EarMarkPattern saved, IReadOnlyList<EarMarkPattern> otherPlans, FinancialPattern goal,
+        EarMarkPattern? crossBoundaryTarget, FinancialPattern? crossBoundaryGoal)
+    {
+        var current = proposedPlan;
+        var toDelete = new List<DateOnly>();
+        // Keyed by each surviving neighbor's own ORIGINAL Start — stable
+        // even for ExtendUntil's own neighbor, whose Start itself moves, so
+        // the cascade step below can still find and update it by where it
+        // used to be.
+        var toSave = new Dictionary<DateOnly, EarMarkPattern>();
+
+        var predecessors = otherPlans.Where(plan => plan.DatePattern.Start < saved.DatePattern.Start).ToList();
+        var successors = otherPlans.Where(plan => plan.DatePattern.Start > saved.DatePattern.Start).ToList();
+
+        if (PlanTouchesChainBoundary && UserChoseStayLinked)
+        {
+            if (saved.DatePattern.Start != current.DatePattern.Start && predecessors.Count > 0)
+            {
+                var result = RestructureFactory.ExtendStart(current, predecessors, goal, current.DatePattern.Start);
+                current = result.Current;
+                foreach (var absorbed in result.Absorbed)
+                {
+                    toDelete.Add(absorbed.DatePattern.Start);
+                }
+
+                if (result.AdjustedNeighbor is { } adjusted)
+                {
+                    // ExtendStart's own neighbor keeps its own Start — an
+                    // in-place update, not a key change.
+                    toSave[adjusted.DatePattern.Start] = adjusted;
+                }
+            }
+
+            if (saved.DatePattern.Until != current.DatePattern.Until && successors.Count > 0)
+            {
+                var result = RestructureFactory.ExtendUntil(current, successors, goal, current.DatePattern.Until);
+                current = result.Current;
+                foreach (var absorbed in result.Absorbed)
+                {
+                    toDelete.Add(absorbed.DatePattern.Start);
+                }
+
+                if (result.AdjustedNeighbor is { } adjusted)
+                {
+                    // ExtendUntil's own neighbor gets a NEW Start — a real
+                    // key change, found by whichever original still has the
+                    // adjusted one's own (unmoved) Until.
+                    var original = successors.First(plan => plan.DatePattern.Until == adjusted.DatePattern.Until);
+                    toDelete.Add(original.DatePattern.Start);
+                    toSave[original.DatePattern.Start] = adjusted;
+                }
+            }
+        }
+
+        if (PlanChangeCanCascade && UserChoseCascadeForward && successors.Count > 0)
+        {
+            // Cascades onto whatever successors are still standing after
+            // boundary resolution above — including one just date-adjusted
+            // there, whose own dates CascadeForward leaves untouched, only
+            // its Amount/shape change.
+            var stillStanding = successors
+                .Where(plan => !toDelete.Contains(plan.DatePattern.Start) || toSave.ContainsKey(plan.DatePattern.Start))
+                .Select(plan => toSave.TryGetValue(plan.DatePattern.Start, out var adjusted) ? adjusted : plan)
+                .ToList();
+
+            foreach (var cascaded in RestructureFactory.CascadeForward(current.DatePattern, current.Amount, stillStanding, goal))
+            {
+                // CascadeForward's own output always keeps its input's
+                // Start, so this is guaranteed to be a real key already in
+                // toSave or among the originals — never a fresh one.
+                toSave[cascaded.DatePattern.Start] = cascaded;
+            }
+        }
+        else if (PlanChangeCanCascade && UserChoseCascadeForward && crossBoundaryTarget is not null && crossBoundaryGoal is not null)
+        {
+            // planning/27's "fourth relationship" — the far side belongs to
+            // a DIFFERENT finance_id than everything else this method
+            // touches, so it can't go through toSave/toDelete (both keyed
+            // for THIS finance_id's own rows, where a key collision against
+            // an unrelated goal's own Start is a real, if unlikely, risk) —
+            // saved directly instead. CascadeForward's own output always
+            // keeps its input's Start, so this is always an in-place update,
+            // never a key change, matching why no delete is needed here.
+            var cascaded = RestructureFactory.CascadeForward(current.DatePattern, current.Amount, [crossBoundaryTarget], crossBoundaryGoal).Single();
+            _repositories.EarMarkPatterns.Save(cascaded);
+        }
+
+        // A "let it break" choice — or a standalone plan with no neighbor to
+        // stay linked to at all, so PlanTouchesChainBoundary never even fired
+        // — can shrink current's own span away from wherever it used to
+        // reach. Checked generally here, not gated on PlanTouchesChainBoundary
+        // specifically, so a standalone plan's own Start/Until edit gets the
+        // same protection a chained one does. This is the only way an
+        // EarMarkPattern-level edit can genuinely orphan a ManualEarmark —
+        // absorption never does (this class's own planning/27 note: the
+        // absorbing segment's final span always covers the union of what
+        // both old segments covered, so nothing inside it stops being
+        // covered). Computed against finalOtherPlans (post-boundary-
+        // resolution — the adjusted neighbor if one exists, not its stale
+        // original) rather than the raw otherPlans read at the top, so a
+        // neighbor that just stretched to stay contiguous correctly still
+        // counts as covering whatever it now reaches. Must run before any
+        // write below: ManualEarmarkRepository.GetAll() re-validates every
+        // row against whatever's currently saved, so reading here — before
+        // this save touches anything — is what keeps this from throwing on
+        // the very rows it's trying to identify, same reasoning
+        // DetermineBackTruncationsIfApplicable's own header note already
+        // gives for the FinancialPattern-level equivalent of this check.
+        var finalOtherPlans = otherPlans
+            .Where(plan => !toDelete.Contains(plan.DatePattern.Start) || toSave.ContainsKey(plan.DatePattern.Start))
+            .Select(plan => toSave.TryGetValue(plan.DatePattern.Start, out var adjusted) ? adjusted : plan)
+            .ToList();
+        var finalCoverage = new List<EarMarkPattern> { current };
+        finalCoverage.AddRange(finalOtherPlans);
+
+        var orphanedManualEarmarkDates = FindOrphanedManualEarmarkDates(finalCoverage, goal.FinanceId);
+
+        // The saved row's own key only actually changed if Start moved —
+        // checked here, after boundary resolution, not assumed up front:
+        // saving current under its final key and then deleting the OLD key
+        // (only when they differ) is what makes this an update rather than
+        // an accidental drop of a row that never actually moved.
+        if (current.DatePattern.Start != saved.DatePattern.Start)
+        {
+            toDelete.Add(saved.DatePattern.Start);
+        }
+
+        foreach (var date in orphanedManualEarmarkDates)
+        {
+            _repositories.ManualEarmarks.Delete(goal.FinanceId, date);
+        }
+
+        _repositories.EarMarkPatterns.Save(current);
+        foreach (var plan in toSave.Values)
+        {
+            _repositories.EarMarkPatterns.Save(plan);
+        }
+
+        foreach (var start in toDelete.Distinct())
+        {
+            _repositories.EarMarkPatterns.Delete(goal.FinanceId, start);
+        }
+    }
+
+    /// <summary>[READS FILE] Builds what ConfirmImplicitChanges needs for the EarMarkPattern-editing case — planning/27's own "stay linked or break" and "cascade forward or not" questions, now with the concrete-consequence wording that document's own settled content calls for (StayLinkedWarning/LetItBreakWarning/CascadeDescription). Only ever called when at least one of PlanTouchesChainBoundary/PlanChangeCanCascade is true (RunForPlan's own gate), so Description always names at least one. [READS FILE] because the "let it break" preview dry-runs FindOrphanedManualEarmarkDates, which reads ManualEarmarks — safe here, same as everywhere else in this class, since nothing has been saved yet this Run().</summary>
+    /// <param name="current">The plan as the user is currently proposing to save it.</param>
+    /// <param name="saved">The plan as it's actually saved today.</param>
+    /// <param name="otherPlans">Every other EarMarkPattern sharing the same finance_id (concurrent plans already excluded — see RunForPlan's own note).</param>
+    /// <param name="goal">The goal this Savings Plan funds.</param>
+    /// <param name="crossBoundaryTarget">planning/27's "fourth relationship" target, or null — see PerformEarmarkSave's own param doc for the full explanation.</param>
+    /// <param name="crossBoundaryGoal">The far side's own goal, paired with crossBoundaryTarget.</param>
+    private ImplicitChangeConfirmationRequest BuildEarmarkConfirmationRequest(
+        EarMarkPattern current, EarMarkPattern saved, IReadOnlyList<EarMarkPattern> otherPlans, FinancialPattern goal,
+        EarMarkPattern? crossBoundaryTarget, FinancialPattern? crossBoundaryGoal)
+    {
+        var predecessors = otherPlans.Where(plan => plan.DatePattern.Start < saved.DatePattern.Start).ToList();
+        var successors = otherPlans.Where(plan => plan.DatePattern.Start > saved.DatePattern.Start).ToList();
+
+        return new ImplicitChangeConfirmationRequest
+        {
+            IsChangeCritical = false,
+            HasMultipleEarmarkPatterns = false,
+            ConsolidationNeeded = false,
+            IsAmountOnlyChange = false,
+            PlanShapeCandidates = [],
+            Description = (PlanTouchesChainBoundary, PlanChangeCanCascade) switch
+            {
+                (true, true) => "This plan is part of a chain. Its date range touches a neighboring segment, and its amount or schedule change could carry forward too.",
+                (true, false) => "This plan is part of a chain. Its date range touches a neighboring segment.",
+                _ => "This plan is part of a chain. Later segments could pick up this same amount or schedule change.",
+            },
+            PlanTouchesChainBoundary = PlanTouchesChainBoundary,
+            PlanChangeCanCascade = PlanChangeCanCascade,
+            StayLinkedWarning = PlanTouchesChainBoundary ? DescribeStayLinkedConsequence(current, saved, predecessors, successors, goal) : "",
+            LetItBreakWarning = PlanTouchesChainBoundary ? DescribeLetItBreakConsequence(current, saved, predecessors, successors, otherPlans, goal) : "",
+            CascadeDescription = PlanChangeCanCascade ? DescribeCascadeConsequence(current, successors, crossBoundaryTarget, crossBoundaryGoal) : "",
+        };
+    }
+
+    /// <summary>[CALC] Previews what "stay linked" would actually do to current's own neighbors, for the confirmation row's own warning slot — "" for a plain, contiguous nudge (never destructive, matching the settled "the default option is never the dangerous one" reasoning, so nothing to warn about), or a real sentence naming which segment(s) would be absorbed (deleted outright, their own values overwritten) once the edit reaches that far. Dry-runs the exact same RestructureFactory calls PerformEarmarkSave itself will make if this branch is actually chosen; the result here is discarded after formatting, not stored, since only one of "stay linked"/"let it break" ever actually runs and re-deriving it is cheap (pure functions over short lists).</summary>
+    private static string DescribeStayLinkedConsequence(
+        EarMarkPattern current, EarMarkPattern saved, IReadOnlyList<EarMarkPattern> predecessors, IReadOnlyList<EarMarkPattern> successors, FinancialPattern goal)
+    {
+        var absorbed = new List<EarMarkPattern>();
+
+        if (saved.DatePattern.Start != current.DatePattern.Start && predecessors.Count > 0)
+        {
+            absorbed.AddRange(RestructureFactory.ExtendStart(current, predecessors, goal, current.DatePattern.Start).Absorbed);
+        }
+
+        if (saved.DatePattern.Until != current.DatePattern.Until && successors.Count > 0)
+        {
+            absorbed.AddRange(RestructureFactory.ExtendUntil(current, successors, goal, current.DatePattern.Until).Absorbed);
+        }
+
+        if (absorbed.Count == 0)
+        {
+            return ""; // a plain nudge — never destructive, nothing to warn about
+        }
+
+        var ordered = absorbed.OrderBy(plan => plan.DatePattern.Start).ToList();
+        var ranges = string.Join("; ", ordered.Select(plan => $"{plan.DatePattern.Start:MMM d, yyyy} – {plan.DatePattern.Until:MMM d, yyyy}"));
+        return ordered.Count == 1
+            ? $"This will delete the segment covering {ranges} entirely — its own amount and schedule won't be kept."
+            : $"This will delete {ordered.Count} segments entirely ({ranges}) — their own amounts and schedules won't be kept.";
+    }
+
+    /// <summary>[READS FILE] Previews what "let the chain break" would actually leave behind, for the confirmation row's own warning slot — always a real sentence when PlanTouchesChainBoundary is true, since breaking the chain always leaves SOME gap or overlap. Names whether a gap or overlap forms with the predecessor/successor (RestructureFactory.SpansOverlap decides which) and how many manual earmarks a gap would strand, via a dry run of FindOrphanedManualEarmarkDates against the hypothetical "break" outcome — current's own new span plus every other plan left exactly as it stands today, since "let it break" never touches a neighbor.</summary>
+    private string DescribeLetItBreakConsequence(
+        EarMarkPattern current, EarMarkPattern saved, IReadOnlyList<EarMarkPattern> predecessors, IReadOnlyList<EarMarkPattern> successors,
+        IReadOnlyList<EarMarkPattern> otherPlans, FinancialPattern goal)
+    {
+        var consequences = new List<string>();
+
+        if (saved.DatePattern.Start != current.DatePattern.Start && predecessors.Count > 0)
+        {
+            var predecessor = predecessors.OrderByDescending(plan => plan.DatePattern.Start).First();
+            consequences.Add(RestructureFactory.SpansOverlap(current, predecessor)
+                ? $"it will overlap with the segment before it ({predecessor.DatePattern.Start:MMM d, yyyy} – {predecessor.DatePattern.Until:MMM d, yyyy})"
+                : $"a gap will open before it, from {predecessor.DatePattern.Until.AddDays(1):MMM d, yyyy} to {current.DatePattern.Start.AddDays(-1):MMM d, yyyy}");
+        }
+
+        if (saved.DatePattern.Until != current.DatePattern.Until && successors.Count > 0)
+        {
+            var successor = successors.OrderBy(plan => plan.DatePattern.Start).First();
+            consequences.Add(RestructureFactory.SpansOverlap(current, successor)
+                ? $"it will overlap with the segment after it ({successor.DatePattern.Start:MMM d, yyyy} – {successor.DatePattern.Until:MMM d, yyyy})"
+                : $"a gap will open after it, from {current.DatePattern.Until.AddDays(1):MMM d, yyyy} to {successor.DatePattern.Start.AddDays(-1):MMM d, yyyy}");
+        }
+
+        var hypotheticalCoverage = new List<EarMarkPattern> { current };
+        hypotheticalCoverage.AddRange(otherPlans);
+        var orphaned = FindOrphanedManualEarmarkDates(hypotheticalCoverage, goal.FinanceId);
+        if (orphaned.Count > 0)
+        {
+            consequences.Add(orphaned.Count == 1
+                ? $"1 manual earmark dated {orphaned[0]:MMM d, yyyy} will be deleted"
+                : $"{orphaned.Count} manual earmarks will be deleted");
+        }
+
+        if (consequences.Count == 0)
+        {
+            // Shouldn't happen when PlanTouchesChainBoundary is true (some
+            // gap/overlap always results from breaking) — never claim a
+            // consequence isn't real just to force non-empty text.
+            return "";
+        }
+
+        var sentence = string.Join("; ", consequences) + ".";
+        return char.ToUpperInvariant(sentence[0]) + sentence[1..];
+    }
+
+    /// <summary>[CALC] Names the date range a cascade would actually reach, for the confirmation row's own always-shown description — round 2 of planning/27's own small questions settled that whatever confirms an Amount/shape cascade "must show, plainly, the date range the direct edit itself covers and how far the cascade reaches into the future — which segments, through what date." Unlike StayLinkedWarning/LetItBreakWarning above, this isn't a warning tied to one "dangerous" option — neither Cascade choice is destructive, so it's shown under the row regardless of which one is currently selected. successors and crossBoundaryTarget are mutually exclusive by construction (RunForPlan only ever computes the cross-boundary target when this same-finance_id chain has no successor of its own), so exactly one branch below ever has anything to describe.</summary>
+    /// <param name="current">The plan as the user is currently proposing to save it.</param>
+    /// <param name="successors">Later plans sharing the same finance_id — empty whenever the cascade is cross-boundary instead.</param>
+    /// <param name="crossBoundaryTarget">planning/27's "fourth relationship" target, or null when there isn't one.</param>
+    /// <param name="crossBoundaryGoal">The far side's own goal, paired with crossBoundaryTarget — named in the sentence so the user knows this reaches beyond the bill they're currently looking at.</param>
+    private static string DescribeCascadeConsequence(
+        EarMarkPattern current, IReadOnlyList<EarMarkPattern> successors, EarMarkPattern? crossBoundaryTarget, FinancialPattern? crossBoundaryGoal)
+    {
+        var ownRange = $"This edit covers {current.DatePattern.Start:MMM d, yyyy} – {current.DatePattern.Until:MMM d, yyyy}.";
+
+        if (successors.Count > 0)
+        {
+            var furthest = successors.Max(plan => plan.DatePattern.Until);
+            return successors.Count == 1
+                ? $"{ownRange} Cascading forward would also update the segment running through {furthest:MMM d, yyyy}."
+                : $"{ownRange} Cascading forward would also update {successors.Count} later segments, through {furthest:MMM d, yyyy}.";
+        }
+
+        if (crossBoundaryTarget is not null && crossBoundaryGoal is not null)
+        {
+            var label = string.IsNullOrWhiteSpace(crossBoundaryGoal.Description) ? crossBoundaryGoal.Source : crossBoundaryGoal.Description;
+            return $"{ownRange} This bill has since moved to a newer segment (\"{label}\") — cascading forward would also update its own savings plan, running through {crossBoundaryTarget.DatePattern.Until:MMM d, yyyy}.";
+        }
+
+        return "";
+    }
+
+    /// <summary>[READS FILE] Every ManualEarmark under a finance_id that no plan in the given final coverage set still covers (RecurrenceRule.ActiveSpanContains — the same check ManualEarmark.Create/ManualEarmarkRepository.GetAll already use to validate one). Shared by PerformEarmarkSave (the real, about-to-be-deleted list, against the actual post-save set) and DescribeLetItBreakConsequence (a preview count, against a hypothetical set, nothing deleted).</summary>
+    /// <param name="finalCoverage">Every EarMarkPattern expected to exist under financeId once this save (real or hypothetical) completes.</param>
+    /// <param name="financeId">Which goal's own ManualEarmarks to check.</param>
+    private IReadOnlyList<DateOnly> FindOrphanedManualEarmarkDates(IReadOnlyList<EarMarkPattern> finalCoverage, int financeId) =>
+        _repositories.ManualEarmarks.GetAll()
+            .Where(earmark => earmark.FinanceId == financeId)
+            .Where(earmark => !finalCoverage.Any(plan => plan.DatePattern.ActiveSpanContains(earmark.Date)))
+            .Select(earmark => earmark.Date)
+            .ToList();
+
+    /// <summary>[CALC] The safest, least-destructive answer to the EarMarkPattern-editing questions at once — used whenever no ConfirmImplicitChanges delegate is wired up. Matches the settled defaults: stays linked (never leaves an unannounced gap or overlap) and cascades forward (the settled default for a rate/schedule change). Always proceeds — there's no one here to cancel on.</summary>
+    private static ImplicitChangeConfirmationAnswer DefaultEarmarkConfirmationAnswer() => new()
+    {
+        Proceed = true,
+        ChoseStayLinked = true,
+        ChoseCascadeForward = true,
+    };
 
     /// <summary>[CALC] Computes the nine conditions above against the current Savings Plan and the proposed edit. Everything here reads off the current, already-saved forecast — it does not yet simulate what the forecast would look like with the proposed edit actually applied, so ChangeWarrantsSuggestions in particular only catches a plan that's already concerning today, not one this specific edit would newly make concerning (the same gap planning/22 §3 already named for the Expense form's own passive status indicator). internal (not private) so FinancePatternSaveConfirmationTests can call it directly ahead of a method that Run() itself can't reach yet (NarrowSurvivingPlanIfNeeded) without needing Run()'s own placeholder guidance step to run too.</summary>
     internal void DetermineConditions()
@@ -778,6 +1245,12 @@ public sealed class FinancePatternSaveConfirmation
         IsAmountOnlyChange = _isAmountOnlyChange,
         PlanShapeCandidates = _planShapeCandidates,
         Description = BuildDescription(),
+        // planning/27's own questions never apply to a FinancialPattern-editing request.
+        PlanTouchesChainBoundary = false,
+        PlanChangeCanCascade = false,
+        StayLinkedWarning = "",
+        LetItBreakWarning = "",
+        CascadeDescription = "",
     };
 
     /// <summary>[CALC] A plain-language sentence naming what's changing and why it needs asking — no raw field names, no finance_id.</summary>
@@ -1227,6 +1700,28 @@ public sealed record ImplicitChangeConfirmationRequest
     public required IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates { get; init; }
 
     public required string Description { get; init; }
+
+    // planning/27's own EarMarkPattern-chain questions — only ever true for
+    // a request built by RunForPlan (the EarMarkPattern-editing entry
+    // point); always false for an ordinary FinancialPattern-editing one.
+    public required bool PlanTouchesChainBoundary { get; init; }
+    public required bool PlanChangeCanCascade { get; init; }
+
+    // planning/27's own "name the concrete consequence, not a generic
+    // notice" requirement — always "" for an ordinary FinancialPattern-
+    // editing request (matching PlanTouchesChainBoundary/PlanChangeCanCascade
+    // above). StayLinkedWarning is "" for a plain, never-destructive nudge
+    // and only a real sentence once the edit reaches far enough to absorb a
+    // neighbor — the row-based design's own "the warning escalates with the
+    // consequence, the default option doesn't change" case. LetItBreakWarning
+    // is always a real sentence whenever PlanTouchesChainBoundary is true —
+    // breaking the chain always leaves SOME gap or overlap. CascadeDescription
+    // is a plain, always-shown description (not a warning tied to one
+    // "dangerous" option — neither cascade choice here is destructive),
+    // naming the direct edit's own range and how far cascading would reach.
+    public required string StayLinkedWarning { get; init; }
+    public required string LetItBreakWarning { get; init; }
+    public required string CascadeDescription { get; init; }
 }
 
 // What the user (or, when nothing is wired up, DefaultConfirmationAnswer)
@@ -1247,4 +1742,11 @@ public sealed record ImplicitChangeConfirmationAnswer
     // Propose's own default (whether because PlanShapeCandidates was empty,
     // or the user was offered a choice and picked the default anyway).
     public EarMarkPattern? ChosenPlanShape { get; init; }
+
+    // planning/27's own EarMarkPattern-chain answers — meaningless unless
+    // the matching request field of the same name was true. Both default to
+    // the settled safe defaults, so a caller answering only what it cares
+    // about still gets the right behavior for the rest.
+    public bool ChoseStayLinked { get; init; } = true;
+    public bool ChoseCascadeForward { get; init; } = true;
 }

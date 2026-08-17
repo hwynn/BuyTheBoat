@@ -1,21 +1,24 @@
 # 27 — Editing within a pattern's own chain (name pending)
 
-**Status: OPEN — started 2026-08-16.** Split off after a direct question surfaced a real,
-previously-unflagged gap while working [25](25-editing-patterns-with-history.md)'s own "avoid forcing
-consolidation" thread — see the entry logged in
+**Status: Phases 1, 2, and the fourth relationship (cross-`FinancialPattern`-boundary cascade) are all
+BUILT as of 2026-08-17 — only Phase 3 (resuming [25](25-editing-patterns-with-history.md)'s own Item F)
+remains.** Split off after a direct question surfaced a real, previously-unflagged gap while working
+25's own "avoid forcing consolidation" thread — see the entry logged in
 [24](24-app-layer-known-gaps.md#editing-an-early-already-superseded-segment-of-a-break-offrenewal-chain-has-no-guard-at-all)
 for the concrete failure that prompted this.
 
 **Sequencing decision (author, 2026-08-16):** this needs answering before returning to 25's own
 still-open "avoid forcing consolidation" thread — three phases, in order:
 1. **This document, `FinancialPattern` first** — rules for a change to one segment of a break-off/renewal
-   chain cascading to (or needing reconciliation against) the segments that continue it.
+   chain cascading to (or needing reconciliation against) the segments that continue it. **BUILT.**
 2. **The same question for `EarMarkPattern` chains** (`RestructureFactory`'s own same-`finance_id`
-   sequential segments) — its own section below, not started.
+   sequential segments), combined with the fourth relationship (the cross-boundary cascade) — its own
+   section below. **BUILT 2026-08-17**, UI included.
 3. **Then, and only then, back to [25](25-editing-patterns-with-history.md)'s own Item F** — cascading a
    change to a `FinancialPattern` onto the `EarMarkPattern`s that fund it (the "avoid forcing
    consolidation for a recurrence-shape change" thread, and the paycheck-association thread, both
-   parked mid-conversation).
+   parked mid-conversation). **Asked 2026-08-17, once 1/2 were done — declined for now ("keep forcing
+   consolidation"), not approved. Nothing built; the proposal stays on record for later.**
 
 Author's own framing for what each phase needs to answer: **what kinds of changes do what, and
 how/when a warning or a question to the user should be part of the process** — the same two-axis shape
@@ -154,19 +157,33 @@ several independent questions fit on **one** confirmation page instead of a stac
   `PlanHealthState.IsWorthWarningAbout`/`GoalShortfall` are built and already answer exactly this
   question elsewhere; this is a new place to surface them, not new logic to compute them.
 
-**The edge case flagged above — SETTLED, author, 2026-08-16.** "Keep it linked" pushed far enough that
-the neighbor would need to shrink past its own boundary (zero or negative length) — possible in either
-direction, `Start` reaching back past the predecessor's own `Start`, or `Until` reaching forward past
-the successor's own `Until` — resolves to **absorption**: the neighbor is deleted outright, and the
-pattern being saved simply expands to cover the range it used to occupy, overwriting whatever values
-were there. Deliberately not merged or reconciled — the neighbor's own fields (`Amount`, shape,
-`Description`, everything) are gone, not blended. **Its own `EarMarkPattern`(s) go with it** —
-`ManualEarmark`s and `RecurrenceRule.ExcludedDates` (planning/26's skip-dates mechanism) tied to the
-absorbed segment are simply deleted, same "no extra history protection, the user's own segment choice
-is the control" principle already governing the forward-cascade case above — no preserve option, cancel
-is the only way out. **Deliberately reframed as a feature, not just a handled edge case (author):** this
-gives a user a real way to consolidate a chain that's become too fragmented over time, by deliberately
-extending one segment far enough to absorb its neighbors.
+**The edge case flagged above — SETTLED, and now BUILT for the `EarMarkPattern`-chain side, 2026-08-16
+(`RestructureFactory.ExtendUntil`/`ExtendStart`, `RecurrenceRule.WithStart` added alongside the existing
+`WithUntil`).** "Keep it linked" pushed far enough that the neighbor would need to shrink past its own
+boundary (zero or negative length) — possible in either direction, `Start` reaching back past the
+predecessor's own `Start`, or `Until` reaching forward past the successor's own `Until` — resolves to
+**absorption**: the neighbor is deleted outright, and the pattern being saved simply expands to cover the
+range it used to occupy, overwriting whatever values were there. Deliberately not merged or reconciled —
+the neighbor's own fields (`Amount`, shape, `Description`, everything) are gone, not blended.
+**Deliberately reframed as a feature, not just a handled edge case (author):** this gives a user a real
+way to consolidate a chain that's become too fragmented over time, by deliberately extending one segment
+far enough to absorb its neighbors. `StartingAllocation` carries forward from every absorbed segment —
+my own addition while building this, not something explicitly discussed, grounded directly in the
+already-standing "already-realized jar money is never just dropped" principle (planning/26).
+
+**A real correction to what this section said before, found while actually building it — worth being
+honest about rather than quietly fixing:** "its own `EarMarkPattern`(s) go with it — `ManualEarmark`s...
+tied to the absorbed segment are simply deleted" is **not accurate for this, `EarMarkPattern`-chain
+level of absorption.** That description is correct at the `FinancialPattern` level (absorbing a whole
+bill/goal segment genuinely orphans everything under its own now-gone `finance_id`, `ManualEarmark`s
+included) — but at the `EarMarkPattern` level, the `finance_id` never changes, and the absorbing
+segment's own new span covers the *union* of what both segments covered before, so a `ManualEarmark`
+dated anywhere in the absorbed segment's old range is still covered by the survivor afterward. Nothing
+is orphaned by absorption itself. What *is* correctly lost is `RecurrenceRule.ExcludedDates` — those live
+directly on the absorbed row, not a separate record, so they're gone once that row is (as they should
+be — an excluded date on a segment no longer being funded that way isn't meaningful to keep). Manual
+earmarks only become genuinely orphaned by **"let the chain break"** opening a real gap — a different
+scenario from absorb, already correctly described further up this document.
 
 **Composes with the row mechanism above without any new machinery — checked, not assumed:** "stay
 linked" already carries the row's default selection and already gets its warning drawn from whichever
@@ -175,22 +192,129 @@ consequence is real for the *current* edit, not a fixed script — so when "stay
 message, still attached to the same (still-default) option. Nothing about the confirmation page itself
 needs to change shape for this case.
 
-**One inference, not stated directly, flagged rather than assumed: absorption is not bounded to a
-single neighbor.** If the new boundary reaches far enough to swallow more than one segment in a row,
-each one is absorbed in turn — reads as the more useful version of "a mechanism to consolidate a
-fragmented chain" (a chain fragmented into many short segments is exactly the case where sweeping up
-several at once matters most), but it's this document's own extrapolation, not something said explicitly
-— worth a veto if a single-hop limit was actually intended.
+**Absorption is not bounded to a single neighbor — confirmed by the author (round 3 of the small
+questions) and now built that way**, walking as far through the chain as the new boundary reaches, one
+absorbed segment at a time, stopping at the first one it doesn't fully reach.
 
-**Warning content, SETTLED:** must name the concrete consequence, not a generic notice — which pattern
-is being absorbed, its date range, how many manual earmarks and skipped dates go with it. Same "show the
-consequence, not just a yes/no" precedent [25](25-editing-patterns-with-history.md)'s own Item E already
-established for orphaned data.
+**Warning content still not fully built** (real rows exist now, see below, but the specific wording
+doesn't yet meet this bar): must name the concrete consequence, not a generic notice — which pattern is
+being absorbed, its date range, how many manual earmarks (for the "let it break" case specifically) and
+skipped dates go with it. Same "show the consequence, not just a yes/no" precedent [25](25-editing-patterns-with-history.md)'s
+own Item E already established for orphaned data.
+
+**What's built vs. what's still needed — updated 2026-08-16, the UI wiring now exists too:**
+- **Domain, done and tested:** `RestructureFactory.ExtendUntil`/`ExtendStart` (boundary resolution,
+  absorb included, 10 tests) and `RestructureFactory.CascadeForward` (the Amount/shape default, 4 tests).
+- **The orchestrator extension, done and tested:** `FinancePatternSaveConfirmation` gained a second
+  constructor — `(EarMarkPattern proposedPlan, DateOnly savedStart, FinancialPattern goal,
+  requestForecast, repositories)` — a genuinely separate entry point (`RunForPlan`/`PerformEarmarkSave`),
+  never touching any of the `FinancialPattern`-editing logic. `savedStart` is needed as its own
+  parameter, distinct from the proposed plan's own `Start`, because `EarMarkPattern`'s persistence key
+  *is* `(FinanceId, Start)` — exactly the field this whole mechanism can move. Detects whether `Start`/
+  `Until` touch a real neighbor (`PlanTouchesChainBoundary`) and whether `Amount`/shape can cascade
+  (`PlanChangeCanCascade`), fires the same `ConfirmImplicitChanges` popup mechanism the `FinancialPattern`
+  side already uses (request/answer types extended with the two new questions, not duplicated), and
+  saves. **Both settled defaults are wired in and proven by tests that run with no confirmation delegate
+  at all** — stay linked, cascade forward. 9 new end-to-end tests, including the composed case (a
+  boundary change and a cascade both landing on the very same successor in one save — its own dates move
+  from the boundary resolution, its own amount changes from the cascade, one final row, not two
+  conflicting writes) and the specific bug this design has to avoid (an amount-only edit, no `Start`/
+  `Until` change, must update the existing row in place — the "does the key actually change" check runs
+  *after* boundary resolution is known, never assumed up front).
+- **A real bug, found while grounding the UI-wiring work below and FIXED the same pass, not just
+  flagged:** `RunForPlan`'s own `hasPredecessor`/`hasSuccessor` originally compared only `Start` against
+  `saved` — with no check for whether the "neighbor" actually forms a sequential chain versus being a
+  genuinely concurrent, overlapping plan (F27 — e.g. the "Storage Unit Rental" seed scenario's own two
+  household-partner funders). A concurrent plan with a differing `Start` satisfied the old check just as
+  well as a real chain neighbor would, meaning extending `Until`/`Start` into its overlapping span could
+  silently truncate or fully absorb (delete) it via `ExtendUntil`/`ExtendStart`, or have its own `Amount`
+  silently overwritten via `CascadeForward` under the "cascade forward" default — a direct violation of
+  this document's own settled rule that concurrent "must NOT get the same treatment as a sequential
+  chain." Inert until this session's own UI wiring made `RunForPlan` reachable from a real save for the
+  first time — not a regression, but newly *dangerous* the moment it became reachable, which is exactly
+  why it surfaced now rather than earlier. **Fixed** by extracting `RestructureFactory.SpansOverlap`
+  (the exact overlap check `FindCurrentPlan` already used, now a shared, reusable definition instead of a
+  second copy) and filtering `otherPlans` by it before `hasPredecessor`/`hasSuccessor` are computed — the
+  same filtered list also feeds `PerformEarmarkSave`'s own `predecessors`/`successors`, so both the *ask*
+  and the *actual mutation* are protected by the one fix. 6 new regression tests (4 direct `SpansOverlap`
+  cases in `RestructureFactoryTests`, 2 end-to-end in `FinancePatternSaveConfirmationEarmarkTests` proving
+  a concurrent plan is untouched — and that `ConfirmImplicitChanges` is never even invoked — under both
+  the boundary and cascade paths).
+- **The confirmation window, done — real rows now, matching the existing minimal style:**
+  `EditingHistoryConfirmationWindow` gained `ChainBoundarySection` (stay linked / let it break, plus a
+  `ChainBreakWarningText` that only turns visible while "let it break" is the one currently selected —
+  wired live via a shared `Checked` handler on both radios, not just computed at Save, matching the
+  row-based design's own "contextual warning under the dangerous option" rule) and `CascadeSection`
+  (cascade forward / just this plan). Both default to the settled system defaults. `ChoseStayLinked`/
+  `ChoseCascadeForward` read back the same way the existing three properties already do. This is still
+  the same deliberately-minimal, plain-WPF shape as the rest of the window (see its own header comment)
+  — not the fuller styled mockup design, and not yet the generalized "every question is its own row with
+  a live contextual warning" treatment applied to the *older* Item E/F sections too (they still work the
+  way they always did — a static forced-notice text, no live warning toggling).
+- **`EarmarkFormPanel`/`MainWindow` wiring, done:** `EarmarkFormPanel` now tracks `_loadedPlanStart` (the
+  plan's own literal `Start` as loaded — distinct from `_loadedActiveStart`, which tracks `ActiveStart`
+  for the isolated-starting-earmark's own unrelated bookkeeping) and passes it through the now two-
+  parameter `PatternSaved` (`Action<EarMarkPattern, DateOnly>`, was `Action<EarMarkPattern>`) so the
+  caller can supply `FinancePatternSaveConfirmation`'s `savedStart`. `MainWindow`'s own
+  `OnEarmarkPatternSaved` constructs the confirmation, runs it, and only then refreshes/switches tabs —
+  mirroring `OnExpensePatternSaved`'s own shape. `ConfirmImplicitChanges` for both save paths now shares
+  one method (`ShowEditingHistoryConfirmation`) rather than two near-identical inline lambdas, since the
+  window and the full set of answer fields worth reading back are the same either way.
+- **One default that was never explicitly settled, flagged rather than guessed silently:** "stay linked"
+  needed *some* default the same way cascading forward has one, and none was ever stated outright for it
+  specifically. Defaulted to **stay linked** — the only one of the two choices that's never destructive
+  on its own — as this implementation's own reasoned choice, not something ruled on. Worth a real answer,
+  not just an assumption that held.
+- **The `ManualEarmark` orphan cleanup, done and tested — 2026-08-17, broader than just "let it
+  break":** `PerformEarmarkSave` now computes, unconditionally and before any write, the *final*
+  post-save set of plans (`current` plus every other plan still standing after boundary resolution, using
+  each one's adjusted shape where one applies) and deletes any `ManualEarmark` under the goal's own
+  `finance_id` that no plan in that final set covers anymore (`RecurrenceRule.ActiveSpanContains`, the
+  same check `ManualEarmark.Create`/`ManualEarmarkRepository.GetAll` already use to validate one). Not
+  gated on `PlanTouchesChainBoundary` specifically — a **standalone plan with no chain neighbor at all**
+  can orphan a manual earmark by shrinking its own span just as easily, and `PlanTouchesChainBoundary`
+  never even fires for that case (nothing to ask about), so gating the cleanup on it would have missed
+  the more common scenario. This was worth building now rather than deferring further: left unguarded,
+  `ManualEarmarkRepository.GetAll()` re-validates every row on read and throws the moment one is no
+  longer covered — a crash waiting to happen the first time a real gap (or a plain shrink) left one
+  behind, not just quiet data untidiness. 4 new end-to-end tests: a chain gap actually deletes the
+  stranded earmark; a standalone plan's own shrink does too, with no question ever asked; staying linked
+  never deletes one that's still covered by the (possibly-adjusted) final set; absorbing a neighbor never
+  deletes one inside the absorbed range either, matching this document's own already-settled "absorption
+  orphans nothing" claim, now backed by a real `ManualEarmark`, not just `StartingAllocation`. **Suite:
+  433 green** (330 domain + 58 scenario + 45 app, up from 429), 0 warnings.
+- **The concrete-consequence wording itself, done and tested — 2026-08-17, closing the "still not built"
+  gap this section used to end on:** `ImplicitChangeConfirmationRequest` gained three plain-text fields —
+  `StayLinkedWarning`, `LetItBreakWarning`, `CascadeDescription` — computed by
+  `BuildEarmarkConfirmationRequest` *before* the popup ever opens (so both possible answers' own
+  consequences are known ahead of the user picking either one), via three new preview methods:
+  `DescribeStayLinkedConsequence` dry-runs the exact same `ExtendStart`/`ExtendUntil` calls
+  `PerformEarmarkSave` itself would make, returning `""` for a plain nudge (matching this document's own
+  "the default option is never the dangerous one" reasoning — nothing to warn about) or a real sentence
+  naming which segment(s) would be absorbed, their own date range, once the edit reaches that far.
+  `DescribeLetItBreakConsequence` names whether a gap or overlap forms with the relevant neighbor
+  (`RestructureFactory.SpansOverlap` decides which — reusing the same-day fix above rather than a second
+  overlap check) and how many manual earmarks a gap would strand, via a dry run of the same
+  `FindOrphanedManualEarmarkDates` helper the real deletion above uses, just against a *hypothetical*
+  final set instead of the real one. `DescribeCascadeConsequence` names the direct edit's own date range
+  and how far cascading would reach (which/how many later segments, through what date) — round 2 of the
+  small questions' own explicit requirement, shown as a plain always-visible description under the
+  Cascade row rather than a warning tied to one option, since neither cascade choice is destructive.
+  `EditingHistoryConfirmationWindow` wires all three in: a warning slot under *each* ChainBoundary radio
+  now (not just "let it break" — `StayLinkedWarningText` stays empty/hidden for a nudge, exactly the
+  "escalates with the consequence" case this document already called for), toggled live by the existing
+  shared `Checked` handler; `CascadeDescriptionText` always shown alongside the Cascade row. 6 new
+  end-to-end tests capturing the real `ImplicitChangeConfirmationRequest` and asserting on its own warning
+  text (not just the eventual saved state) — a nudge gets no warning; an absorb names the segment and its
+  range; a break names a gap with its own start/end dates; a break names an overlap instead of a gap when
+  the new span reaches into the neighbor without fully absorbing it; a break names the manual-earmark
+  count and date it would strand; a cascade names its own range and reach. **Suite: 439 green** (330
+  domain + 58 scenario + 51 app, up from 433), 0 warnings.
 
 **Confirmed: everything in this section applies equally to `EarMarkPattern` chains (Phase 2) —
 author, 2026-08-16.**
 
-## A fourth relationship, surfaced 2026-08-16 — now slotted immediately after Phase 1, combined with Phase 2
+## A fourth relationship, surfaced 2026-08-16, BUILT 2026-08-17 — now slotted immediately after Phase 1, combined with Phase 2
 
 **The author's own question: does a change to an `EarMarkPattern` ever cascade to the `EarMarkPattern`s
 funding the *same conceptual expense* on the other side of a `FinancialPattern` break — a different
@@ -241,8 +365,9 @@ fix provides ([24](24-app-layer-known-gaps.md)) is not considered enough on its 
 - **Absorption reaches as far as the new boundary goes, confirmed** — not limited to one hop. Settles
   the inference flagged earlier in this document.
 
-**Third round, SETTLED 2026-08-16 (three of four; the fourth needs a precise answer, not guessed —
-see the open item right below):**
+**Third round, SETTLED 2026-08-16, all four** (the fourth's own intro line here originally said "needs a
+precise answer, not guessed" — stale the moment the RESOLVED bullet right below it was added the same
+day; fixed 2026-08-17, found while re-grounding for this section's own implementation pass):
 - **The cross-boundary cascade is forward-only too**, same reasoning as Phase 1 — an edit to a later
   segment's own plan shouldn't reach back and rewrite an earlier, already-settled one.
 - **No picker for what gets carried forward — always whichever rate/schedule is current today.**
@@ -283,16 +408,49 @@ row-based confirmation shape itself.
   questions," the author's own preference is firmly the former risk over the latter — lean toward
   surfacing a question or a warning whenever a choice is real, even at the cost of more clicks.
 
+**What's built — 2026-08-17, closing out this section:** unified into the *same* `PlanChangeCanCascade`/
+`CascadeSection` mechanism Phase 2 already built, rather than a separate new question, since the two
+triggers turn out mutually exclusive by construction — `RunForPlan` only ever computes the cross-boundary
+target when this plan's own same-`finance_id` chain has *no* successor (`!hasSuccessor`), matching
+"forward-only" and the general "cascade through your own chain first, only then reach further" reading of
+that rule. Composes the two lookups this section named from the start:
+`BreakOffFactory.FindSuccessor(goal, allFinancialPatterns)` finds the far side's own `FinancialPattern`
+(if the underlying bill has broken off at all), then `RestructureFactory.FindCurrentPlan` on that side's
+own `EarMarkPatternsFor` finds its "current" plan — correctly `null`, and so correctly offering no
+cascade, whenever the far side has no plan yet or its own plans are a genuinely concurrent set (no special
+leniency, per round 2's own settled answer). No new domain mechanism needed for the cascade itself —
+`RestructureFactory.CascadeForward` already generalizes: it takes exactly one `goal` for whatever plans
+it's given, so pointing it at `[farSideCurrentPlan]` with the far side's OWN goal (not the one being
+edited) works correctly unchanged, since `EarMarkPattern.Create`'s own validation just needs the `FinanceId`
+and `goal` it's handed to actually match — which they now do, on purpose. The one real difference from the
+same-`finance_id` case: the result can't go through the existing `toSave` dictionary (keyed for the edited
+plan's own `finance_id` — a coincidental `Start` collision against an unrelated goal is a real, if
+unlikely, risk) — saved directly instead, in its own clearly-commented branch.
+`ImplicitChangeConfirmationRequest.CascadeDescription` now names which kind of cascade is on offer either
+way — "later segments" for the same-`finance_id` case, or the far side's own label ("this bill has since
+moved to a newer segment...") for the cross-boundary one — since `DescribeCascadeConsequence` takes both
+possible targets and only one is ever non-empty. 6 new end-to-end tests in a new file,
+`FinancePatternSaveConfirmationCrossBoundaryTests` (a genuinely different scenario — two `FinancialPattern`s,
+not one — matching this project's own existing split-by-scenario test-file convention): the cascade itself
+fires and applies; declining it leaves the far side untouched; no cascade is offered when the far side has
+no plan yet, or when its own plans are concurrent; a same-`finance_id` successor takes priority when both
+exist simultaneously (proving the mutual-exclusion reasoning above, not just asserting it); the description
+names the successor segment correctly. **Suite: 445 green** (330 domain + 58 scenario + 57 app, up from
+439), 0 warnings. Verified the app still launches clean (same baseline check as every other pass this
+session).
+
+**Still not built:** everything this document's own Phase 3 (below) already covers — this fourth
+relationship's own scope stops at the cascade mechanism itself, not planning/25's separately-parked
+consolidation-avoidance/paycheck-association threads.
+
 ## Not started
 
-- **Phase 2 — the same question for `EarMarkPattern` chains** (`RestructureFactory`, same `finance_id`,
-  no new identity) **combined with the fourth relationship above** (SETTLED 2026-08-16: designed
-  together, not as two separate passes) — one design pass covering both same-`finance_id`
-  `EarMarkPattern` chains and the cross-`FinancialPattern`-boundary cascade, next up once Phase 1's own
-  remaining loose ends (the multi-hop absorption inference, now confirmed; anything else that surfaces
-  while starting this) are closed out. A related gap is already on record (planning/21's own "editing an
-  early (superseded) segment has a real knock-on effect on its successor... the jar never restarts
-  across a cut" note) — worth reading again once this starts, not re-derived here.
 - **Phase 3 — resuming [25](25-editing-patterns-with-history.md)'s own Item F** ("avoid forcing
   consolidation" for a recurrence-shape change, and the paycheck-association/"loose association"
-  cascade) — deliberately parked until Phase 1 and the combined Phase 2 are settled.
+  cascade) — Phase 1 and the combined Phase 2 are now settled and built, so this was asked about
+  directly 2026-08-17; the author's answer was **"keep forcing consolidation for now"** — declined, not
+  approved, so this stays not-started. See planning/25's own Item F closing note for the full proposal,
+  left written up as-is for a future session. The paycheck-association thread is even earlier-stage than
+  that — still just "detection is a live date-range comparison, genuinely new machinery," never actually
+  proposed as a concrete mechanism — so it would need its own round of grounding before there's anything
+  to ask approval for, not just an implementation green light.

@@ -56,6 +56,18 @@ public partial class EarmarkFormPanel : UserControl
     // ActiveStart so a moved Start date doesn't leave the old entry orphaned.
     private DateOnly? _loadedActiveStart;
 
+    // The plan's own literal Start as it's actually saved today, or null for
+    // a brand-new plan (LoadForNewPattern/LoadForMaterialize — no existing
+    // row to speak of yet). Distinct from _loadedActiveStart above: that one
+    // tracks ActiveStart, for the isolated-starting-earmark's own key; this
+    // one tracks Start itself, since Start is one of the two fields
+    // FinancePatternSaveConfirmation's chain-boundary question can move, and
+    // PatternSaved needs the ORIGINAL value to find the right row — the
+    // proposed EarMarkPattern handed to PatternSaved only ever carries
+    // whatever Start the form currently shows, which is the NEW value once
+    // the user has changed it.
+    private DateOnly? _loadedPlanStart;
+
     // Guards against SavingsPlanRadio's XAML-declared IsChecked="True"
     // firing Checked synchronously mid-InitializeComponent, before this
     // form's other controls exist yet. Starts true and flips once, at the
@@ -86,8 +98,12 @@ public partial class EarmarkFormPanel : UserControl
     }
 
     // MainWindow persists whatever comes back through these — this panel
-    // owns no repository itself.
-    public Action<EarMarkPattern>? PatternSaved { get; set; }
+    // owns no repository itself. PatternSaved's second parameter is the
+    // plan's own Start as it's actually saved today (or the same as the
+    // proposed pattern's own Start for a brand-new plan) — see
+    // _loadedPlanStart's own field comment for why this can't just be read
+    // off the pattern parameter itself.
+    public Action<EarMarkPattern, DateOnly>? PatternSaved { get; set; }
     public Action<IReadOnlyList<ManualEarmark>, IReadOnlyList<(int FinanceId, DateOnly Date)>>? ManualEarmarksSaved { get; set; }
 
     // Computes (or returns the cached) live forecast on demand, so this form
@@ -152,6 +168,7 @@ public partial class EarmarkFormPanel : UserControl
         _startingEarmarkAmount = 0m;
         StartingEarmarkAmountTextBox.Text = string.Empty;
         _loadedActiveStart = null;
+        _loadedPlanStart = null;
 
         _suppressEvents = false;
         UpdateModeVisibility();
@@ -177,6 +194,7 @@ public partial class EarmarkFormPanel : UserControl
         _startingEarmarkAmount = GetStartingEarmarkAmount(existing);
         StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
         _loadedActiveStart = existing.DatePattern.ActiveStart;
+        _loadedPlanStart = existing.DatePattern.Start;
         RuleEditor.LoadFrom(existing.DatePattern);
 
         _suppressEvents = false;
@@ -205,6 +223,7 @@ public partial class EarmarkFormPanel : UserControl
         _startingEarmarkAmount = 0m;
         StartingEarmarkAmountTextBox.Text = string.Empty;
         _loadedActiveStart = null;
+        _loadedPlanStart = null;
 
         _suppressEvents = false;
         UpdateModeVisibility();
@@ -687,12 +706,19 @@ public partial class EarmarkFormPanel : UserControl
             ManualEarmarksSaved?.Invoke(savedEarmarks, deletedEarmarks);
         }
 
+        // savedStart has to be read before LoadForNewPattern below clears
+        // _loadedPlanStart — falls back to the proposed pattern's own Start
+        // when there was nothing loaded (a brand-new plan), matching
+        // FinancePatternSaveConfirmation's other constructor's own
+        // documented contract for that parameter.
+        var savedStart = _loadedPlanStart ?? pattern.DatePattern.Start;
+
         // The form clears itself automatically after a successful save,
         // before invoking the callback — same as ExpenseFormPanel.Save,
         // unconditional even though the callback's own navigation takes the
         // user elsewhere.
         LoadForNewPattern();
-        PatternSaved?.Invoke(pattern);
+        PatternSaved?.Invoke(pattern, savedStart);
     }
 
     /// <summary>[CALC] Ported from ManualEarmarkWindow verbatim (Merge/RequireFundsCover/WarnIfOverFree/BalancesOn below) — same validation policy, just reading the source fund from this panel's own goal picker instead of a separate JarComboBox, since the goal is already chosen at the top of this same form.</summary>

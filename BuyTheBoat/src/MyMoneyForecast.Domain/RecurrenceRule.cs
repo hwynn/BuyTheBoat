@@ -101,6 +101,20 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     });
 
+    /// <summary>[CALC] Returns a copy of this rule starting on the given date instead — Until, ActiveFrom, and everything else (including ExcludedDates) stay the same. Start plays no part in building the underlying recurrence pattern itself, so this is as safe a substitution as WithUntil's.</summary>
+    /// <param name="start">The new start date.</param>
+    public RecurrenceRule WithStart(DateOnly start) => Create(new RecurrenceRuleOptions
+    {
+        Frequency = Frequency,
+        Start = start,
+        Interval = Interval,
+        ByDay = ByDay,
+        ByMonthDay = ByMonthDay,
+        Until = Until,
+        ActiveFrom = ActiveFrom,
+        ExcludedDates = ExcludedDates,
+    });
+
     /// <summary>[CALC] Returns a copy of this rule with a new set of excluded dates (RFC 5545 EXDATE) — everything else, including the schedule itself, stays the same. Replaces the whole list rather than adding one at a time, so a caller removing a date doesn't need a separate method.</summary>
     /// <param name="excludedDates">The complete new list of dates to skip.</param>
     public RecurrenceRule WithExcludedDates(IReadOnlyList<DateOnly> excludedDates) => Create(new RecurrenceRuleOptions

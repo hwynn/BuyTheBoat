@@ -135,10 +135,19 @@ public class EarmarkFormLivePreviewTests : IDisposable
     //
     // 2. Far more significant: EarmarkFormPanel.SaveSavingsPlan builds a
     //    plain EarMarkPattern (same FinanceId+Start as whatever's already
-    //    saved) and MainWindow's own EarmarkForm.PatternSaved handler saves
-    //    it with nothing but `_earMarkPatterns.Save(pattern)` — no
-    //    FinancePatternSaveConfirmation, no Item B-G question, no "this has
-    //    history behind it" check of any kind. Every mechanism this session
+    //    saved) and this test saves it directly via _earMarkPatterns.Save,
+    //    the same way MainWindow's own EarmarkForm.PatternSaved handler did
+    //    until 2026-08-16. As of planning/27, that handler now goes through
+    //    FinancePatternSaveConfirmation's own EarMarkPattern-editing
+    //    constructor — but its two questions ("stay linked or break,"
+    //    "cascade forward or not") only fire for a plan that's part of a
+    //    chain (another EarMarkPattern sharing the same finance_id), and
+    //    even then they're about the CHAIN's own neighbors, not a Item-B-G-
+    //    style "this rewrites your own past" guard. For exactly the single,
+    //    unchained plan this test builds, the save path is still, today,
+    //    functionally identical to this test's own direct repository call —
+    //    no FinancePatternSaveConfirmation question, no "this has history
+    //    behind it" check of any kind, applies. Every mechanism this session
     //    (and planning/25 generally) built protects editing the GOAL
     //    (FinancialPattern) from silently rewriting the past. None of it
     //    applies to editing the SAVINGS PLAN (EarMarkPattern) funding that
