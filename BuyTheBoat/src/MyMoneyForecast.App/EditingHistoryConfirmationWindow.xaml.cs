@@ -60,20 +60,10 @@ public partial class EditingHistoryConfirmationWindow : Window
 
         DescriptionText.Text = request.Description;
 
+        // Forward-only (planning/28): a Critical edit always breaks off — this
+        // is now a plain announcement (AlterPastSection is a TextBlock), shown
+        // only when the edit reaches already-occurred history.
         AlterPastSection.Visibility = request.IsChangeCritical ? Visibility.Visible : Visibility.Collapsed;
-
-        // Text set before the visibility pass below runs — BreakOffRadio's
-        // own XAML-declared IsChecked="True" fires OnAlterPastChoiceChanged
-        // synchronously mid-InitializeComponent, before this .Text is set,
-        // the same WPF footgun ChainBoundarySection's own comment already
-        // documents. Calling UpdateAlterPastConsequenceVisibility again
-        // here, after the text is in place, is what makes the INITIAL
-        // state correct rather than relying on that early, premature firing.
-        AlterPastConsequenceText.Text = request.AlterPastConsequence;
-        UpdateAlterPastConsequenceVisibility();
-
-        NarrowingLimitationWarningText.Text = request.NarrowingLimitationWarning;
-        NarrowingLimitationWarningText.Visibility = string.IsNullOrEmpty(request.NarrowingLimitationWarning) ? Visibility.Collapsed : Visibility.Visible;
 
         // Forced consolidation is announced, not asked — Item F's own
         // ruling: there's no real choice once the recurrence shape itself
@@ -87,13 +77,6 @@ public partial class EditingHistoryConfirmationWindow : Window
             : Visibility.Collapsed;
         ConsolidationCaveatText.Text = request.ConsolidationCaveat;
         ConsolidationCaveatText.Visibility = string.IsNullOrEmpty(request.ConsolidationCaveat) ? Visibility.Collapsed : Visibility.Visible;
-
-        // Shown regardless of which Consolidation radio ends up picked —
-        // simplest correct behavior for a deliberately minimal popup; the
-        // caller only reads ChoseScalePatterns when it's actually relevant.
-        ScaleCheckBox.Visibility = offersConsolidationChoice && request.IsAmountOnlyChange
-            ? Visibility.Visible
-            : Visibility.Collapsed;
 
         SourceChangeWarningText.Text = request.SourceChangeWarning;
         SourceChangeWarningText.Visibility = string.IsNullOrEmpty(request.SourceChangeWarning) ? Visibility.Collapsed : Visibility.Visible;
@@ -128,20 +111,6 @@ public partial class EditingHistoryConfirmationWindow : Window
         PacedBillsCascadeDescriptionText.Visibility = string.IsNullOrEmpty(request.PacedBillsCascadeDescription) ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    // Same "warning follows the currently-selected option" reasoning as
-    // OnChainBoundaryChoiceChanged just below, for Item E's own two radios
-    // instead — AlterPastConsequenceText only shows while AlterPastRadio is
-    // the one currently checked, since BreakOffRadio (the default) never
-    // orphans anything on its own.
-    private void OnAlterPastChoiceChanged(object sender, RoutedEventArgs e) => UpdateAlterPastConsequenceVisibility();
-
-    private void UpdateAlterPastConsequenceVisibility()
-    {
-        AlterPastConsequenceText.Visibility = AlterPastRadio.IsChecked == true && !string.IsNullOrEmpty(AlterPastConsequenceText.Text)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-    }
-
     // Keeps each warning's own visibility live as the user picks between the
     // two ChainBoundary radios — both radios share this one handler (Checked
     // fires on whichever one becomes checked, including the one WPF checks
@@ -166,9 +135,7 @@ public partial class EditingHistoryConfirmationWindow : Window
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
-        ChooseAlterPast = AlterPastRadio.IsChecked == true;
         ChooseConsolidation = ConsolidateRadio.IsChecked == true;
-        ChoseScalePatterns = ScaleCheckBox.IsChecked == true;
         ChoseStayLinked = StayLinkedRadio.IsChecked == true;
         ChoseCascadeForward = CascadeForwardRadio.IsChecked == true;
         ChoseCascadeTrivialFields = CascadeTrivialFieldsRadio.IsChecked == true;

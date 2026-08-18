@@ -12,34 +12,16 @@
         </StackPanel>
 
         <StackPanel>
-            <!-- Item E's own choice — visible only when IsChangeCritical.
-                 AlterPastConsequenceText names the SPECIFIC savings-plan
-                 consequence (absorbed balance, deleted manual earmarks) of
-                 the "apply everywhere" option, per planning/25's own "show
-                 the consequence, not just a yes/no" requirement — shown
-                 only while that option is the one currently selected,
-                 mirroring ChainBoundarySection's own "warning escalates
-                 with the currently-selected option" pattern. BreakOffRadio,
-                 the default, has nothing under it: breaking off never
-                 orphans anything on its own (a fresh successor, nothing
-                 deleted). -->
-            <StackPanel x:Name="AlterPastSection" Margin="0,0,0,14">
-                <TextBlock Text="How should this apply?" FontWeight="Bold" Margin="0,0,0,6"/>
-                <RadioButton x:Name="BreakOffRadio" GroupName="AlterPast" IsChecked="True" Margin="0,0,0,4"
-                             Content="Only from today forward — keep past history as it was" Checked="OnAlterPastChoiceChanged"/>
-                <RadioButton x:Name="AlterPastRadio" GroupName="AlterPast"
-                             Content="Apply it everywhere, including past transactions" Checked="OnAlterPastChoiceChanged"/>
-                <TextBlock x:Name="AlterPastConsequenceText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="20,4,0,0"/>
-            </StackPanel>
-
-            <!-- Item E's own narrowing limitation — announced, not asked;
-                 visible only when NarrowingLimitationWarning is non-empty
-                 (a retroactive correction whose own new boundary couldn't
-                 be applied to the savings plan for a known reason). Built
-                 2026-08-17 to replace what used to be total silence here —
-                 see FinancePatternSaveConfirmation.NarrowingLimitationWarning's
-                 own field comment. -->
-            <TextBlock x:Name="NarrowingLimitationWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,14"/>
+            <!-- Forward-only (planning/28, 2026-08-18): a change reaching
+                 already-occurred history always breaks off from today — there
+                 is no "apply to the past" choice anymore. Announced, not
+                 asked, to satisfy planning/25 Item B ("a change touching an
+                 on-or-before-as-of-date occurrence must never be silent").
+                 Visible only when IsChangeCritical. Kept as a named control
+                 (AlterPastSection) so the code-behind's own visibility line
+                 is unchanged. -->
+            <TextBlock x:Name="AlterPastSection" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,0,0,14"
+                       Text="This reaches back to history that's already happened, so it will start a new segment from today — your past records stay exactly as they were."/>
 
             <!-- Item F's own ask — visible only when there's a real choice
                  (more than one savings plan, and the schedule/start date
@@ -56,8 +38,6 @@
                 <RadioButton x:Name="KeepSeparateRadio" GroupName="Consolidation" IsChecked="True" Margin="0,0,0,4"
                              Content="Keep them separate"/>
                 <RadioButton x:Name="ConsolidateRadio" GroupName="Consolidation" Content="Combine them into one"/>
-                <CheckBox x:Name="ScaleCheckBox" Margin="20,6,0,0"
-                          Content="Also update each plan's amount to match the new total"/>
                 <TextBlock x:Name="ConsolidationCaveatText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,6,0,0"/>
             </StackPanel>
 

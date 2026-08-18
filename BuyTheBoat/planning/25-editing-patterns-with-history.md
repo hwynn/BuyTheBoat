@@ -123,7 +123,15 @@ date, the user must be given a confirmation before it happens — never silent. 
 downward changes"* — landed bundled with item E, exactly as that doc's own deferred note guessed it
 would.
 
-## Item C — The mechanism · SETTLED 2026-08-11
+## Item C — The mechanism · SETTLED 2026-08-11 · RETROACTIVE HALF SUPERSEDED 2026-08-18
+
+> **SUPERSEDED 2026-08-18 (author), see [planning/28's forward-only ruling](28-refactoring-the-save-confirmation.md#the-forward-only-ruling--settled-2026-08-18-author).**
+> The **"correct it everywhere" (retroactive) option below is dropped.** Changes cascade forward only;
+> to affect earlier history the user opens the *earliest segment* they want changed. A Critical edit
+> that touches already-occurred history now **always** breaks off from today — the "how should this
+> apply?" choice is removed. Item C's *break-off* half stands; its retroactive half, Item E's whole
+> narrowing mechanism, and the narrowing-before-AsOfDate crash risk all go with this ruling. Read
+> Item C/E below as historical for the retroactive path only.
 
 **This is item 4 (`BreakOffFactory.BreakOff`), reused almost as-is — not a new factory.** Confirmed: a
 `FinancialPattern` edit that would violate `1.2.3.10.a5` always needs a genuinely new `finance_id`
