@@ -1,0 +1,40 @@
+using MyMoneyForecast.Domain;
+
+namespace MyMoneyForecast.App.Tests;
+
+// Builds the ConfirmationOutcome a fake popup hands back, named in terms of the
+// same choices the old flat answer used — so a test double reads the way it
+// used to (Confirm.Proceed().ChoseToRepaceBills()) rather than in raw row-id /
+// option-index pairs. Each setter fills one ChoiceRow's index the way the real
+// popup would; a choice left unset stays at that row's own safe default (the
+// wrapper treats a row absent from the outcome as its default), so
+// Confirm.Proceed() alone means "accept every default."
+internal static class Confirm
+{
+    public static ConfirmationOutcome Proceed() => new() { Proceed = true };
+    public static ConfirmationOutcome Cancel() => new() { Proceed = false };
+
+    // paced-bills cascade — [0] update them (also the popup's own pre-selection),
+    // [1] leave them.
+    public static ConfirmationOutcome ChoseToRepaceBills(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.PacedBillsCascade, 0);
+    public static ConfirmationOutcome ChoseToLeavePacedBills(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.PacedBillsCascade, 1);
+
+    // consolidation — [0] keep separate, [1] combine. The wrapper doesn't read
+    // this today (a break-off always consolidates), but a test can still state
+    // the user's pick.
+    public static ConfirmationOutcome ChoseConsolidation(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.Consolidation, 1);
+
+    // chain-boundary — [0] stay linked, [1] let it break.
+    public static ConfirmationOutcome ChoseToLetChainBreak(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.ChainBoundary, 1);
+
+    // cascade — [0] apply forward, [1] only this segment.
+    public static ConfirmationOutcome ChoseJustThisSegment(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.Cascade, 1);
+
+    // trivial-fields cascade — [0] only this segment, [1] apply forward.
+    public static ConfirmationOutcome ChoseCascadeTrivialFields(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.TrivialFieldsCascade, 1);
+
+    public static ConfirmationOutcome WithPlanShape(this ConfirmationOutcome o, EarMarkPattern plan) => o with { ChosenPlanShape = plan };
+
+    private static ConfirmationOutcome At(this ConfirmationOutcome o, string rowId, int index) =>
+        o with { ChosenOptionIndex = new Dictionary<string, int>(o.ChosenOptionIndex) { [rowId] = index } };
+}

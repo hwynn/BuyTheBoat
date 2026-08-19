@@ -128,12 +128,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
             // value the test just hands back blind.
             request.PlanShapeCandidates.Count.ShouldBeGreaterThan(1);
             var sameSchedule = request.PlanShapeCandidates.Single(c => c.Label == "Keep the same schedule");
-            return new ImplicitChangeConfirmationAnswer
-            {
-                Proceed = true,
-                ChooseAlterPast = false,
-                ChosenPlanShape = sameSchedule.Plan.Plan,
-            };
+            return Confirm.Proceed().WithPlanShape(sameSchedule.Plan.Plan);
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -287,7 +282,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         {
             var recommended = request.PlanShapeCandidates.Single(c => c.Label == "Recommended").Plan.Plan;
             recommendedPreview = recommended;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChooseAlterPast = false, ChosenPlanShape = recommended };
+            return Confirm.Proceed().WithPlanShape(recommended);
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -348,17 +343,11 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             var sameSchedule = request.PlanShapeCandidates.Single(c => c.Label == "Keep the same schedule");
-            return new ImplicitChangeConfirmationAnswer
-            {
-                Proceed = true,
-                ChooseAlterPast = false,
-                // Amount-only change, so ConsolidationNeeded is naturally
-                // false (that row is meant to be feasible to keep separate)
-                // — has to be chosen explicitly to reach PerformMultiPlanBreakOff
-                // at all, same as any other multi-plan break-off.
-                ChooseConsolidation = true,
-                ChosenPlanShape = sameSchedule.Plan.Plan,
-            };
+            // Amount-only change, so ConsolidationNeeded is naturally
+            // false (that row is meant to be feasible to keep separate)
+            // — has to be chosen explicitly to reach PerformMultiPlanBreakOff
+            // at all, same as any other multi-plan break-off.
+            return Confirm.Proceed().ChoseConsolidation().WithPlanShape(sameSchedule.Plan.Plan);
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -397,7 +386,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             capturedRequest = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChooseAlterPast = false, ChooseConsolidation = true };
+            return Confirm.Proceed().ChoseConsolidation();
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -511,7 +500,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     // different, still-unbuilt mechanism (each plan would need its own
     // successor, not one combined fresh one), so nothing was saved at all
     // — not even the FinancialPattern itself — whenever the user picked
-    // (or, via DefaultConfirmationAnswer, defaulted to) "keep separate."
+    // (or, via DefaultOutcome, defaulted to) "keep separate."
     // Found and fixed the same day, once that silence turned out to be a
     // real gap rather than a safe placeholder: a Save button that silently
     // does nothing is worse than one that combines plans the user didn't
@@ -687,8 +676,8 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         confirmation.ConfirmImplicitChanges = request =>
         {
-            request.IsChangeCritical.ShouldBeTrue(); // the request itself is built correctly
-            return new ImplicitChangeConfirmationAnswer { Proceed = false };
+            request.HasRow(ConfirmationRowIds.AlterPast).ShouldBeTrue(); // the request itself is built correctly
+            return Confirm.Cancel();
         };
 
         var proceeded = confirmation.Run();
@@ -716,8 +705,8 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         confirmation.ConfirmImplicitChanges = request =>
         {
-            capturedCaveat = request.ConsolidationCaveat;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true };
+            capturedCaveat = request.AnnouncementText(ConfirmationRowIds.ConsolidationCaveat);
+            return Confirm.Proceed();
         };
 
         confirmation.Run().ShouldBeTrue();

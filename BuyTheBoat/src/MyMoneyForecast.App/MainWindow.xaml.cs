@@ -1271,22 +1271,12 @@ public partial class MainWindow : Window
         return true;
     }
 
-    /// <summary>[STEP] Shows EditingHistoryConfirmationWindow and maps its result back into an answer — shared by both the Expense and Earmark save paths' own ConfirmImplicitChanges wiring, since the window (and the full set of fields worth reading back) is the same either way; each request's own fields decide which sections the window actually shows.</summary>
-    private ImplicitChangeConfirmationAnswer ShowEditingHistoryConfirmation(ImplicitChangeConfirmationRequest request)
+    /// <summary>[STEP] Shows EditingHistoryConfirmationWindow and returns the raw selections it reports — shared by both the Expense and Earmark save paths' own ConfirmImplicitChanges wiring, since the window is the same either way; each request's own rows decide what it actually shows, and the wrapper reads each selection back into a decision.</summary>
+    private ConfirmationOutcome ShowEditingHistoryConfirmation(ImplicitChangeConfirmationRequest request)
     {
         var confirmWindow = new EditingHistoryConfirmationWindow(request) { Owner = this };
         var proceed = confirmWindow.ShowDialog() == true;
-        return new ImplicitChangeConfirmationAnswer
-        {
-            Proceed = proceed,
-            ChooseAlterPast = confirmWindow.ChooseAlterPast,
-            ChooseConsolidation = confirmWindow.ChooseConsolidation,
-            ChoseScalePatterns = confirmWindow.ChoseScalePatterns,
-            ChoseStayLinked = confirmWindow.ChoseStayLinked,
-            ChoseCascadeForward = confirmWindow.ChoseCascadeForward,
-            ChoseCascadeTrivialFields = confirmWindow.ChoseCascadeTrivialFields,
-            ChoseToRepaceBills = confirmWindow.ChoseToRepaceBills,
-        };
+        return confirmWindow.ToOutcome(proceed);
     }
 
     /// <summary>[UI] The Concerning popup's own minimal, real form (2026-08-17) — a plain MessageBox naming the plan health concern FinancePatternSaveConfirmation.AskForSuggestions already worked out, matching this project's existing acknowledge-only MessageBox convention (see e.g. OnDeleteAccountClick's own "can't delete" case) rather than a bespoke Window. Deliberately not the elaborate strategy-picker planning/25 describes and defers — see ShowSuggestion's own field comment on FinancePatternSaveConfirmation for why.</summary>

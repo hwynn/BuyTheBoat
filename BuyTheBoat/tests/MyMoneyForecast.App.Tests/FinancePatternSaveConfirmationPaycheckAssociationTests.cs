@@ -46,9 +46,9 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         string? capturedDescription = null;
         confirmation.ConfirmImplicitChanges = request =>
         {
-            request.PacedBillsCanCascade.ShouldBeTrue();
-            capturedDescription = request.PacedBillsCascadeDescription;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true }; // ChoseToRepaceBills defaults false
+            request.HasRow(ConfirmationRowIds.PacedBillsCascade).ShouldBeTrue();
+            capturedDescription = request.OptionConsequence(ConfirmationRowIds.PacedBillsCascade, 0);
+            return Confirm.Proceed(); // ChoseToRepaceBills defaults false
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -71,7 +71,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var confirmation = Confirmation(1, editedIncome);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseToRepaceBills = true };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToRepaceBills();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -93,7 +93,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var confirmation = Confirmation(1, editedIncome);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseToRepaceBills = true };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToRepaceBills();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -116,8 +116,8 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         string? capturedDescription = null;
         confirmation.ConfirmImplicitChanges = request =>
         {
-            capturedDescription = request.PacedBillsCascadeDescription;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseToRepaceBills = true };
+            capturedDescription = request.OptionConsequence(ConfirmationRowIds.PacedBillsCascade, 0);
+            return Confirm.Proceed().ChoseToRepaceBills();
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -143,7 +143,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var confirmation = Confirmation(1, editedIncome);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true }; // ChoseToRepaceBills defaults false
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed(); // ChoseToRepaceBills defaults false
 
         confirmation.Run().ShouldBeTrue();
 

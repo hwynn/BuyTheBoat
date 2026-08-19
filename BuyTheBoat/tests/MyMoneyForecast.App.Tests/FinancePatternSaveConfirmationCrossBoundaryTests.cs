@@ -42,7 +42,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
 
         var editedPlan = Plan(original, -1_550m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
         var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.Start, original);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseCascadeForward = true };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -63,7 +63,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
 
         var editedPlan = Plan(original, -1_550m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
         var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.Start, original);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseCascadeForward = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseJustThisSegment();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -155,14 +155,14 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true };
+            return Confirm.Proceed();
         };
 
         confirmation.Run().ShouldBeTrue();
 
         captured.ShouldNotBeNull();
-        captured.CascadeDescription.ShouldContain("newer segment");
-        captured.CascadeDescription.ShouldContain("Dec 31, 2025"); // how far the successor's own plan reaches
+        captured.OptionConsequence(ConfirmationRowIds.Cascade, 0).ShouldContain("newer segment");
+        captured.OptionConsequence(ConfirmationRowIds.Cascade, 0).ShouldContain("Dec 31, 2025"); // how far the successor's own plan reaches
     }
 
     // ---- shared scenario-building helpers ----------------------------------

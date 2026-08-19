@@ -88,7 +88,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
 
         var editedPlan = Bill(2, "Rent", -1_800m, new DateOnly(2025, 6, 1), new DateOnly(2025, 12, 31));
         var confirmation = Confirmation(2, editedPlan);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseStayLinked = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToLetChainBreak();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -131,12 +131,12 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         var chainQuestionAsked = false;
         confirmation.ConfirmImplicitChanges = request =>
         {
-            if (request.TouchesChainBoundary)
+            if (request.HasRow(ConfirmationRowIds.ChainBoundary))
             {
                 chainQuestionAsked = true;
             }
 
-            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChooseAlterPast = true };
+            return Confirm.Proceed();
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -201,7 +201,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
 
         var editedPlan = Bill(1, "Rent", -1_650m, new DateOnly(2025, 7, 1), new DateOnly(2025, 9, 30));
         var confirmation = Confirmation(1, editedPlan);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseCascadeForward = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseJustThisSegment();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -254,7 +254,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
             DatePattern = Monthly(new DateOnly(2025, 7, 1), new DateOnly(2025, 9, 30)),
         });
         var confirmation = Confirmation(1, editedPlan);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseCascadeTrivialFields = true };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseCascadeTrivialFields();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -277,8 +277,8 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         string? capturedWarning = null;
         confirmation.ConfirmImplicitChanges = request =>
         {
-            capturedWarning = request.SourceChangeWarning;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true };
+            capturedWarning = request.AnnouncementText(ConfirmationRowIds.SourceChange);
+            return Confirm.Proceed();
         };
 
         confirmation.Run().ShouldBeTrue();
@@ -298,7 +298,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
 
         var editedPlan = Bill(2, "Rent", -1_800m, new DateOnly(2025, 6, 1), new DateOnly(2025, 12, 31));
         var confirmation = Confirmation(2, editedPlan);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Cancel();
 
         confirmation.Run().ShouldBeFalse();
 

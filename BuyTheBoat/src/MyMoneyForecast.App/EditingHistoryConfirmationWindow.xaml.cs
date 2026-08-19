@@ -1,52 +1,34 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace MyMoneyForecast.App;
 
-// planning/28 Thread 2: a dumb renderer over request.Rows. Each row is one
-// question or announcement FinancePatternSaveConfirmation decided to raise on a
-// single save; this window draws them top-to-bottom and reads the choices back.
-// It never decides which rows exist, what they mean, or that one answer might
-// unlock another — the wrapper owns all of that. Still deliberately the minimal
-// plain-WPF look (planning/mockups/editing-history-confirmation-mockups.html is
-// the eventual styled target, not this).
+// planning/28: a dumb renderer over request.Rows. Each row is one question or
+// announcement FinancePatternSaveConfirmation decided to raise on a single
+// save; this window draws them top-to-bottom and reports the raw selections
+// back as a ConfirmationOutcome (one option index per ChoiceRow it drew). It
+// never decides which rows exist, what they mean, or that one answer might
+// unlock another — and, with the row-keyed outcome, it no longer even knows
+// what a selection means: the wrapper reads each index back into a decision.
+// Still deliberately the minimal plain-WPF look (the styled mockup is the
+// eventual target, not this).
 //
 // Built in code-behind rather than an ItemsControl + DataTemplates on purpose:
 // the ConfirmationRow records are immutable (no mutable SelectedIndex to bind
 // two-way against), each ChoiceRow needs its own independent radio group, and
 // the selected-option consequence footer has to update live — all a few lines
 // here, but each needs its own per-row viewmodel + converters through pure XAML
-// binding. Nothing about the domain lives in this file regardless of which way
-// it's drawn.
-//
-// The answer it hands back is still the flat ImplicitChangeConfirmationAnswer,
-// via the properties MainWindow reads after ShowDialog — step 2 only changes
-// how the window is built, not the answer's shape, so the whole suite stays
-// green. planning/28's step 3 makes the answer row-keyed and drops the two
-// always-false properties below (ChooseAlterPast / ChoseScalePatterns — no row
-// feeds them since forward-only retired the alter-past choice and the scale
-// rider; kept only so MainWindow's own read still compiles until then).
+// binding. Nothing about the domain lives in this file regardless of how it's
+// drawn.
 public partial class EditingHistoryConfirmationWindow : Window
 {
-    // Read by MainWindow after ShowDialog() returns true, in the same shape as
-    // before this window became a row renderer. Each stays at its safe default
-    // whenever its row wasn't shown (OnSaveClick maps an absent row to the
-    // default), matching how the old fixed sections' own defaulted radios
-    // behaved when collapsed.
-    public bool ChooseAlterPast { get; private set; }
-    public bool ChooseConsolidation { get; private set; }
-    public bool ChoseScalePatterns { get; private set; }
-    public bool ChoseStayLinked { get; private set; } = true;
-    public bool ChoseCascadeForward { get; private set; } = true;
-    public bool ChoseCascadeTrivialFields { get; private set; }
-    public bool ChoseToRepaceBills { get; private set; }
-
     // One entry per ChoiceRow drawn — its radios (in option order), its options
     // (for the consequence text), and the footer TextBlock under them. Keyed by
-    // row Id so OnSaveClick can read each selection back and the one shared
+    // row Id so ToOutcome can report each selection and the one shared
     // OnOptionChecked handler can refresh the right footer.
     private sealed record ChoiceRowControls(
         IReadOnlyList<RadioButton> Radios, IReadOnlyList<ChoiceOption> Options, TextBlock Footer);
@@ -63,6 +45,14 @@ public partial class EditingHistoryConfirmationWindow : Window
             RowsPanel.Children.Add(BuildRowControl(row));
         }
     }
+
+    /// <summary>[CALC] The raw selections to hand the wrapper — one option index per ChoiceRow drawn, keyed by row Id. Call after ShowDialog returns, passing its result as proceed. No CandidatePickerRow/CheckboxRiderRow is drawn yet, so ChosenPlanShape and Riders stay empty.</summary>
+    /// <param name="proceed">The dialog result — false when the user cancelled.</param>
+    public ConfirmationOutcome ToOutcome(bool proceed) => new()
+    {
+        Proceed = proceed,
+        ChosenOptionIndex = _choiceRows.ToDictionary(entry => entry.Key, entry => SelectedIndex(entry.Value.Radios)),
+    };
 
     /// <summary>[CALC] Builds the one control that renders a single row, dispatched on its kind.</summary>
     private UIElement BuildRowControl(ConfirmationRow row) => row switch
@@ -175,21 +165,7 @@ public partial class EditingHistoryConfirmationWindow : Window
         return -1;
     }
 
-    // Maps each row's selection back to the flat answer MainWindow reads. An
-    // absent row yields -1, which lands on the safe default — the same value the
-    // old window's own defaulted-and-collapsed radios produced.
-    private void OnSaveClick(object sender, RoutedEventArgs e)
-    {
-        ChooseConsolidation = SelectedOption(ConfirmationRowIds.Consolidation) == 1;       // 1 = combine
-        ChoseStayLinked = SelectedOption(ConfirmationRowIds.ChainBoundary) != 1;           // 0 = keep linked (default)
-        ChoseCascadeForward = SelectedOption(ConfirmationRowIds.Cascade) != 1;             // 0 = cascade forward (default)
-        ChoseCascadeTrivialFields = SelectedOption(ConfirmationRowIds.TrivialFieldsCascade) == 1; // 1 = cascade forward
-        ChoseToRepaceBills = SelectedOption(ConfirmationRowIds.PacedBillsCascade) == 0;    // 0 = update them
-        DialogResult = true;
-    }
+    private void OnSaveClick(object sender, RoutedEventArgs e) => DialogResult = true;
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
-
-    private int SelectedOption(string rowId) =>
-        _choiceRows.TryGetValue(rowId, out var controls) ? SelectedIndex(controls.Radios) : -1;
 }

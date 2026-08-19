@@ -1,3 +1,5 @@
+using MyMoneyForecast.Domain;
+
 namespace MyMoneyForecast.App;
 
 // A confirmation row: one question, or one announcement, that the
@@ -89,4 +91,20 @@ public static class ConfirmationRowIds
     public const string Cascade = "cascade";
     public const string TrivialFieldsCascade = "trivial-fields-cascade";
     public const string PacedBillsCascade = "paced-bills-cascade";
+}
+
+// The user's answer, as the raw selections the popup reports — one option
+// index per ChoiceRow it drew, keyed by row Id, plus any picked plan shape and
+// checkbox riders. The popup doesn't interpret these (it never knew what a row
+// meant); the wrapper (FinancePatternSaveConfirmation.Run/RunForPlan) reads
+// each index back into a decision. A row the popup never drew is simply absent
+// from the map — the wrapper treats absent as that row's own safe default, so
+// a headless caller (or a test) can return a bare Proceed and still get the
+// settled defaults for every question.
+public sealed record ConfirmationOutcome
+{
+    public required bool Proceed { get; init; }
+    public IReadOnlyDictionary<string, int> ChosenOptionIndex { get; init; } = new Dictionary<string, int>();
+    public IReadOnlyDictionary<string, bool> Riders { get; init; } = new Dictionary<string, bool>();
+    public EarMarkPattern? ChosenPlanShape { get; init; }
 }

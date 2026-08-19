@@ -77,7 +77,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
         var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseStayLinked = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToLetChainBreak();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -144,7 +144,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         var editedPlan = Plan(goal, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
         var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseCascadeForward = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseJustThisSegment();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -283,7 +283,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         // stranding the Jun 15 earmark with nothing covering it.
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 30));
         var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseStayLinked = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToLetChainBreak();
 
         confirmation.Run().ShouldBeTrue();
 
@@ -391,13 +391,13 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true };
+            return Confirm.Proceed();
         };
 
         confirmation.Run().ShouldBeTrue();
 
         captured.ShouldNotBeNull();
-        captured.StayLinkedWarning.ShouldBe("");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 0).ShouldBe("");
     }
 
     [Fact]
@@ -416,15 +416,15 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true };
+            return Confirm.Proceed();
         };
 
         confirmation.Run().ShouldBeTrue();
 
         captured.ShouldNotBeNull();
-        captured.StayLinkedWarning.ShouldContain("Apr 1, 2025");
-        captured.StayLinkedWarning.ShouldContain("Jun 30, 2025");
-        captured.StayLinkedWarning.ShouldContain("delete");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 0).ShouldContain("Apr 1, 2025");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 0).ShouldContain("Jun 30, 2025");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 0).ShouldContain("delete");
     }
 
     [Fact]
@@ -443,15 +443,15 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseStayLinked = false };
+            return Confirm.Proceed().ChoseToLetChainBreak();
         };
 
         confirmation.Run().ShouldBeTrue();
 
         captured.ShouldNotBeNull();
-        captured.LetItBreakWarning.ShouldContain("gap");
-        captured.LetItBreakWarning.ShouldContain("May 1, 2025");
-        captured.LetItBreakWarning.ShouldContain("Jun 30, 2025");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 1).ShouldContain("gap");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 1).ShouldContain("May 1, 2025");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 1).ShouldContain("Jun 30, 2025");
     }
 
     [Fact]
@@ -473,14 +473,14 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseStayLinked = false };
+            return Confirm.Proceed().ChoseToLetChainBreak();
         };
 
         confirmation.Run().ShouldBeTrue();
 
         captured.ShouldNotBeNull();
-        captured.LetItBreakWarning.ShouldContain("overlap");
-        captured.LetItBreakWarning.ShouldNotContain("gap");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 1).ShouldContain("overlap");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 1).ShouldNotContain("gap");
     }
 
     [Fact]
@@ -500,14 +500,14 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true, ChoseStayLinked = false };
+            return Confirm.Proceed().ChoseToLetChainBreak();
         };
 
         confirmation.Run().ShouldBeTrue();
 
         captured.ShouldNotBeNull();
-        captured.LetItBreakWarning.ShouldContain("1 manual earmark");
-        captured.LetItBreakWarning.ShouldContain("Jun 15, 2025");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 1).ShouldContain("1 manual earmark");
+        captured.OptionConsequence(ConfirmationRowIds.ChainBoundary, 1).ShouldContain("Jun 15, 2025");
     }
 
     [Fact]
@@ -526,15 +526,15 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
-            return new ImplicitChangeConfirmationAnswer { Proceed = true };
+            return Confirm.Proceed();
         };
 
         confirmation.Run().ShouldBeTrue();
 
         captured.ShouldNotBeNull();
-        captured.CascadeDescription.ShouldContain("Jan 1, 2025");
-        captured.CascadeDescription.ShouldContain("Mar 31, 2025");
-        captured.CascadeDescription.ShouldContain("Jun 30, 2025"); // how far the cascade reaches
+        captured.OptionConsequence(ConfirmationRowIds.Cascade, 0).ShouldContain("Jan 1, 2025");
+        captured.OptionConsequence(ConfirmationRowIds.Cascade, 0).ShouldContain("Mar 31, 2025");
+        captured.OptionConsequence(ConfirmationRowIds.Cascade, 0).ShouldContain("Jun 30, 2025"); // how far the cascade reaches
     }
 
     [Fact]
@@ -549,7 +549,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
         var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
-        confirmation.ConfirmImplicitChanges = _ => new ImplicitChangeConfirmationAnswer { Proceed = false };
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Cancel();
 
         confirmation.Run().ShouldBeFalse();
 

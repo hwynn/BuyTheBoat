@@ -27,7 +27,7 @@ namespace MyMoneyForecast.App;
 // on direct author request to make sure nothing found got lost to low
 // context before it could be written down. When ConfirmImplicitChanges
 // isn't wired at all (most tests, and any host that hasn't connected a real
-// popup), DefaultConfirmationAnswer supplies the same safest,
+// popup), DefaultOutcome supplies the same safest,
 // least-destructive answers the old placeholder logic used to hardcode.
 //
 // PerformSave/PerformImplicitEarmarkChanges are real for: a break-off with 0
@@ -549,10 +549,10 @@ public sealed class FinancePatternSaveConfirmation
     // NavigateToEarmarkForm: this class builds the request and applies the
     // answer, but never constructs a Window itself, so it stays WPF-free —
     // MainWindow is the one that actually shows something. Null (nothing
-    // wired up — most tests) falls back to DefaultConfirmationAnswer's own
+    // wired up — most tests) falls back to DefaultOutcome's own
     // safest, least-destructive answer to every question at once, so Run()
     // still completes end to end without a live UI.
-    public Func<ImplicitChangeConfirmationRequest, ImplicitChangeConfirmationAnswer>? ConfirmImplicitChanges { get; set; }
+    public Func<ImplicitChangeConfirmationRequest, ConfirmationOutcome>? ConfirmImplicitChanges { get; set; }
 
     /// <summary>[STEP] The single entry point: works out whether anything needs asking, shows the confirmation if so, saves the FinancialPattern, performs whatever implicit EarMarkPattern/EarMarkEvent changes were decided, and (on Save and Plan) calls NavigateToEarmarkForm. See the class's own STATUS note for exactly which of PerformImplicitEarmarkChanges' branches are real versus still TODO.</summary>
     /// <returns>False if the user cancelled out of the confirmation — nothing was saved, exactly as if Save had never been clicked. True otherwise, including every case where nothing needed asking at all.</returns>
@@ -614,17 +614,17 @@ public sealed class FinancePatternSaveConfirmation
         // TODOs). One combined pass either way, per the note above.
         if (IsChangeCritical || HasMultipleEarmarkPatterns || TouchesChainBoundary || ChangeCanCascade || TrivialFieldsCanCascade || !string.IsNullOrEmpty(SourceChangeWarning) || PacedBillsCanCascade)
         {
-            var answer = ConfirmImplicitChanges?.Invoke(BuildConfirmationRequest()) ?? DefaultConfirmationAnswer();
-            if (!answer.Proceed)
+            var outcome = ConfirmImplicitChanges?.Invoke(BuildConfirmationRequest()) ?? DefaultOutcome();
+            if (!outcome.Proceed)
             {
                 return false;
             }
 
-            ChosenPlanShape = answer.ChosenPlanShape;
-            UserChoseStayLinked = answer.ChoseStayLinked;
-            UserChoseCascadeForward = answer.ChoseCascadeForward;
-            UserChoseCascadeTrivialFields = answer.ChoseCascadeTrivialFields;
-            UserChoseToRepaceBills = answer.ChoseToRepaceBills;
+            ChosenPlanShape = outcome.ChosenPlanShape;
+            UserChoseStayLinked = ChoseStayLinked(outcome);
+            UserChoseCascadeForward = ChoseCascadeForward(outcome);
+            UserChoseCascadeTrivialFields = ChoseCascadeTrivialFields(outcome);
+            UserChoseToRepaceBills = ChoseToRepaceBills(outcome);
         }
 
         PerformSave();
@@ -737,14 +737,14 @@ public sealed class FinancePatternSaveConfirmation
         if (PlanTouchesChainBoundary || PlanChangeCanCascade)
         {
             var request = BuildEarmarkConfirmationRequest(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal);
-            var answer = ConfirmImplicitChanges?.Invoke(request) ?? DefaultEarmarkConfirmationAnswer();
-            if (!answer.Proceed)
+            var outcome = ConfirmImplicitChanges?.Invoke(request) ?? DefaultOutcome();
+            if (!outcome.Proceed)
             {
                 return false;
             }
 
-            UserChoseStayLinked = answer.ChoseStayLinked;
-            UserChoseCascadeForward = answer.ChoseCascadeForward;
+            UserChoseStayLinked = ChoseStayLinked(outcome);
+            UserChoseCascadeForward = ChoseCascadeForward(outcome);
         }
 
         PerformEarmarkSave(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal);
@@ -917,42 +917,29 @@ public sealed class FinancePatternSaveConfirmation
         var predecessors = otherPlans.Where(plan => plan.DatePattern.Start < saved.DatePattern.Start).ToList();
         var successors = otherPlans.Where(plan => plan.DatePattern.Start > saved.DatePattern.Start).ToList();
 
-        return WithRows(new ImplicitChangeConfirmationRequest
+        // planning/27's own Phase 1 (FinancialPattern-chain), consolidation, and
+        // paycheck-association questions never apply to an EarMarkPattern-editing
+        // request, so those inputs stay at their false / "" defaults.
+        var inputs = new RowInputs
         {
-            IsChangeCritical = false,
-            HasMultipleEarmarkPatterns = false,
-            ConsolidationNeeded = false,
-            ConsolidationForcedReason = "",
-            ConsolidationCaveat = "",
-            IsAmountOnlyChange = false,
-            PlanShapeCandidates = [],
+            PlanTouchesChainBoundary = PlanTouchesChainBoundary,
+            PlanChangeCanCascade = PlanChangeCanCascade,
+            StayLinkedWarning = PlanTouchesChainBoundary ? DescribeStayLinkedConsequence(current, saved, predecessors, successors, goal) : "",
+            LetItBreakWarning = PlanTouchesChainBoundary ? DescribeLetItBreakConsequence(current, saved, predecessors, successors, otherPlans, goal) : "",
+            CascadeDescription = PlanChangeCanCascade ? DescribeCascadeConsequence(current, successors, crossBoundaryTarget, crossBoundaryGoal) : "",
+        };
+
+        return new ImplicitChangeConfirmationRequest
+        {
             Description = (PlanTouchesChainBoundary, PlanChangeCanCascade) switch
             {
                 (true, true) => "This plan is part of a chain. Its date range touches a neighboring segment, and its amount or schedule change could carry forward too.",
                 (true, false) => "This plan is part of a chain. Its date range touches a neighboring segment.",
                 _ => "This plan is part of a chain. Later segments could pick up this same amount or schedule change.",
             },
-            AlterPastConsequence = "", // no AlterPastSection at all for this entry point
-            NarrowingLimitationWarning = "", // Item E's own narrowing never applies to this entry point
-            PlanTouchesChainBoundary = PlanTouchesChainBoundary,
-            PlanChangeCanCascade = PlanChangeCanCascade,
-            // planning/27's own Phase 1 questions never apply to an
-            // EarMarkPattern-editing request.
-            TouchesChainBoundary = false,
-            ChangeCanCascade = false,
-            TrivialFieldsCanCascade = false,
-            SourceChangeWarning = "",
-            StayLinkedWarning = PlanTouchesChainBoundary ? DescribeStayLinkedConsequence(current, saved, predecessors, successors, goal) : "",
-            LetItBreakWarning = PlanTouchesChainBoundary ? DescribeLetItBreakConsequence(current, saved, predecessors, successors, otherPlans, goal) : "",
-            CascadeDescription = PlanChangeCanCascade ? DescribeCascadeConsequence(current, successors, crossBoundaryTarget, crossBoundaryGoal) : "",
-            TrivialFieldsCascadeDescription = "",
-            // The paycheck-association cascade never applies to an
-            // EarMarkPattern-editing request — a savings plan itself is
-            // never income, so it can never BE the paycheck side of this
-            // relationship.
-            PacedBillsCanCascade = false,
-            PacedBillsCascadeDescription = "",
-        });
+            PlanShapeCandidates = [],
+            Rows = BuildRows(inputs),
+        };
     }
 
     /// <summary>[CALC] Previews what "stay linked" would actually do to current's own neighbors, for the confirmation row's own warning slot — "" for a plain, contiguous nudge (never destructive, matching the settled "the default option is never the dangerous one" reasoning, so nothing to warn about), or a real sentence naming which segment(s) would be absorbed (deleted outright, their own values overwritten) once the edit reaches that far. Dry-runs the exact same RestructureFactory calls PerformEarmarkSave itself will make if this branch is actually chosen; the result here is discarded after formatting, not stored, since only one of "stay linked"/"let it break" ever actually runs and re-deriving it is cheap (pure functions over short lists).</summary>
@@ -1065,13 +1052,31 @@ public sealed class FinancePatternSaveConfirmation
             .Select(earmark => earmark.Date)
             .ToList();
 
-    /// <summary>[CALC] The safest, least-destructive answer to the EarMarkPattern-editing questions at once — used whenever no ConfirmImplicitChanges delegate is wired up. Matches the settled defaults: stays linked (never leaves an unannounced gap or overlap) and cascades forward (the settled default for a rate/schedule change). Always proceeds — there's no one here to cancel on.</summary>
-    private static ImplicitChangeConfirmationAnswer DefaultEarmarkConfirmationAnswer() => new()
-    {
-        Proceed = true,
-        ChoseStayLinked = true,
-        ChoseCascadeForward = true,
-    };
+    /// <summary>[CALC] The default outcome when no ConfirmImplicitChanges delegate is wired up (most tests, and any host that hasn't connected a real popup) — a bare Proceed with no selections. Every question then reads back as its own safe default, since the interpreters below treat a row absent from the map as its default: stay linked, cascade a rate/schedule change forward, don't cascade trivial fields, leave paced bills alone. Always proceeds — there's no one here to cancel on.</summary>
+    private static ConfirmationOutcome DefaultOutcome() => new() { Proceed = true };
+
+    // The interpreters that turn the popup's raw per-row selection back into a
+    // decision — the semantics the popup itself no longer knows. A row absent
+    // from the outcome (the popup never drew it, or a headless caller returned
+    // a bare Proceed) reads as index -1, which each rule below resolves to the
+    // settled safe default. The option indices mirror, exactly, the order
+    // BuildRows lays each ChoiceRow out in.
+    private static int Chosen(ConfirmationOutcome outcome, string rowId) =>
+        outcome.ChosenOptionIndex.TryGetValue(rowId, out var index) ? index : -1;
+
+    // chain-boundary: [0] keep linked (default), [1] let it break.
+    private static bool ChoseStayLinked(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.ChainBoundary) != 1;
+
+    // cascade: [0] apply forward (default), [1] only this segment.
+    private static bool ChoseCascadeForward(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.Cascade) != 1;
+
+    // trivial-fields cascade: [0] only this segment (default), [1] apply forward.
+    private static bool ChoseCascadeTrivialFields(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.TrivialFieldsCascade) == 1;
+
+    // paced-bills cascade: [0] update them (the popup's own pre-selection), [1]
+    // leave them. Absent (headless) reads as leave — nothing re-paces money
+    // when no one was actually asked.
+    private static bool ChoseToRepaceBills(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.PacedBillsCascade) == 0;
 
     /// <summary>[CALC] Computes the nine conditions above against the current Savings Plan and the proposed edit. Everything here reads off the current, already-saved forecast — it does not yet simulate what the forecast would look like with the proposed edit actually applied, so ChangeWarrantsSuggestions in particular only catches a plan that's already concerning today, not one this specific edit would newly make concerning (the same gap planning/22 §3 already named for the Expense form's own passive status indicator). internal (not private) so FinancePatternSaveConfirmationTests can call it directly ahead of a method that Run() itself can't reach yet (NarrowSurvivingPlanIfNeeded) without needing Run()'s own placeholder guidance step to run too.</summary>
     internal void DetermineConditions()
@@ -1395,12 +1400,39 @@ public sealed class FinancePatternSaveConfirmation
         return "If you choose to apply this only from today forward (above), these plans will always be combined into one regardless of this choice — keeping them separate through a break-off isn't supported yet.";
     }
 
-    /// <summary>[CALC] Projects an already-built request's flat fields into the confirmation-row list (planning/28 Thread 2). One row per section the hand-built popup shows today, in the same top-to-bottom order and under the same visibility conditions — a behavior-preserving mirror, nothing added to or removed from what the user sees. Serves both entry points: the earmark-editing request only sets the two chain fields, so it naturally yields just those rows. Nothing renders Rows yet (step 1 is additive); step 2 makes the popup a renderer over this list.
+    // Everything BuildRows needs to project the rows — the trigger booleans and
+    // the pre-computed warning/description strings, gathered by each entry point
+    // from its own state. A private build-time intermediate, so the public
+    // request stays down to what the popup actually reads (Description, Rows,
+    // PlanShapeCandidates). Fields default to false / "" so each builder sets
+    // only the ones its own path can raise.
+    private sealed record RowInputs
+    {
+        public bool IsChangeCritical { get; init; }
+        public bool HasMultipleEarmarkPatterns { get; init; }
+        public bool ConsolidationNeeded { get; init; }
+        public string ConsolidationForcedReason { get; init; } = "";
+        public string ConsolidationCaveat { get; init; } = "";
+        public string SourceChangeWarning { get; init; } = "";
+        public bool TouchesChainBoundary { get; init; }
+        public bool PlanTouchesChainBoundary { get; init; }
+        public string StayLinkedWarning { get; init; } = "";
+        public string LetItBreakWarning { get; init; } = "";
+        public bool ChangeCanCascade { get; init; }
+        public bool PlanChangeCanCascade { get; init; }
+        public string CascadeDescription { get; init; } = "";
+        public bool TrivialFieldsCanCascade { get; init; }
+        public string TrivialFieldsCascadeDescription { get; init; } = "";
+        public bool PacedBillsCanCascade { get; init; }
+        public string PacedBillsCascadeDescription { get; init; } = "";
+    }
+
+    /// <summary>[CALC] Projects the computed inputs into the confirmation-row list (planning/28) — one row per section, in most-vital-first order, under the same visibility conditions the hand-built popup used. Serves both entry points: the earmark path only sets the chain fields, so it naturally yields just those rows.
     ///
-    /// Deliberately NOT emitted, because today's popup surfaces neither, so turning them into rows would offer a choice that isn't offered now — a behavior change left to a later thread: the plan-shape picker (PlanShapeCandidates → a CandidatePickerRow) and the amount-scale rider (a CheckboxRiderRow). Both flat fields stay on the request, ready for that thread to pick up.
+    /// Deliberately NOT emitted, because today's popup surfaces neither, so turning them into rows would offer a choice that isn't offered now — a behavior change left to a later thread: the plan-shape picker (PlanShapeCandidates → a CandidatePickerRow, still carried on the request) and the amount-scale rider (a CheckboxRiderRow).
     ///
-    /// An always-shown description that accompanies a choice (the cascade/trivial/paced-bills descriptions) rides as BOTH options' Consequence, so the popup's "footer under the selected option" shows it whichever option is picked — matching today's always-visible behavior. A per-option warning (the chain-boundary case) rides only on the option it belongs to.</summary>
-    private static IReadOnlyList<ConfirmationRow> BuildRows(ImplicitChangeConfirmationRequest r)
+    /// An always-shown description that accompanies a choice (the cascade/trivial/paced-bills descriptions) rides as BOTH options' Consequence, so the popup's "footer under the selected option" shows it whichever option is picked. A per-option warning (the chain-boundary case) rides only on the option it belongs to.</summary>
+    private static IReadOnlyList<ConfirmationRow> BuildRows(RowInputs r)
     {
         var rows = new List<ConfirmationRow>();
 
@@ -1499,7 +1531,7 @@ public sealed class FinancePatternSaveConfirmation
         // (index 0) — the author's chosen default for what a real user sees, so
         // matching the bills to the new schedule is one Save away (changed from
         // "leave them" 2026-08-19, on the author's call). The headless fallback
-        // (DefaultConfirmationAnswer) still declines, so nothing re-paces money
+        // (DefaultOutcome) still declines, so nothing re-paces money
         // when no one was actually asked. Mirrors PacedBillsCascadeSection.
         if (r.PacedBillsCanCascade)
         {
@@ -1517,41 +1549,34 @@ public sealed class FinancePatternSaveConfirmation
     }
 
     /// <summary>[READS FILE] Builds what ConfirmImplicitChanges needs to render the Item B/C/E/F confirmation, plus planning/27's own Phase 1 questions (chain boundary, Amount/shape cascade, trivial-fields cascade, Source-change warning) — everything DetermineConditions/DetermineChainConditionsIfApplicable already worked out, plus a plain-language description of what changed. [READS FILE] because the chain-boundary/cascade previews below dry-run BreakOffFactory calls and read EarMarkPatternsFor for the absorb warning's own plan count — safe here, same as everywhere else in this class, since nothing has been saved yet this Run(). TODO: doesn't yet name the specific amount/date that would be orphaned by a retroactive correction (Item E's own "show the consequence, not just a yes/no" — mockups/editing-history-confirmation-mockups.html, Popup 1 · B) — the generic description below is a simpler first cut.</summary>
-    /// <summary>[CALC] Attaches the confirmation-row projection (planning/28 Thread 2) to a freshly-built flat request — the one place both entry points fold BuildRows in, so neither builder has to name the request twice.</summary>
-    private static ImplicitChangeConfirmationRequest WithRows(ImplicitChangeConfirmationRequest request) =>
-        request with { Rows = BuildRows(request) };
-
-    private ImplicitChangeConfirmationRequest BuildConfirmationRequest() => WithRows(new()
+    private ImplicitChangeConfirmationRequest BuildConfirmationRequest()
     {
-        IsChangeCritical = IsChangeCritical,
-        HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns,
-        ConsolidationNeeded = ConsolidationNeeded,
-        ConsolidationForcedReason = DescribeConsolidationForcedReason(),
-        ConsolidationCaveat = DescribeConsolidationCaveat(),
-        IsAmountOnlyChange = _isAmountOnlyChange,
-        PlanShapeCandidates = _planShapeCandidates,
-        Description = BuildDescription(),
-        // Forward-only (planning/28): the retroactive "apply everywhere" choice
-        // and Item E's narrowing are gone, so these two DTO fields (kept until
-        // Thread 2 reshapes the request) are always empty now.
-        AlterPastConsequence = "",
-        NarrowingLimitationWarning = "",
-        // planning/27's own EarMarkPattern-chain questions never apply to a
-        // FinancialPattern-editing request — TouchesChainBoundary/
-        // ChangeCanCascade below are this request's own, Phase 1 versions.
-        PlanTouchesChainBoundary = false,
-        PlanChangeCanCascade = false,
-        TouchesChainBoundary = TouchesChainBoundary,
-        ChangeCanCascade = ChangeCanCascade,
-        TrivialFieldsCanCascade = TrivialFieldsCanCascade,
-        SourceChangeWarning = SourceChangeWarning,
-        StayLinkedWarning = TouchesChainBoundary ? DescribeChainStayLinkedConsequence() : "",
-        LetItBreakWarning = TouchesChainBoundary ? DescribeChainLetItBreakConsequence() : "",
-        CascadeDescription = ChangeCanCascade ? DescribeChainCascadeConsequence() : "",
-        TrivialFieldsCascadeDescription = TrivialFieldsCanCascade ? DescribeChainTrivialFieldsCascadeConsequence() : "",
-        PacedBillsCanCascade = PacedBillsCanCascade,
-        PacedBillsCascadeDescription = PacedBillsCanCascade ? DescribePacedBillsCascadeConsequence() : "",
-    });
+        var inputs = new RowInputs
+        {
+            IsChangeCritical = IsChangeCritical,
+            HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns,
+            ConsolidationNeeded = ConsolidationNeeded,
+            ConsolidationForcedReason = DescribeConsolidationForcedReason(),
+            ConsolidationCaveat = DescribeConsolidationCaveat(),
+            TouchesChainBoundary = TouchesChainBoundary,
+            ChangeCanCascade = ChangeCanCascade,
+            TrivialFieldsCanCascade = TrivialFieldsCanCascade,
+            SourceChangeWarning = SourceChangeWarning,
+            StayLinkedWarning = TouchesChainBoundary ? DescribeChainStayLinkedConsequence() : "",
+            LetItBreakWarning = TouchesChainBoundary ? DescribeChainLetItBreakConsequence() : "",
+            CascadeDescription = ChangeCanCascade ? DescribeChainCascadeConsequence() : "",
+            TrivialFieldsCascadeDescription = TrivialFieldsCanCascade ? DescribeChainTrivialFieldsCascadeConsequence() : "",
+            PacedBillsCanCascade = PacedBillsCanCascade,
+            PacedBillsCascadeDescription = PacedBillsCanCascade ? DescribePacedBillsCascadeConsequence() : "",
+        };
+
+        return new ImplicitChangeConfirmationRequest
+        {
+            Description = BuildDescription(),
+            PlanShapeCandidates = _planShapeCandidates,
+            Rows = BuildRows(inputs),
+        };
+    }
 
     /// <summary>[READS FILE] Previews what "stay linked" would actually do to _proposedPattern's own neighbors, for the confirmation row's own warning slot — "" for a plain, contiguous nudge (never destructive), or a real sentence naming which segment(s) would be absorbed. Unlike the EarMarkPattern-chain case, absorbing a whole FinancialPattern genuinely deletes everything under its own now-gone FinanceId — its own EarMarkPattern chain (if any) and every ManualEarmark tied to it, not just the row itself (this document's own explicit distinction) — named here, not glossed over, matching the "show the consequence" standard. [READS FILE] to count each absorbed segment's own EarMarkPatterns.</summary>
     private string DescribeChainStayLinkedConsequence()
@@ -1710,15 +1735,6 @@ public sealed class FinancePatternSaveConfirmation
             : $"\"{label}\" already has more than one savings plan.";
     }
 
-    /// <summary>[CALC] The safest, least-destructive answer to every implicit-change question at once — used whenever no ConfirmImplicitChanges delegate is wired up (most tests, and any host that hasn't connected a real popup). Preserves history (break off, don't alter the past), keeps existing plans separate rather than silently merging them, and never rescales money the user didn't confirm touching. Always proceeds — there's no one here to cancel on.</summary>
-    private static ImplicitChangeConfirmationAnswer DefaultConfirmationAnswer() => new()
-    {
-        Proceed = true,
-        ChooseAlterPast = false,
-        ChooseConsolidation = false,
-        ChoseScalePatterns = false,
-    };
-
     /// <summary>[READS FILE] When more than one EarMarkPattern survives and the user clicked Save and Plan, asks which one to actually open next. Real for the unambiguous cases (none, or exactly one); the genuinely ambiguous case still needs the actual disambiguation popup. Reads the repository directly, not the live forecast: _requestForecast may be a cached accessor (MainWindow's own EnsureForecast caches until something explicitly recomputes), so it can't be trusted to reflect what PerformSave/PerformImplicitEarmarkChanges just wrote a moment ago. The repository has no such cache — matches what MainWindow's own pre-migration callback already did here (_earMarkPatterns.GetAll()), not a new choice. Looks under _navigationFinanceId, not _financeId directly — after a break-off, _financeId's own EarMarkPattern is the truncated, no-longer-current predecessor.</summary>
     /// <returns>The EarMarkPattern to open, or null if there isn't one yet.</returns>
     private EarMarkPattern? AskWhichEarmarkPatternToOpen()
@@ -1742,7 +1758,7 @@ public sealed class FinancePatternSaveConfirmation
         // first match — the original placeholder — whenever nothing's
         // wired up (most tests, and any host that hasn't connected one),
         // same "safest default when nothing's connected" reasoning
-        // DefaultConfirmationAnswer already applies elsewhere in this class.
+        // DefaultOutcome already applies elsewhere in this class.
         return PickEarmarkPattern?.Invoke(savingsPlan) ?? savingsPlan[0];
     }
 
@@ -2183,177 +2199,26 @@ public sealed record FinancePatternRepositories
     public required ManualEarmarkRepository ManualEarmarks { get; init; }
 }
 
-// What ConfirmImplicitChanges needs to render itself — everything
-// DetermineConditions worked out that a real popup (or a test double) needs
-// to know which questions actually apply, plus a plain-language description
-// of what changed. Built fresh per Run() call, right before the delegate
-// fires — see FinancePatternSaveConfirmation.BuildConfirmationRequest.
+// What the confirmation popup needs to render itself — the plain-language
+// description and the list of rows (each a question or announcement) it draws,
+// plus the plan-shape candidates that don't have a row of their own yet. Built
+// fresh per Run() call, right before the delegate fires — see
+// FinancePatternSaveConfirmation.BuildConfirmationRequest. The trigger booleans
+// and warning strings that decide which rows exist live on the private
+// RowInputs now, not here.
 public sealed record ImplicitChangeConfirmationRequest
 {
-    // planning/28 Thread 2: the confirmation-row projection of everything
-    // below. One row per question/announcement the popup would show, in the
-    // order it shows them (most-vital first), built by
-    // FinancePatternSaveConfirmation.BuildRows from the same flat fields the
-    // popup reads today. Additive for now — nothing renders Rows yet; the flat
-    // fields still drive EditingHistoryConfirmationWindow. Step 2 makes the
-    // popup a renderer over this list, Step 3 drops the flat fields once
-    // nothing reads them. Defaulted to empty so every existing construction
-    // site keeps compiling without setting it.
+    // One row per question/announcement the popup shows, in the order it shows
+    // them (most-vital first), built by FinancePatternSaveConfirmation.BuildRows.
+    // The popup renders exactly this — it never re-derives which questions apply.
     public IReadOnlyList<ConfirmationRow> Rows { get; init; } = [];
-
-    public required bool IsChangeCritical { get; init; }
-    public required bool HasMultipleEarmarkPatterns { get; init; }
-    public required bool ConsolidationNeeded { get; init; }
-
-    // "" whenever ConsolidationNeeded is false. Shown as a plain
-    // announcement (ConsolidationForcedText), not tied to any choice —
-    // there's no choice on this row once consolidation is forced, matching
-    // ConsolidationForcedReason/DescribeConsolidationForcedReason's own doc
-    // comment for why this replaced a static XAML string 2026-08-17.
-    public required string ConsolidationForcedReason { get; init; }
-
-    // "" whenever there's nothing to caveat — either "keep separate" isn't
-    // being offered at all (ConsolidationNeeded true, or fewer than two
-    // plans), or the edit isn't Critical so there's no break-off/alter-past
-    // ambiguity for the caveat to be about. A real sentence otherwise,
-    // warning ahead of the choice that "break off" always combines plans
-    // regardless of what's picked in the Consolidation row — see
-    // DescribeConsolidationCaveat's own doc comment for the 2026-08-17 fix
-    // this exists to explain.
-    public required string ConsolidationCaveat { get; init; }
-
-    public required bool IsAmountOnlyChange { get; init; }
 
     // planning/25's Item G — empty whenever there's nothing to choose
     // between (most edits, multi-plan goals, or a break-off with no
     // existing plan to draw an alternative shape from). A real popup shows
     // each candidate's own Label and hands back whichever one's own Plan
-    // the user picked as ImplicitChangeConfirmationAnswer.ChosenPlanShape.
+    // the user picked as ConfirmationOutcome.ChosenPlanShape.
     public required IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates { get; init; }
 
     public required string Description { get; init; }
-
-    // "" whenever there's nothing concrete to name (see FinancePatternSaveConfirmation.
-    // DescribeAlterPastConsequence's own doc comment for exactly when). A
-    // real sentence naming the SPECIFIC savings-plan consequence — absorbed
-    // balance, deleted manual earmarks — of choosing "apply it everywhere"
-    // in AlterPastSection above, shown only while that option is the one
-    // currently selected. Only ever set for a FinancialPattern-editing
-    // request — RunForPlan's own EarMarkPattern-editing one never
-    // populates it (there's no AlterPastSection there at all).
-    public required string AlterPastConsequence { get; init; }
-
-    // "" whenever nothing to warn about — a real sentence whenever a
-    // retroactive correction's own new boundary couldn't be applied to the
-    // savings plan for a known, specific reason (see FinancePatternSaveConfirmation.
-    // NarrowingLimitationWarning's own field comment). Only ever set for a
-    // FinancialPattern-editing request — RunForPlan's own EarMarkPattern-
-    // editing one never populates it.
-    public required string NarrowingLimitationWarning { get; init; }
-
-    // planning/27's own EarMarkPattern-chain questions (Phase 2) — only ever
-    // true for a request built by RunForPlan (the EarMarkPattern-editing
-    // entry point); always false for a FinancialPattern-editing one. See
-    // TouchesChainBoundary/ChangeCanCascade below for that side's own,
-    // distinctly-named Phase 1 versions of the same two questions — kept
-    // separate rather than shared, even though the two modes never both
-    // populate a single request, so each pair's own documented meaning
-    // (EarMarkPattern chain vs. FinancialPattern chain) stays unambiguous.
-    public required bool PlanTouchesChainBoundary { get; init; }
-    public required bool PlanChangeCanCascade { get; init; }
-
-    // planning/27's own Phase 1 — the FinancialPattern-chain mirror of the
-    // two above, only ever true for an ordinary FinancialPattern-editing
-    // request; always false for RunForPlan's own EarMarkPattern-editing one.
-    public required bool TouchesChainBoundary { get; init; }
-    public required bool ChangeCanCascade { get; init; }
-
-    // Phase 1's own third question, no EarMarkPattern equivalent at all —
-    // see FinancePatternSaveConfirmation.TrivialFieldsCanCascade's own field
-    // comment for why Priority/Mandatory/Description/AutoRenew get this
-    // treatment while nothing analogous exists for a savings plan.
-    public required bool TrivialFieldsCanCascade { get; init; }
-
-    // planning/27's Source row: "warn, don't block." "" whenever nothing to
-    // warn about (Source unchanged, or changed on a standalone pattern with
-    // no predecessor/successor to disconnect from); a real sentence
-    // otherwise. Shown as a plain warning block, not tied to any radio
-    // choice — there's no choice on this row, the edit proceeds either way.
-    public required string SourceChangeWarning { get; init; }
-
-    // planning/27's own "name the concrete consequence, not a generic
-    // notice" requirement — "" whenever the matching trigger (either chain
-    // type's own PlanTouchesChainBoundary/TouchesChainBoundary or
-    // PlanChangeCanCascade/ChangeCanCascade) is false. Shared by BOTH chain
-    // types rather than duplicated per-type, since only one type's own
-    // trigger is ever true per request. StayLinkedWarning is "" for a
-    // plain, never-destructive nudge and only a real sentence once the edit
-    // reaches far enough to absorb a neighbor — the row-based design's own
-    // "the warning escalates with the consequence, the default option
-    // doesn't change" case. LetItBreakWarning is always a real sentence
-    // whenever a TouchesChainBoundary flag is true — breaking the chain
-    // always leaves SOME gap or overlap. CascadeDescription is a plain,
-    // always-shown description (not a warning tied to one "dangerous"
-    // option — neither cascade choice here is destructive), naming the
-    // direct edit's own range and how far cascading would reach.
-    public required string StayLinkedWarning { get; init; }
-    public required string LetItBreakWarning { get; init; }
-    public required string CascadeDescription { get; init; }
-
-    // Phase 1's own third question's own description — "" whenever
-    // TrivialFieldsCanCascade is false. No EarMarkPattern equivalent, so
-    // this is never shared the way the three fields above are.
-    public required string TrivialFieldsCascadeDescription { get; init; }
-
-    // The paycheck-association cascade (2026-08-17) — only ever true for a
-    // FinancialPattern-editing request whose edit is to an income pattern's
-    // own schedule; always false for an EarMarkPattern-editing (RunForPlan)
-    // one, since a savings plan itself is never income. A different
-    // relationship from every field above (this income's own effect on
-    // OTHER patterns' plans, not this pattern's own chain), so it gets its
-    // own trigger/description pair rather than sharing one.
-    public required bool PacedBillsCanCascade { get; init; }
-    public required string PacedBillsCascadeDescription { get; init; }
-}
-
-// What the user (or, when nothing is wired up, DefaultConfirmationAnswer)
-// decided. Proceed = false cancels the whole save — Run() returns false and
-// stops before PerformSave, exactly as if Save had never been clicked. The
-// other fields are meaningless when they don't apply (e.g.
-// ChooseConsolidation when HasMultipleEarmarkPatterns was false) — Run()
-// only ever reads the ones DetermineConditions says are actually in play.
-public sealed record ImplicitChangeConfirmationAnswer
-{
-    public required bool Proceed { get; init; }
-    public bool ChooseAlterPast { get; init; }
-    public bool ChooseConsolidation { get; init; }
-    public bool ChoseScalePatterns { get; init; }
-
-    // planning/25's Item G — one of the EarMarkPatterns offered via this
-    // same request's own PlanShapeCandidates, by reference, or null to use
-    // Propose's own default (whether because PlanShapeCandidates was empty,
-    // or the user was offered a choice and picked the default anyway).
-    public EarMarkPattern? ChosenPlanShape { get; init; }
-
-    // planning/27's own chain-boundary/cascade answers — shared by BOTH
-    // FinancialPattern-editing (Phase 1) and EarMarkPattern-editing (Phase
-    // 2) requests, meaningless unless the matching request field (either
-    // PlanTouchesChainBoundary/PlanChangeCanCascade or
-    // TouchesChainBoundary/ChangeCanCascade) was true. Both default to the
-    // settled safe defaults, so a caller answering only what it cares about
-    // still gets the right behavior for the rest.
-    public bool ChoseStayLinked { get; init; } = true;
-    public bool ChoseCascadeForward { get; init; } = true;
-
-    // Phase 1's own third answer, no EarMarkPattern equivalent — meaningless
-    // unless TrivialFieldsCanCascade was true. Defaults to FALSE, unlike
-    // ChoseCascadeForward above — SETTLED (round 3 of the small questions):
-    // "default stays 'just this segment.'"
-    public bool ChoseCascadeTrivialFields { get; init; }
-
-    // The paycheck-association cascade's own answer — meaningless unless
-    // PacedBillsCanCascade was true. Defaults to FALSE: "offered as a
-    // suggestion (not forced)" means declining is the safe no-op, same
-    // reasoning as ChoseCascadeTrivialFields above.
-    public bool ChoseToRepaceBills { get; init; }
 }
