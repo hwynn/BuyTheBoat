@@ -1408,7 +1408,7 @@ public sealed class FinancePatternSaveConfirmation
         // (forward-only). Mirrors AlterPastSection.
         if (r.IsChangeCritical)
         {
-            rows.Add(new AnnouncementRow("alter-past",
+            rows.Add(new AnnouncementRow(ConfirmationRowIds.AlterPast,
                 "This reaches back to history that's already happened, so it will start a new segment from today — your past records stay exactly as they were."));
         }
 
@@ -1417,21 +1417,21 @@ public sealed class FinancePatternSaveConfirmation
         // consolidation). Mirrors ConsolidationAskSection.
         if (r.HasMultipleEarmarkPatterns && !r.ConsolidationNeeded)
         {
-            rows.Add(new ChoiceRow("consolidation",
+            rows.Add(new ChoiceRow(ConfirmationRowIds.Consolidation,
                 "It has more than one savings plan. What do you want to do?",
                 [
                     new ChoiceOption("Keep them separate", "", ""),
                     new ChoiceOption("Combine them into one", "", ""),
                 ],
                 DefaultIndex: 0,
-                Layout: OptionLayout.SideBySide));
+                Layout: OptionLayout.Stacked));
 
             // The always-shown caveat that a break-off combines plans
             // regardless of this choice — its own line, not tied to a radio
             // (mirrors ConsolidationCaveatText).
             if (!string.IsNullOrEmpty(r.ConsolidationCaveat))
             {
-                rows.Add(new AnnouncementRow("consolidation-caveat", r.ConsolidationCaveat));
+                rows.Add(new AnnouncementRow(ConfirmationRowIds.ConsolidationCaveat, r.ConsolidationCaveat));
             }
         }
 
@@ -1439,14 +1439,14 @@ public sealed class FinancePatternSaveConfirmation
         // ConsolidationForcedText.
         if (r.HasMultipleEarmarkPatterns && r.ConsolidationNeeded && !string.IsNullOrEmpty(r.ConsolidationForcedReason))
         {
-            rows.Add(new AnnouncementRow("consolidation-forced", r.ConsolidationForcedReason));
+            rows.Add(new AnnouncementRow(ConfirmationRowIds.ConsolidationForced, r.ConsolidationForcedReason));
         }
 
         // planning/27's Source row — "warn, don't block." Mirrors
         // SourceChangeWarningText.
         if (!string.IsNullOrEmpty(r.SourceChangeWarning))
         {
-            rows.Add(new AnnouncementRow("source-change", r.SourceChangeWarning));
+            rows.Add(new AnnouncementRow(ConfirmationRowIds.SourceChange, r.SourceChangeWarning));
         }
 
         // "Stay linked or break" — shared by both chain types (only one is ever
@@ -1454,14 +1454,14 @@ public sealed class FinancePatternSaveConfirmation
         // while it's the selected one. Mirrors ChainBoundarySection.
         if (r.TouchesChainBoundary || r.PlanTouchesChainBoundary)
         {
-            rows.Add(new ChoiceRow("chain-boundary",
+            rows.Add(new ChoiceRow(ConfirmationRowIds.ChainBoundary,
                 "This plan is part of a chain. Should it stay connected to its neighbor?",
                 [
                     new ChoiceOption("Keep it linked — adjust the neighboring segment to match", "", r.StayLinkedWarning),
                     new ChoiceOption("Let the chain break", "", r.LetItBreakWarning),
                 ],
                 DefaultIndex: 0,
-                Layout: OptionLayout.SideBySide));
+                Layout: OptionLayout.Stacked));
         }
 
         // "Cascade forward or not" for an Amount/shape change. The always-shown
@@ -1469,14 +1469,14 @@ public sealed class FinancePatternSaveConfirmation
         // CascadeSection.
         if (r.ChangeCanCascade || r.PlanChangeCanCascade)
         {
-            rows.Add(new ChoiceRow("cascade",
+            rows.Add(new ChoiceRow(ConfirmationRowIds.Cascade,
                 "This change could also apply to later segments in the chain. What do you want to do?",
                 [
                     new ChoiceOption("Apply it going forward too", "", r.CascadeDescription),
                     new ChoiceOption("Only this segment", "", r.CascadeDescription),
                 ],
                 DefaultIndex: 0,
-                Layout: OptionLayout.SideBySide));
+                Layout: OptionLayout.Stacked));
         }
 
         // Phase 1's trivial-fields cascade (Priority/Mandatory/Description/
@@ -1485,28 +1485,32 @@ public sealed class FinancePatternSaveConfirmation
         // own default. Mirrors TrivialFieldsCascadeSection.
         if (r.TrivialFieldsCanCascade)
         {
-            rows.Add(new ChoiceRow("trivial-fields-cascade",
+            rows.Add(new ChoiceRow(ConfirmationRowIds.TrivialFieldsCascade,
                 "This also changes details like priority, mandatory, or description. Update later segments too?",
                 [
                     new ChoiceOption("Only this segment", "", r.TrivialFieldsCascadeDescription),
                     new ChoiceOption("Apply it going forward too", "", r.TrivialFieldsCascadeDescription),
                 ],
                 DefaultIndex: 0,
-                Layout: OptionLayout.SideBySide));
+                Layout: OptionLayout.Stacked));
         }
 
-        // The paycheck-association cascade — defaults to "leave them" (index 1),
-        // "offered as a suggestion, not forced." Mirrors PacedBillsCascadeSection.
+        // The paycheck-association cascade. The popup pre-selects "update them"
+        // (index 0) — the author's chosen default for what a real user sees, so
+        // matching the bills to the new schedule is one Save away (changed from
+        // "leave them" 2026-08-19, on the author's call). The headless fallback
+        // (DefaultConfirmationAnswer) still declines, so nothing re-paces money
+        // when no one was actually asked. Mirrors PacedBillsCascadeSection.
         if (r.PacedBillsCanCascade)
         {
-            rows.Add(new ChoiceRow("paced-bills-cascade",
+            rows.Add(new ChoiceRow(ConfirmationRowIds.PacedBillsCascade,
                 "Your paycheck's schedule changed. Update its associated savings plan(s) too?",
                 [
                     new ChoiceOption("Update them to match the new schedule", "", r.PacedBillsCascadeDescription),
                     new ChoiceOption("Leave them as they are", "", r.PacedBillsCascadeDescription),
                 ],
-                DefaultIndex: 1,
-                Layout: OptionLayout.SideBySide));
+                DefaultIndex: 0,
+                Layout: OptionLayout.Stacked));
         }
 
         return rows;

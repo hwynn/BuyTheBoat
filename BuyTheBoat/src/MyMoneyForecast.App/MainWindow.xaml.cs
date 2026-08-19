@@ -1151,7 +1151,7 @@ public partial class MainWindow : Window
     /// <param name="accountId">Which account the pattern is filed under.</param>
     /// <param name="isNew">Whether this is a brand-new pattern (Stage 1's proposer should run) or an edit to an existing one.</param>
     /// <param name="jumpToEarmark">True for "Save and Plan," false for "Save and Skip planning."</param>
-    private void OnExpensePatternSaved(FinancialPattern pattern, int accountId, bool isNew, bool jumpToEarmark)
+    private bool OnExpensePatternSaved(FinancialPattern pattern, int accountId, bool isNew, bool jumpToEarmark)
     {
         var confirmation = new FinancePatternSaveConfirmation(
             pattern.FinanceId,
@@ -1205,7 +1205,7 @@ public partial class MainWindow : Window
 
         if (!confirmation.Run())
         {
-            return; // user cancelled — nothing saved, stay on the Expense tab as-is
+            return false; // user cancelled — nothing saved; the form keeps the user's edits and the Expense tab stays as-is
         }
 
         if (!jumpToEarmark)
@@ -1224,12 +1224,14 @@ public partial class MainWindow : Window
             RefreshEarmarkFormContext();
             SwitchToTab("Forecast");
         }
+
+        return true;
     }
 
     /// <summary>[STEP] What EarmarkForm.PatternSaved calls (wired in the constructor) — planning/27's own migration target, now resolved: routes every Savings-plan save through FinancePatternSaveConfirmation's EarMarkPattern-editing constructor instead of a plain repository save, so a Start/Until edit that touches a chain neighbor, or an Amount/schedule edit with later segments to carry it to, goes through EditingHistoryConfirmationWindow first.</summary>
     /// <param name="pattern">The form's current field values — what the user typed, before any stay-linked/cascade resolution Run() might apply.</param>
     /// <param name="savedStart">The plan's own Start as it's actually saved today, or the same as pattern's own Start for a brand-new plan (EarmarkFormPanel's own _loadedPlanStart).</param>
-    private void OnEarmarkPatternSaved(EarMarkPattern pattern, DateOnly savedStart)
+    private bool OnEarmarkPatternSaved(EarMarkPattern pattern, DateOnly savedStart)
     {
         var goal = _financialPatterns.GetByFinanceId(pattern.FinanceId)
             ?? throw new InvalidOperationException(
@@ -1252,7 +1254,7 @@ public partial class MainWindow : Window
 
         if (!confirmation.Run())
         {
-            return; // user cancelled — nothing saved, form was already cleared (EarmarkFormPanel.SaveSavingsPlan's own unconditional clear) but the tab stays as-is
+            return false; // user cancelled — nothing saved; the form keeps the user's edits and the tab stays as-is
         }
 
         RefreshGrids();
@@ -1265,6 +1267,8 @@ public partial class MainWindow : Window
         // planning/21: Earmark's own save "returns to the Forecast tab —
         // no onward hop from there to anywhere else."
         SwitchToTab("Forecast");
+
+        return true;
     }
 
     /// <summary>[STEP] Shows EditingHistoryConfirmationWindow and maps its result back into an answer — shared by both the Expense and Earmark save paths' own ConfirmImplicitChanges wiring, since the window (and the full set of fields worth reading back) is the same either way; each request's own fields decide which sections the window actually shows.</summary>

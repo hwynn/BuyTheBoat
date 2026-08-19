@@ -83,11 +83,13 @@ public partial class ExpenseFormPanel : UserControl
     // at all times, so there's nothing to actually wait on the user for.
     public Func<ForecastResult>? RequestForecast { get; set; }
 
-    // (pattern, accountId, isNew, jumpToEarmark) — jumpToEarmark distinguishes
-    // Save and Plan from Save and Skip planning; isNew tells MainWindow's
-    // callback whether to also run AutoCreateAllocationPlan, matching the old
-    // split between the create and edit entry points.
-    public Action<FinancialPattern, int, bool, bool>? PatternSaved { get; set; }
+    // (pattern, accountId, isNew, jumpToEarmark) -> did the save go through.
+    // jumpToEarmark distinguishes Save and Plan from Save and Skip planning;
+    // isNew tells MainWindow's callback whether to also run
+    // AutoCreateAllocationPlan, matching the old split between the create and
+    // edit entry points. Returns false when the user cancels the confirmation,
+    // so Save can leave the form exactly as it was rather than clearing it.
+    public Func<FinancialPattern, int, bool, bool, bool>? PatternSaved { get; set; }
 
     /// <summary>[UI] Fires whenever IsDirty or IsPopulated could have changed, so MainWindow can restyle this form's tab header live.</summary>
     public event EventHandler? StateChanged;
@@ -780,20 +782,25 @@ public partial class ExpenseFormPanel : UserControl
             var accountId = SelectedAccountId;
             var isNew = _isNew;
 
-            // The form clears itself automatically after a successful save.
-            // Done before invoking the callback, so it happens
-            // unconditionally even though the callback's own navigation
-            // (Forecast vs. Earmark) takes the user elsewhere — this
-            // Expense tab should read blank whichever way they arrived back
-            // at it next.
-            LoadForNewPattern();
-
             // The confirmation-and-consequence flow for planning/25's Items
             // B/E/F runs inside PatternSaved's own handler (MainWindow.
             // OnExpensePatternSaved constructs and runs a
             // FinancePatternSaveConfirmation) — this panel hands off the raw,
             // just-typed pattern and stays WPF/persistence-free itself.
-            PatternSaved?.Invoke(pattern, accountId, isNew, jumpToEarmark);
+            //
+            // Only clear once the save has actually gone through. Cancelling
+            // the confirmation returns false and leaves every field exactly as
+            // typed, so the user resumes as if Save was never clicked. A null
+            // handler (nothing wired) counts as "went through," keeping the old
+            // always-clear behavior for that case. The clear happens after the
+            // callback's own navigation (Forecast vs. Earmark) — clearing a
+            // now-off-screen panel is fine; it just reads blank next time the
+            // user lands back on this tab.
+            var saved = PatternSaved?.Invoke(pattern, accountId, isNew, jumpToEarmark) ?? true;
+            if (saved)
+            {
+                LoadForNewPattern();
+            }
         }
         catch (Exception ex)
         {

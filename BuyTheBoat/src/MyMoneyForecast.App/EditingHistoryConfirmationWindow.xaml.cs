@@ -1,147 +1,195 @@
+using System;
+using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace MyMoneyForecast.App;
 
-// Minimal, plain-WPF version of planning/25's Item B/C/E/F confirmation
-// (and, as of this session, planning/27's own "stay linked or break" and
-// "cascade forward or not" questions for a savings-plan chain edit) —
-// deliberately not the full styled design in
-// planning/mockups/editing-history-confirmation-mockups.html, just enough
-// content and interaction for FinancePatternSaveConfirmation's
-// ConfirmImplicitChanges delegate to have something real to show, so the
-// mechanism built this session (break-off, consolidation, narrowing, chain
-// boundary resolution, cascade) is actually reachable by using the app, not
-// just by its own tests. Content and which sections are visible are driven
-// entirely by the ImplicitChangeConfirmationRequest passed to the
-// constructor — nothing here re-derives anything DetermineConditions (or
-// RunForPlan, for the EarMarkPattern-editing path) already worked out.
+// planning/28 Thread 2: a dumb renderer over request.Rows. Each row is one
+// question or announcement FinancePatternSaveConfirmation decided to raise on a
+// single save; this window draws them top-to-bottom and reads the choices back.
+// It never decides which rows exist, what they mean, or that one answer might
+// unlock another — the wrapper owns all of that. Still deliberately the minimal
+// plain-WPF look (planning/mockups/editing-history-confirmation-mockups.html is
+// the eventual styled target, not this).
 //
-// Naming the specific amount/date a retroactive correction would orphan
-// (Item E's own "show the consequence, not just a yes/no") is now built too,
-// 2026-08-17 — AlterPastConsequenceText, computed by FinancePatternSaveConfirmation.
-// DescribeAlterPastConsequence and shown only while AlterPastRadio is
-// selected, the same "concrete consequence under the currently-selected
-// option" pattern StayLinkedWarning/LetItBreakWarning/CascadeDescription
-// already established. TODO still open: doesn't cover the proportional-
-// scaling offer's own math, just whether the user wants it (ScaleCheckBox) —
-// ScaleSurvivingPlansIfNeeded itself has acted on ChoseScalePatterns since
-// 2026-08-14, this window just doesn't show what the new amounts would be
-// ahead of the choice.
+// Built in code-behind rather than an ItemsControl + DataTemplates on purpose:
+// the ConfirmationRow records are immutable (no mutable SelectedIndex to bind
+// two-way against), each ChoiceRow needs its own independent radio group, and
+// the selected-option consequence footer has to update live — all a few lines
+// here, but each needs its own per-row viewmodel + converters through pure XAML
+// binding. Nothing about the domain lives in this file regardless of which way
+// it's drawn.
+//
+// The answer it hands back is still the flat ImplicitChangeConfirmationAnswer,
+// via the properties MainWindow reads after ShowDialog — step 2 only changes
+// how the window is built, not the answer's shape, so the whole suite stays
+// green. planning/28's step 3 makes the answer row-keyed and drops the two
+// always-false properties below (ChooseAlterPast / ChoseScalePatterns — no row
+// feeds them since forward-only retired the alter-past choice and the scale
+// rider; kept only so MainWindow's own read still compiles until then).
 public partial class EditingHistoryConfirmationWindow : Window
 {
-    // Read by the caller (MainWindow's own ConfirmImplicitChanges wiring)
-    // after ShowDialog() returns true. Meaningless when the corresponding
-    // section was never shown — the caller only reads the ones
-    // FinancePatternSaveConfirmation itself says are actually in play,
-    // mirroring how ImplicitChangeConfirmationAnswer's own fields work.
+    // Read by MainWindow after ShowDialog() returns true, in the same shape as
+    // before this window became a row renderer. Each stays at its safe default
+    // whenever its row wasn't shown (OnSaveClick maps an absent row to the
+    // default), matching how the old fixed sections' own defaulted radios
+    // behaved when collapsed.
     public bool ChooseAlterPast { get; private set; }
     public bool ChooseConsolidation { get; private set; }
     public bool ChoseScalePatterns { get; private set; }
-
-    // planning/27's own chain-boundary/cascade answers — shared by both
-    // chain types (see ChainBoundarySection/CascadeSection's own XAML
-    // comment), meaningless unless the matching request field of the same
-    // name — either PlanTouchesChainBoundary/PlanChangeCanCascade or
-    // TouchesChainBoundary/ChangeCanCascade — was true.
-    public bool ChoseStayLinked { get; private set; }
-    public bool ChoseCascadeForward { get; private set; }
-
-    // Phase 1's own third answer, no EarMarkPattern equivalent — meaningless
-    // unless TrivialFieldsCanCascade was true.
+    public bool ChoseStayLinked { get; private set; } = true;
+    public bool ChoseCascadeForward { get; private set; } = true;
     public bool ChoseCascadeTrivialFields { get; private set; }
-
-    // The paycheck-association cascade's own answer — meaningless unless
-    // PacedBillsCanCascade was true.
     public bool ChoseToRepaceBills { get; private set; }
+
+    // One entry per ChoiceRow drawn — its radios (in option order), its options
+    // (for the consequence text), and the footer TextBlock under them. Keyed by
+    // row Id so OnSaveClick can read each selection back and the one shared
+    // OnOptionChecked handler can refresh the right footer.
+    private sealed record ChoiceRowControls(
+        IReadOnlyList<RadioButton> Radios, IReadOnlyList<ChoiceOption> Options, TextBlock Footer);
+
+    private readonly Dictionary<string, ChoiceRowControls> _choiceRows = new();
 
     public EditingHistoryConfirmationWindow(ImplicitChangeConfirmationRequest request)
     {
         InitializeComponent();
 
         DescriptionText.Text = request.Description;
-
-        // Forward-only (planning/28): a Critical edit always breaks off — this
-        // is now a plain announcement (AlterPastSection is a TextBlock), shown
-        // only when the edit reaches already-occurred history.
-        AlterPastSection.Visibility = request.IsChangeCritical ? Visibility.Visible : Visibility.Collapsed;
-
-        // Forced consolidation is announced, not asked — Item F's own
-        // ruling: there's no real choice once the recurrence shape itself
-        // is changing (ConsolidationNeeded), so the ask section and the
-        // forced-notice text are mutually exclusive.
-        var offersConsolidationChoice = request.HasMultipleEarmarkPatterns && !request.ConsolidationNeeded;
-        ConsolidationAskSection.Visibility = offersConsolidationChoice ? Visibility.Visible : Visibility.Collapsed;
-        ConsolidationForcedText.Text = request.ConsolidationForcedReason;
-        ConsolidationForcedText.Visibility = request.HasMultipleEarmarkPatterns && request.ConsolidationNeeded
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ConsolidationCaveatText.Text = request.ConsolidationCaveat;
-        ConsolidationCaveatText.Visibility = string.IsNullOrEmpty(request.ConsolidationCaveat) ? Visibility.Collapsed : Visibility.Visible;
-
-        SourceChangeWarningText.Text = request.SourceChangeWarning;
-        SourceChangeWarningText.Visibility = string.IsNullOrEmpty(request.SourceChangeWarning) ? Visibility.Collapsed : Visibility.Visible;
-
-        // Either chain type's own trigger shows the same row — the two
-        // never both apply to one request (RunForPlan/Run() never both run
-        // on one instance), so this is never ambiguous about which one lit
-        // it up.
-        ChainBoundarySection.Visibility = request.PlanTouchesChainBoundary || request.TouchesChainBoundary ? Visibility.Visible : Visibility.Collapsed;
-        CascadeSection.Visibility = request.PlanChangeCanCascade || request.ChangeCanCascade ? Visibility.Visible : Visibility.Collapsed;
-        TrivialFieldsCascadeSection.Visibility = request.TrivialFieldsCanCascade ? Visibility.Visible : Visibility.Collapsed;
-
-        // Text set before the visibility pass below runs — StayLinkedRadio's
-        // own XAML-declared IsChecked="True" fires OnChainBoundaryChoiceChanged
-        // synchronously mid-InitializeComponent, before either .Text is set,
-        // the same WPF footgun EarmarkFormPanel's own _initialized guard
-        // exists for. Calling UpdateChainBoundaryWarningVisibility again here,
-        // after both texts are in place, is what makes the INITIAL state
-        // correct rather than relying on that early, premature firing.
-        StayLinkedWarningText.Text = request.StayLinkedWarning;
-        ChainBreakWarningText.Text = request.LetItBreakWarning;
-        UpdateChainBoundaryWarningVisibility();
-
-        CascadeDescriptionText.Text = request.CascadeDescription;
-        CascadeDescriptionText.Visibility = string.IsNullOrEmpty(request.CascadeDescription) ? Visibility.Collapsed : Visibility.Visible;
-
-        TrivialFieldsCascadeDescriptionText.Text = request.TrivialFieldsCascadeDescription;
-        TrivialFieldsCascadeDescriptionText.Visibility = string.IsNullOrEmpty(request.TrivialFieldsCascadeDescription) ? Visibility.Collapsed : Visibility.Visible;
-
-        PacedBillsCascadeSection.Visibility = request.PacedBillsCanCascade ? Visibility.Visible : Visibility.Collapsed;
-        PacedBillsCascadeDescriptionText.Text = request.PacedBillsCascadeDescription;
-        PacedBillsCascadeDescriptionText.Visibility = string.IsNullOrEmpty(request.PacedBillsCascadeDescription) ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var row in request.Rows)
+        {
+            RowsPanel.Children.Add(BuildRowControl(row));
+        }
     }
 
-    // Keeps each warning's own visibility live as the user picks between the
-    // two ChainBoundary radios — both radios share this one handler (Checked
-    // fires on whichever one becomes checked, including the one WPF checks
-    // automatically when the other is unchecked), rather than computing it
-    // only once at OnSaveClick, so the warning is something the user actually
-    // sees before committing, not after. A warning only ever shows for
-    // whichever option is CURRENTLY selected, and only when there's a real
-    // consequence to name — StayLinkedWarningText stays empty (so stays
-    // hidden) for a plain, never-destructive nudge, matching the row-based
-    // design's own "the default option is never the dangerous one" case.
-    private void OnChainBoundaryChoiceChanged(object sender, RoutedEventArgs e) => UpdateChainBoundaryWarningVisibility();
-
-    private void UpdateChainBoundaryWarningVisibility()
+    /// <summary>[CALC] Builds the one control that renders a single row, dispatched on its kind.</summary>
+    private UIElement BuildRowControl(ConfirmationRow row) => row switch
     {
-        StayLinkedWarningText.Visibility = StayLinkedRadio.IsChecked == true && !string.IsNullOrEmpty(StayLinkedWarningText.Text)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ChainBreakWarningText.Visibility = LetChainBreakRadio.IsChecked == true && !string.IsNullOrEmpty(ChainBreakWarningText.Text)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        AnnouncementRow announcement => BuildAnnouncement(announcement),
+        ChoiceRow choice => BuildChoice(choice),
+        // CandidatePickerRow / CheckboxRiderRow aren't produced by
+        // FinancePatternSaveConfirmation.BuildRows yet (their choices aren't
+        // surfaced today), so they never reach here. Fail loud rather than
+        // draw nothing if a later thread emits one without adding its template.
+        _ => throw new NotSupportedException($"No popup template for confirmation row kind {row.GetType().Name}."),
+    };
+
+    /// <summary>[CALC] A plain, wrapped statement with no choice attached — the forced-consolidation notice, the source-change warning, the break-off notice.</summary>
+    private static TextBlock BuildAnnouncement(AnnouncementRow row) => new()
+    {
+        Text = row.Text,
+        TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(0, 0, 0, 14),
+    };
+
+    /// <summary>[CALC] A question: its bold prompt, its options as one independent radio group (laid out per OptionLayout), the default pre-selected, and a footer under them showing the selected option's consequence (hidden when that option has none).</summary>
+    private FrameworkElement BuildChoice(ChoiceRow row)
+    {
+        var container = new StackPanel { Margin = new Thickness(0, 0, 0, 14) };
+
+        container.Children.Add(new TextBlock
+        {
+            Text = row.Question,
+            FontWeight = FontWeights.Bold,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+
+        // SideBySide lays the radios in a row; Stacked (what every row uses
+        // today) lays them one per line, matching the old fixed sections.
+        var sideBySide = row.Layout == OptionLayout.SideBySide;
+        var optionsPanel = new StackPanel
+        {
+            Orientation = sideBySide ? Orientation.Horizontal : Orientation.Vertical,
+        };
+
+        var footer = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Brushes.Gray,
+            FontStyle = FontStyles.Italic,
+            Margin = new Thickness(20, 4, 0, 0),
+            Visibility = Visibility.Collapsed,
+        };
+
+        var radios = new List<RadioButton>(row.Options.Count);
+        for (var i = 0; i < row.Options.Count; i++)
+        {
+            var radio = new RadioButton
+            {
+                Content = row.Options[i].Label,
+                // Unique GroupName per row keeps each question's radios
+                // mutually exclusive without bleeding into the next question's.
+                GroupName = row.Id,
+                IsChecked = i == row.DefaultIndex,
+                Margin = sideBySide ? new Thickness(0, 0, 12, 0) : new Thickness(0, 0, 0, 4),
+                Tag = row.Id,
+            };
+            radio.Checked += OnOptionChecked;
+            radios.Add(radio);
+            optionsPanel.Children.Add(radio);
+        }
+
+        container.Children.Add(optionsPanel);
+        container.Children.Add(footer);
+
+        var controls = new ChoiceRowControls(radios, row.Options, footer);
+        _choiceRows[row.Id] = controls;
+        UpdateConsequenceFooter(controls); // set the footer for the default selection up front
+
+        return container;
     }
 
+    // The one place a selected option's consequence is written — replaces the
+    // hand-copied per-section Update*Visibility handlers the old window had. The
+    // sender's Tag names its row; refresh that row's footer to whatever option
+    // is now checked.
+    private void OnOptionChecked(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string rowId } && _choiceRows.TryGetValue(rowId, out var controls))
+        {
+            UpdateConsequenceFooter(controls);
+        }
+    }
+
+    private static void UpdateConsequenceFooter(ChoiceRowControls controls)
+    {
+        var selected = SelectedIndex(controls.Radios);
+        var consequence = selected >= 0 ? controls.Options[selected].Consequence : "";
+        controls.Footer.Text = consequence;
+        controls.Footer.Visibility = string.IsNullOrEmpty(consequence) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private static int SelectedIndex(IReadOnlyList<RadioButton> radios)
+    {
+        for (var i = 0; i < radios.Count; i++)
+        {
+            if (radios[i].IsChecked == true)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // Maps each row's selection back to the flat answer MainWindow reads. An
+    // absent row yields -1, which lands on the safe default — the same value the
+    // old window's own defaulted-and-collapsed radios produced.
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
-        ChooseConsolidation = ConsolidateRadio.IsChecked == true;
-        ChoseStayLinked = StayLinkedRadio.IsChecked == true;
-        ChoseCascadeForward = CascadeForwardRadio.IsChecked == true;
-        ChoseCascadeTrivialFields = CascadeTrivialFieldsRadio.IsChecked == true;
-        ChoseToRepaceBills = RepaceBillsRadio.IsChecked == true;
+        ChooseConsolidation = SelectedOption(ConfirmationRowIds.Consolidation) == 1;       // 1 = combine
+        ChoseStayLinked = SelectedOption(ConfirmationRowIds.ChainBoundary) != 1;           // 0 = keep linked (default)
+        ChoseCascadeForward = SelectedOption(ConfirmationRowIds.Cascade) != 1;             // 0 = cascade forward (default)
+        ChoseCascadeTrivialFields = SelectedOption(ConfirmationRowIds.TrivialFieldsCascade) == 1; // 1 = cascade forward
+        ChoseToRepaceBills = SelectedOption(ConfirmationRowIds.PacedBillsCascade) == 0;    // 0 = update them
         DialogResult = true;
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    private int SelectedOption(string rowId) =>
+        _choiceRows.TryGetValue(rowId, out var controls) ? SelectedIndex(controls.Radios) : -1;
 }

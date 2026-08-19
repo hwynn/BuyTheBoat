@@ -70,3 +70,23 @@ public enum OptionLayout
     SideBySide,
     Stacked,
 }
+
+// The stable Id of every row FinancePatternSaveConfirmation.BuildRows can
+// produce. Shared so the builder and the popup that reads choices back
+// (EditingHistoryConfirmationWindow.OnSaveClick) can never drift on a literal
+// — a mismatch there would map a selection to the wrong answer with no test
+// catching it, since the whole suite bypasses the real popup (a delegate
+// double stands in). The announcement Ids aren't read back (announcements have
+// no answer), but are named here for one complete list.
+public static class ConfirmationRowIds
+{
+    public const string AlterPast = "alter-past";
+    public const string Consolidation = "consolidation";
+    public const string ConsolidationCaveat = "consolidation-caveat";
+    public const string ConsolidationForced = "consolidation-forced";
+    public const string SourceChange = "source-change";
+    public const string ChainBoundary = "chain-boundary";
+    public const string Cascade = "cascade";
+    public const string TrivialFieldsCascade = "trivial-fields-cascade";
+    public const string PacedBillsCascade = "paced-bills-cascade";
+}

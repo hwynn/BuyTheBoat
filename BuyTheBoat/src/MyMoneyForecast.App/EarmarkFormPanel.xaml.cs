@@ -102,8 +102,10 @@ public partial class EarmarkFormPanel : UserControl
     // plan's own Start as it's actually saved today (or the same as the
     // proposed pattern's own Start for a brand-new plan) — see
     // _loadedPlanStart's own field comment for why this can't just be read
-    // off the pattern parameter itself.
-    public Action<EarMarkPattern, DateOnly>? PatternSaved { get; set; }
+    // off the pattern parameter itself. It returns whether the save went
+    // through (false when the user cancels the confirmation), so SaveSavingsPlan
+    // can leave the form as-is rather than clearing it.
+    public Func<EarMarkPattern, DateOnly, bool>? PatternSaved { get; set; }
     public Action<IReadOnlyList<ManualEarmark>, IReadOnlyList<(int FinanceId, DateOnly Date)>>? ManualEarmarksSaved { get; set; }
 
     // Computes (or returns the cached) live forecast on demand, so this form
@@ -713,12 +715,17 @@ public partial class EarmarkFormPanel : UserControl
         // documented contract for that parameter.
         var savedStart = _loadedPlanStart ?? pattern.DatePattern.Start;
 
-        // The form clears itself automatically after a successful save,
-        // before invoking the callback — same as ExpenseFormPanel.Save,
-        // unconditional even though the callback's own navigation takes the
-        // user elsewhere.
-        LoadForNewPattern();
-        PatternSaved?.Invoke(pattern, savedStart);
+        // Only clear once the save has actually gone through — cancelling the
+        // confirmation returns false and leaves the form exactly as typed, so
+        // the user resumes as if Save was never clicked (same rule as
+        // ExpenseFormPanel.Save). A null handler counts as "went through,"
+        // keeping the old always-clear behavior for that case. Clearing after
+        // the callback's own navigation is fine — the panel just reads blank
+        // next time the user lands back on this tab.
+        if (PatternSaved?.Invoke(pattern, savedStart) ?? true)
+        {
+            LoadForNewPattern();
+        }
     }
 
     /// <summary>[CALC] Ported from ManualEarmarkWindow verbatim (Merge/RequireFundsCover/WarnIfOverFree/BalancesOn below) — same validation policy, just reading the source fund from this panel's own goal picker instead of a separate JarComboBox, since the goal is already chosen at the top of this same form.</summary>

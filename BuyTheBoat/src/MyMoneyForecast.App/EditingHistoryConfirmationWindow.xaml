@@ -11,128 +11,13 @@
             <Button Content="Save" Width="90" Padding="0,5" Click="OnSaveClick" IsDefault="True"/>
         </StackPanel>
 
-        <StackPanel>
-            <!-- Forward-only (planning/28, 2026-08-18): a change reaching
-                 already-occurred history always breaks off from today — there
-                 is no "apply to the past" choice anymore. Announced, not
-                 asked, to satisfy planning/25 Item B ("a change touching an
-                 on-or-before-as-of-date occurrence must never be silent").
-                 Visible only when IsChangeCritical. Kept as a named control
-                 (AlterPastSection) so the code-behind's own visibility line
-                 is unchanged. -->
-            <TextBlock x:Name="AlterPastSection" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,0,0,14"
-                       Text="This reaches back to history that's already happened, so it will start a new segment from today — your past records stay exactly as they were."/>
-
-            <!-- Item F's own ask — visible only when there's a real choice
-                 (more than one savings plan, and the schedule/start date
-                 isn't forcing consolidation). ConsolidationCaveatText warns
-                 ahead of the choice, not tied to either radio, that a
-                 break-off (Item E's own AlterPastSection above) always
-                 combines plans regardless of what's picked here — found
-                 2026-08-17: "keep separate" through a break-off was never
-                 built and used to silently save nothing at all, fixed to
-                 fall back to combining instead, which makes this caveat
-                 necessary so that fallback is never a surprise. -->
-            <StackPanel x:Name="ConsolidationAskSection" Margin="0,0,0,14">
-                <TextBlock Text="It has more than one savings plan. What do you want to do?" FontWeight="Bold" Margin="0,0,0,6"/>
-                <RadioButton x:Name="KeepSeparateRadio" GroupName="Consolidation" IsChecked="True" Margin="0,0,0,4"
-                             Content="Keep them separate"/>
-                <RadioButton x:Name="ConsolidateRadio" GroupName="Consolidation" Content="Combine them into one"/>
-                <TextBlock x:Name="ConsolidationCaveatText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,6,0,0"/>
-            </StackPanel>
-
-            <!-- Item F's forced case — announced, not asked. Text supplied
-                 by the request (ConsolidationForcedReason) rather than a
-                 static string since 2026-08-17, when the trigger widened to
-                 also cover a start_date change, not just a recurrence-shape
-                 one — see FinancePatternSaveConfirmation.DescribeConsolidationForcedReason's
-                 own doc comment. -->
-            <TextBlock x:Name="ConsolidationForcedText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic"/>
-
-            <!-- planning/27's own Source row (Phase 1 only — no EarMarkPattern
-                 equivalent): "warn, don't block." Announced, not asked — there's
-                 no choice on this row, the edit proceeds either way; visible
-                 only when SourceChangeWarning is non-empty. -->
-            <TextBlock x:Name="SourceChangeWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,14"/>
-
-            <!-- planning/27's own "stay linked or break" question — shared by
-                 both chain types (a savings-plan Start/Until edit touching an
-                 EarMarkPattern-chain neighbor, PlanTouchesChainBoundary, or a
-                 bill/paycheck Start/Until edit touching a FinancialPattern-
-                 chain neighbor, TouchesChainBoundary — the two never both
-                 apply to one request). Each
-                 radio gets its own warning slot right below it, text supplied
-                 by the request (StayLinkedWarning/LetItBreakWarning) and
-                 shown only while that option is the one currently selected
-                 AND there's a real consequence to name — mirroring the
-                 row-based design's own "contextual warning under the
-                 dangerous option" rule, and its own "the warning escalates
-                 with the consequence, the default option doesn't change"
-                 case (a plain nudge has nothing under it at all). -->
-            <StackPanel x:Name="ChainBoundarySection" Margin="0,0,0,14">
-                <TextBlock Text="This plan is part of a chain. Should it stay connected to its neighbor?" FontWeight="Bold" Margin="0,0,0,6"/>
-                <RadioButton x:Name="StayLinkedRadio" GroupName="ChainBoundary" IsChecked="True" Margin="0,0,0,4"
-                             Content="Keep it linked — adjust the neighboring segment to match" Checked="OnChainBoundaryChoiceChanged"/>
-                <TextBlock x:Name="StayLinkedWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="20,0,0,4"/>
-                <RadioButton x:Name="LetChainBreakRadio" GroupName="ChainBoundary"
-                             Content="Let the chain break" Checked="OnChainBoundaryChoiceChanged"/>
-                <TextBlock x:Name="ChainBreakWarningText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="20,4,0,0"/>
-            </StackPanel>
-
-            <!-- planning/27's own "cascade forward or not" question, for a
-                 savings-plan Amount/schedule edit with later segments to
-                 carry it to — visible only when PlanChangeCanCascade.
-                 Defaults to cascading forward, the settled system default.
-                 CascadeDescriptionText is a plain, always-shown description
-                 (not a warning tied to one option — neither choice here is
-                 destructive), naming the direct edit's own range and how far
-                 cascading would reach, per round 2 of the small questions. -->
-            <StackPanel x:Name="CascadeSection" Margin="0,0,0,14">
-                <TextBlock Text="This change could also apply to later segments in the chain. What do you want to do?" FontWeight="Bold" Margin="0,0,0,6"/>
-                <TextBlock x:Name="CascadeDescriptionText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,6"/>
-                <RadioButton x:Name="CascadeForwardRadio" GroupName="Cascade" IsChecked="True" Margin="0,0,0,4"
-                             Content="Apply it going forward too"/>
-                <RadioButton x:Name="JustThisPlanRadio" GroupName="Cascade"
-                             Content="Only this segment"/>
-            </StackPanel>
-
-            <!-- Phase 1's own third question (planning/27, "fourth
-                 relationship" round 3) — no EarMarkPattern equivalent, since
-                 EarMarkPattern has no Priority/Mandatory/Description/AutoRenew.
-                 Visible only when TrivialFieldsCanCascade. Unlike CascadeSection
-                 above, defaults to "just this segment" — the one place this
-                 mechanism doesn't mirror Amount/shape's own default. No
-                 warning needed either direction; neither choice has a real
-                 downside for these fields. -->
-            <StackPanel x:Name="TrivialFieldsCascadeSection" Margin="0,0,0,14">
-                <TextBlock Text="This also changes details like priority, mandatory, or description. Update later segments too?" FontWeight="Bold" Margin="0,0,0,6"/>
-                <TextBlock x:Name="TrivialFieldsCascadeDescriptionText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,6"/>
-                <RadioButton x:Name="JustThisSegmentTrivialRadio" GroupName="TrivialFieldsCascade" IsChecked="True" Margin="0,0,0,4"
-                             Content="Only this segment"/>
-                <RadioButton x:Name="CascadeTrivialFieldsRadio" GroupName="TrivialFieldsCascade"
-                             Content="Apply it going forward too"/>
-            </StackPanel>
-
-            <!-- The paycheck-association cascade (2026-08-17) — visible only
-                 when PacedBillsCanCascade: at least one OTHER pattern's
-                 currently-active savings plan was paced against this
-                 income's OLD schedule and no longer is.
-                 PacedBillsCascadeDescriptionText names which bill(s), per
-                 the settled "singly for one associated bill or as a
-                 combined 'update all' option for several" language. Unlike
-                 CascadeSection above, defaults to NOT updating — "offered
-                 as a suggestion (not forced)," the settled language this
-                 mechanism is named for; no warning needed either direction,
-                 since declining just leaves an existing, still-valid plan
-                 as it already was. -->
-            <StackPanel x:Name="PacedBillsCascadeSection" Margin="0,0,0,14">
-                <TextBlock Text="Your paycheck's schedule changed. Update its associated savings plan(s) too?" FontWeight="Bold" Margin="0,0,0,6"/>
-                <TextBlock x:Name="PacedBillsCascadeDescriptionText" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,0,0,6"/>
-                <RadioButton x:Name="RepaceBillsRadio" GroupName="PacedBillsCascade" Margin="0,0,0,4"
-                             Content="Update them to match the new schedule"/>
-                <RadioButton x:Name="LeaveBillsAloneRadio" GroupName="PacedBillsCascade" IsChecked="True"
-                             Content="Leave them as they are"/>
-            </StackPanel>
-        </StackPanel>
+        <!-- planning/28 Thread 2: every question/announcement is now a
+             ConfirmationRow in request.Rows. The code-behind fills this panel
+             from that list, in order — this window no longer knows which
+             sections exist or what they mean. The wrapper
+             (FinancePatternSaveConfirmation) decides the rows; this just draws
+             them and reads the choices back. Deliberately still the minimal
+             plain-WPF look, not the styled mockup. -->
+        <StackPanel x:Name="RowsPanel"/>
     </DockPanel>
 </Window>
