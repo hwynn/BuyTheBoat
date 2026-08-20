@@ -88,7 +88,7 @@ public partial class CreateEarMarkPatternWindow : Window
 
         decimal.TryParse(AmountTextBox.Text, out var enteredAmount);
         decimal.TryParse(StartingAllocationTextBox.Text, out var startingAllocation);
-        var start = RuleEditor.Result?.Start ?? DateOnly.FromDateTime(DateTime.Today);
+        var start = RuleEditor.Result?.ActiveStart ?? DateOnly.FromDateTime(DateTime.Today);
 
         var narrative = enteredAmount > 0m
             ? $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {enteredAmount:C0} per occurrence, starting {start:MMM d, yyyy}."

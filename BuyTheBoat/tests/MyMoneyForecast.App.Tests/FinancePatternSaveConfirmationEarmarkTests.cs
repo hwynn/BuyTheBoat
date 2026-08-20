@@ -32,7 +32,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _financialPatterns.Save(goal, accountId: 1);
         var newPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31));
 
-        var confirmation = Confirmation(newPlan, newPlan.DatePattern.Start, goal);
+        var confirmation = Confirmation(newPlan, newPlan.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked for a brand-new plan");
 
         confirmation.Run().ShouldBeTrue();
@@ -51,7 +51,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(successor);
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         // No ConfirmImplicitChanges wired up — proves the DEFAULT (stay
         // linked) is what fires, not a hard-coded test answer.
 
@@ -59,8 +59,8 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         var plans = _earMarkPatterns.GetAll();
         plans.Count.ShouldBe(2);
-        plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 1, 1)).DatePattern.Until.ShouldBe(new DateOnly(2025, 4, 15));
-        var adjustedSuccessor = plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 4, 16));
+        plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 1, 1)).DatePattern.Until.ShouldBe(new DateOnly(2025, 4, 15));
+        var adjustedSuccessor = plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 4, 16));
         adjustedSuccessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // unchanged
         adjustedSuccessor.Amount.ShouldBe(-80m); // unchanged — no cascade was in play here
     }
@@ -76,14 +76,14 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(successor);
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToLetChainBreak();
 
         confirmation.Run().ShouldBeTrue();
 
         var plans = _earMarkPatterns.GetAll();
         plans.Count.ShouldBe(2);
-        var untouchedSuccessor = plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 4, 1));
+        var untouchedSuccessor = plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 4, 1));
         untouchedSuccessor.Amount.ShouldBe(successor.Amount);
         untouchedSuccessor.DatePattern.Until.ShouldBe(successor.DatePattern.Until); // own overlap with current left in place, not resolved
     }
@@ -99,7 +99,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(successor);
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
 
         confirmation.Run().ShouldBeTrue();
 
@@ -120,14 +120,14 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(successor);
 
         var editedPlan = Plan(goal, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         // No ConfirmImplicitChanges wired up — proves cascading forward is
         // the actual default, not something only a test-supplied answer does.
 
         confirmation.Run().ShouldBeTrue();
 
         var plans = _earMarkPatterns.GetAll();
-        var cascaded = plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 4, 1));
+        var cascaded = plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 4, 1));
         cascaded.Amount.ShouldBe(-120m);
         cascaded.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // its own dates, untouched
     }
@@ -143,12 +143,12 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(successor);
 
         var editedPlan = Plan(goal, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseJustThisSegment();
 
         confirmation.Run().ShouldBeTrue();
 
-        _earMarkPatterns.GetAll().Single(p => p.DatePattern.Start == new DateOnly(2025, 4, 1)).Amount.ShouldBe(-100m);
+        _earMarkPatterns.GetAll().Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 4, 1)).Amount.ShouldBe(-100m);
     }
 
     // The composed case — a boundary change AND a cascade-eligible change in
@@ -168,13 +168,13 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         // Until extends 15 days into the successor AND the amount changes —
         // both defaults (stay linked, cascade forward) apply.
         var editedPlan = Plan(goal, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
 
         confirmation.Run().ShouldBeTrue();
 
         var plans = _earMarkPatterns.GetAll();
         plans.Count.ShouldBe(2);
-        var adjustedSuccessor = plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 4, 16));
+        var adjustedSuccessor = plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 4, 16));
         adjustedSuccessor.Amount.ShouldBe(-120m); // cascaded
         adjustedSuccessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // its own, unaffected by the cascade
     }
@@ -192,7 +192,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(current);
 
         var editedPlan = Plan(goal, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
 
         confirmation.Run().ShouldBeTrue();
 
@@ -225,15 +225,15 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         // Shrinks main's own Until to Jun 30 — still well inside concurrent's
         // own Mar 1 - Aug 31 span, so the two plans still overlap either way.
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, main.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, main.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked — concurrent, not a chain neighbor");
 
         confirmation.Run().ShouldBeTrue();
 
         var plans = _earMarkPatterns.GetAll();
         plans.Count.ShouldBe(2);
-        plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 1, 1)).DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // main, edited
-        var untouchedConcurrent = plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 3, 1));
+        plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 1, 1)).DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // main, edited
+        var untouchedConcurrent = plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 3, 1));
         untouchedConcurrent.DatePattern.Until.ShouldBe(new DateOnly(2025, 8, 31)); // NOT truncated to Jul 1
         untouchedConcurrent.Amount.ShouldBe(-50m);
     }
@@ -252,14 +252,14 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(concurrent);
 
         var editedPlan = Plan(goal, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31));
-        var confirmation = Confirmation(editedPlan, main.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, main.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked — concurrent, not a chain neighbor");
 
         confirmation.Run().ShouldBeTrue();
 
         var plans = _earMarkPatterns.GetAll();
-        plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 1, 1)).Amount.ShouldBe(-120m); // main, edited
-        plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 3, 1)).Amount.ShouldBe(-50m); // untouched
+        plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 1, 1)).Amount.ShouldBe(-120m); // main, edited
+        plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 3, 1)).Amount.ShouldBe(-50m); // untouched
     }
 
     // planning/27's own "let the chain break" case: the gap left behind
@@ -282,7 +282,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         // (successor's own Start stays Jul 1, untouched by "let it break"),
         // stranding the Jun 15 earmark with nothing covering it.
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToLetChainBreak();
 
         confirmation.Run().ShouldBeTrue();
@@ -305,7 +305,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _manualEarmarks.Save(ManualEarmarkEntry(current, new DateOnly(2025, 8, 15), 25m));
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked — no neighbor to touch a boundary with");
 
         confirmation.Run().ShouldBeTrue();
@@ -335,7 +335,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         // successor's own span, so the successor is nudged (Start -> Sep 1),
         // not absorbed. Jul 15 is inside current's own new span now.
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 31));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         // No ConfirmImplicitChanges wired up — proves the DEFAULT (stay
         // linked) is what runs, matching the plain nudge test above.
 
@@ -360,7 +360,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _manualEarmarks.Save(ManualEarmarkEntry(successor, new DateOnly(2025, 5, 15), 25m));
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
 
         confirmation.Run().ShouldBeTrue();
 
@@ -387,7 +387,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         ImplicitChangeConfirmationRequest? captured = null;
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
@@ -412,7 +412,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         ImplicitChangeConfirmationRequest? captured = null;
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
@@ -439,7 +439,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         ImplicitChangeConfirmationRequest? captured = null;
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
@@ -469,7 +469,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         // reaching its Until (Jun 30) — an overlap, not an absorb candidate
         // in the "stay linked" sense, and not a gap in the "let it break" sense.
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
@@ -496,7 +496,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         ImplicitChangeConfirmationRequest? captured = null;
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
@@ -522,7 +522,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
 
         ImplicitChangeConfirmationRequest? captured = null;
         var editedPlan = Plan(goal, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
@@ -548,14 +548,14 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         _earMarkPatterns.Save(successor);
 
         var editedPlan = Plan(goal, -100m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 15));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, goal);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, goal);
         confirmation.ConfirmImplicitChanges = _ => Confirm.Cancel();
 
         confirmation.Run().ShouldBeFalse();
 
         var plans = _earMarkPatterns.GetAll();
-        plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 1, 1)).DatePattern.Until.ShouldBe(new DateOnly(2025, 3, 31)); // unchanged
-        plans.Single(p => p.DatePattern.Start == new DateOnly(2025, 4, 1)).Amount.ShouldBe(successor.Amount); // unchanged
+        plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 1, 1)).DatePattern.Until.ShouldBe(new DateOnly(2025, 3, 31)); // unchanged
+        plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 4, 1)).Amount.ShouldBe(successor.Amount); // unchanged
     }
 
     // ---- shared scenario-building helpers ----------------------------------
@@ -587,7 +587,7 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [start.Day],
-        Start = start,
+        DtStart = start,
         Until = until,
     });
 

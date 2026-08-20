@@ -59,7 +59,7 @@ public static class PayoffEstimator
         var schedule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = request.Frequency,
-            Start = request.Start,
+            DtStart = request.Start,
             Interval = request.Interval,
             ByDay = request.ByDay,
             ByMonthDay = request.ByMonthDay,

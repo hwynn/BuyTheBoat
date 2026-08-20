@@ -146,7 +146,7 @@ public partial class ExpenseFormPanel : UserControl
         // started segment.
         _patternsByFinanceId = earMarkPatterns
             .GroupBy(pattern => pattern.FinanceId)
-            .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.Start).First());
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.ActiveStart).First());
 
         // How MANY plans each finance id has, not just the one above —
         // UpdateSummary's own signal for "editing this could force a
@@ -281,7 +281,7 @@ public partial class ExpenseFormPanel : UserControl
 
         if (isOneTime)
         {
-            DueDatePicker.SelectedDate = current.DatePattern.Start.ToDateTime(TimeOnly.MinValue);
+            DueDatePicker.SelectedDate = current.DatePattern.ActiveStart.ToDateTime(TimeOnly.MinValue);
         }
         else
         {
@@ -375,7 +375,7 @@ public partial class ExpenseFormPanel : UserControl
             // the plan-progress ones.
             Summary.Load(
                 $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.",
-                start: plan.DatePattern.Start,
+                start: plan.DatePattern.ActiveStart,
                 asOfDate: todayDate,
                 dueDate: dueDate,
                 startAmount: 0m,
@@ -387,7 +387,7 @@ public partial class ExpenseFormPanel : UserControl
         }
 
         var narrative =
-            $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {Math.Abs(plan.Amount):C0} per occurrence, starting {plan.DatePattern.Start:MMM d, yyyy}.";
+            $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {Math.Abs(plan.Amount):C0} per occurrence, starting {plan.DatePattern.ActiveStart:MMM d, yyyy}.";
 
         var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
             [plan], existing, plan.DatePattern.ActiveStart, dueDate, plan.StartingAllocation);
@@ -427,7 +427,7 @@ public partial class ExpenseFormPanel : UserControl
 
         Summary.Load(
             narrative,
-            start: plan.DatePattern.Start,
+            start: plan.DatePattern.ActiveStart,
             asOfDate: todayDate,
             dueDate: dueDate,
             startAmount: plan.StartingAllocation,
@@ -462,7 +462,7 @@ public partial class ExpenseFormPanel : UserControl
 
         if (BreakOffFactory.FindSuccessor(existing, allPatterns) is { } successor)
         {
-            SuccessorNoteText.Text = $"This pattern is continued by a newer one, starting {successor.DatePattern.Start:MMM d, yyyy}.";
+            SuccessorNoteText.Text = $"This pattern is continued by a newer one, starting {successor.DatePattern.ActiveStart:MMM d, yyyy}.";
             SuccessorNoteText.Visibility = Visibility.Visible;
         }
         else
@@ -503,7 +503,7 @@ public partial class ExpenseFormPanel : UserControl
         var label = string.IsNullOrWhiteSpace(pattern.Description) ? pattern.Source : pattern.Description;
         var todayDate = DateOnly.FromDateTime(DateTime.Today);
         var narrative =
-            $"We'd need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. This is a rough preview of the savings plan Save and Plan would set up — {Math.Abs(proposal.Plan.Amount):C0} per occurrence, starting {proposal.Plan.DatePattern.Start:MMM d, yyyy}.";
+            $"We'd need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. This is a rough preview of the savings plan Save and Plan would set up — {Math.Abs(proposal.Plan.Amount):C0} per occurrence, starting {proposal.Plan.DatePattern.ActiveStart:MMM d, yyyy}.";
 
         var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
             [proposal.Plan], pattern, proposal.Plan.DatePattern.ActiveStart, dueDate, proposal.Plan.StartingAllocation);
@@ -511,7 +511,7 @@ public partial class ExpenseFormPanel : UserControl
 
         Summary.Load(
             narrative,
-            start: proposal.Plan.DatePattern.Start,
+            start: proposal.Plan.DatePattern.ActiveStart,
             asOfDate: todayDate,
             dueDate: dueDate,
             startAmount: proposal.Plan.StartingAllocation,
@@ -899,7 +899,7 @@ public partial class ExpenseFormPanel : UserControl
             return RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = DateOnly.FromDateTime(date),
+                DtStart = DateOnly.FromDateTime(date),
                 Count = 1,
             });
         }

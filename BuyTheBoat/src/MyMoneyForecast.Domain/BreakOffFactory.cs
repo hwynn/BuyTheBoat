@@ -301,7 +301,7 @@ public static class BreakOffFactory
                 Interval = request.Predecessor.DatePattern.Interval,
                 ByDay = request.Predecessor.DatePattern.ByDay,
                 ByMonthDay = request.Predecessor.DatePattern.ByMonthDay,
-                Start = request.RenewalDate,
+                DtStart = request.RenewalDate,
                 Until = request.RenewalDate.AddYears(request.SegmentYears),
             },
             CarriedOverJarBalance = request.CarriedOverJarBalance,
@@ -335,7 +335,7 @@ public static class BreakOffFactory
     /// <param name="successorSchedule">The successor's proposed schedule.</param>
     private static void ValidateCutBoundaries(FinancialPattern predecessor, DateOnly cutDate, int successorFinanceId, RecurrenceRuleOptions successorSchedule)
     {
-        if (cutDate <= predecessor.DatePattern.Start)
+        if (cutDate <= predecessor.DatePattern.ActiveStart)
         {
             throw new ArgumentException(
                 "The cut date must be after the pattern's own start — there has to be at least one day of history to preserve.",
@@ -359,7 +359,7 @@ public static class BreakOffFactory
         // truncated predecessor, the same invariant this check has always
         // enforced, just read off the field that's now sometimes doing that
         // job instead of Start itself.
-        var successorActiveStart = successorSchedule.ActiveFrom ?? successorSchedule.Start;
+        var successorActiveStart = successorSchedule.ActiveFrom ?? successorSchedule.DtStart;
         if (successorActiveStart != cutDate)
         {
             throw new ArgumentException(
@@ -384,7 +384,7 @@ public static class BreakOffFactory
         allPatterns
             .Where(candidate => candidate.Source == pattern.Source)
             .Append(pattern) // always a candidate, even if the caller's list omits it
-            .OrderByDescending(candidate => candidate.DatePattern.Start)
+            .OrderByDescending(candidate => candidate.DatePattern.ActiveStart)
             .First();
 
     /// <summary>[CALC] Finds the segment immediately BEFORE this one in a break-off/renewal chain — same Source-reuse lookup FindCurrentSegment uses, one direction: another pattern sharing this one's own Source whose own Until ends exactly the day before this one's own Start. Null when this pattern doesn't continue from an earlier one — either it's the first segment ever, or it was never part of a chain at all. Editing UIs use this to tell a user "this continues an existing pattern" without them having to remember the history themselves.</summary>
@@ -394,7 +394,7 @@ public static class BreakOffFactory
         allPatterns.FirstOrDefault(candidate =>
             candidate.Source == pattern.Source &&
             candidate.FinanceId != pattern.FinanceId &&
-            candidate.DatePattern.Until.AddDays(1) == pattern.DatePattern.Start);
+            candidate.DatePattern.ImmediatelyPrecedes(pattern.DatePattern));
 
     /// <summary>[CALC] Finds the segment immediately AFTER this one in a break-off/renewal chain — the mirror of FindPredecessor: another pattern sharing this one's own Source whose own Start begins exactly the day after this one's own Until. Null when this pattern hasn't since been continued by a later one — it's still the current segment (FindCurrentSegment would return it unchanged).</summary>
     /// <param name="pattern">The segment to find a successor for.</param>
@@ -403,12 +403,12 @@ public static class BreakOffFactory
         allPatterns.FirstOrDefault(candidate =>
             candidate.Source == pattern.Source &&
             candidate.FinanceId != pattern.FinanceId &&
-            candidate.DatePattern.Start == pattern.DatePattern.Until.AddDays(1));
+            pattern.DatePattern.ImmediatelyPrecedes(candidate.DatePattern));
 
     /// <summary>[CALC] Whether two FinancialPatterns sharing a Source have overlapping active spans — unlike EarMarkPattern's own F27 concurrent-funder shape, nothing in this project designs for two FinancialPatterns sharing a Source and overlapping on purpose (FindPredecessor/FindSuccessor only ever match STRICTLY contiguous dates), but FinancialPattern.Create itself validates no such thing, so a caller building the fuller "every other same-Source pattern" list (not just FindPredecessor/FindSuccessor's own strict match) needs this guard for the same reason RestructureFactory.SpansOverlap exists — an overlapping pattern must never be mistaken for a sequential chain neighbor and absorbed/cascaded onto.</summary>
     /// <returns>True when the two patterns' own active spans (ActiveStart–Until) share any day.</returns>
     public static bool SpansOverlap(FinancialPattern a, FinancialPattern b) =>
-        a.DatePattern.ActiveStart <= b.DatePattern.Until && b.DatePattern.ActiveStart <= a.DatePattern.Until;
+        a.DatePattern.ActiveSpansOverlap(b.DatePattern);
 
     /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27, Phase 1) for a segment's own Until moving, against every other FinancialPattern sharing its Source — the neighbor a growing Until reaches into shrinks or expands to match; one reached far enough to be fully overtaken is absorbed instead (its own FinanceId ceases to exist entirely — see the class-level note on what a caller still owes it), and the walk keeps going in case it reaches even further. Mirrors RestructureFactory.ExtendUntil's own shape exactly, one level up — no goal parameter needed here (a FinancialPattern has no parent to validate against, unlike EarMarkPattern).</summary>
     /// <param name="current">The segment being saved, with its own Until about to change.</param>
@@ -417,14 +417,14 @@ public static class BreakOffFactory
     /// <returns>The segment's own updated shape, whichever later segments get absorbed (if any, ordered earliest first), and whichever one segment needs its own Start moved to stay contiguous (if any).</returns>
     public static FinancialChainBoundaryResult ExtendUntil(FinancialPattern current, IReadOnlyList<FinancialPattern> otherPatterns, DateOnly newUntil)
     {
-        if (newUntil < current.DatePattern.Start)
+        if (newUntil < current.DatePattern.ActiveStart)
         {
             throw new ArgumentException("The new Until can't be before the pattern's own Start.", nameof(newUntil));
         }
 
         var laterPatterns = otherPatterns
-            .Where(pattern => pattern.DatePattern.Start > current.DatePattern.Start)
-            .OrderBy(pattern => pattern.DatePattern.Start)
+            .Where(pattern => pattern.DatePattern.ActiveStart > current.DatePattern.ActiveStart)
+            .OrderBy(pattern => pattern.DatePattern.ActiveStart)
             .ToList();
 
         var absorbed = new List<FinancialPattern>();
@@ -464,18 +464,18 @@ public static class BreakOffFactory
             throw new ArgumentException("The new Start can't be after the pattern's own Until.", nameof(newStart));
         }
 
-        // <= , not < : current.DatePattern.Start here is already the NEW,
+        // <= , not < : current.DatePattern.ActiveStart here is already the NEW,
         // proposed Start (every caller passes it as both current and
         // newStart) — a neighbor whose own Start lands EXACTLY on newStart
         // is still a real absorb candidate (the loop's own newStart <=
-        // pattern.DatePattern.Start check below would say so), so filtering
+        // pattern.DatePattern.ActiveStart check below would say so), so filtering
         // it out here with a strict < silently dropped that exact-boundary
         // case entirely. Found 2026-08-17 while writing this method's own
         // app-layer test — RestructureFactory.ExtendStart had the identical,
         // already-latent bug, fixed there too the same pass.
         var earlierPatterns = otherPatterns
-            .Where(pattern => pattern.DatePattern.Start <= current.DatePattern.Start)
-            .OrderByDescending(pattern => pattern.DatePattern.Start)
+            .Where(pattern => pattern.DatePattern.ActiveStart <= current.DatePattern.ActiveStart)
+            .OrderByDescending(pattern => pattern.DatePattern.ActiveStart)
             .ToList();
 
         var absorbed = new List<FinancialPattern>();
@@ -486,7 +486,7 @@ public static class BreakOffFactory
         // first one not fully reached" rule.
         foreach (var pattern in earlierPatterns)
         {
-            if (newStart <= pattern.DatePattern.Start)
+            if (newStart <= pattern.DatePattern.ActiveStart)
             {
                 absorbed.Add(pattern);
                 continue;
@@ -510,17 +510,7 @@ public static class BreakOffFactory
             {
                 FinanceId = pattern.FinanceId,
                 Source = pattern.Source,
-                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-                {
-                    Frequency = newShape.Frequency,
-                    Interval = newShape.Interval,
-                    ByDay = newShape.ByDay,
-                    ByMonthDay = newShape.ByMonthDay,
-                    Start = pattern.DatePattern.Start,
-                    Until = pattern.DatePattern.Until,
-                    ActiveFrom = pattern.DatePattern.ActiveFrom,
-                    ExcludedDates = pattern.DatePattern.ExcludedDates,
-                }),
+                DatePattern = pattern.DatePattern.WithShapeOf(newShape),
                 Amount = newAmount,
                 Priority = pattern.Priority,
                 Mandatory = pattern.Mandatory,

@@ -9,7 +9,7 @@ public class TransferTests
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [1],
-        Start = new DateOnly(2025, 1, 1),
+        DtStart = new DateOnly(2025, 1, 1),
         Until = new DateOnly(2027, 1, 1),
     });
 

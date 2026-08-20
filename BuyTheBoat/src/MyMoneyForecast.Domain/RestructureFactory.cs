@@ -58,7 +58,7 @@ public static class RestructureFactory
     /// <returns>The now-bounded original plan plus the new one that continues from the cut date, at the user's specified rate.</returns>
     public static RestructureResult Restructure(RestructureRequest request)
     {
-        if (request.CutDate <= request.Predecessor.DatePattern.Start)
+        if (request.CutDate <= request.Predecessor.DatePattern.ActiveStart)
         {
             throw new ArgumentException(
                 "The cut date must be after the plan's own start — there has to be at least one day of the old rate to preserve.",
@@ -71,7 +71,7 @@ public static class RestructureFactory
         // (below) needs them to differ: its one $0 occurrence sits at the
         // goal's own due date, but its active span — where the jar stays
         // alive and computable — must still begin exactly on the cut date.
-        var successorActiveStart = request.SuccessorSchedule.ActiveFrom ?? request.SuccessorSchedule.Start;
+        var successorActiveStart = request.SuccessorSchedule.ActiveFrom ?? request.SuccessorSchedule.DtStart;
         if (successorActiveStart != request.CutDate)
         {
             throw new ArgumentException(
@@ -147,7 +147,7 @@ public static class RestructureFactory
                 // Frequency is immaterial for a single occurrence — mirrors
                 // ProposeEmpty's identical shape.
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = dueDate,
+                DtStart = dueDate,
                 Count = 1,
                 // Only reach back when the occurrence itself doesn't already
                 // cover the cut date.
@@ -180,13 +180,13 @@ public static class RestructureFactory
             }
         }
 
-        return plans.OrderByDescending(plan => plan.DatePattern.Start).First();
+        return plans.OrderByDescending(plan => plan.DatePattern.ActiveStart).First();
     }
 
     /// <summary>[CALC] Whether two EarMarkPatterns sharing one finance_id are genuinely concurrent (F27 — e.g. two household-partner funders both live at once) rather than sequential chain neighbors. The one shared definition of "overlap" for this whole file — FindCurrentPlan's own pairwise check above, extracted so FinancePatternSaveConfirmation.RunForPlan can rule out a concurrent plan before ever treating it as a predecessor/successor, instead of re-deriving the same test a second way.</summary>
     /// <returns>True when the two plans' own active spans (ActiveStart–Until) share any day.</returns>
     public static bool SpansOverlap(EarMarkPattern a, EarMarkPattern b) =>
-        a.DatePattern.ActiveStart <= b.DatePattern.Until && b.DatePattern.ActiveStart <= a.DatePattern.Until;
+        a.DatePattern.ActiveSpansOverlap(b.DatePattern);
 
     /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27) for a plan's own Until moving, against every other EarMarkPattern sharing its finance_id — the neighbor a growing Until reaches into shrinks or expands to match; one reached far enough to be fully overtaken is absorbed instead, and the walk keeps going in case it reaches even further.</summary>
     /// <param name="current">The plan being saved, with its own Until about to change.</param>
@@ -196,14 +196,14 @@ public static class RestructureFactory
     /// <returns>The plan's own updated shape, whichever later plans get absorbed (if any, ordered earliest first), and whichever one plan needs its own Start moved to stay contiguous (if any).</returns>
     public static ChainBoundaryResult ExtendUntil(EarMarkPattern current, IReadOnlyList<EarMarkPattern> otherPlans, FinancialPattern goal, DateOnly newUntil)
     {
-        if (newUntil < current.DatePattern.Start)
+        if (newUntil < current.DatePattern.ActiveStart)
         {
             throw new ArgumentException("The new Until can't be before the plan's own Start.", nameof(newUntil));
         }
 
         var laterPlans = otherPlans
-            .Where(plan => plan.DatePattern.Start > current.DatePattern.Start)
-            .OrderBy(plan => plan.DatePattern.Start)
+            .Where(plan => plan.DatePattern.ActiveStart > current.DatePattern.ActiveStart)
+            .OrderBy(plan => plan.DatePattern.ActiveStart)
             .ToList();
 
         var absorbed = new List<EarMarkPattern>();
@@ -269,18 +269,18 @@ public static class RestructureFactory
             throw new ArgumentException("The new Start can't be after the plan's own Until.", nameof(newStart));
         }
 
-        // <= , not < : current.DatePattern.Start here is already the NEW,
+        // <= , not < : current.DatePattern.ActiveStart here is already the NEW,
         // proposed Start (every caller passes it as both current and
         // newStart) — a neighbor whose own Start lands EXACTLY on newStart
         // is still a real absorb candidate (the loop's own newStart <=
-        // plan.DatePattern.Start check below would say so), so filtering it
+        // plan.DatePattern.ActiveStart check below would say so), so filtering it
         // out here with a strict < silently dropped that exact-boundary
         // case entirely. Found 2026-08-17 while building Phase 1's own
         // mirror of this method and hitting the case directly; fixed here
         // too since the same bug was already latent in this, the original.
         var earlierPlans = otherPlans
-            .Where(plan => plan.DatePattern.Start <= current.DatePattern.Start)
-            .OrderByDescending(plan => plan.DatePattern.Start)
+            .Where(plan => plan.DatePattern.ActiveStart <= current.DatePattern.ActiveStart)
+            .OrderByDescending(plan => plan.DatePattern.ActiveStart)
             .ToList();
 
         var absorbed = new List<EarMarkPattern>();
@@ -292,7 +292,7 @@ public static class RestructureFactory
         // first one not fully reached" rule.
         foreach (var plan in earlierPlans)
         {
-            if (newStart <= plan.DatePattern.Start)
+            if (newStart <= plan.DatePattern.ActiveStart)
             {
                 absorbed.Add(plan);
                 absorbedStartingAllocation += plan.StartingAllocation;
@@ -336,17 +336,7 @@ public static class RestructureFactory
                 new EarMarkPatternOptions
                 {
                     FinanceId = plan.FinanceId,
-                    DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-                    {
-                        Frequency = newShape.Frequency,
-                        Interval = newShape.Interval,
-                        ByDay = newShape.ByDay,
-                        ByMonthDay = newShape.ByMonthDay,
-                        Start = plan.DatePattern.Start,
-                        Until = plan.DatePattern.Until,
-                        ActiveFrom = plan.DatePattern.ActiveFrom,
-                        ExcludedDates = plan.DatePattern.ExcludedDates,
-                    }),
+                    DatePattern = plan.DatePattern.WithShapeOf(newShape),
                     Amount = newAmount,
                     StartingAllocation = plan.StartingAllocation,
                 },

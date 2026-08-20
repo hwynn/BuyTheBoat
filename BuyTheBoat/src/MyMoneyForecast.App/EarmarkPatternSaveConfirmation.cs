@@ -84,7 +84,7 @@ public sealed class EarmarkPatternSaveConfirmation
         var goal = _goal;
         var forecast = _requestForecast();
         var allPlansForGoal = forecast.Book.EarMarkPatternsFor(goal.FinanceId);
-        var saved = allPlansForGoal.FirstOrDefault(plan => plan.DatePattern.Start == _earmarkSavedStart);
+        var saved = allPlansForGoal.FirstOrDefault(plan => plan.DatePattern.DtStart == _earmarkSavedStart);
 
         if (saved is null)
         {
@@ -106,12 +106,12 @@ public sealed class EarmarkPatternSaveConfirmation
         // mistaken for a sequential neighbor and absorbed/cascaded-onto by
         // PerformEarmarkSave below, which trusts this same filtered list.
         var otherPlans = allPlansForGoal
-            .Where(plan => plan.DatePattern.Start != saved.DatePattern.Start && !RestructureFactory.SpansOverlap(plan, saved))
+            .Where(plan => plan.DatePattern.DtStart != saved.DatePattern.DtStart && !RestructureFactory.SpansOverlap(plan, saved))
             .ToList();
-        var hasPredecessor = otherPlans.Any(plan => plan.DatePattern.Start < saved.DatePattern.Start);
-        var hasSuccessor = otherPlans.Any(plan => plan.DatePattern.Start > saved.DatePattern.Start);
+        var hasPredecessor = otherPlans.Any(plan => plan.DatePattern.DtStart < saved.DatePattern.DtStart);
+        var hasSuccessor = otherPlans.Any(plan => plan.DatePattern.DtStart > saved.DatePattern.DtStart);
 
-        var startChanged = saved.DatePattern.Start != proposedPlan.DatePattern.Start;
+        var startChanged = saved.DatePattern.DtStart != proposedPlan.DatePattern.DtStart;
         var untilChanged = saved.DatePattern.Until != proposedPlan.DatePattern.Until;
         var amountOrShapeChanged = saved.Amount != proposedPlan.Amount
             || saved.DatePattern.Frequency != proposedPlan.DatePattern.Frequency
@@ -186,25 +186,25 @@ public sealed class EarmarkPatternSaveConfirmation
         // used to be.
         var toSave = new Dictionary<DateOnly, EarMarkPattern>();
 
-        var predecessors = otherPlans.Where(plan => plan.DatePattern.Start < saved.DatePattern.Start).ToList();
-        var successors = otherPlans.Where(plan => plan.DatePattern.Start > saved.DatePattern.Start).ToList();
+        var predecessors = otherPlans.Where(plan => plan.DatePattern.DtStart < saved.DatePattern.DtStart).ToList();
+        var successors = otherPlans.Where(plan => plan.DatePattern.DtStart > saved.DatePattern.DtStart).ToList();
 
         if (PlanTouchesChainBoundary && UserChoseStayLinked)
         {
-            if (saved.DatePattern.Start != current.DatePattern.Start && predecessors.Count > 0)
+            if (saved.DatePattern.DtStart != current.DatePattern.DtStart && predecessors.Count > 0)
             {
-                var result = RestructureFactory.ExtendStart(current, predecessors, goal, current.DatePattern.Start);
+                var result = RestructureFactory.ExtendStart(current, predecessors, goal, current.DatePattern.DtStart);
                 current = result.Current;
                 foreach (var absorbed in result.Absorbed)
                 {
-                    toDelete.Add(absorbed.DatePattern.Start);
+                    toDelete.Add(absorbed.DatePattern.DtStart);
                 }
 
                 if (result.AdjustedNeighbor is { } adjusted)
                 {
                     // ExtendStart's own neighbor keeps its own Start — an
                     // in-place update, not a key change.
-                    toSave[adjusted.DatePattern.Start] = adjusted;
+                    toSave[adjusted.DatePattern.DtStart] = adjusted;
                 }
             }
 
@@ -214,7 +214,7 @@ public sealed class EarmarkPatternSaveConfirmation
                 current = result.Current;
                 foreach (var absorbed in result.Absorbed)
                 {
-                    toDelete.Add(absorbed.DatePattern.Start);
+                    toDelete.Add(absorbed.DatePattern.DtStart);
                 }
 
                 if (result.AdjustedNeighbor is { } adjusted)
@@ -223,8 +223,8 @@ public sealed class EarmarkPatternSaveConfirmation
                     // key change, found by whichever original still has the
                     // adjusted one's own (unmoved) Until.
                     var original = successors.First(plan => plan.DatePattern.Until == adjusted.DatePattern.Until);
-                    toDelete.Add(original.DatePattern.Start);
-                    toSave[original.DatePattern.Start] = adjusted;
+                    toDelete.Add(original.DatePattern.DtStart);
+                    toSave[original.DatePattern.DtStart] = adjusted;
                 }
             }
         }
@@ -236,8 +236,8 @@ public sealed class EarmarkPatternSaveConfirmation
             // there, whose own dates CascadeForward leaves untouched, only
             // its Amount/shape change.
             var stillStanding = successors
-                .Where(plan => !toDelete.Contains(plan.DatePattern.Start) || toSave.ContainsKey(plan.DatePattern.Start))
-                .Select(plan => toSave.TryGetValue(plan.DatePattern.Start, out var adjusted) ? adjusted : plan)
+                .Where(plan => !toDelete.Contains(plan.DatePattern.DtStart) || toSave.ContainsKey(plan.DatePattern.DtStart))
+                .Select(plan => toSave.TryGetValue(plan.DatePattern.DtStart, out var adjusted) ? adjusted : plan)
                 .ToList();
 
             foreach (var cascaded in RestructureFactory.CascadeForward(current.DatePattern, current.Amount, stillStanding, goal))
@@ -245,7 +245,7 @@ public sealed class EarmarkPatternSaveConfirmation
                 // CascadeForward's own output always keeps its input's
                 // Start, so this is guaranteed to be a real key already in
                 // toSave or among the originals — never a fresh one.
-                toSave[cascaded.DatePattern.Start] = cascaded;
+                toSave[cascaded.DatePattern.DtStart] = cascaded;
             }
         }
         else if (PlanChangeCanCascade && UserChoseCascadeForward && crossBoundaryTarget is not null && crossBoundaryGoal is not null)
@@ -284,8 +284,8 @@ public sealed class EarmarkPatternSaveConfirmation
         // DetermineBackTruncationsIfApplicable's own header note already
         // gives for the FinancialPattern-level equivalent of this check.
         var finalOtherPlans = otherPlans
-            .Where(plan => !toDelete.Contains(plan.DatePattern.Start) || toSave.ContainsKey(plan.DatePattern.Start))
-            .Select(plan => toSave.TryGetValue(plan.DatePattern.Start, out var adjusted) ? adjusted : plan)
+            .Where(plan => !toDelete.Contains(plan.DatePattern.DtStart) || toSave.ContainsKey(plan.DatePattern.DtStart))
+            .Select(plan => toSave.TryGetValue(plan.DatePattern.DtStart, out var adjusted) ? adjusted : plan)
             .ToList();
         var finalCoverage = new List<EarMarkPattern> { current };
         finalCoverage.AddRange(finalOtherPlans);
@@ -297,9 +297,9 @@ public sealed class EarmarkPatternSaveConfirmation
         // saving current under its final key and then deleting the OLD key
         // (only when they differ) is what makes this an update rather than
         // an accidental drop of a row that never actually moved.
-        if (current.DatePattern.Start != saved.DatePattern.Start)
+        if (current.DatePattern.DtStart != saved.DatePattern.DtStart)
         {
-            toDelete.Add(saved.DatePattern.Start);
+            toDelete.Add(saved.DatePattern.DtStart);
         }
 
         foreach (var date in orphanedManualEarmarkDates)
@@ -330,8 +330,8 @@ public sealed class EarmarkPatternSaveConfirmation
         EarMarkPattern current, EarMarkPattern saved, IReadOnlyList<EarMarkPattern> otherPlans, FinancialPattern goal,
         EarMarkPattern? crossBoundaryTarget, FinancialPattern? crossBoundaryGoal)
     {
-        var predecessors = otherPlans.Where(plan => plan.DatePattern.Start < saved.DatePattern.Start).ToList();
-        var successors = otherPlans.Where(plan => plan.DatePattern.Start > saved.DatePattern.Start).ToList();
+        var predecessors = otherPlans.Where(plan => plan.DatePattern.DtStart < saved.DatePattern.DtStart).ToList();
+        var successors = otherPlans.Where(plan => plan.DatePattern.DtStart > saved.DatePattern.DtStart).ToList();
 
         // planning/27's own Phase 1 (FinancialPattern-chain), consolidation, and
         // paycheck-association questions never apply to an EarMarkPattern-editing
@@ -364,9 +364,9 @@ public sealed class EarmarkPatternSaveConfirmation
     {
         var absorbed = new List<EarMarkPattern>();
 
-        if (saved.DatePattern.Start != current.DatePattern.Start && predecessors.Count > 0)
+        if (saved.DatePattern.DtStart != current.DatePattern.DtStart && predecessors.Count > 0)
         {
-            absorbed.AddRange(RestructureFactory.ExtendStart(current, predecessors, goal, current.DatePattern.Start).Absorbed);
+            absorbed.AddRange(RestructureFactory.ExtendStart(current, predecessors, goal, current.DatePattern.DtStart).Absorbed);
         }
 
         if (saved.DatePattern.Until != current.DatePattern.Until && successors.Count > 0)
@@ -379,8 +379,8 @@ public sealed class EarmarkPatternSaveConfirmation
             return ""; // a plain nudge — never destructive, nothing to warn about
         }
 
-        var ordered = absorbed.OrderBy(plan => plan.DatePattern.Start).ToList();
-        var ranges = string.Join("; ", ordered.Select(plan => $"{plan.DatePattern.Start:MMM d, yyyy} – {plan.DatePattern.Until:MMM d, yyyy}"));
+        var ordered = absorbed.OrderBy(plan => plan.DatePattern.DtStart).ToList();
+        var ranges = string.Join("; ", ordered.Select(plan => $"{plan.DatePattern.DtStart:MMM d, yyyy} – {plan.DatePattern.Until:MMM d, yyyy}"));
         return ordered.Count == 1
             ? $"This will delete the segment covering {ranges} entirely — its own amount and schedule won't be kept."
             : $"This will delete {ordered.Count} segments entirely ({ranges}) — their own amounts and schedules won't be kept.";
@@ -393,20 +393,20 @@ public sealed class EarmarkPatternSaveConfirmation
     {
         var consequences = new List<string>();
 
-        if (saved.DatePattern.Start != current.DatePattern.Start && predecessors.Count > 0)
+        if (saved.DatePattern.DtStart != current.DatePattern.DtStart && predecessors.Count > 0)
         {
-            var predecessor = predecessors.OrderByDescending(plan => plan.DatePattern.Start).First();
+            var predecessor = predecessors.OrderByDescending(plan => plan.DatePattern.DtStart).First();
             consequences.Add(RestructureFactory.SpansOverlap(current, predecessor)
-                ? $"it will overlap with the segment before it ({predecessor.DatePattern.Start:MMM d, yyyy} – {predecessor.DatePattern.Until:MMM d, yyyy})"
-                : $"a gap will open before it, from {predecessor.DatePattern.Until.AddDays(1):MMM d, yyyy} to {current.DatePattern.Start.AddDays(-1):MMM d, yyyy}");
+                ? $"it will overlap with the segment before it ({predecessor.DatePattern.DtStart:MMM d, yyyy} – {predecessor.DatePattern.Until:MMM d, yyyy})"
+                : $"a gap will open before it, from {predecessor.DatePattern.Until.AddDays(1):MMM d, yyyy} to {current.DatePattern.DtStart.AddDays(-1):MMM d, yyyy}");
         }
 
         if (saved.DatePattern.Until != current.DatePattern.Until && successors.Count > 0)
         {
-            var successor = successors.OrderBy(plan => plan.DatePattern.Start).First();
+            var successor = successors.OrderBy(plan => plan.DatePattern.DtStart).First();
             consequences.Add(RestructureFactory.SpansOverlap(current, successor)
-                ? $"it will overlap with the segment after it ({successor.DatePattern.Start:MMM d, yyyy} – {successor.DatePattern.Until:MMM d, yyyy})"
-                : $"a gap will open after it, from {current.DatePattern.Until.AddDays(1):MMM d, yyyy} to {successor.DatePattern.Start.AddDays(-1):MMM d, yyyy}");
+                ? $"it will overlap with the segment after it ({successor.DatePattern.DtStart:MMM d, yyyy} – {successor.DatePattern.Until:MMM d, yyyy})"
+                : $"a gap will open after it, from {current.DatePattern.Until.AddDays(1):MMM d, yyyy} to {successor.DatePattern.DtStart.AddDays(-1):MMM d, yyyy}");
         }
 
         var hypotheticalCoverage = new List<EarMarkPattern> { current };
@@ -439,7 +439,7 @@ public sealed class EarmarkPatternSaveConfirmation
     private static string DescribeCascadeConsequence(
         EarMarkPattern current, IReadOnlyList<EarMarkPattern> successors, EarMarkPattern? crossBoundaryTarget, FinancialPattern? crossBoundaryGoal)
     {
-        var ownRange = $"This edit covers {current.DatePattern.Start:MMM d, yyyy} – {current.DatePattern.Until:MMM d, yyyy}.";
+        var ownRange = $"This edit covers {current.DatePattern.DtStart:MMM d, yyyy} – {current.DatePattern.Until:MMM d, yyyy}.";
 
         if (successors.Count > 0)
         {

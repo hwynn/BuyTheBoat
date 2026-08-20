@@ -109,7 +109,7 @@ public partial class RecurrenceRuleEditor : UserControl
         }
 
         ByMonthDayTextBox.Text = string.Join(", ", rule.ByMonthDay);
-        StartDatePicker.SelectedDate = rule.Start.ToDateTime(TimeOnly.MinValue);
+        StartDatePicker.SelectedDate = rule.ToOptions().DtStart.ToDateTime(TimeOnly.MinValue);
         EndsOnDateRadio.IsChecked = true;
         UntilDatePicker.SelectedDate = rule.Until.ToDateTime(TimeOnly.MinValue);
 
@@ -230,7 +230,7 @@ public partial class RecurrenceRuleEditor : UserControl
             {
                 PreviewCalendar.SelectedDates.Add(date.ToDateTime(TimeOnly.MinValue));
             }
-            PreviewCalendar.DisplayDate = rule.Start.ToDateTime(TimeOnly.MinValue);
+            PreviewCalendar.DisplayDate = rule.ToOptions().DtStart.ToDateTime(TimeOnly.MinValue);
 
             _allOccurrences = occurrences;
             UpdateOccurrencesDisplay();
@@ -470,7 +470,7 @@ public partial class RecurrenceRuleEditor : UserControl
         return new RecurrenceRuleOptions
         {
             Frequency = frequency,
-            Start = start,
+            DtStart = start,
             Interval = interval,
             ByDay = byDay,
             ByMonthDay = byMonthDay,

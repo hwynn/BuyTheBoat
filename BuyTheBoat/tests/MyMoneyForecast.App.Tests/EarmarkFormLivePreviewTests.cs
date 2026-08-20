@@ -53,14 +53,14 @@ public class EarmarkFormLivePreviewTests : IDisposable
     {
         var goal = Bill(1, "Kitchen Remodel", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(goal, accountId: 1);
-        var saved = Plan(goal, -100m, goal.DatePattern.Start, goal.DatePattern.Until);
+        var saved = Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
         _earMarkPatterns.Save(saved);
 
         // The user opens the Earmark form for this plan — RuleEditor/
         // AmountTextBox load pre-filled from the saved pattern, so the
         // "draft" EarmarkFormPanel would build right now is identical to
         // what's already saved, until they actually change something.
-        var draft = Plan(goal, -100m, goal.DatePattern.Start, goal.DatePattern.Until);
+        var draft = Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
 
         // EarmarkFormPanel.GetLiveJarAmounts, reproduced: single plan, no
         // concurrent funder, so GetPatternsForLiveCheck's own list is just
@@ -99,7 +99,7 @@ public class EarmarkFormLivePreviewTests : IDisposable
     {
         var goal = Bill(1, "Kitchen Remodel", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(goal, accountId: 1);
-        var plan = Plan(goal, -100m, goal.DatePattern.Start, goal.DatePattern.Until);
+        var plan = Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
         _earMarkPatterns.Save(plan);
         _manualEarmarks.Save(ManualEarmark.Create(
             new ManualEarmarkOptions { FinanceId = 1, Date = new DateOnly(2025, 3, 15), Amount = 50m }, // a mid-plan top-up
@@ -167,12 +167,12 @@ public class EarmarkFormLivePreviewTests : IDisposable
     {
         var goal = Bill(1, "Kitchen Remodel", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(goal, accountId: 1);
-        _earMarkPatterns.Save(Plan(goal, -100m, goal.DatePattern.Start, goal.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until));
 
         // The user opens the form and raises the amount from $100 to $120 —
         // AsOf (June 15) is well past 6 monthly releases (Jan-Jun 1st), so
         // this plan has real history behind it.
-        var draft = Plan(goal, -120m, goal.DatePattern.Start, goal.DatePattern.Until);
+        var draft = Plan(goal, -120m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
 
         var liveTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
             [draft], goal, draft.DatePattern.ActiveStart, AsOf);
@@ -210,7 +210,7 @@ public class EarmarkFormLivePreviewTests : IDisposable
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [start.Day],
-        Start = start,
+        DtStart = start,
         Until = until,
     });
 

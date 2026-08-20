@@ -21,7 +21,7 @@ public class TransactionLogBookTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = date,
+                DtStart = date,
                 Count = 1,
             }),
             Amount = -100m,

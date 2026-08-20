@@ -19,7 +19,7 @@ public partial class EarmarkPatternPickerWindow : Window
     {
         public EarMarkPattern Pattern { get; } = pattern;
         public string AmountText => $"{Math.Abs(Pattern.Amount):C}{(Pattern.Amount < 0 ? " / occurrence" : "")}";
-        public string DateRangeText => $"{Pattern.DatePattern.Start:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
+        public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
         public string StartingAllocationText => Pattern.StartingAllocation.ToString("C");
     }
 
@@ -31,7 +31,7 @@ public partial class EarmarkPatternPickerWindow : Window
         InitializeComponent();
 
         var rows = plans
-            .OrderBy(plan => plan.DatePattern.Start)
+            .OrderBy(plan => plan.DatePattern.ActiveStart)
             .Select(plan => new Row(plan))
             .ToList();
 

@@ -32,7 +32,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2019, 1, 2),
+                DtStart = new DateOnly(2019, 1, 2),
                 ByMonthDay = [9, 25],
                 Until = new DateOnly(2025, 1, 1),
             }),
@@ -64,7 +64,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2019, 1, 2),
+                DtStart = new DateOnly(2019, 1, 2),
                 ByMonthDay = [11],
                 Until = new DateOnly(2025, 1, 1),
             }),
@@ -96,7 +96,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2019, 1, 2),
+                DtStart = new DateOnly(2019, 1, 2),
                 ByMonthDay = [1],
                 Until = new DateOnly(2022, 7, 1),
             }),
@@ -111,7 +111,7 @@ public class PatternRepositoryTests : IDisposable
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Monthly,
-                    Start = new DateOnly(2019, 6, 9),
+                    DtStart = new DateOnly(2019, 6, 9),
                     ByMonthDay = [9, 25],
                     Until = new DateOnly(2019, 7, 20),
                 }),
@@ -136,7 +136,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2030, 1, 1),
+                DtStart = new DateOnly(2030, 1, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
@@ -152,7 +152,7 @@ public class PatternRepositoryTests : IDisposable
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Monthly,
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     ByMonthDay = [1],
                     Until = new DateOnly(2029, 12, 1),
                 }),
@@ -186,7 +186,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2027, 1, 1),
                     ExcludedDates = [new DateOnly(2025, 3, 1), new DateOnly(2025, 6, 1)],
                 }),
@@ -212,7 +212,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2027, 1, 1),
                 }),
             },
@@ -233,7 +233,7 @@ public class PatternRepositoryTests : IDisposable
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [1],
-            Start = new DateOnly(2025, 1, 1),
+            DtStart = new DateOnly(2025, 1, 1),
             Until = new DateOnly(2027, 1, 1),
         });
 
@@ -265,7 +265,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 6, 1),
                 }),
             },
@@ -279,7 +279,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 7, 1),
+                    DtStart = new DateOnly(2025, 7, 1),
                     Until = new DateOnly(2027, 1, 1),
                 }),
             },
@@ -307,7 +307,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2027, 1, 1),
                 }),
             },
@@ -352,7 +352,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 6, 1),
                 }),
             },
@@ -366,7 +366,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 7, 1),
+                    DtStart = new DateOnly(2025, 7, 1),
                     Until = new DateOnly(2027, 1, 1),
                 }),
             },
@@ -381,7 +381,7 @@ public class PatternRepositoryTests : IDisposable
 
         var remaining = _earMarkPatterns.GetAll();
         remaining.ShouldHaveSingleItem();
-        remaining[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1)); // the successor survives, untouched
+        remaining[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1)); // the successor survives, untouched
 
         _manualEarmarks.GetAll().ShouldHaveSingleItem(); // its manual earmark is untouched too — no cascade
     }
@@ -434,7 +434,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2027, 1, 1),
                 }),
             },
@@ -571,7 +571,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 ByMonthDay = [1],
                 Until = new DateOnly(2025, 12, 1),
             }),
@@ -596,7 +596,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2022, 1, 1), // saving starts before the due date (planning/15)
             }),
@@ -611,7 +611,7 @@ public class PatternRepositoryTests : IDisposable
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Monthly,
-                    Start = new DateOnly(2022, 1, 1),
+                    DtStart = new DateOnly(2022, 1, 1),
                     ByMonthDay = [1],
                     Until = new DateOnly(2025, 1, 1),
                 }),
@@ -636,7 +636,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2027, 1, 1),
+                DtStart = new DateOnly(2027, 1, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 6, 1),
             }),
@@ -645,7 +645,7 @@ public class PatternRepositoryTests : IDisposable
         });
         _financialPatterns.Save(goal, accountId: 1);
 
-        _financialPatterns.GetAll().Single().DatePattern.ActiveFrom.ShouldBe(new DateOnly(2025, 6, 1));
+        _financialPatterns.GetAll().Single().DatePattern.ToOptions().ActiveFrom.ShouldBe(new DateOnly(2025, 6, 1));
     }
 
     [Fact]
@@ -653,7 +653,7 @@ public class PatternRepositoryTests : IDisposable
     {
         _financialPatterns.Save(Bill(1, "Rent"), accountId: 1);
 
-        _financialPatterns.GetAll().Single().DatePattern.ActiveFrom.ShouldBeNull();
+        _financialPatterns.GetAll().Single().DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
     }
 
     [Fact]
@@ -667,7 +667,7 @@ public class PatternRepositoryTests : IDisposable
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2026, 1, 1),
             }),
             Amount = -1_600m,
@@ -702,7 +702,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2027, 1, 1),
+                DtStart = new DateOnly(2027, 1, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -719,7 +719,7 @@ public class PatternRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2026, 12, 1),
                 }),
             },
@@ -730,7 +730,7 @@ public class PatternRepositoryTests : IDisposable
         // Re-open: Initialize runs the backfill. A clean GetAll proves the goal
         // regained an ActiveFrom that satisfies the earmark's containment check.
         var reopened = new FinancialPatternRepository(new PatternDatabase(_databasePath));
-        reopened.GetAll().Single().DatePattern.ActiveFrom.ShouldBe(new DateOnly(2025, 1, 1));
+        reopened.GetAll().Single().DatePattern.ToOptions().ActiveFrom.ShouldBe(new DateOnly(2025, 1, 1));
     }
 
     private void StripActiveFrom(int financeId)
@@ -753,7 +753,7 @@ public class PatternRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 ByMonthDay = [1],
                 Until = new DateOnly(2027, 1, 1),
             }),

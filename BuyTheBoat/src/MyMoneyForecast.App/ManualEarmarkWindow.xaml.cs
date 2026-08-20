@@ -99,7 +99,7 @@ public partial class ManualEarmarkWindow : Window
         // Constrain the picker to the fund's lifetime (its pattern's span).
         if (JarComboBox.SelectedItem is JarChoice { Pattern: var pattern })
         {
-            EarmarkDatePicker.DisplayDateStart = pattern.DatePattern.Start.ToDateTime(TimeOnly.MinValue);
+            EarmarkDatePicker.DisplayDateStart = pattern.DatePattern.ActiveStart.ToDateTime(TimeOnly.MinValue);
             EarmarkDatePicker.DisplayDateEnd = pattern.DatePattern.Until.ToDateTime(TimeOnly.MinValue);
         }
 
@@ -122,7 +122,7 @@ public partial class ManualEarmarkWindow : Window
         var (jarBalance, free) = BalancesOn(date, choice.Pattern.FinanceId);
         BalanceInfoText.Text =
             $"On {date:MMMM d, yyyy}: {choice.Label} holds {jarBalance:C} · free balance {free:C}. " +
-            $"The fund's plan runs {choice.Pattern.DatePattern.Start:MMM d, yyyy} – {choice.Pattern.DatePattern.Until:MMM d, yyyy}.";
+            $"The fund's plan runs {choice.Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {choice.Pattern.DatePattern.Until:MMM d, yyyy}.";
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)

@@ -16,7 +16,7 @@ public class PatternTruncationTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [dayOfMonth],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -31,7 +31,7 @@ public class PatternTruncationTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [start.Day],
-                    Start = start,
+                    DtStart = start,
                     Until = until,
                 }),
             },
@@ -64,10 +64,10 @@ public class PatternTruncationTests
         result.Pattern.Amount.ShouldBe(bill.Amount);
         result.Pattern.Priority.ShouldBe(bill.Priority);
         result.Pattern.Mandatory.ShouldBe(bill.Mandatory);
-        result.Pattern.DatePattern.Start.ShouldBe(bill.DatePattern.Start);
+        result.Pattern.DatePattern.ActiveStart.ShouldBe(bill.DatePattern.ActiveStart);
         result.Plan!.Amount.ShouldBe(plan.Amount);
         result.Plan.StartingAllocation.ShouldBe(plan.StartingAllocation);
-        result.Plan.DatePattern.Start.ShouldBe(plan.DatePattern.Start);
+        result.Plan.DatePattern.ActiveStart.ShouldBe(plan.DatePattern.ActiveStart);
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class PatternTruncationTests
 
         var result = PatternTruncation.EndOn(bill, plan, new DateOnly(2025, 8, 31));
 
-        result.Pattern.DatePattern.ActiveFrom.ShouldBe(new DateOnly(2025, 1, 1));
+        result.Pattern.DatePattern.ToOptions().ActiveFrom.ShouldBe(new DateOnly(2025, 1, 1));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class PatternTruncationTests
 
         var trimmed = PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 6, 15), absorbedBalance: 450m);
 
-        trimmed.DatePattern.Start.ShouldBe(new DateOnly(2025, 6, 15));
+        trimmed.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 6, 15));
         trimmed.StartingAllocation.ShouldBe(450m);
     }
 
@@ -140,7 +140,7 @@ public class PatternTruncationTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2026, 1, 1),
                 }),
             },
@@ -180,7 +180,7 @@ public class PatternTruncationTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2026, 1, 1),
                     ActiveFrom = new DateOnly(2024, 10, 1), // was already saving ahead of its own Start
                 }),
@@ -189,7 +189,7 @@ public class PatternTruncationTests
 
         var trimmed = PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 6, 15), absorbedBalance: 200m);
 
-        trimmed.DatePattern.ActiveFrom.ShouldBeNull();
+        trimmed.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
         trimmed.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 6, 15));
     }
 

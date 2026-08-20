@@ -22,7 +22,7 @@ public static class PatternTruncation
     /// <returns>The pattern and its plan, both ending on <paramref name="lastDay"/> — the plan only if one existed, and never pushed later than it already ended.</returns>
     public static TruncatedPattern EndOn(FinancialPattern pattern, EarMarkPattern? plan, DateOnly lastDay)
     {
-        if (lastDay < pattern.DatePattern.Start)
+        if (lastDay < pattern.DatePattern.ActiveStart)
         {
             throw new ArgumentException(
                 "The end date can't be before the pattern's own start.",
@@ -62,7 +62,7 @@ public static class PatternTruncation
     /// <returns>A plan with the same finance id, rate, and recurrence shape, starting from newStart, its StartingAllocation increased by absorbedBalance.</returns>
     public static EarMarkPattern StartOn(EarMarkPattern plan, FinancialPattern goal, DateOnly newStart, decimal absorbedBalance)
     {
-        if (newStart <= plan.DatePattern.Start)
+        if (newStart <= plan.DatePattern.ActiveStart)
         {
             throw new ArgumentException(
                 "The new start must be after the plan's own current start — there has to be at least one day of history to absorb.",
@@ -75,7 +75,7 @@ public static class PatternTruncation
             Interval = plan.DatePattern.Interval,
             ByDay = plan.DatePattern.ByDay,
             ByMonthDay = plan.DatePattern.ByMonthDay,
-            Start = newStart,
+            DtStart = newStart,
             Until = plan.DatePattern.Until,
         });
 

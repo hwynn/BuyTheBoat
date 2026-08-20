@@ -16,17 +16,18 @@ internal static class RecurrenceRuleColumns
     /// <param name="rule">The rule to serialize.</param>
     public static void AddParameters(SqliteCommand command, RecurrenceRule rule)
     {
+        var persisted = rule.ToOptions(); // the raw DtStart anchor + ActiveFrom, for a faithful round-trip
         command.Parameters.AddWithValue("$Frequency", rule.Frequency.ToString());
         command.Parameters.AddWithValue("$IntervalValue", rule.Interval);
         command.Parameters.AddWithValue(
             "$ByDay", rule.ByDay.Count > 0 ? string.Join(',', rule.ByDay) : DBNull.Value);
         command.Parameters.AddWithValue(
             "$ByMonthDay", rule.ByMonthDay.Count > 0 ? string.Join(',', rule.ByMonthDay) : DBNull.Value);
-        command.Parameters.AddWithValue("$StartDate", rule.Start.ToString(DateFormat, CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$StartDate", persisted.DtStart.ToString(DateFormat, CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$UntilDate", rule.Until.ToString(DateFormat, CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue(
             "$ActiveFrom",
-            rule.ActiveFrom is { } activeFrom
+            persisted.ActiveFrom is { } activeFrom
                 ? activeFrom.ToString(DateFormat, CultureInfo.InvariantCulture)
                 : DBNull.Value);
         command.Parameters.AddWithValue(
@@ -69,7 +70,7 @@ internal static class RecurrenceRuleColumns
         return RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = frequency,
-            Start = start,
+            DtStart = start,
             Interval = interval,
             ByDay = byDay,
             ByMonthDay = byMonthDay,

@@ -150,7 +150,7 @@ public class OneTimeGoalFactoryTests
             StartSavingDate = new DateOnly(2025, 1, 19),
         });
 
-        result.Goal.DatePattern.ActiveFrom.ShouldBe(new DateOnly(2025, 1, 19));
+        result.Goal.DatePattern.ToOptions().ActiveFrom.ShouldBe(new DateOnly(2025, 1, 19));
         result.Goal.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 19));
         result.Goal.DatePattern.GetOccurrences().ShouldBe([new DateOnly(2025, 6, 1)]);
     }

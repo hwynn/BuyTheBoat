@@ -17,7 +17,7 @@ public class AllocationPlanProposerTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [dayOfMonth],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -32,7 +32,7 @@ public class AllocationPlanProposerTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [dayOfMonth],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -47,7 +47,7 @@ public class AllocationPlanProposerTests
             {
                 Frequency = RecurrenceFrequency.Weekly,
                 Interval = 2,
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -117,7 +117,7 @@ public class AllocationPlanProposerTests
         // earmark, or the Summary chart's own "since when" reading, isn't
         // stranded before the plan's own first real contribution) even
         // though the first payday itself falls two days later.
-        result.Plan.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 3));
+        result.Plan.DatePattern.DtStart.ShouldBe(new DateOnly(2025, 1, 3));
         result.Plan.DatePattern.ActiveStart.ShouldBe(AsOf);
     }
 
@@ -172,7 +172,7 @@ public class AllocationPlanProposerTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2025, 9, 1),
+                DtStart = new DateOnly(2025, 9, 1),
                 Count = 1,
             }),
         });
@@ -201,7 +201,7 @@ public class AllocationPlanProposerTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2025, 1, 20),
+                DtStart = new DateOnly(2025, 1, 20),
                 Count = 1,
             }),
         });
@@ -229,7 +229,7 @@ public class AllocationPlanProposerTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
-                Start = new DateOnly(2025, 9, 1),
+                DtStart = new DateOnly(2025, 9, 1),
                 Count = 1,
             }),
         });
@@ -297,7 +297,7 @@ public class AllocationPlanProposerTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 12, 1),
+                DtStart = new DateOnly(2025, 12, 1),
                 Count = 1,
             }),
         });
@@ -318,7 +318,7 @@ public class AllocationPlanProposerTests
 
         var result = AllocationPlanProposer.Propose(bill, [bill], AsOf);
 
-        result.Outflow.DatePattern.ActiveFrom.ShouldBe(AsOf);
+        result.Outflow.DatePattern.ToOptions().ActiveFrom.ShouldBe(AsOf);
         result.Outflow.DatePattern.GetOccurrences().ShouldBe(bill.DatePattern.GetOccurrences());
     }
 
@@ -331,7 +331,7 @@ public class AllocationPlanProposerTests
 
         var result = AllocationPlanProposer.Propose(bill, [bill], AsOf);
 
-        result.Outflow.DatePattern.ActiveFrom.ShouldBeNull();
+        result.Outflow.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public class AllocationPlanProposerTests
 
         var result = AllocationPlanProposer.ProposeEmpty(bill, AsOf);
 
-        result.Outflow.DatePattern.ActiveFrom.ShouldBe(AsOf);
+        result.Outflow.DatePattern.ToOptions().ActiveFrom.ShouldBe(AsOf);
         result.Plan.DatePattern.ActiveStart.ShouldBe(AsOf);
     }
 
@@ -378,7 +378,7 @@ public class AllocationPlanProposerTests
 
         var result = AllocationPlanProposer.ProposeEmpty(bill, AsOf);
 
-        result.Outflow.DatePattern.ActiveFrom.ShouldBeNull();
+        result.Outflow.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
         result.Plan.DatePattern.ActiveStart.ShouldBe(AsOf);
     }
 
@@ -451,8 +451,8 @@ public class AllocationPlanProposerTests
         result.Plan.DatePattern.Interval.ShouldBe(2);
         // Same phase as the existing plan's own Friday cycle — not just "any
         // biweekly schedule."
-        existingPlan.DatePattern.GetOccurrences().ShouldContain(result.Plan.DatePattern.Start);
-        result.Plan.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 3));
+        existingPlan.DatePattern.GetOccurrences().ShouldContain(result.Plan.DatePattern.DtStart);
+        result.Plan.DatePattern.DtStart.ShouldBe(new DateOnly(2025, 1, 3));
         // $6,000 needed (6 monthly releases from the aligned Start through
         // the due date), spread across 13 biweekly occurrences in that same
         // window.
@@ -497,7 +497,7 @@ public class AllocationPlanProposerTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = AsOf,
+                    DtStart = AsOf,
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -570,7 +570,7 @@ public class AllocationPlanProposerTests
         // lands the last one well short of the due date, not pressed against it.
         result.Plan.DatePattern.GetOccurrences().Count.ShouldBe(140);
         result.Plan.DatePattern.Interval.ShouldBe(1);
-        result.Plan.DatePattern.Start.ShouldBe(AsOf);
+        result.Plan.DatePattern.ActiveStart.ShouldBe(AsOf);
         result.Plan.DatePattern.Until.ShouldBe(new DateOnly(2025, 5, 20));
     }
 
@@ -591,7 +591,7 @@ public class AllocationPlanProposerTests
         // $1 per occurrence, due tomorrow, needing $10,000 — no cadence at
         // any frequency can reach that in one day.
         var goal = MonthlyBill(-10_000m, AsOf.AddDays(1).Day, AsOf.AddDays(1), AsOf.AddDays(1));
-        var existingPlan = BiweeklyPlan(goal, -1m, goal.DatePattern.Start, goal.DatePattern.Until);
+        var existingPlan = BiweeklyPlan(goal, -1m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
 
         var result = AllocationPlanProposer.ProposeSameAmount(goal, existingPlan, carriedOverJarBalance: 0m, [], [goal], AsOf);
 
@@ -717,7 +717,7 @@ public class AllocationPlanProposerTests
                 {
                     Frequency = RecurrenceFrequency.Weekly,
                     Interval = 2,
-                    Start = start,
+                    DtStart = start,
                     Until = until,
                 }),
                 StartingAllocation = startingAllocation,
@@ -735,7 +735,7 @@ public class AllocationPlanProposerTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [dayOfMonth],
-                    Start = start,
+                    DtStart = start,
                     Until = until,
                 }),
             },

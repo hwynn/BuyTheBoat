@@ -41,7 +41,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
         _earMarkPatterns.Save(successorPlan);
 
         var editedPlan = Plan(original, -1_550m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.Start, original);
+        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.ActiveStart, original);
         confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed();
 
         confirmation.Run().ShouldBeTrue();
@@ -62,7 +62,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
         _earMarkPatterns.Save(successorPlan);
 
         var editedPlan = Plan(original, -1_550m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.Start, original);
+        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.ActiveStart, original);
         confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseJustThisSegment();
 
         confirmation.Run().ShouldBeTrue();
@@ -83,7 +83,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
         // No plan saved for the successor at all — nothing to cascade onto.
 
         var editedPlan = Plan(original, -1_550m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.Start, original);
+        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.ActiveStart, original);
         confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked — nothing on the far side to cascade onto");
 
         confirmation.Run().ShouldBeTrue();
@@ -106,7 +106,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
         _earMarkPatterns.Save(Plan(successor, -800m, new DateOnly(2025, 7, 2), new DateOnly(2025, 12, 31)));
 
         var editedPlan = Plan(original, -1_550m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.Start, original);
+        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.ActiveStart, original);
         confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked — the far side is a concurrent set, no single current plan");
 
         confirmation.Run().ShouldBeTrue();
@@ -127,13 +127,13 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
         _earMarkPatterns.Save(crossBoundaryPlan);
 
         var editedPlan = Plan(original, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, current.DatePattern.Start, original);
+        var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, original);
         // No ConfirmImplicitChanges wired up — proves the DEFAULT (cascade
         // forward) is what runs, matching Phase 2's own same-chain tests.
 
         confirmation.Run().ShouldBeTrue();
 
-        _earMarkPatterns.GetAll().Single(p => p.DatePattern.Start == new DateOnly(2025, 7, 1)).Amount.ShouldBe(-120m); // same-chain successor cascaded onto
+        _earMarkPatterns.GetAll().Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 7, 1)).Amount.ShouldBe(-120m); // same-chain successor cascaded onto
         _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1_600m); // cross-boundary plan untouched — never even reached
     }
 
@@ -151,7 +151,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
 
         ImplicitChangeConfirmationRequest? captured = null;
         var editedPlan = Plan(original, -1_550m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
-        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.Start, original);
+        var confirmation = Confirmation(editedPlan, originalPlan.DatePattern.ActiveStart, original);
         confirmation.ConfirmImplicitChanges = request =>
         {
             captured = request;
@@ -205,7 +205,7 @@ public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [start.Day],
-        Start = start,
+        DtStart = start,
         Until = until,
     });
 

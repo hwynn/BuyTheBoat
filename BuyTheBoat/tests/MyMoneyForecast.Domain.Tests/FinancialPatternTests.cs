@@ -8,7 +8,7 @@ public class FinancialPatternTests
     private static RecurrenceRule Biweekly() => RecurrenceRule.Create(new RecurrenceRuleOptions
     {
         Frequency = RecurrenceFrequency.Daily,
-        Start = new DateOnly(2025, 1, 24),
+        DtStart = new DateOnly(2025, 1, 24),
         Interval = 14,
         Until = new DateOnly(2027, 12, 25),
     });

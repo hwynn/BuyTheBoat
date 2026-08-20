@@ -21,7 +21,7 @@ public class EarmarkConsolidationTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = GoalStart,
+                DtStart = GoalStart,
                 Until = GoalEnd,
             }),
         });
@@ -36,7 +36,7 @@ public class EarmarkConsolidationTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [dayOfMonth],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -51,7 +51,7 @@ public class EarmarkConsolidationTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [start.Day],
-                    Start = start,
+                    DtStart = start,
                     Until = until,
                     ActiveFrom = activeFrom,
                 }),
@@ -81,7 +81,7 @@ public class EarmarkConsolidationTests
         result.End.ShouldBe(GoalEnd);
         result.ConsolidatedPlan.Amount.ShouldBe(-400m);
         result.ConsolidatedPlan.DatePattern.ByMonthDay.ShouldBe([25]);
-        result.ConsolidatedPlan.DatePattern.Start.ShouldBe(GoalStart);
+        result.ConsolidatedPlan.DatePattern.ActiveStart.ShouldBe(GoalStart);
         result.ConsolidatedPlan.DatePattern.Until.ShouldBe(GoalEnd);
     }
 

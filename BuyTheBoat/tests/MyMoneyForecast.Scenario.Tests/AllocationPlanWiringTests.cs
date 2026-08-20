@@ -41,7 +41,7 @@ public class AllocationPlanWiringTests : IDisposable
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [25],
-                Start = asOf,
+                DtStart = asOf,
                 Until = new DateOnly(2026, 1, 1),
             }),
         });
@@ -56,7 +56,7 @@ public class AllocationPlanWiringTests : IDisposable
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 2, 1),
+                DtStart = new DateOnly(2025, 2, 1),
                 Until = new DateOnly(2026, 1, 1),
             }),
         });
@@ -114,7 +114,7 @@ public class AllocationPlanWiringTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Weekly,
-                Start = new DateOnly(2025, 1, 3),
+                DtStart = new DateOnly(2025, 1, 3),
                 Until = new DateOnly(2026, 1, 1),
             }),
         });
@@ -129,7 +129,7 @@ public class AllocationPlanWiringTests : IDisposable
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2027, 1, 1),
             }),
         });
@@ -159,7 +159,7 @@ public class AllocationPlanWiringTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 3, 1),
+                DtStart = new DateOnly(2025, 3, 1),
                 Count = 1,
             }),
         });

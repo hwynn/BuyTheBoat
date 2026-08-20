@@ -179,7 +179,7 @@ public static class TransactionLogBookFactory
         var firstOccurrence = FirstOccurrence(goal.DatePattern)!.Value;
         var accumulated = patterns.Sum(pattern =>
                 pattern.StartingAllocation
-                - pattern.Amount * pattern.DatePattern.GetOccurrences(pattern.DatePattern.Start, firstOccurrence).Count)
+                - pattern.Amount * pattern.DatePattern.GetOccurrences(pattern.DatePattern.ActiveStart, firstOccurrence).Count)
             + manualEarmarks
                 .Where(manual => manual.FinanceId == goal.FinanceId && manual.Date <= firstOccurrence)
                 .Sum(manual => manual.Amount);
@@ -191,7 +191,7 @@ public static class TransactionLogBookFactory
     /// <param name="pattern">The pattern to search.</param>
     private static DateOnly? FirstOccurrence(RecurrenceRule pattern)
     {
-        var occurrences = pattern.GetOccurrences(pattern.Start, pattern.Until);
+        var occurrences = pattern.GetOccurrences();
         return occurrences.Count > 0 ? occurrences[0] : null;
     }
 
@@ -442,14 +442,14 @@ public static class TransactionLogBookFactory
             var plans = group.ToList();
             var contributed = plans.Sum(earmark =>
                     earmark.StartingAllocation
-                    - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, asOfDate).Count)
+                    - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.ActiveStart, asOfDate).Count)
                 // Manual adjustments already made on/before the as-of date
                 // are part of the jar's settled history — dated
                 // StartingAllocation, effectively.
                 + input.ManualEarmarks
                     .Where(manual => manual.FinanceId == financeId && manual.Date <= asOfDate)
                     .Sum(manual => manual.Amount);
-            var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.Start, asOfDate).Count;
+            var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.ActiveStart, asOfDate).Count;
             jarValues[financeId] = Math.Max(0m, contributed - withdrawn);
 
             // 3.13.5.4.a1, reset-at-release: milestone counts scheduled
@@ -918,7 +918,7 @@ public static class TransactionLogBookFactory
             var dueDate = goal.DatePattern.Until;
 
             var occurrenceCount = goal.DatePattern
-                .GetOccurrences(goal.DatePattern.Start, goal.DatePattern.Until).Count;
+                .GetOccurrences(goal.DatePattern.ActiveStart, goal.DatePattern.Until).Count;
             var amountNeeded = Math.Abs(goal.Amount) * occurrenceCount;
 
             // StartingAllocation (the entered opening balance) + every plan's
@@ -926,7 +926,7 @@ public static class TransactionLogBookFactory
             // before the due date. The three don't overlap, so no double count.
             var allocated = group.Sum(earmark =>
                     earmark.StartingAllocation
-                    - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, dueDate).Count)
+                    - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.ActiveStart, dueDate).Count)
                 + manualEarmarks
                     .Where(manual => manual.FinanceId == financeId && manual.Date <= dueDate)
                     .Sum(manual => manual.Amount);
@@ -999,7 +999,7 @@ public static class TransactionLogBookFactory
             var plannedTotal = earMarkPatterns
                 .Where(earmark => earmark.FinanceId == financeId)
                 .Sum(earmark => -earmark.Amount
-                    * earmark.DatePattern.GetOccurrences(earmark.DatePattern.Start, shortfall.DueDate).Count);
+                    * earmark.DatePattern.GetOccurrences(earmark.DatePattern.ActiveStart, shortfall.DueDate).Count);
             var isChronicShortfall = shortfall.ShortfallAmount > 0m && plannedTotal < shortfall.AmountNeeded;
 
             // IsChronicOverfund: the excess-side mirror, same plannedTotal —
@@ -1088,7 +1088,7 @@ public static class TransactionLogBookFactory
             return true;
         }
 
-        var isRepeated = goal.DatePattern.GetOccurrences(goal.DatePattern.Start, goal.DatePattern.Until).Count > 1;
+        var isRepeated = goal.DatePattern.GetOccurrences(goal.DatePattern.ActiveStart, goal.DatePattern.Until).Count > 1;
         var warnByDate = asOfDate.AddMonths(WarnIfWithinMonths);
 
         if (shortfall.ShortfallAmount > 0m)
@@ -1147,7 +1147,7 @@ public static class TransactionLogBookFactory
             }
 
             var smallestContribution = plansForThisGoal
-                .Where(plan => plan.DatePattern.GetOccurrences(plan.DatePattern.Start, plan.DatePattern.Until).Count > 1)
+                .Where(plan => plan.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, plan.DatePattern.Until).Count > 1)
                 .Select(plan => Math.Abs(plan.Amount))
                 .DefaultIfEmpty(0m)
                 .Min();

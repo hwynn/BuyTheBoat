@@ -57,7 +57,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         capturedDescription.ShouldContain("Rent");
         // Declined by default — the bill's own plan is untouched.
         var untouchedPlan = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2);
-        untouchedPlan.DatePattern.Start.ShouldBe(pacedPlan.DatePattern.Start);
+        untouchedPlan.DatePattern.ActiveStart.ShouldBe(pacedPlan.DatePattern.ActiveStart);
         untouchedPlan.DatePattern.ByMonthDay.ShouldBe(pacedPlan.DatePattern.ByMonthDay);
     }
 
@@ -78,7 +78,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         var plans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 2).ToList();
         plans.ShouldHaveSingleItem(); // the old (FinanceId, Start) row is gone, not left behind
         var newPlan = plans.Single();
-        newPlan.DatePattern.Start.ShouldNotBe(oldPlan.DatePattern.Start);
+        newPlan.DatePattern.DtStart.ShouldNotBe(oldPlan.DatePattern.DtStart);
         newPlan.DatePattern.ByMonthDay.ShouldBe(new[] { 5 }); // paced to the NEW payday
         newPlan.Amount.ShouldBe(-300m); // still fully paced (same payday count either way)
     }
@@ -147,8 +147,8 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
 
         confirmation.Run().ShouldBeTrue();
 
-        _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.Start.ShouldBe(rentPlan.DatePattern.Start);
-        _earMarkPatterns.GetAll().Single(p => p.FinanceId == 3).DatePattern.Start.ShouldBe(utilitiesPlan.DatePattern.Start);
+        _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.ActiveStart.ShouldBe(rentPlan.DatePattern.ActiveStart);
+        _earMarkPatterns.GetAll().Single(p => p.FinanceId == 3).DatePattern.ActiveStart.ShouldBe(utilitiesPlan.DatePattern.ActiveStart);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Weekly,
-                    Start = new DateOnly(2025, 7, 4),
+                    DtStart = new DateOnly(2025, 7, 4),
                     Until = new DateOnly(2026, 6, 30),
                 }),
             },
@@ -251,7 +251,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [dayOfMonth],
-        Start = start,
+        DtStart = start,
         Until = until,
     });
 

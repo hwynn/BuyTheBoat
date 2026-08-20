@@ -42,7 +42,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         // Funds slightly ahead of the bill's own $100/month need, so a real,
         // non-zero buffer has built up by AsOf below — a $0 carry-over would
         // be indistinguishable from a broken one.
-        _earMarkPatterns.Save(Plan(bill, -120m, bill.DatePattern.Start, bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -120m, bill.DatePattern.ActiveStart, bill.DatePattern.Until));
 
         var forecast = Forecast();
 
@@ -58,7 +58,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         // Only Amount changed — Start/Until/schedule are untouched, so this is
         // a clean test of the amount-change trigger specifically.
-        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
@@ -71,7 +71,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         var successorBill = patterns.Single(p => p.FinanceId == 2); // NextFinanceId() with only id 1 in play
         successorBill.Amount.ShouldBe(-150m); // the proposed edit lands here instead
-        successorBill.DatePattern.Start.ShouldBe(AsOf);
+        successorBill.DatePattern.ActiveStart.ShouldBe(AsOf);
         successorBill.DatePattern.Until.ShouldBe(bill.DatePattern.Until);
 
         var plans = _earMarkPatterns.GetAll();
@@ -80,7 +80,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plans.Single(p => p.FinanceId == 1).DatePattern.Until.ShouldBe(AsOf.AddDays(-1));
 
         var successorPlan = plans.Single(p => p.FinanceId == 2);
-        successorPlan.DatePattern.Start.ShouldBe(AsOf);
+        successorPlan.DatePattern.ActiveStart.ShouldBe(AsOf);
         successorPlan.StartingAllocation.ShouldBe(expectedCarriedOverBalance);
     }
 
@@ -104,7 +104,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Weekly,
                     Interval = 2,
-                    Start = new DateOnly(2025, 1, 3), // a Friday
+                    DtStart = new DateOnly(2025, 1, 3), // a Friday
                     Until = bill.DatePattern.Until,
                 }),
             },
@@ -112,7 +112,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.Save(existingPlan);
 
         var forecast = Forecast();
-        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
 
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         confirmation.ConfirmImplicitChanges = request =>
@@ -132,12 +132,12 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorPlan.DatePattern.Interval.ShouldBe(2);
         // Same phase as the existing plan's own Friday cycle, re-anchored —
         // not the bill's own monthly cadence Propose's default would have used.
-        existingPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.Start);
+        existingPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.DtStart);
     }
 
     // Found 2026-08-17 while grounding the paycheck-association cascade:
     // BuildSuccessorSchedule copies the edited pattern's own Frequency/
-    // Interval/ByDay/ByMonthDay but sets Start = cutDate directly — for a
+    // Interval/ByDay/ByMonthDay but sets DtStart = cutDate directly — for a
     // Weekly pattern with an empty ByDay (RecurrenceRuleEditor's own
     // checkboxes let a real user leave every one unchecked), RFC 5545 ties
     // an omitted BYDAY to DTSTART's own weekday, so the successor's own
@@ -165,7 +165,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
                 Interval = 2,
                 // ByDay left empty on purpose — the exact real-world shape
                 // RecurrenceRuleEditor lets a user save.
-                Start = new DateOnly(2025, 1, 3), // a Friday
+                DtStart = new DateOnly(2025, 1, 3), // a Friday
                 Until = new DateOnly(2026, 12, 31),
             }),
         });
@@ -205,7 +205,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
                 Frequency = RecurrenceFrequency.Weekly,
                 Interval = 2,
                 ByDay = [DayOfWeek.Friday], // explicit this time
-                Start = new DateOnly(2025, 1, 3),
+                DtStart = new DateOnly(2025, 1, 3),
                 Until = new DateOnly(2026, 12, 31),
             }),
         });
@@ -232,13 +232,13 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _financialPatterns.Save(bill, accountId: 1);
         var forecast = Forecast();
 
-        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run().ShouldBeTrue();
 
         var successorBill = _financialPatterns.GetAll().Single(p => p.FinanceId == 2);
-        successorBill.DatePattern.Start.ShouldBe(AsOf);
-        successorBill.DatePattern.ActiveFrom.ShouldBeNull();
+        successorBill.DatePattern.ActiveStart.ShouldBe(AsOf);
+        successorBill.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
     }
 
     // Mechanism-C follow-on (redesign/planning/26, "the glut case,"
@@ -261,14 +261,14 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _financialPatterns.Save(bill, accountId: 1);
         // Over-contributes every month, so a real, verifiable balance has
         // built up by AsOf — the exact scenario this fix protects.
-        _earMarkPatterns.Save(Plan(bill, -150m, bill.DatePattern.Start, bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until));
 
         var forecast = Forecast();
         var realCarriedOverBalance = forecast.GetTimeline(1)
             .Last(entry => entry.Date <= AsOf).Snapshot.FundJars.Single(j => j.FinanceId == 1).ExpectedAmount;
         realCarriedOverBalance.ShouldBeGreaterThan(0m); // confirms this scenario actually exercises the fix, not a $0 no-op
 
-        var editedBill = Bill(1, bill.Source, -120m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -120m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
 
         EarMarkPattern? recommendedPreview = null;
@@ -309,7 +309,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         // Matches the bill's own original rate exactly, so no meaningful
         // glut or shortfall builds up before the restructure — an earlier,
         // since-superseded segment.
-        _earMarkPatterns.Save(Plan(bill, -50m, bill.DatePattern.Start, new DateOnly(2025, 3, 31)));
+        _earMarkPatterns.Save(Plan(bill, -50m, bill.DatePattern.ActiveStart, new DateOnly(2025, 3, 31)));
         var currentPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions
             {
@@ -319,7 +319,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Weekly,
                     Interval = 2,
-                    Start = new DateOnly(2025, 4, 4), // a Friday
+                    DtStart = new DateOnly(2025, 4, 4), // a Friday
                     Until = bill.DatePattern.Until,
                 }),
             },
@@ -331,7 +331,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         // remaining need vastly exceeds whatever's already banked, so
         // ProposeSameSchedule/ProposeSameAmount have real work to do
         // regardless of the exact pre-edit balance.
-        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
 
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         confirmation.ConfirmImplicitChanges = request =>
@@ -352,7 +352,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         // Same phase as the current segment's own Friday cycle, re-anchored —
         // not the superseded segment's own $80 rate, and not the bill's own
         // monthly cadence Propose's default would have used.
-        currentPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.Start);
+        currentPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.DtStart);
     }
 
     // Regression lock, 2026-08-16: the fix above must not reach into F27's
@@ -373,7 +373,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
 
         var forecast = Forecast();
-        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
 
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         ImplicitChangeConfirmationRequest? capturedRequest = null;
@@ -430,7 +430,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _financialPatterns.Save(bill, accountId: 1);
         var forecast = Forecast();
 
-        var editedBill = Bill(1, bill.Source, -60m, bill.DatePattern.Start, bill.DatePattern.Until); // amount is normally Critical...
+        var editedBill = Bill(1, bill.Source, -60m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // amount is normally Critical...
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
@@ -452,7 +452,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _financialPatterns.Save(bill, accountId: 1); // no EarMarkPattern saved for it
         var forecast = Forecast();
 
-        var editedBill = Bill(1, bill.Source, -18m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -18m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
@@ -476,7 +476,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _financialPatterns.Save(paycheck, accountId: 1);
         var forecast = Forecast();
 
-        var raise = Bill(1, paycheck.Source, 3200m, paycheck.DatePattern.Start, paycheck.DatePattern.Until, byMonthDay: 25);
+        var raise = Bill(1, paycheck.Source, 3200m, paycheck.DatePattern.ActiveStart, paycheck.DatePattern.Until, byMonthDay: 25);
 
         Confirmation(1, raise, accountId: 1, forecast).Run();
 
@@ -517,7 +517,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var expectedCarriedOverBalance = forecast.GetTimeline(1)
             .Last(entry => entry.Date <= AsOf).Snapshot.FundJars
             .Single(jar => jar.FinanceId == 1).ExpectedAmount;
-        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.Start, bill.DatePattern.Until); // amount only — recurrence shape untouched
+        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // amount only — recurrence shape untouched
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
@@ -553,14 +553,14 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         // The due date itself moves (1st -> 15th) — a recurrence-shape
         // change, not just an amount change.
-        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.Start, bill.DatePattern.Until, byMonthDay: 15);
+        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.ActiveStart, bill.DatePattern.Until, byMonthDay: 15);
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
         var patterns = _financialPatterns.GetAll();
         patterns.Count.ShouldBe(2); // the break-off happened this time
         patterns.Single(p => p.FinanceId == 1).DatePattern.Until.ShouldBe(AsOf.AddDays(-1));
-        patterns.Single(p => p.FinanceId == 2).DatePattern.Start.ShouldBe(AsOf);
+        patterns.Single(p => p.FinanceId == 2).DatePattern.ActiveStart.ShouldBe(AsOf);
 
         var plans = _earMarkPatterns.GetAll();
         plans.Count.ShouldBe(3); // both original plans, truncated, plus ONE consolidated successor
@@ -568,7 +568,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plans.Where(p => p.FinanceId == 1).ShouldAllBe(p => p.DatePattern.Until == AsOf.AddDays(-1));
 
         var successorPlan = plans.Single(p => p.FinanceId == 2); // exactly one — consolidated, not two
-        successorPlan.DatePattern.Start.ShouldBe(AsOf);
+        successorPlan.DatePattern.ActiveStart.ShouldBe(AsOf);
         successorPlan.StartingAllocation.ShouldBe(expectedCarriedOverBalance); // the ONE combined jar's balance, not either plan's own share
     }
 
@@ -594,7 +594,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         var forecast = Forecast();
         var newUntil = new DateOnly(2027, 11, 11); // shorter than both plans' own Until
-        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.Start, newUntil);
+        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.ActiveStart, newUntil);
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
@@ -603,8 +603,8 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var plans = _earMarkPatterns.GetAll();
         plans.Count.ShouldBe(2); // both survive — neither plan's own Start was past the new Until
         plans.ShouldAllBe(p => p.DatePattern.Until == newUntil);
-        plans.ShouldContain(p => p.DatePattern.Start == new DateOnly(2025, 1, 1));
-        plans.ShouldContain(p => p.DatePattern.Start == new DateOnly(2025, 1, 2)); // both survive as separate rows — not merged
+        plans.ShouldContain(p => p.DatePattern.ActiveStart == new DateOnly(2025, 1, 1));
+        plans.ShouldContain(p => p.DatePattern.ActiveStart == new DateOnly(2025, 1, 2)); // both survive as separate rows — not merged
     }
 
     [Fact]
@@ -612,7 +612,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     {
         var bill = Bill(1, "Storage Unit Rental", -80m, new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31));
         _financialPatterns.Save(bill, accountId: 1);
-        var plan = Plan(bill, -60m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var plan = Plan(bill, -60m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
         _earMarkPatterns.Save(plan);
         _manualEarmarks.Save(ManualEarmark.Create(
             new ManualEarmarkOptions { FinanceId = 1, Date = new DateOnly(2027, 12, 1), Amount = 200m }, // after the new Until, below
@@ -620,7 +620,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         var forecast = Forecast();
         var newUntil = new DateOnly(2027, 11, 11);
-        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.Start, newUntil);
+        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.ActiveStart, newUntil);
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
@@ -645,13 +645,13 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         var forecast = Forecast();
         var newUntil = new DateOnly(2026, 6, 30); // before the second plan's own Start
-        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.Start, newUntil);
+        var editedBill = Bill(1, bill.Source, bill.Amount, bill.DatePattern.ActiveStart, newUntil);
 
         Confirmation(1, editedBill, accountId: 1, forecast).Run();
 
         var plans = _earMarkPatterns.GetAll();
         plans.ShouldHaveSingleItem(); // the not-yet-started plan is gone entirely, not left dangling
-        plans[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+        plans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1));
         plans[0].DatePattern.Until.ShouldBe(newUntil); // the surviving plan was also truncated to match
     }
 
@@ -665,7 +665,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var bill = Bill(1, "Electric Co", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(bill, accountId: 1);
         var forecast = Forecast();
-        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.Start, bill.DatePattern.Until);
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
 
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         confirmation.ConfirmImplicitChanges = request =>
@@ -693,7 +693,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
 
         var forecast = Forecast();
-        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.Start, bill.DatePattern.Until); // amount only
+        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // amount only
 
         string? capturedCaveat = null;
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
@@ -742,7 +742,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2026, 6, 1),
+                DtStart = new DateOnly(2026, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -758,7 +758,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -815,7 +815,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         confirmation.PickEarmarkPattern = plans =>
         {
             offeredPlans = plans;
-            return plans.Single(p => p.DatePattern.Start == new DateOnly(2026, 1, 1)); // deliberately not the first one
+            return plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2026, 1, 1)); // deliberately not the first one
         };
         confirmation.NavigateToEarmarkForm = plan => navigatedTo = plan;
 
@@ -824,7 +824,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         offeredPlans.ShouldNotBeNull();
         offeredPlans!.Count.ShouldBe(2);
         navigatedTo.ShouldNotBeNull();
-        navigatedTo!.DatePattern.Start.ShouldBe(new DateOnly(2026, 1, 1)); // the picker's own choice, not savingsPlan[0]
+        navigatedTo!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2026, 1, 1)); // the picker's own choice, not savingsPlan[0]
     }
 
     // ---- shared scenario-building helpers ----------------------------------
@@ -847,7 +847,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [byMonthDay ?? start.Day],
-        Start = start,
+        DtStart = start,
         Until = until,
     });
 

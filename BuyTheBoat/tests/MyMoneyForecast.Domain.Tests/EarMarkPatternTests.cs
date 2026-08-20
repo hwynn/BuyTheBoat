@@ -14,7 +14,7 @@ public class EarMarkPatternTests
         DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Yearly,
-            Start = new DateOnly(2025, 1, 1),
+            DtStart = new DateOnly(2025, 1, 1),
             Count = 1,
             // Saving started three years before the due date, so the goal's
             // active span reaches back that far (planning/15, ActiveFrom).
@@ -35,7 +35,7 @@ public class EarMarkPatternTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Weekly,
-                    Start = new DateOnly(2024, 6, 1),
+                    DtStart = new DateOnly(2024, 6, 1),
                     Until = new DateOnly(2025, 1, 1),
                 }),
                 Amount = -200m,
@@ -60,7 +60,7 @@ public class EarMarkPatternTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Monthly,
-                    Start = new DateOnly(2022, 1, 1), // three years before the goal's own start
+                    DtStart = new DateOnly(2022, 1, 1), // three years before the goal's own start
                     ByMonthDay = [1],
                     Until = new DateOnly(2025, 1, 1),
                 }),
@@ -68,7 +68,7 @@ public class EarMarkPatternTests
             },
             goal);
 
-        earmark.DatePattern.Start.ShouldBeLessThan(goal.DatePattern.Start);
+        earmark.DatePattern.ActiveStart.ShouldBeLessThan(goal.DatePattern.DtStart);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class EarMarkPatternTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Weekly,
-                    Start = new DateOnly(2024, 6, 1),
+                    DtStart = new DateOnly(2024, 6, 1),
                     Until = new DateOnly(2025, 2, 1), // after the goal's own due date
                 }),
                 Amount = -200m,
@@ -103,7 +103,7 @@ public class EarMarkPatternTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Monthly,
-                    Start = new DateOnly(2024, 1, 1),
+                    DtStart = new DateOnly(2024, 1, 1),
                     ByMonthDay = [1],
                     Until = new DateOnly(2025, 1, 1),
                 }),
@@ -126,7 +126,7 @@ public class EarMarkPatternTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Monthly,
-                    Start = new DateOnly(2024, 1, 1),
+                    DtStart = new DateOnly(2024, 1, 1),
                     ByMonthDay = [1],
                     Until = new DateOnly(2025, 1, 1),
                 }),
@@ -151,7 +151,7 @@ public class EarMarkPatternTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Monthly,
-                    Start = new DateOnly(2021, 1, 1), // before the goal's ActiveFrom (2022-01-01)
+                    DtStart = new DateOnly(2021, 1, 1), // before the goal's ActiveFrom (2022-01-01)
                     ByMonthDay = [1],
                     Until = new DateOnly(2025, 1, 1),
                 }),

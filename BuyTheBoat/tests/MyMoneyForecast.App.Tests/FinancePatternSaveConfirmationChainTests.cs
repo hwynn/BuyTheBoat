@@ -46,10 +46,10 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         confirmation.Run().ShouldBeTrue();
 
         var patterns = _financialPatterns.GetAll();
-        patterns.Single(p => p.FinanceId == 2).DatePattern.Start.ShouldBe(new DateOnly(2025, 6, 1));
+        patterns.Single(p => p.FinanceId == 2).DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 6, 1));
         var adjustedPredecessor = patterns.Single(p => p.FinanceId == 1);
         adjustedPredecessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 5, 31));
-        adjustedPredecessor.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1)); // unchanged
+        adjustedPredecessor.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1)); // unchanged
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         confirmation.Run().ShouldBeTrue();
 
         var untouchedPredecessor = _financialPatterns.GetAll().Single(p => p.FinanceId == 1);
-        untouchedPredecessor.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+        untouchedPredecessor.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1));
         untouchedPredecessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // own overlap with current left in place, not resolved
     }
 
@@ -163,7 +163,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
 
         confirmation.Run().ShouldBeTrue();
 
-        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.Start.ShouldBe(new DateOnly(2025, 9, 1)); // untouched
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 9, 1)); // untouched
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
 
         var cascaded = _financialPatterns.GetAll().Single(p => p.FinanceId == 2);
         cascaded.Amount.ShouldBe(-1_650m);
-        cascaded.DatePattern.Start.ShouldBe(new DateOnly(2025, 10, 1)); // its own, untouched
+        cascaded.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 10, 1)); // its own, untouched
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         confirmation.Run().ShouldBeFalse();
 
         _financialPatterns.GetAll().Single(p => p.FinanceId == 1).DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30));
-        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1));
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1));
     }
 
     // ---- editing an EARLIER segment (has a later one): edit in place +
@@ -417,7 +417,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [start.Day],
-        Start = start,
+        DtStart = start,
         Until = until,
     });
 

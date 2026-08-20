@@ -28,7 +28,7 @@ public partial class FinancialPatternPickerWindow : Window
         public FinancialPattern Pattern { get; } = pattern;
         public string Description => string.IsNullOrWhiteSpace(Pattern.Description) ? "—" : Pattern.Description;
         public string Source => Pattern.Source;
-        public string DateRangeText => $"{Pattern.DatePattern.Start:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
+        public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
     }
 
     // The pattern the user picked, or null if they cancelled out.
@@ -42,7 +42,7 @@ public partial class FinancialPatternPickerWindow : Window
             .Where(pattern => pattern.DatePattern.Until >= today)
             .Where(pattern => !transferFinanceIds.Contains(pattern.FinanceId))
             .OrderBy(pattern => pattern.Source)
-            .ThenBy(pattern => pattern.DatePattern.Start)
+            .ThenBy(pattern => pattern.DatePattern.ActiveStart)
             .Select(pattern => new Row(pattern))
             .ToList();
 

@@ -20,7 +20,7 @@ public partial class ChainSegmentPickerWindow : Window
         public string StatusText => IsCurrent ? "Current" : "";
 
         // Both borders of the range in full — year, month, and day.
-        public string DateRangeText => $"{Pattern.DatePattern.Start:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
+        public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
 
         public string AmountText => $"{Math.Abs(Pattern.Amount):C}{(Pattern.Amount < 0 ? " / occurrence" : "")}";
     }
@@ -35,7 +35,7 @@ public partial class ChainSegmentPickerWindow : Window
         var current = BreakOffFactory.FindCurrentSegment(segments[0], segments);
 
         var rows = segments
-            .OrderBy(segment => segment.DatePattern.Start) // oldest first — history reads top to bottom
+            .OrderBy(segment => segment.DatePattern.ActiveStart) // oldest first — history reads top to bottom
             .Select(segment => new Row(segment, segment.FinanceId == current.FinanceId))
             .ToList();
 

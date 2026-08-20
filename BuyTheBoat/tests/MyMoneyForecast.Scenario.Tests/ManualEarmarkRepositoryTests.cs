@@ -30,7 +30,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2026, 6, 1),
+                DtStart = new DateOnly(2026, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
@@ -44,7 +44,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -128,7 +128,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2026, 1, 1),
+                DtStart = new DateOnly(2026, 1, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -143,7 +143,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 6, 1),
             }),
         }, goal);
@@ -155,7 +155,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 7, 1),
+                DtStart = new DateOnly(2025, 7, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         }, goal);

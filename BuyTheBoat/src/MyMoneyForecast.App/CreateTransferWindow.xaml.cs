@@ -48,7 +48,7 @@ public partial class CreateTransferWindow : Window
             RuleEditor.LoadFrom(RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = date,
+                DtStart = date,
                 Count = 1,
             }));
         }

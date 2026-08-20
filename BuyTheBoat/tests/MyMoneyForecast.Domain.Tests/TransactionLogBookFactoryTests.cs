@@ -20,7 +20,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = date,
+                DtStart = date,
                 Count = 1,
             }),
             Amount = amount,
@@ -78,7 +78,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 31),
             }),
             Amount = -100m,
@@ -92,7 +92,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 31),
                 }),
             },
@@ -136,7 +136,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 12, 25),
+                DtStart = new DateOnly(2025, 12, 25),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -151,7 +151,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 4, 1),
                     ExcludedDates = [new DateOnly(2025, 3, 1)], // deliberately skipped
                 }),
@@ -203,7 +203,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2026, 6, 15),
+                DtStart = new DateOnly(2026, 6, 15),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -219,7 +219,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 6, 30),
                 }),
             },
@@ -234,7 +234,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 7, 1),
+                    DtStart = new DateOnly(2025, 7, 1),
                     Until = new DateOnly(2025, 12, 31),
                 }),
             },
@@ -249,7 +249,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2026, 1, 1),
+                    DtStart = new DateOnly(2026, 1, 1),
                     Until = new DateOnly(2026, 6, 15),
                 }),
             },
@@ -367,7 +367,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -380,7 +380,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2025, 1, 15),
+                    DtStart = new DateOnly(2025, 1, 15),
                     Until = new DateOnly(2025, 11, 15), // must not outlast the bill's own Dec 1 end (3.11.2.a2)
                 }),
             },
@@ -429,7 +429,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -442,7 +442,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2025, 1, 15),
+                    DtStart = new DateOnly(2025, 1, 15),
                     Until = new DateOnly(2025, 11, 15),
                 }),
             },
@@ -479,7 +479,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Monthly,
                 Interval = 3,
                 ByMonthDay = [1],
-                Start = new DateOnly(2020, 1, 1),
+                DtStart = new DateOnly(2020, 1, 1),
                 Until = new DateOnly(2020, 12, 1),
             }),
         });
@@ -492,7 +492,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2020, 1, 15),
+                    DtStart = new DateOnly(2020, 1, 15),
                     Until = new DateOnly(2020, 11, 15),
                 }),
             },
@@ -527,7 +527,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [12],
-                Start = new DateOnly(2026, 1, 12),
+                DtStart = new DateOnly(2026, 1, 12),
                 Until = new DateOnly(2026, 6, 12),
             }),
         });
@@ -540,7 +540,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [12],
-                    Start = new DateOnly(2026, 1, 12),
+                    DtStart = new DateOnly(2026, 1, 12),
                     Until = new DateOnly(2026, 6, 12),
                 }),
             },
@@ -573,7 +573,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [15],
-                Start = new DateOnly(2026, 1, 15),
+                DtStart = new DateOnly(2026, 1, 15),
                 Until = new DateOnly(2026, 2, 15),
             }).WithActiveFrom(new DateOnly(2026, 1, 1)),
         });
@@ -586,7 +586,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [5],
-                    Start = new DateOnly(2026, 1, 5),
+                    DtStart = new DateOnly(2026, 1, 5),
                     Until = new DateOnly(2026, 2, 5),
                 }),
             },
@@ -628,7 +628,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2026, 3, 1),
+                DtStart = new DateOnly(2026, 3, 1),
                 Until = new DateOnly(2026, 12, 1),
             }),
         });
@@ -660,7 +660,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2026, 3, 1),
+                DtStart = new DateOnly(2026, 3, 1),
                 Until = new DateOnly(2027, 12, 1),
             }),
         });
@@ -673,7 +673,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2026, 3, 15), // AFTER the Mar 1 bill
+                    DtStart = new DateOnly(2026, 3, 15), // AFTER the Mar 1 bill
                     Until = new DateOnly(2026, 12, 15),
                 }),
             },
@@ -695,7 +695,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2026, 3, 1),
+                DtStart = new DateOnly(2026, 3, 1),
                 Until = new DateOnly(2027, 12, 1),
             }),
         });
@@ -708,7 +708,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2026, 3, 15),
+                    DtStart = new DateOnly(2026, 3, 15),
                     Until = new DateOnly(2026, 12, 15),
                 }),
                 StartingAllocation = 200m,
@@ -735,7 +735,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2026, 3, 1),
+                DtStart = new DateOnly(2026, 3, 1),
                 Until = new DateOnly(2027, 12, 1),
             }).WithActiveFrom(new DateOnly(2026, 1, 1)),
         });
@@ -759,7 +759,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2026, 2, 20),
+                    DtStart = new DateOnly(2026, 2, 20),
                     Until = new DateOnly(2026, 12, 15),
                 }),
             },
@@ -790,7 +790,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2026, 3, 1),
+                DtStart = new DateOnly(2026, 3, 1),
                 Until = new DateOnly(2027, 12, 1),
             }),
         });
@@ -803,7 +803,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2026, 3, 15),
+                    DtStart = new DateOnly(2026, 3, 15),
                     Until = new DateOnly(2026, 12, 15),
                 }),
             },
@@ -841,7 +841,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [15],
-                Start = new DateOnly(2026, 1, 15),
+                DtStart = new DateOnly(2026, 1, 15),
                 Until = new DateOnly(2027, 12, 15),
             }).WithActiveFrom(new DateOnly(2025, 12, 1)),
         });
@@ -854,7 +854,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2026, 1, 1), // 1st contribution: Jan 1 — before the Jan 15 due date
+                    DtStart = new DateOnly(2026, 1, 1), // 1st contribution: Jan 1 — before the Jan 15 due date
                     Until = new DateOnly(2027, 11, 1), // 2nd contribution: Feb 1 — AFTER it
                 }),
             },
@@ -862,7 +862,7 @@ public class TransactionLogBookFactoryTests
 
         // Confirmed, not assumed: exactly one contribution falls on-or-before
         // the due date, not two and not zero.
-        plan.DatePattern.GetOccurrences(plan.DatePattern.Start, new DateOnly(2026, 1, 15)).Count.ShouldBe(1);
+        plan.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, new DateOnly(2026, 1, 15)).Count.ShouldBe(1);
 
         TransactionLogBookFactory.FirstOccurrenceShortfall([plan], bill, [], new DateOnly(2026, 1, 1))
             .ShouldBe(100m); // $100 landed, $100 still short — not $0, not $200
@@ -890,7 +890,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -903,7 +903,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -949,7 +949,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2026, 1, 1),
+                DtStart = new DateOnly(2026, 1, 1),
                 Until = new DateOnly(2027, 12, 31),
             }),
         });
@@ -962,7 +962,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2026, 1, 1),
+                    DtStart = new DateOnly(2026, 1, 1),
                     Until = new DateOnly(2027, 12, 31),
                 }),
             },
@@ -976,7 +976,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [2],
-                    Start = new DateOnly(2026, 1, 2),
+                    DtStart = new DateOnly(2026, 1, 2),
                     Until = new DateOnly(2027, 12, 31),
                 }),
             },
@@ -1009,7 +1009,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -1022,7 +1022,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -1065,7 +1065,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -1078,7 +1078,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -1111,7 +1111,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 6, 1),
             }),
         });
@@ -1124,7 +1124,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 6, 1),
                 }),
             },
@@ -1196,7 +1196,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 6, 1),
+                DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -1210,7 +1210,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 5, 1),
                 }),
             },
@@ -1273,7 +1273,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -1286,7 +1286,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -1329,7 +1329,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [15],
-                Start = new DateOnly(2025, 1, 15),
+                DtStart = new DateOnly(2025, 1, 15),
                 Until = new DateOnly(2025, 12, 15),
                 ActiveFrom = new DateOnly(2025, 1, 1), // the plan's own Start predates this
             }),
@@ -1343,7 +1343,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -1406,7 +1406,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 2, 15), // 45 days out — well inside 2 months
+                DtStart = new DateOnly(2025, 2, 15), // 45 days out — well inside 2 months
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -1420,7 +1420,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 1, 1),
                 }),
             },
@@ -1502,7 +1502,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -1515,7 +1515,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -1556,7 +1556,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2026, 12, 1),
             }),
         });
@@ -1569,7 +1569,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 8, 1), // stops after August — bill keeps going 16 more months
                 }),
             },
@@ -1602,7 +1602,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2026, 12, 1),
             }),
         });
@@ -1615,7 +1615,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 8, 1),
                 }),
             },
@@ -1649,7 +1649,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 6, 1),
+                DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -1663,7 +1663,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 5, 1),
                 }),
             },
@@ -1695,7 +1695,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 6, 1),
+                DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -1709,7 +1709,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 5, 1),
                 }),
             },
@@ -1767,7 +1767,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 6, 1),
+                DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
@@ -1786,7 +1786,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 3, 1),
+                    DtStart = new DateOnly(2025, 3, 1),
                     Until = new DateOnly(2025, 5, 1),
                 }),
                 Amount = -100m,
@@ -1821,7 +1821,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 6, 1),
+                DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -1837,7 +1837,7 @@ public class TransactionLogBookFactoryTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Yearly,
-                    Start = new DateOnly(2025, 6, 1),
+                    DtStart = new DateOnly(2025, 6, 1),
                     Count = 1,
                 }),
             },
@@ -1891,7 +1891,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Daily,
-                Start = horizonEndDate,
+                DtStart = horizonEndDate,
                 Until = horizonEndDate.AddDays(1),
             }),
             Amount = -10m,
@@ -1944,7 +1944,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2025, 6, 1),
+                DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
@@ -1960,7 +1960,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 5, 1),
                 }),
                 Amount = -240m,
@@ -1997,7 +1997,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 6, 1),
             }),
             Amount = -15m,
@@ -2029,7 +2029,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2030, 1, 1),
+                DtStart = new DateOnly(2030, 1, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
@@ -2045,7 +2045,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2029, 12, 1),
                 }),
                 Amount = -100m,
@@ -2083,7 +2083,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
         });
@@ -2096,7 +2096,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -2130,7 +2130,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 3, 1),
             }),
         });
@@ -2143,7 +2143,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 3, 1),
                 }),
             },
@@ -2175,7 +2175,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
             Amount = -1000m,
@@ -2192,7 +2192,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [15],
-                    Start = new DateOnly(2025, 1, 15),
+                    DtStart = new DateOnly(2025, 1, 15),
                     Until = new DateOnly(2025, 12, 1),
                 }),
                 Amount = -1000m,
@@ -2234,7 +2234,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [15],
-                Start = new DateOnly(2025, 1, 15),
+                DtStart = new DateOnly(2025, 1, 15),
                 Until = new DateOnly(2040, 1, 15),
             }),
             Amount = 2000m,
@@ -2248,7 +2248,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2040, 1, 1),
             }),
             Amount = -1200m,
@@ -2404,7 +2404,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
             Amount = -300m,
@@ -2449,7 +2449,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 1),
             }),
             Amount = -800m,
@@ -2491,7 +2491,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = farFuture,
+                DtStart = farFuture,
                 Count = 1,
             }),
         });
@@ -2504,7 +2504,7 @@ public class TransactionLogBookFactoryTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Yearly,
-                    Start = farFuture,
+                    DtStart = farFuture,
                     Count = 1,
                 }),
             },
@@ -2525,7 +2525,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = date,
+                DtStart = date,
                 Count = 1,
             }),
         });
@@ -2669,7 +2669,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = farFuture,
+                DtStart = farFuture,
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 2, 1), // saving starts before the due date (planning/15)
             }),
@@ -2684,7 +2684,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 2, 1),
+                    DtStart = new DateOnly(2025, 2, 1),
                     Until = new DateOnly(2025, 2, 1),
                 }),
             },
@@ -2830,7 +2830,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2026, 6, 1),
+                DtStart = new DateOnly(2026, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
             }),
@@ -2845,7 +2845,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -2875,7 +2875,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2026, 6, 1),
+                DtStart = new DateOnly(2026, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2024, 1, 1),
             }),
@@ -2890,7 +2890,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 6, 1),
                 }),
             },
@@ -2905,7 +2905,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 7, 1),
+                    DtStart = new DateOnly(2025, 7, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -2933,7 +2933,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2026, 6, 1),
+                DtStart = new DateOnly(2026, 6, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2024, 1, 1),
             }),
@@ -2947,7 +2947,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 6, 1),
                 }),
             },
@@ -2961,7 +2961,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 7, 1),
+                    DtStart = new DateOnly(2025, 7, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -2995,7 +2995,7 @@ public class TransactionLogBookFactoryTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = new DateOnly(2027, 1, 1),
+                DtStart = new DateOnly(2027, 1, 1),
                 Count = 1,
                 ActiveFrom = new DateOnly(2025, 1, 1),
             }),
@@ -3010,7 +3010,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -3026,7 +3026,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 2, 1),
+                    DtStart = new DateOnly(2025, 2, 1),
                     Until = new DateOnly(2025, 12, 1),
                 }),
             },
@@ -3068,7 +3068,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 6, 1),
                 ActiveFrom = new DateOnly(2024, 6, 1), // saving started well before the due date
             }),
@@ -3085,7 +3085,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2024, 6, 1),
+                    DtStart = new DateOnly(2024, 6, 1),
                     Until = new DateOnly(2024, 12, 1),
                 }),
             },
@@ -3271,7 +3271,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 4, 1),
             }),
             Amount = -100m,
@@ -3285,7 +3285,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 4, 1),
                 }),
             },
@@ -3363,7 +3363,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = new DateOnly(2025, 12, 31),
             }),
             Amount = -100m,
@@ -3377,7 +3377,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2025, 12, 31),
                 }),
             },

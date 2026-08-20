@@ -644,9 +644,7 @@ public sealed class FinancePatternSaveConfirmation
         // the new, narrower one (Item E) — grouped under "start_date" for
         // that reason, even though only Start itself moves an actual
         // occurrence date.
-        _startChanged =
-            saved.DatePattern.Start != _proposedPattern.DatePattern.Start ||
-            saved.DatePattern.ActiveFrom != _proposedPattern.DatePattern.ActiveFrom;
+        _startChanged = saved.DatePattern.ActiveStart != _proposedPattern.DatePattern.ActiveStart;
 
         _amountChanged = saved.Amount != _proposedPattern.Amount;
         var restrictedFieldChanged = _recurrenceShapeChanged || _startChanged || _amountChanged;
@@ -724,14 +722,14 @@ public sealed class FinancePatternSaveConfirmation
             .ToList();
         _chainContext = new ChainContext(saved, otherPatterns);
 
-        var hasPredecessor = otherPatterns.Any(pattern => pattern.DatePattern.Start < saved.DatePattern.Start);
-        var hasSuccessor = otherPatterns.Any(pattern => pattern.DatePattern.Start > saved.DatePattern.Start);
+        var hasPredecessor = otherPatterns.Any(pattern => pattern.DatePattern.ActiveStart < saved.DatePattern.ActiveStart);
+        var hasSuccessor = otherPatterns.Any(pattern => pattern.DatePattern.ActiveStart > saved.DatePattern.ActiveStart);
 
         // Start's own literal move — deliberately narrower than _startChanged
         // above, which also counts ActiveFrom (Item E's own narrowing
         // trigger, unrelated to chain contiguity: a predecessor's own Until
         // connects to THIS pattern's own Start, never its ActiveFrom lead-in).
-        var startChanged = saved.DatePattern.Start != _proposedPattern.DatePattern.Start;
+        var startChanged = saved.DatePattern.ActiveStart != _proposedPattern.DatePattern.ActiveStart;
         var untilChanged = saved.DatePattern.Until != _proposedPattern.DatePattern.Until;
         var trivialFieldsChanged = saved.Priority != _proposedPattern.Priority
             || saved.Mandatory != _proposedPattern.Mandatory
@@ -991,13 +989,13 @@ public sealed class FinancePatternSaveConfirmation
             return "";
         }
 
-        var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start < context.Saved.DatePattern.Start).ToList();
-        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start > context.Saved.DatePattern.Start).ToList();
+        var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart < context.Saved.DatePattern.ActiveStart).ToList();
+        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart).ToList();
         var absorbed = new List<FinancialPattern>();
 
-        if (context.Saved.DatePattern.Start != _proposedPattern.DatePattern.Start && predecessors.Count > 0)
+        if (context.Saved.DatePattern.ActiveStart != _proposedPattern.DatePattern.ActiveStart && predecessors.Count > 0)
         {
-            absorbed.AddRange(BreakOffFactory.ExtendStart(_proposedPattern, predecessors, _proposedPattern.DatePattern.Start).Absorbed);
+            absorbed.AddRange(BreakOffFactory.ExtendStart(_proposedPattern, predecessors, _proposedPattern.DatePattern.ActiveStart).Absorbed);
         }
 
         if (context.Saved.DatePattern.Until != _proposedPattern.DatePattern.Until && successors.Count > 0)
@@ -1011,12 +1009,12 @@ public sealed class FinancePatternSaveConfirmation
         }
 
         var forecast = _requestForecast();
-        var ordered = absorbed.OrderBy(pattern => pattern.DatePattern.Start).ToList();
+        var ordered = absorbed.OrderBy(pattern => pattern.DatePattern.ActiveStart).ToList();
         var descriptions = ordered.Select(pattern =>
         {
             var planCount = forecast.Book.EarMarkPatternsFor(pattern.FinanceId).Count;
             var label = string.IsNullOrWhiteSpace(pattern.Description) ? pattern.Source : pattern.Description;
-            var range = $"{pattern.DatePattern.Start:MMM d, yyyy} – {pattern.DatePattern.Until:MMM d, yyyy}";
+            var range = $"{pattern.DatePattern.ActiveStart:MMM d, yyyy} – {pattern.DatePattern.Until:MMM d, yyyy}";
             return planCount > 0
                 ? $"\"{label}\" ({range}), along with its own {planCount} savings plan{(planCount == 1 ? "" : "s")} and any money saved toward it"
                 : $"\"{label}\" ({range})";
@@ -1035,24 +1033,24 @@ public sealed class FinancePatternSaveConfirmation
             return "";
         }
 
-        var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start < context.Saved.DatePattern.Start).ToList();
-        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start > context.Saved.DatePattern.Start).ToList();
+        var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart < context.Saved.DatePattern.ActiveStart).ToList();
+        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart).ToList();
         var consequences = new List<string>();
 
-        if (context.Saved.DatePattern.Start != _proposedPattern.DatePattern.Start && predecessors.Count > 0)
+        if (context.Saved.DatePattern.ActiveStart != _proposedPattern.DatePattern.ActiveStart && predecessors.Count > 0)
         {
-            var predecessor = predecessors.OrderByDescending(pattern => pattern.DatePattern.Start).First();
+            var predecessor = predecessors.OrderByDescending(pattern => pattern.DatePattern.ActiveStart).First();
             consequences.Add(BreakOffFactory.SpansOverlap(_proposedPattern, predecessor)
-                ? $"it will overlap with the segment before it ({predecessor.DatePattern.Start:MMM d, yyyy} – {predecessor.DatePattern.Until:MMM d, yyyy})"
-                : $"a gap will open before it, from {predecessor.DatePattern.Until.AddDays(1):MMM d, yyyy} to {_proposedPattern.DatePattern.Start.AddDays(-1):MMM d, yyyy}");
+                ? $"it will overlap with the segment before it ({predecessor.DatePattern.ActiveStart:MMM d, yyyy} – {predecessor.DatePattern.Until:MMM d, yyyy})"
+                : $"a gap will open before it, from {predecessor.DatePattern.Until.AddDays(1):MMM d, yyyy} to {_proposedPattern.DatePattern.ActiveStart.AddDays(-1):MMM d, yyyy}");
         }
 
         if (context.Saved.DatePattern.Until != _proposedPattern.DatePattern.Until && successors.Count > 0)
         {
-            var successor = successors.OrderBy(pattern => pattern.DatePattern.Start).First();
+            var successor = successors.OrderBy(pattern => pattern.DatePattern.ActiveStart).First();
             consequences.Add(BreakOffFactory.SpansOverlap(_proposedPattern, successor)
-                ? $"it will overlap with the segment after it ({successor.DatePattern.Start:MMM d, yyyy} – {successor.DatePattern.Until:MMM d, yyyy})"
-                : $"a gap will open after it, from {_proposedPattern.DatePattern.Until.AddDays(1):MMM d, yyyy} to {successor.DatePattern.Start.AddDays(-1):MMM d, yyyy}");
+                ? $"it will overlap with the segment after it ({successor.DatePattern.ActiveStart:MMM d, yyyy} – {successor.DatePattern.Until:MMM d, yyyy})"
+                : $"a gap will open after it, from {_proposedPattern.DatePattern.Until.AddDays(1):MMM d, yyyy} to {successor.DatePattern.ActiveStart.AddDays(-1):MMM d, yyyy}");
         }
 
         if (consequences.Count == 0)
@@ -1075,7 +1073,7 @@ public sealed class FinancePatternSaveConfirmation
             return "";
         }
 
-        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start > context.Saved.DatePattern.Start).ToList();
+        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart).ToList();
         if (successors.Count == 0)
         {
             return "";
@@ -1083,8 +1081,8 @@ public sealed class FinancePatternSaveConfirmation
 
         var furthest = successors.Max(pattern => pattern.DatePattern.Until);
         return successors.Count == 1
-            ? $"This edit covers {_proposedPattern.DatePattern.Start:MMM d, yyyy} – {_proposedPattern.DatePattern.Until:MMM d, yyyy}. Cascading forward would also update the segment running through {furthest:MMM d, yyyy}."
-            : $"This edit covers {_proposedPattern.DatePattern.Start:MMM d, yyyy} – {_proposedPattern.DatePattern.Until:MMM d, yyyy}. Cascading forward would also update {successors.Count} later segments, through {furthest:MMM d, yyyy}.";
+            ? $"This edit covers {_proposedPattern.DatePattern.ActiveStart:MMM d, yyyy} – {_proposedPattern.DatePattern.Until:MMM d, yyyy}. Cascading forward would also update the segment running through {furthest:MMM d, yyyy}."
+            : $"This edit covers {_proposedPattern.DatePattern.ActiveStart:MMM d, yyyy} – {_proposedPattern.DatePattern.Until:MMM d, yyyy}. Cascading forward would also update {successors.Count} later segments, through {furthest:MMM d, yyyy}.";
     }
 
     /// <summary>[CALC] Names how many later segments the trivial-fields cascade (Priority/Mandatory/Description/AutoRenew) would reach — Phase 1's own third question, with no EarMarkPattern equivalent. Simpler than DescribeChainCascadeConsequence's own text since there's no "date range" concept for fields that don't affect timing at all.</summary>
@@ -1095,7 +1093,7 @@ public sealed class FinancePatternSaveConfirmation
             return "";
         }
 
-        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start > context.Saved.DatePattern.Start).ToList();
+        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart).ToList();
         return successors.Count switch
         {
             0 => "",
@@ -1226,9 +1224,9 @@ public sealed class FinancePatternSaveConfirmation
 
         foreach (var plan in fix.PlansExceedingNewUntil)
         {
-            if (plan.DatePattern.Start > _proposedPattern.DatePattern.Until)
+            if (plan.DatePattern.ActiveStart > _proposedPattern.DatePattern.Until)
             {
-                _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.Start);
+                _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
                 continue;
             }
 
@@ -1249,14 +1247,14 @@ public sealed class FinancePatternSaveConfirmation
         var toSave = new Dictionary<int, FinancialPattern>();
         var toDelete = new List<int>();
 
-        var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start < context.Saved.DatePattern.Start).ToList();
-        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.Start > context.Saved.DatePattern.Start).ToList();
+        var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart < context.Saved.DatePattern.ActiveStart).ToList();
+        var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart).ToList();
 
         if (TouchesChainBoundary && UserChoseStayLinked)
         {
-            if (context.Saved.DatePattern.Start != _proposedPattern.DatePattern.Start && predecessors.Count > 0)
+            if (context.Saved.DatePattern.ActiveStart != _proposedPattern.DatePattern.ActiveStart && predecessors.Count > 0)
             {
-                var result = BreakOffFactory.ExtendStart(_proposedPattern, predecessors, _proposedPattern.DatePattern.Start);
+                var result = BreakOffFactory.ExtendStart(_proposedPattern, predecessors, _proposedPattern.DatePattern.ActiveStart);
                 foreach (var absorbed in result.Absorbed)
                 {
                     toDelete.Add(absorbed.FinanceId);
@@ -1366,12 +1364,12 @@ public sealed class FinancePatternSaveConfirmation
             // nothing has touched this bill's own plan or ManualEarmarks yet,
             // even though the income's own save has already happened.
             var otherExistingPlans = forecast.Book.EarMarkPatternsFor(oldPlan.FinanceId)
-                .Where(plan => plan.DatePattern.Start != oldPlan.DatePattern.Start)
+                .Where(plan => plan.DatePattern.DtStart != oldPlan.DatePattern.DtStart)
                 .ToList();
             var finalCoverage = otherExistingPlans.Append(proposal.Plan).ToList();
             var orphanedDates = _repositories.FindOrphanedManualEarmarkDates(finalCoverage, oldPlan.FinanceId);
 
-            _repositories.EarMarkPatterns.Delete(oldPlan.FinanceId, oldPlan.DatePattern.Start);
+            _repositories.EarMarkPatterns.Delete(oldPlan.FinanceId, oldPlan.DatePattern.DtStart);
             foreach (var date in orphanedDates)
             {
                 _repositories.ManualEarmarks.Delete(oldPlan.FinanceId, date);
@@ -1424,7 +1422,7 @@ public sealed class FinancePatternSaveConfirmation
         // Monthly/Yearly always carry an explicit ByMonthDay — RecurrenceRuleEditor
         // never shows a ByDay picker for those — so ical.net always finds
         // the right day regardless of where Start itself falls. Nothing to
-        // preserve here; Start = cutDate is already correct, and every
+        // preserve here; DtStart = cutDate is already correct, and every
         // existing break-off test for the common (Monthly) case depends on
         // Start landing exactly there, not on the reference's own next
         // occurrence.
@@ -1436,7 +1434,7 @@ public sealed class FinancePatternSaveConfirmation
                 Interval = reference.Interval,
                 ByDay = reference.ByDay,
                 ByMonthDay = reference.ByMonthDay,
-                Start = cutDate,
+                DtStart = cutDate,
                 Until = reference.Until,
             };
         }

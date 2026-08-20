@@ -16,7 +16,7 @@ public class ExpenseKindClassifierTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Count = occurrences,
             }),
         });

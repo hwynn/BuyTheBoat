@@ -16,7 +16,7 @@ public class RestructureFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -31,7 +31,7 @@ public class RestructureFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = start,
+                    DtStart = start,
                     Until = until,
                 }),
                 StartingAllocation = startingAllocation,
@@ -42,7 +42,7 @@ public class RestructureFactoryTests
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [1],
-        Start = start,
+        DtStart = start,
         Until = until,
     };
 
@@ -63,7 +63,7 @@ public class RestructureFactoryTests
         });
 
         result.Predecessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30));
-        result.Successor.DatePattern.Start.ShouldBe(cutDate);
+        result.Successor.DatePattern.ActiveStart.ShouldBe(cutDate);
         result.Successor.Amount.ShouldBe(-150m);
     }
 
@@ -223,7 +223,7 @@ public class RestructureFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = new DateOnly(2025, 1, 1),
+                DtStart = new DateOnly(2025, 1, 1),
                 Until = loanPaidOff,
             }),
         });
@@ -362,7 +362,7 @@ public class RestructureFactoryTests
         result.Current.DatePattern.Until.ShouldBe(new DateOnly(2025, 4, 15));
         result.Absorbed.ShouldBeEmpty();
         result.AdjustedNeighbor.ShouldNotBeNull();
-        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 4, 16));
+        result.AdjustedNeighbor!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 4, 16));
         result.AdjustedNeighbor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // unchanged
         result.AdjustedNeighbor.Amount.ShouldBe(-80m); // unchanged
     }
@@ -377,7 +377,7 @@ public class RestructureFactoryTests
 
         result.Current.DatePattern.Until.ShouldBe(new DateOnly(2025, 3, 15));
         result.Absorbed.ShouldBeEmpty();
-        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 3, 16)); // closes what would be a gap
+        result.AdjustedNeighbor!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 3, 16)); // closes what would be a gap
         result.AdjustedNeighbor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30));
     }
 
@@ -394,7 +394,7 @@ public class RestructureFactoryTests
         result.Current.StartingAllocation.ShouldBe(50m); // carried forward from the absorbed neighbor
         result.Absorbed.ShouldHaveSingleItem();
         result.Absorbed[0].ShouldBe(absorbedNeighbor);
-        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 11));
+        result.AdjustedNeighbor!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 11));
         result.AdjustedNeighbor.DatePattern.Until.ShouldBe(new DateOnly(2025, 9, 30)); // farNeighbor, untouched otherwise
     }
 
@@ -411,7 +411,7 @@ public class RestructureFactoryTests
         result.Absorbed.Count.ShouldBe(2);
         result.Absorbed.ShouldBe([neighborA, neighborB]); // earliest first
         result.Current.StartingAllocation.ShouldBe(80m); // 50 + 30
-        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 10, 16));
+        result.AdjustedNeighbor!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 10, 16));
     }
 
     [Fact]
@@ -441,7 +441,7 @@ public class RestructureFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 4, 1),
+                    DtStart = new DateOnly(2025, 4, 1),
                     Until = new DateOnly(2025, 6, 30),
                     ExcludedDates = [skippedDate],
                 }),
@@ -470,10 +470,10 @@ public class RestructureFactoryTests
 
         var result = RestructureFactory.ExtendStart(current, [predecessor], ChainGoal, new DateOnly(2025, 3, 15));
 
-        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 3, 15));
+        result.Current.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 3, 15));
         result.Absorbed.ShouldBeEmpty();
         result.AdjustedNeighbor!.DatePattern.Until.ShouldBe(new DateOnly(2025, 3, 14));
-        result.AdjustedNeighbor.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1)); // unchanged
+        result.AdjustedNeighbor.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1)); // unchanged
     }
 
     [Fact]
@@ -487,13 +487,13 @@ public class RestructureFactoryTests
         result.Absorbed.ShouldHaveSingleItem();
         result.Absorbed[0].ShouldBe(predecessor);
         result.AdjustedNeighbor.ShouldBeNull();
-        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+        result.Current.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1));
         result.Current.StartingAllocation.ShouldBe(20m);
     }
 
     // Deliberately matches how the real caller (FinancePatternSaveConfirmation)
     // actually invokes this — current's own Start is ALREADY newStart (every
-    // real call passes current.DatePattern.Start as newStart directly), not
+    // real call passes current.DatePattern.ActiveStart as newStart directly), not
     // some other value like the test above uses. Found 2026-08-17: with
     // current.Start already equal to newStart, a predecessor landing on that
     // EXACT same date used to fail the (buggy) `plan.Start < current.Start`
@@ -509,7 +509,7 @@ public class RestructureFactoryTests
 
         result.Absorbed.ShouldHaveSingleItem();
         result.Absorbed[0].ShouldBe(predecessor);
-        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+        result.Current.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1));
     }
 
     [Fact]
@@ -531,7 +531,7 @@ public class RestructureFactoryTests
         {
             Frequency = RecurrenceFrequency.Weekly,
             Interval = 2,
-            Start = new DateOnly(2025, 1, 3), // irrelevant to the result — only shape is read
+            DtStart = new DateOnly(2025, 1, 3), // irrelevant to the result — only shape is read
             Until = new DateOnly(2025, 3, 31),
         });
 
@@ -542,7 +542,7 @@ public class RestructureFactoryTests
         updated.Amount.ShouldBe(-120m);
         updated.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Weekly);
         updated.DatePattern.Interval.ShouldBe(2);
-        updated.DatePattern.Start.ShouldBe(new DateOnly(2025, 4, 1)); // laterPlan's own, untouched
+        updated.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 4, 1)); // laterPlan's own, untouched
         updated.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30)); // laterPlan's own, untouched
         updated.StartingAllocation.ShouldBe(25m); // laterPlan's own, untouched
     }
@@ -559,8 +559,8 @@ public class RestructureFactoryTests
 
         result.Count.ShouldBe(2);
         result.ShouldAllBe(plan => plan.Amount == -150m);
-        result[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 4, 1));
-        result[1].DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1));
+        result[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 4, 1));
+        result[1].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1));
     }
 
     [Fact]
@@ -576,7 +576,7 @@ public class RestructureFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 4, 1),
+                    DtStart = new DateOnly(2025, 4, 1),
                     Until = new DateOnly(2025, 6, 30),
                     ExcludedDates = [skippedDate],
                 }),

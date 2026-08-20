@@ -116,7 +116,7 @@ public static class AllocationPlanProposer
         // (an outflow already covering today keeps a null ActiveFrom). The
         // prepared outflow is returned so the caller persists it, not the
         // original; occurrences are untouched.
-        var preparedOutflow = outflow.DatePattern.Start > asOfDate
+        var preparedOutflow = outflow.DatePattern.ActiveStart > asOfDate
             ? outflow.WithActiveFrom(asOfDate)
             : outflow;
 
@@ -185,7 +185,7 @@ public static class AllocationPlanProposer
     {
         var dueDate = outflow.DatePattern.Until;
         var alignedSchedule = AlignedSchedule(existingPlan.DatePattern, asOfDate, dueDate);
-        if (alignedSchedule is null || alignedSchedule.Start > dueDate)
+        if (alignedSchedule is null || alignedSchedule.DtStart > dueDate)
         {
             return null;
         }
@@ -200,7 +200,7 @@ public static class AllocationPlanProposer
             }
 
             var totalReleases = Math.Abs(outflow.Amount)
-                * outflow.DatePattern.GetOccurrences(alignedSchedule.Start, dueDate).Count;
+                * outflow.DatePattern.GetOccurrences(alignedSchedule.DtStart, dueDate).Count;
             var alreadyBanked = carriedOverJarBalance
                 + manualEarmarksForThisGoal.Where(manual => manual.Date > asOfDate && manual.Date <= dueDate).Sum(manual => manual.Amount);
             var totalNeeded = Math.Max(0m, totalReleases - alreadyBanked);
@@ -267,7 +267,7 @@ public static class AllocationPlanProposer
         RecurrenceRuleOptions schedule;
         if (occurrencesNeeded <= 1)
         {
-            schedule = new RecurrenceRuleOptions { Frequency = RecurrenceFrequency.Yearly, Start = asOfDate, Count = 1 };
+            schedule = new RecurrenceRuleOptions { Frequency = RecurrenceFrequency.Yearly, DtStart = asOfDate, Count = 1 };
         }
         else
         {
@@ -286,7 +286,7 @@ public static class AllocationPlanProposer
             {
                 Frequency = RecurrenceFrequency.Daily,
                 Interval = interval,
-                Start = asOfDate,
+                DtStart = asOfDate,
                 Count = occurrencesNeeded,
             };
         }
@@ -335,7 +335,7 @@ public static class AllocationPlanProposer
 
         // Same sparing rule as Propose: stretch the outflow's active span back to
         // today only when it starts in the future, so its jar is visible now.
-        var preparedOutflow = outflow.DatePattern.Start > asOfDate
+        var preparedOutflow = outflow.DatePattern.ActiveStart > asOfDate
             ? outflow.WithActiveFrom(asOfDate)
             : outflow;
 
@@ -346,7 +346,7 @@ public static class AllocationPlanProposer
             // Frequency is immaterial for a single occurrence; Yearly matches the
             // proposer's other Count = 1 plan.
             Frequency = RecurrenceFrequency.Yearly,
-            Start = planStart,
+            DtStart = planStart,
             Count = 1,
             // Reach the jar's span back to today so the jar exists now, not only
             // on the outflow's last day — but only when that day is in the future
@@ -406,7 +406,7 @@ public static class AllocationPlanProposer
         // point; how much drift (a skipped date, a one-off manual edit)
         // should still count as "still paced against it" is an open
         // question this doesn't attempt to answer.
-        var paydays = income.DatePattern.GetOccurrences(plan.DatePattern.Start, plan.DatePattern.Until).ToHashSet();
+        var paydays = income.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, plan.DatePattern.Until).ToHashSet();
         return planDates.All(paydays.Contains);
     }
 
@@ -435,7 +435,7 @@ public static class AllocationPlanProposer
     {
         var perPayday = Math.Round(billAmount * billOccurrenceCount / paydayCount, 2);
 
-        // Fixed 2026-08-14 — was: Start = asOfDate here, blindly. Copying
+        // Fixed 2026-08-14 — was: DtStart = asOfDate here, blindly. Copying
         // income's own Frequency/Interval/ByDay/ByMonthDay but anchoring at
         // asOfDate instead of a real payday silently loses phase whenever
         // income relies on RFC 5545's implicit "omitted BYDAY defaults to
@@ -494,7 +494,7 @@ public static class AllocationPlanProposer
         // income (the multi-occurrence branch below) is unaffected either
         // way — it already reserves the full amount per cycle.
         var isSingleOccurrence =
-            outflow.DatePattern.GetOccurrences(outflow.DatePattern.Start, billUntil).Count <= 1;
+            outflow.DatePattern.GetOccurrences(outflow.DatePattern.ActiveStart, billUntil).Count <= 1;
 
         if (isSingleOccurrence)
         {
@@ -507,7 +507,7 @@ public static class AllocationPlanProposer
         {
             Frequency = outflow.DatePattern.Frequency,
             Interval = outflow.DatePattern.Interval,
-            Start = asOfDate,
+            DtStart = asOfDate,
             Until = billUntil,
         });
 
@@ -538,7 +538,7 @@ public static class AllocationPlanProposer
             Frequency = RecurrenceFrequency.Yearly,
             // Guard a past-dated one-off: the plan can't end after the
             // outflow it funds (EarMarkPattern.Create / 3.11.2.a2).
-            Start = asOfDate <= billUntil ? asOfDate : billUntil,
+            DtStart = asOfDate <= billUntil ? asOfDate : billUntil,
             Count = 1,
         });
 
@@ -567,7 +567,7 @@ public static class AllocationPlanProposer
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [start.Day],
-            Start = start,
+            DtStart = start,
             Until = billUntil,
         });
         var occurrenceCount = installmentPattern.GetOccurrences().Count;
@@ -647,7 +647,7 @@ public static class AllocationPlanProposer
             Interval = reference.Interval,
             ByDay = reference.ByDay,
             ByMonthDay = reference.ByMonthDay,
-            Start = alignedStart,
+            DtStart = alignedStart,
             ActiveFrom = alignedStart > desiredStart ? desiredStart : null,
             Until = until,
         };
@@ -665,7 +665,7 @@ public static class AllocationPlanProposer
         return candidate.Amount == defaultPlan.Amount
             && candidate.DatePattern.Frequency == defaultPlan.DatePattern.Frequency
             && candidate.DatePattern.Interval == defaultPlan.DatePattern.Interval
-            && candidate.DatePattern.Start == defaultPlan.DatePattern.Start
+            && candidate.DatePattern.ActiveStart == defaultPlan.DatePattern.ActiveStart
             && candidate.DatePattern.Until == defaultPlan.DatePattern.Until
             && candidate.DatePattern.ByDay.SequenceEqual(defaultPlan.DatePattern.ByDay)
             && candidate.DatePattern.ByMonthDay.SequenceEqual(defaultPlan.DatePattern.ByMonthDay);

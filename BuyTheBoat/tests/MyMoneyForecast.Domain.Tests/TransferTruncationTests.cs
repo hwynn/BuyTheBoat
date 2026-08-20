@@ -15,7 +15,7 @@ public class TransferTruncationTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [start.Day],
-            Start = start,
+            DtStart = start,
             Until = until,
         });
 
@@ -61,7 +61,7 @@ public class TransferTruncationTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [start.Day],
-                    Start = start,
+                    DtStart = start,
                     Until = until,
                 }),
             },

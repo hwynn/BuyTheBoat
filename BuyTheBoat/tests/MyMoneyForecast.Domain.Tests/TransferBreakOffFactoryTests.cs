@@ -15,7 +15,7 @@ public class TransferBreakOffFactoryTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [start.Day],
-            Start = start,
+            DtStart = start,
             Until = until,
         });
 
@@ -57,7 +57,7 @@ public class TransferBreakOffFactoryTests
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [start.Day],
-        Start = start,
+        DtStart = start,
         Until = until,
     };
 
@@ -83,9 +83,9 @@ public class TransferBreakOffFactoryTests
             AllPatterns = [withdrawal, deposit],
         });
 
-        result.SuccessorWithdrawal.DatePattern.Start.ShouldBe(cutDate);
-        result.SuccessorDeposit.DatePattern.Start.ShouldBe(cutDate);
-        result.SuccessorTransfer.DatePattern.Start.ShouldBe(cutDate);
+        result.SuccessorWithdrawal.DatePattern.ActiveStart.ShouldBe(cutDate);
+        result.SuccessorDeposit.DatePattern.ActiveStart.ShouldBe(cutDate);
+        result.SuccessorTransfer.DatePattern.ActiveStart.ShouldBe(cutDate);
         result.SuccessorWithdrawal.Amount.ShouldBe(-300m);
         result.SuccessorDeposit.Amount.ShouldBe(300m);
         result.SuccessorTransfer.Amount.ShouldBe(300m);
@@ -288,7 +288,7 @@ public class TransferBreakOffFactoryTests
         });
 
         result.PredecessorTransfer.DatePattern.Until.ShouldBe(new DateOnly(2024, 7, 31));
-        result.SuccessorTransfer.DatePattern.Start.ShouldBe(pastCutDate);
+        result.SuccessorTransfer.DatePattern.ActiveStart.ShouldBe(pastCutDate);
         result.SuccessorWithdrawalPlan.StartingAllocation.ShouldBe(50m);
     }
 
@@ -349,9 +349,9 @@ public class TransferBreakOffFactoryTests
             AllPatterns = [withdrawal, deposit],
         });
 
-        result.SuccessorWithdrawal.DatePattern.Start.ShouldBe(renewalDate);
-        result.SuccessorDeposit.DatePattern.Start.ShouldBe(renewalDate);
-        result.SuccessorTransfer.DatePattern.Start.ShouldBe(renewalDate);
+        result.SuccessorWithdrawal.DatePattern.ActiveStart.ShouldBe(renewalDate);
+        result.SuccessorDeposit.DatePattern.ActiveStart.ShouldBe(renewalDate);
+        result.SuccessorTransfer.DatePattern.ActiveStart.ShouldBe(renewalDate);
         result.SuccessorTransfer.DatePattern.Until.ShouldBe(renewalDate.AddYears(1));
         // Unchanged — a renewal is not a change.
         result.SuccessorWithdrawal.Amount.ShouldBe(-200m);

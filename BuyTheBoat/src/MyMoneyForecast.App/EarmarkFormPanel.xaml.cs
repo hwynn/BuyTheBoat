@@ -148,7 +148,7 @@ public partial class EarmarkFormPanel : UserControl
         // used until then.
         _patternsByFinanceId = patterns
             .GroupBy(pattern => pattern.FinanceId)
-            .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.Start).First());
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.ActiveStart).First());
 
         _existingManualEarmarks = manualEarmarks;
         _transferFinanceIds = transferFinanceIds;
@@ -196,7 +196,7 @@ public partial class EarmarkFormPanel : UserControl
         _startingEarmarkAmount = GetStartingEarmarkAmount(existing);
         StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
         _loadedActiveStart = existing.DatePattern.ActiveStart;
-        _loadedPlanStart = existing.DatePattern.Start;
+        _loadedPlanStart = existing.DatePattern.DtStart;
         RuleEditor.LoadFrom(existing.DatePattern);
 
         _suppressEvents = false;
@@ -347,7 +347,7 @@ public partial class EarmarkFormPanel : UserControl
             return;
         }
 
-        EarmarkDatePicker.DisplayDateStart = pattern.DatePattern.Start.ToDateTime(TimeOnly.MinValue);
+        EarmarkDatePicker.DisplayDateStart = pattern.DatePattern.ActiveStart.ToDateTime(TimeOnly.MinValue);
         EarmarkDatePicker.DisplayDateEnd = pattern.DatePattern.Until.ToDateTime(TimeOnly.MinValue);
 
         if (EarmarkDatePicker.SelectedDate is { } selected
@@ -595,7 +595,7 @@ public partial class EarmarkFormPanel : UserControl
         var pattern = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId);
         var span = pattern is null
             ? string.Empty
-            : $" The fund's plan runs {pattern.DatePattern.Start:MMM d, yyyy} – {pattern.DatePattern.Until:MMM d, yyyy}.";
+            : $" The fund's plan runs {pattern.DatePattern.ActiveStart:MMM d, yyyy} – {pattern.DatePattern.Until:MMM d, yyyy}.";
         BalanceInfoText.Text = $"On {date:MMMM d, yyyy}: this fund holds {jarBalance:C} · free balance {free:C}.{span}";
     }
 
@@ -713,7 +713,7 @@ public partial class EarmarkFormPanel : UserControl
         // when there was nothing loaded (a brand-new plan), matching
         // FinancePatternSaveConfirmation's other constructor's own
         // documented contract for that parameter.
-        var savedStart = _loadedPlanStart ?? pattern.DatePattern.Start;
+        var savedStart = _loadedPlanStart ?? pattern.DatePattern.ActiveStart;
 
         // Only clear once the save has actually gone through — cancelling the
         // confirmation returns false and leaves the form exactly as typed, so
@@ -1095,7 +1095,7 @@ public partial class EarmarkFormPanel : UserControl
 
         // This goal's own very first occurrence, ever. Only used below when
         // IsFirstOccurrencePending is also true.
-        var firstOccurrenceDate = goal.DatePattern.GetOccurrences(goal.DatePattern.Start, goal.DatePattern.Until).FirstOrDefault();
+        var firstOccurrenceDate = goal.DatePattern.GetOccurrences(goal.DatePattern.ActiveStart, goal.DatePattern.Until).FirstOrDefault();
 
         var health = _forecast?.PlanHealthStates.FirstOrDefault(p => p.FinanceId == goal.FinanceId);
 
@@ -1185,7 +1185,7 @@ public partial class EarmarkFormPanel : UserControl
         else
         {
             decimal.TryParse(AmountTextBox.Text, out var enteredAmount);
-            var start = RuleEditor.Result?.Start ?? DateOnly.FromDateTime(DateTime.Today);
+            var start = RuleEditor.Result?.ActiveStart ?? DateOnly.FromDateTime(DateTime.Today);
             var opening = GoalNarrativeOpening(goal, goalAmount, label, dueDate, isOneTime, DateOnly.FromDateTime(DateTime.Today));
 
             // For a repeating goal, names the plan's own contribution
@@ -1276,15 +1276,14 @@ public partial class EarmarkFormPanel : UserControl
         // that another plan exists at all, without trying to describe or
         // total what it's doing.
         var hasConcurrentPlan = patternsForMilestone.Any(other =>
-            other.DatePattern.Start != plan.DatePattern.Start && // a different row, not this same plan read back
+            other.DatePattern.ActiveStart != plan.DatePattern.ActiveStart && // a different row, not this same plan read back
             // Overlaps this plan's own active span — F27's "concurrent
             // funder" shape, as opposed to a break-off/restructure chain's
             // sequential segments, which never overlap by construction (a
             // predecessor's own Until always ends the day before its
             // successor's own Start — "connected at the start/end," not
             // concurrent).
-            other.DatePattern.ActiveStart <= plan.DatePattern.Until &&
-            plan.DatePattern.ActiveStart <= other.DatePattern.Until);
+            other.DatePattern.ActiveSpansOverlap(plan.DatePattern));
         if (hasConcurrentPlan)
         {
             narrative += " Another earmark pattern is allocating funds alongside this one.";
@@ -1330,7 +1329,7 @@ public partial class EarmarkFormPanel : UserControl
             goalsByFinanceId.TryGetValue(candidate.FinanceId, out var candidateGoal) &&
             candidateGoal.Source == goal.Source;
 
-        if (allPlans.FirstOrDefault(candidate => SharesGoalSource(candidate) && candidate.DatePattern.Until.AddDays(1) == plan.DatePattern.Start) is { } predecessor)
+        if (allPlans.FirstOrDefault(candidate => SharesGoalSource(candidate) && candidate.DatePattern.ImmediatelyPrecedes(plan.DatePattern)) is { } predecessor)
         {
             PredecessorNoteText.Text = $"This plan continues an earlier one, which ran through {predecessor.DatePattern.Until:MMM d, yyyy}.";
             PredecessorNoteText.Visibility = Visibility.Visible;
@@ -1340,9 +1339,9 @@ public partial class EarmarkFormPanel : UserControl
             PredecessorNoteText.Visibility = Visibility.Collapsed;
         }
 
-        if (allPlans.FirstOrDefault(candidate => SharesGoalSource(candidate) && candidate.DatePattern.Start == plan.DatePattern.Until.AddDays(1)) is { } successor)
+        if (allPlans.FirstOrDefault(candidate => SharesGoalSource(candidate) && plan.DatePattern.ImmediatelyPrecedes(candidate.DatePattern)) is { } successor)
         {
-            SuccessorNoteText.Text = $"This plan is continued by a newer one, starting {successor.DatePattern.Start:MMM d, yyyy}.";
+            SuccessorNoteText.Text = $"This plan is continued by a newer one, starting {successor.DatePattern.ActiveStart:MMM d, yyyy}.";
             SuccessorNoteText.Visibility = Visibility.Visible;
         }
         else
@@ -1436,10 +1435,10 @@ public partial class EarmarkFormPanel : UserControl
     /// <param name="proposed">The not-yet-saved version of the pattern currently being edited.</param>
     private IReadOnlyList<EarMarkPattern> GetPatternsForLiveCheck(FinancialPattern goal, EarMarkPattern proposed)
     {
-        var editedStart = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId)?.DatePattern.Start;
+        var editedStart = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId)?.DatePattern.ActiveStart;
         var otherSavedPatterns = _forecast?.Accounts
             .SelectMany(account => account.Page.EarmarkPatterns)
-            .Where(p => p.FinanceId == goal.FinanceId && p.DatePattern.Start != editedStart)
+            .Where(p => p.FinanceId == goal.FinanceId && p.DatePattern.ActiveStart != editedStart)
             .ToList() ?? [];
         return [.. otherSavedPatterns, proposed];
     }

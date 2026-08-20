@@ -18,7 +18,7 @@ public class BreakOffFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [dayOfMonth],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -33,7 +33,7 @@ public class BreakOffFactoryTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [dayOfMonth],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
         });
@@ -42,7 +42,7 @@ public class BreakOffFactoryTests
     {
         Frequency = RecurrenceFrequency.Monthly,
         ByMonthDay = [dayOfMonth],
-        Start = start,
+        DtStart = start,
         Until = until,
     };
 
@@ -65,7 +65,7 @@ public class BreakOffFactoryTests
         });
 
         result.Predecessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30));
-        result.Successor.DatePattern.Start.ShouldBe(cutDate);
+        result.Successor.DatePattern.ActiveStart.ShouldBe(cutDate);
         result.Successor.Amount.ShouldBe(-1_800m);
         result.Successor.FinanceId.ShouldBe(2);
     }
@@ -220,7 +220,7 @@ public class BreakOffFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [1],
-                    Start = new DateOnly(2025, 1, 1),
+                    DtStart = new DateOnly(2025, 1, 1),
                     Until = new DateOnly(2026, 1, 1),
                 }),
             },
@@ -290,7 +290,7 @@ public class BreakOffFactoryTests
             AllPatterns = [rent],
         });
 
-        result.Successor.DatePattern.ActiveFrom.ShouldBeNull();
+        result.Successor.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
     }
 
     [Fact]
@@ -315,7 +315,7 @@ public class BreakOffFactoryTests
         });
 
         result.Predecessor.DatePattern.Until.ShouldBe(new DateOnly(2024, 6, 30));
-        result.Successor.DatePattern.Start.ShouldBe(pastCutDate);
+        result.Successor.DatePattern.ActiveStart.ShouldBe(pastCutDate);
         result.SuccessorPlan!.StartingAllocation.ShouldBe(120m);
     }
 
@@ -389,7 +389,7 @@ public class BreakOffFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [start.Day],
-                    Start = start,
+                    DtStart = start,
                     Until = until,
                 }),
             },
@@ -535,7 +535,7 @@ public class BreakOffFactoryTests
             AllPatterns = [rent],
         });
 
-        result.Successor.DatePattern.Start.ShouldBe(renewalDate);
+        result.Successor.DatePattern.ActiveStart.ShouldBe(renewalDate);
         result.Successor.DatePattern.Until.ShouldBe(new DateOnly(2027, 1, 5));
     }
 
@@ -926,7 +926,7 @@ public class BreakOffFactoryTests
         result.Absorbed.ShouldBeEmpty();
         result.AdjustedNeighbor.ShouldNotBeNull();
         result.AdjustedNeighbor!.FinanceId.ShouldBe(2); // in-place update — FinanceId never changes
-        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 8, 16));
+        result.AdjustedNeighbor!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 8, 16));
         result.AdjustedNeighbor!.DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31)); // unchanged
         result.AdjustedNeighbor!.Amount.ShouldBe(-1_800m); // unchanged — this is a boundary nudge, not a cascade
     }
@@ -958,7 +958,7 @@ public class BreakOffFactoryTests
         result.Absorbed.Select(p => p.FinanceId).ShouldBe([2, 3]);
         result.AdjustedNeighbor.ShouldNotBeNull();
         result.AdjustedNeighbor!.FinanceId.ShouldBe(4);
-        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 11, 16));
+        result.AdjustedNeighbor!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 11, 16));
     }
 
     [Fact]
@@ -969,12 +969,12 @@ public class BreakOffFactoryTests
 
         var result = BreakOffFactory.ExtendStart(current, [predecessor], new DateOnly(2025, 5, 15));
 
-        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 5, 15));
+        result.Current.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 5, 15));
         result.Absorbed.ShouldBeEmpty();
         result.AdjustedNeighbor.ShouldNotBeNull();
         result.AdjustedNeighbor!.FinanceId.ShouldBe(1);
         result.AdjustedNeighbor!.DatePattern.Until.ShouldBe(new DateOnly(2025, 5, 14));
-        result.AdjustedNeighbor!.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1)); // unchanged
+        result.AdjustedNeighbor!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1)); // unchanged
     }
 
     [Fact]
@@ -985,7 +985,7 @@ public class BreakOffFactoryTests
 
         var result = BreakOffFactory.ExtendStart(current, [predecessor], new DateOnly(2025, 1, 1));
 
-        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+        result.Current.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1));
         result.Absorbed.ShouldHaveSingleItem();
         result.Absorbed[0].FinanceId.ShouldBe(1);
         result.AdjustedNeighbor.ShouldBeNull();
@@ -993,7 +993,7 @@ public class BreakOffFactoryTests
 
     // Deliberately matches how the real caller (FinancePatternSaveConfirmation)
     // actually invokes this — current's own Start is ALREADY newStart (every
-    // real call passes current.DatePattern.Start as newStart directly), not
+    // real call passes current.DatePattern.ActiveStart as newStart directly), not
     // some other value like the test above uses. Found 2026-08-17: with
     // current.Start already equal to newStart, a predecessor landing on that
     // EXACT same date used to fail the (buggy) `pattern.Start < current.Start`
@@ -1010,7 +1010,7 @@ public class BreakOffFactoryTests
 
         result.Absorbed.ShouldHaveSingleItem();
         result.Absorbed[0].FinanceId.ShouldBe(1);
-        result.Current.DatePattern.Start.ShouldBe(new DateOnly(2025, 1, 1));
+        result.Current.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1));
     }
 
     [Fact]
@@ -1037,7 +1037,7 @@ public class BreakOffFactoryTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [15], // moved from the 1st to the 15th
-            Start = new DateOnly(2025, 1, 1),
+            DtStart = new DateOnly(2025, 1, 1),
             Until = new DateOnly(2025, 6, 30),
         });
 
@@ -1047,7 +1047,7 @@ public class BreakOffFactoryTests
         result[0].FinanceId.ShouldBe(2);
         result[0].Amount.ShouldBe(-1_650m);
         result[0].DatePattern.ByMonthDay.ShouldBe([15]);
-        result[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1)); // its own, untouched
+        result[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1)); // its own, untouched
         result[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31)); // its own, untouched
         result[0].Priority.ShouldBe(3); // its own, untouched — cascade never touches trivial fields
         result[0].Description.ShouldBe("Rent (raised)"); // its own, untouched
@@ -1067,7 +1067,7 @@ public class BreakOffFactoryTests
         result[0].AutoRenew.ShouldBeTrue();
         result[0].Description.ShouldBe("Rent — landlord raised it");
         result[0].Amount.ShouldBe(-1_800m); // its own, untouched
-        result[0].DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1)); // its own, untouched
+        result[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1)); // its own, untouched
         result[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31)); // its own, untouched
     }
 }

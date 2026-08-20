@@ -18,7 +18,7 @@ public class EarmarkScalingTests
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [1],
-                Start = Start,
+                DtStart = Start,
                 Until = Until,
             }),
         });
@@ -32,7 +32,7 @@ public class EarmarkScalingTests
                 {
                     Frequency = RecurrenceFrequency.Monthly,
                     ByMonthDay = [dayOfMonth],
-                    Start = Start,
+                    DtStart = Start,
                     Until = Until,
                 }),
                 Amount = amount,
@@ -111,7 +111,7 @@ public class EarmarkScalingTests
 
         var result = scaled.Single();
         result.FinanceId.ShouldBe(plan.FinanceId);
-        result.DatePattern.Start.ShouldBe(plan.DatePattern.Start); // same (FinanceId, Start) key
+        result.DatePattern.ActiveStart.ShouldBe(plan.DatePattern.ActiveStart); // same (FinanceId, Start) key
         result.DatePattern.Until.ShouldBe(plan.DatePattern.Until);
         result.DatePattern.ByMonthDay.ShouldBe(plan.DatePattern.ByMonthDay);
     }

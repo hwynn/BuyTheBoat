@@ -71,7 +71,7 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
             // date; fall back to the first so a genuinely out-of-span earmark
             // still fails through ManualEarmark.Create's own, more specific
             // error below rather than a generic one here.
-            var pattern = candidatePlans.Find(candidate => candidate.DatePattern.Start <= date && date <= candidate.DatePattern.Until)
+            var pattern = candidatePlans.Find(candidate => candidate.DatePattern.ActiveSpanContains(date))
                 ?? candidatePlans[0];
 
             earmarks.Add(ManualEarmark.Create(

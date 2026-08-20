@@ -58,7 +58,7 @@ public static class OneTimeGoalFactory
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = request.DueDate,
+                DtStart = request.DueDate,
                 Count = 1,
                 // The goal's only occurrence is its due date, but saving starts
                 // earlier — ActiveFrom stretches the goal's active span back to the
@@ -102,21 +102,21 @@ public static class OneTimeGoalFactory
             SavingsFrequency.Weekly => RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Weekly,
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
             SavingsFrequency.EveryOtherWeek => RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Weekly,
                 Interval = 2,
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
             SavingsFrequency.Monthly => RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Monthly,
                 ByMonthDay = [start.Day],
-                Start = start,
+                DtStart = start,
                 Until = until,
             }),
             _ => throw new ArgumentOutOfRangeException(nameof(frequency)),

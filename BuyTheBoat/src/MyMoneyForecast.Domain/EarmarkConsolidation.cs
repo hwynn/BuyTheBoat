@@ -198,7 +198,7 @@ public static class EarmarkConsolidation
                     Interval = income.DatePattern.Interval,
                     ByDay = income.DatePattern.ByDay,
                     ByMonthDay = income.DatePattern.ByMonthDay,
-                    Start = start,
+                    DtStart = start,
                     Until = planUntil,
                 });
                 return (pacedSchedule, Math.Round(total / paydayCount, 2));
@@ -210,7 +210,7 @@ public static class EarmarkConsolidation
         {
             Frequency = goal.DatePattern.Frequency,
             Interval = goal.DatePattern.Interval,
-            Start = start,
+            DtStart = start,
             Until = end,
         });
         return (spreadSchedule, Math.Round(total / occurrenceCount, 2));

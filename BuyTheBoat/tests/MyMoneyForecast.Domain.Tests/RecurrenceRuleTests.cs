@@ -14,7 +14,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Daily,
-            Start = new DateOnly(2025, 1, 24),
+            DtStart = new DateOnly(2025, 1, 24),
             Interval = 14,
             Until = new DateOnly(2025, 4, 1),
         });
@@ -39,7 +39,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Weekly,
-            Start = new DateOnly(2025, 1, 19),
+            DtStart = new DateOnly(2025, 1, 19),
             Until = new DateOnly(2025, 2, 16),
         });
 
@@ -62,7 +62,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Monthly,
-            Start = new DateOnly(2025, 1, 19),
+            DtStart = new DateOnly(2025, 1, 19),
             ByMonthDay = [10],
             Until = new DateOnly(2025, 5, 1),
         });
@@ -83,7 +83,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Monthly,
-            Start = new DateOnly(2019, 1, 2),
+            DtStart = new DateOnly(2019, 1, 2),
             ByMonthDay = [9, 25],
             Until = new DateOnly(2019, 3, 1),
         });
@@ -104,7 +104,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Weekly,
-            Start = new DateOnly(2025, 1, 6), // a Monday
+            DtStart = new DateOnly(2025, 1, 6), // a Monday
             ByDay = [DayOfWeek.Monday, DayOfWeek.Wednesday],
             Until = new DateOnly(2025, 1, 20),
         });
@@ -129,7 +129,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Weekly,
-            Start = new DateOnly(2025, 1, 6),
+            DtStart = new DateOnly(2025, 1, 6),
             Count = 3,
         });
 
@@ -143,7 +143,7 @@ public class RecurrenceRuleTests
         Should.Throw<ArgumentException>(() => RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Weekly,
-            Start = new DateOnly(2025, 1, 6),
+            DtStart = new DateOnly(2025, 1, 6),
         }));
     }
 
@@ -153,7 +153,7 @@ public class RecurrenceRuleTests
         Should.Throw<ArgumentException>(() => RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Weekly,
-            Start = new DateOnly(2025, 1, 6),
+            DtStart = new DateOnly(2025, 1, 6),
             Until = new DateOnly(2025, 2, 1),
             Count = 3,
         }));
@@ -165,12 +165,12 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Monthly,
-            Start = new DateOnly(2025, 3, 1),
+            DtStart = new DateOnly(2025, 3, 1),
             ByMonthDay = [1],
             Until = new DateOnly(2025, 6, 1),
         });
 
-        rule.ActiveFrom.ShouldBeNull();
+        rule.ToOptions().ActiveFrom.ShouldBeNull();
         rule.ActiveStart.ShouldBe(new DateOnly(2025, 3, 1));
     }
 
@@ -183,7 +183,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Monthly,
-            Start = new DateOnly(2025, 3, 1),
+            DtStart = new DateOnly(2025, 3, 1),
             ByMonthDay = [1],
             Until = new DateOnly(2025, 5, 1),
             ActiveFrom = new DateOnly(2025, 1, 15),
@@ -204,7 +204,7 @@ public class RecurrenceRuleTests
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Monthly,
-            Start = new DateOnly(2025, 3, 1),
+            DtStart = new DateOnly(2025, 3, 1),
             ByMonthDay = [1],
             Until = new DateOnly(2025, 5, 1),
             ActiveFrom = new DateOnly(2025, 1, 15),
@@ -222,7 +222,7 @@ public class RecurrenceRuleTests
         Should.Throw<ArgumentException>(() => RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = RecurrenceFrequency.Monthly,
-            Start = new DateOnly(2025, 3, 1),
+            DtStart = new DateOnly(2025, 3, 1),
             Until = new DateOnly(2025, 6, 1),
             ActiveFrom = new DateOnly(2025, 4, 1),
         }));
@@ -235,7 +235,7 @@ public class RecurrenceRuleTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [1],
-            Start = new DateOnly(2025, 1, 1),
+            DtStart = new DateOnly(2025, 1, 1),
             Until = new DateOnly(2025, 4, 1),
             ExcludedDates = [new DateOnly(2025, 3, 1)],
         });
@@ -254,7 +254,7 @@ public class RecurrenceRuleTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [1],
-            Start = new DateOnly(2025, 1, 1),
+            DtStart = new DateOnly(2025, 1, 1),
             Until = new DateOnly(2025, 7, 1),
             ExcludedDates = [new DateOnly(2025, 3, 1), new DateOnly(2025, 5, 1)],
         });
@@ -279,7 +279,7 @@ public class RecurrenceRuleTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [1],
-            Start = new DateOnly(2025, 1, 1),
+            DtStart = new DateOnly(2025, 1, 1),
             Until = new DateOnly(2025, 3, 1),
             ExcludedDates = [new DateOnly(2025, 6, 15)], // outside the range, and never a real occurrence
         });
@@ -298,14 +298,14 @@ public class RecurrenceRuleTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [1],
-            Start = new DateOnly(2025, 1, 1),
+            DtStart = new DateOnly(2025, 1, 1),
             Until = new DateOnly(2025, 4, 1),
             ExcludedDates = [new DateOnly(2025, 2, 1)],
         });
 
         var updated = rule.WithExcludedDates([new DateOnly(2025, 3, 1)]);
 
-        updated.Start.ShouldBe(rule.Start);
+        updated.ActiveStart.ShouldBe(rule.ActiveStart);
         updated.Until.ShouldBe(rule.Until);
         updated.GetOccurrences().ShouldBe([
             new DateOnly(2025, 1, 1),
@@ -321,7 +321,7 @@ public class RecurrenceRuleTests
         {
             Frequency = RecurrenceFrequency.Monthly,
             ByMonthDay = [1],
-            Start = new DateOnly(2025, 3, 1),
+            DtStart = new DateOnly(2025, 3, 1),
             Until = new DateOnly(2025, 8, 1),
             ExcludedDates = [new DateOnly(2025, 4, 1)],
         });
@@ -349,7 +349,7 @@ public class RecurrenceRuleTests
             Frequency = RecurrenceFrequency.Weekly,
             Interval = 2,
             ByDay = [DayOfWeek.Friday],
-            Start = new DateOnly(2025, 6, 15), // Sunday — not itself part of the Jan-3-anchored series
+            DtStart = new DateOnly(2025, 6, 15), // Sunday — not itself part of the Jan-3-anchored series
             Until = new DateOnly(2025, 12, 31),
         });
 
@@ -362,4 +362,67 @@ public class RecurrenceRuleTests
             new DateOnly(2025, 7, 25),
         ]);
     }
+
+    [Fact]
+    public void ImmediatelyPrecedes_is_true_only_when_this_ends_the_day_before_the_next_begins()
+    {
+        var earlier = MonthlySpan(new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 31));
+        var contiguous = MonthlySpan(new DateOnly(2025, 2, 1), new DateOnly(2025, 3, 31));
+        var withGap = MonthlySpan(new DateOnly(2025, 2, 5), new DateOnly(2025, 3, 31));
+
+        earlier.ImmediatelyPrecedes(contiguous).ShouldBeTrue();
+        contiguous.ImmediatelyPrecedes(earlier).ShouldBeFalse(); // direction matters
+        earlier.ImmediatelyPrecedes(withGap).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void ImmediatelyPrecedes_uses_the_active_span_start_not_the_rrule_anchor()
+    {
+        // The bug FindSuccessor/FindPredecessor used to carry: contiguity must
+        // key on where the pattern's span STARTS (ActiveStart), not on its
+        // rrule anchor (DtStart), which a lead-in — or a phase-preserved
+        // relink — can push later than the span's real start.
+        var earlier = MonthlySpan(new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 31));
+        var leadIn = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            DtStart = new DateOnly(2025, 2, 15),     // rrule anchor — a later real occurrence
+            ActiveFrom = new DateOnly(2025, 2, 1), // but the span is active from Feb 1
+            Until = new DateOnly(2025, 6, 30),
+        });
+
+        // Contiguous on the active span (Jan 31 → Feb 1), even though the rrule
+        // anchor (Feb 15) sits two weeks past the boundary.
+        earlier.ImmediatelyPrecedes(leadIn).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void ActiveSpanWithin_is_true_only_when_fully_contained()
+    {
+        var outer = MonthlySpan(new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31));
+        var inside = MonthlySpan(new DateOnly(2025, 3, 1), new DateOnly(2025, 9, 30));
+        var pokesPastTheEnd = MonthlySpan(new DateOnly(2025, 3, 1), new DateOnly(2026, 1, 31));
+
+        inside.ActiveSpanWithin(outer).ShouldBeTrue();
+        pokesPastTheEnd.ActiveSpanWithin(outer).ShouldBeFalse();
+        outer.ActiveSpanWithin(inside).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void ActiveSpansOverlap_is_true_for_shared_days_false_for_adjacent_or_gapped()
+    {
+        var a = MonthlySpan(new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
+        var overlapping = MonthlySpan(new DateOnly(2025, 6, 1), new DateOnly(2025, 12, 31));
+        var adjacent = MonthlySpan(new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31));
+
+        a.ActiveSpansOverlap(overlapping).ShouldBeTrue();
+        a.ActiveSpansOverlap(adjacent).ShouldBeFalse();
+    }
+
+    private static RecurrenceRule MonthlySpan(DateOnly start, DateOnly until) => RecurrenceRule.Create(new RecurrenceRuleOptions
+    {
+        Frequency = RecurrenceFrequency.Monthly,
+        DtStart = start,
+        Until = until,
+    });
 }

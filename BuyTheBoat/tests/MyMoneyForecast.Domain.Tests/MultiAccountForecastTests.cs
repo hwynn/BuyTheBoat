@@ -23,7 +23,7 @@ public class MultiAccountForecastTests
             DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
-                Start = ExpenseDay,
+                DtStart = ExpenseDay,
                 Count = 1,
             }),
             Amount = amount,
@@ -109,7 +109,7 @@ public class MultiAccountForecastTests
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = RecurrenceFrequency.Yearly,
-                    Start = AsOf,
+                    DtStart = AsOf,
                     Count = 1,
                 }),
                 Amount = -300m,
