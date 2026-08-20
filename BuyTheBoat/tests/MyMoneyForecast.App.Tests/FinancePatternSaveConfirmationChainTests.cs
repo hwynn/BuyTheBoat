@@ -306,6 +306,97 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         _financialPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.Start.ShouldBe(new DateOnly(2025, 7, 1));
     }
 
+    // ---- editing an EARLIER segment (has a later one): edit in place +
+    //      cascade forward, never a break-off (planning/28's "open the earliest
+    //      segment; the change flows forward from there") ---------------------
+
+    [Fact]
+    public void Editing_an_earlier_segments_amount_edits_it_in_place_and_cascades_forward_by_default()
+    {
+        var earlier = Bill(1, "Rent", -1_600m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31)); // fully past, has a successor
+        var current = Bill(2, "Rent", -1_800m, new DateOnly(2025, 4, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(earlier, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+
+        var edited = Bill(1, "Rent", -1_650m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31)); // amount only
+        var confirmation = Confirmation(1, edited);
+        // No delegate — proves the DEFAULT (cascade forward) runs, and that
+        // editing an earlier segment does NOT crash the way the old break-off
+        // path did.
+
+        confirmation.Run().ShouldBeTrue();
+
+        var all = _financialPatterns.GetAll();
+        all.Count.ShouldBe(2); // edited in place + cascaded — no break-off, no new segment
+        all.Single(p => p.FinanceId == 1).Amount.ShouldBe(-1_650m); // the earlier segment itself changed
+        all.Single(p => p.FinanceId == 2).Amount.ShouldBe(-1_650m); // and the change carried forward
+    }
+
+    [Fact]
+    public void Editing_an_earlier_segment_and_declining_the_cascade_leaves_the_later_segment_untouched()
+    {
+        var earlier = Bill(1, "Rent", -1_600m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
+        var current = Bill(2, "Rent", -1_800m, new DateOnly(2025, 4, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(earlier, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+
+        var edited = Bill(1, "Rent", -1_650m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
+        var confirmation = Confirmation(1, edited);
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseJustThisSegment();
+
+        confirmation.Run().ShouldBeTrue();
+
+        var all = _financialPatterns.GetAll();
+        all.Count.ShouldBe(2);
+        all.Single(p => p.FinanceId == 1).Amount.ShouldBe(-1_650m); // the earlier segment changed
+        all.Single(p => p.FinanceId == 2).Amount.ShouldBe(-1_800m); // the later one deliberately left alone
+    }
+
+    [Fact]
+    public void Editing_an_earlier_segment_asks_to_cascade_and_does_not_announce_a_break_off()
+    {
+        var earlier = Bill(1, "Rent", -1_600m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
+        var current = Bill(2, "Rent", -1_800m, new DateOnly(2025, 4, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(earlier, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        var edited = Bill(1, "Rent", -1_650m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
+        var confirmation = Confirmation(1, edited);
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run().ShouldBeTrue();
+
+        captured.ShouldNotBeNull();
+        captured.HasRow(ConfirmationRowIds.Cascade).ShouldBeTrue(); // offered to carry the change forward
+        captured.HasRow(ConfirmationRowIds.AlterPast).ShouldBeFalse(); // NOT a break-off announcement
+        captured.Description.ShouldContain("earlier segment");
+    }
+
+    [Fact]
+    public void Editing_an_earlier_segment_that_has_its_own_savings_plan_does_not_crash()
+    {
+        // Mirrors the real break-off chain (the seeded Car Lease): every segment
+        // has its own savings plan. The plan-shape picker used to run for any
+        // Critical edit and propose a break-off successor plan starting today
+        // against the earlier segment's own past-starting schedule — which threw
+        // "can't begin allocating before its goal's span starts."
+        var earlier = Bill(1, "Rent", -1_600m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
+        var current = Bill(2, "Rent", -1_800m, new DateOnly(2025, 4, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(earlier, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _earMarkPatterns.Save(Plan(earlier, -1_600m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31)));
+        _earMarkPatterns.Save(Plan(current, -1_800m, new DateOnly(2025, 4, 1), new DateOnly(2025, 12, 31)));
+
+        var edited = Bill(1, "Rent", -1_650m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
+        var confirmation = Confirmation(1, edited);
+
+        confirmation.Run().ShouldBeTrue(); // must not throw
+
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 1).Amount.ShouldBe(-1_650m); // edited in place
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1_650m); // cascaded forward
+    }
+
     // ---- shared scenario-building helpers ----------------------------------
 
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until) =>

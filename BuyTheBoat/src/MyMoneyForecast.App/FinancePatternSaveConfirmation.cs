@@ -307,6 +307,14 @@ public sealed class FinancePatternSaveConfirmation
 
     private sealed record ChainContext(FinancialPattern Saved, IReadOnlyList<FinancialPattern> OtherPatterns);
 
+    // Whether the edited FinancialPattern has a later segment in its own
+    // break-off chain (a same-Source pattern with a later Start). Computed by
+    // DetermineChainConditionsIfApplicable. This is what tells an EARLIER-segment
+    // edit (edit in place + cascade forward) apart from a CURRENT-segment edit
+    // (break off from today) once the edit is Critical — see PerformSave and
+    // PerformImplicitEarmarkChanges.
+    private bool _chainHasSuccessor;
+
     // The paycheck-association cascade (redesign/memory's own project_next_phase.md,
     // 2026-08-16/17 blocks — "a paycheck's own finance pattern and a bill's
     // earmark pattern paced against it") — captured before anything is
@@ -1197,29 +1205,24 @@ public sealed class FinancePatternSaveConfirmation
             || saved.Description != _proposedPattern.Description
             || saved.AutoRenew != _proposedPattern.AutoRenew;
 
-        // Gated on !IsChangeCritical — a deliberate scope limit, not an
-        // oversight, found while wiring this in: when IsChangeCritical is
-        // true, Item C's own question fires, and its DEFAULT answer ("break
-        // off") means _proposedPattern is never actually saved under
-        // _financeId at all — PerformSave's own guard skips straight past
-        // it, and PerformImplicitEarmarkChanges saves a TRUNCATED original
-        // plus a BRAND-NEW successor starting today instead. Whatever Start/
-        // Until the user typed (the one that might reach into a predecessor/
-        // successor) never lands on the existing chain the way Phase 1's own
-        // mechanism assumes — asking "stay linked or break" against a value
-        // that's about to be discarded would be actively misleading. The
-        // "correct it everywhere" answer WOULD make Phase 1's own question
-        // valid too — but that answer isn't known yet here (this method runs
-        // BEFORE Item C's own confirmation fires, same as every other
-        // Determine* call in this class), and composing "ask a chain
-        // question that only sometimes turns out to matter, depending on a
-        // DIFFERENT question's own answer on the same page" was judged too
-        // easy to get subtly wrong to build under this session's own time
-        // pressure — narrowed to the always-safe case instead. Worth a real
-        // answer from the author before widening it, not a guess.
-        TouchesChainBoundary = !IsChangeCritical && ((startChanged && hasPredecessor) || (untilChanged && hasSuccessor));
-        ChangeCanCascade = !IsChangeCritical && (_amountChanged || _recurrenceShapeChanged) && hasSuccessor;
-        TrivialFieldsCanCascade = !IsChangeCritical && trivialFieldsChanged && hasSuccessor;
+        _chainHasSuccessor = hasSuccessor;
+
+        // Editing a segment that has a LATER segment in its chain is NOT a
+        // break-off, even when it reaches already-occurred history — it's
+        // forward-only's own "open the earliest segment you want changed; the
+        // change flows forward from there" (planning/28, reconciling planning/27's
+        // own earlier scope note with planning/16 F24's "editing and break-off
+        // are separate, deliberately-chosen actions"). Such a segment is saved
+        // in place and its own occurrences change (PerformSave and
+        // PerformImplicitEarmarkChanges route on the same hasSuccessor), and
+        // these chain questions apply to it. Only a Critical edit of the CURRENT
+        // segment (no successor) still breaks off from today — there the typed
+        // Start/Until never lands on the existing chain, so the boundary question
+        // stays suppressed for that one case (the cascade/trivial rows already
+        // require hasSuccessor, so they suppress themselves there).
+        TouchesChainBoundary = (!IsChangeCritical || hasSuccessor) && ((startChanged && hasPredecessor) || (untilChanged && hasSuccessor));
+        ChangeCanCascade = (_amountChanged || _recurrenceShapeChanged) && hasSuccessor;
+        TrivialFieldsCanCascade = trivialFieldsChanged && hasSuccessor;
 
         if (saved.Source != _proposedPattern.Source && (hasPredecessor || hasSuccessor))
         {
@@ -1272,7 +1275,15 @@ public sealed class FinancePatternSaveConfirmation
     /// <summary>[READS FILE] planning/25's Item G: works out which alternative plan shapes — beyond AllocationPlanProposer.Propose's own default — are genuinely available for this break-off's successor, stored in _planShapeCandidates for BuildConfirmationRequest to show and PerformSingleSuccessorBreakOff/PerformMultiPlanBreakOff to apply whichever gets chosen. Runs regardless of what UserChooseAlterPast will turn out to be — not known yet when this runs, same "compute eagerly, apply conditionally" shape DetermineConsolidationPlanIfApplicable already uses — and simply goes unused if the retroactive-correction side is chosen instead, where no fresh plan ever gets proposed. internal for the same reason its siblings are — so a test can call this directly ahead of PerformSingleSuccessorBreakOff.</summary>
     internal void DeterminePlanShapeCandidatesIfApplicable()
     {
-        if (!IsChangeCritical)
+        // Only for a Critical edit of the CURRENT segment (a real break-off) —
+        // the candidates are shapes for the break-off's freshly-proposed
+        // successor plan. An EARLIER-segment edit (Critical but with a later
+        // segment) is saved in place and never breaks off, so there's no
+        // successor to propose a plan for; running this there would propose a
+        // plan starting today against the earlier segment's own past-starting
+        // schedule and throw ("can't begin allocating before its goal's span
+        // starts").
+        if (!IsChangeCritical || _chainHasSuccessor)
         {
             return;
         }
@@ -1533,6 +1544,13 @@ public sealed class FinancePatternSaveConfirmation
         // "leave them" 2026-08-19, on the author's call). The headless fallback
         // (DefaultOutcome) still declines, so nothing re-paces money
         // when no one was actually asked. Mirrors PacedBillsCascadeSection.
+        //
+        // TODO (content, not mechanism): both options below carry the same
+        // description, so the footer reads the same whichever the user picks.
+        // The popup CAN show a different consequence per option — the
+        // chain-boundary row already does — so give "leave them" its own line
+        // (e.g. what stays stale until it's edited) if a per-option message
+        // here is ever wanted.
         if (r.PacedBillsCanCascade)
         {
             rows.Add(new ChoiceRow(ConfirmationRowIds.PacedBillsCascade,
@@ -1551,13 +1569,22 @@ public sealed class FinancePatternSaveConfirmation
     /// <summary>[READS FILE] Builds what ConfirmImplicitChanges needs to render the Item B/C/E/F confirmation, plus planning/27's own Phase 1 questions (chain boundary, Amount/shape cascade, trivial-fields cascade, Source-change warning) — everything DetermineConditions/DetermineChainConditionsIfApplicable already worked out, plus a plain-language description of what changed. [READS FILE] because the chain-boundary/cascade previews below dry-run BreakOffFactory calls and read EarMarkPatternsFor for the absorb warning's own plan count — safe here, same as everywhere else in this class, since nothing has been saved yet this Run(). TODO: doesn't yet name the specific amount/date that would be orphaned by a retroactive correction (Item E's own "show the consequence, not just a yes/no" — mockups/editing-history-confirmation-mockups.html, Popup 1 · B) — the generic description below is a simpler first cut.</summary>
     private ImplicitChangeConfirmationRequest BuildConfirmationRequest()
     {
+        // An earlier-segment edit (Critical, but the segment has a LATER one in
+        // its chain) is NOT a break-off — it's saved in place and cascades
+        // forward. So the break-off / consolidation / plan-shape machinery
+        // doesn't apply to it; only the chain questions do. The break-off
+        // announcement, the consolidation question, and the plan-shape picker
+        // are all suppressed for it here; BuildDescription names the case
+        // instead.
+        var editingEarlierSegment = IsChangeCritical && _chainHasSuccessor;
+
         var inputs = new RowInputs
         {
-            IsChangeCritical = IsChangeCritical,
-            HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns,
-            ConsolidationNeeded = ConsolidationNeeded,
-            ConsolidationForcedReason = DescribeConsolidationForcedReason(),
-            ConsolidationCaveat = DescribeConsolidationCaveat(),
+            IsChangeCritical = IsChangeCritical && !editingEarlierSegment,
+            HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns && !editingEarlierSegment,
+            ConsolidationNeeded = ConsolidationNeeded && !editingEarlierSegment,
+            ConsolidationForcedReason = editingEarlierSegment ? "" : DescribeConsolidationForcedReason(),
+            ConsolidationCaveat = editingEarlierSegment ? "" : DescribeConsolidationCaveat(),
             TouchesChainBoundary = TouchesChainBoundary,
             ChangeCanCascade = ChangeCanCascade,
             TrivialFieldsCanCascade = TrivialFieldsCanCascade,
@@ -1573,7 +1600,7 @@ public sealed class FinancePatternSaveConfirmation
         return new ImplicitChangeConfirmationRequest
         {
             Description = BuildDescription(),
-            PlanShapeCandidates = _planShapeCandidates,
+            PlanShapeCandidates = editingEarlierSegment ? [] : _planShapeCandidates,
             Rows = BuildRows(inputs),
         };
     }
@@ -1730,6 +1757,15 @@ public sealed class FinancePatternSaveConfirmation
         if (_recurrenceShapeChanged) changedFields.Add("schedule");
         var whatChanged = changedFields.Count > 0 ? string.Join(" and ", changedFields) : "this";
 
+        // An earlier segment (one with a later segment in its chain) is edited in
+        // place — its own occurrences change — never broken off, so its message
+        // says so plainly (planning/25 Item B: a change touching already-occurred
+        // history is never silent).
+        if (IsChangeCritical && _chainHasSuccessor)
+        {
+            return $"You're editing an earlier segment of \"{label}\" — its own past occurrences will change to match.";
+        }
+
         return IsChangeCritical
             ? $"You're changing the {whatChanged} for \"{label}\", and it already has payments recorded."
             : $"\"{label}\" already has more than one savings plan.";
@@ -1782,7 +1818,13 @@ public sealed class FinancePatternSaveConfirmation
     /// <summary>[WRITES FILE] Persists the FinancialPattern side of the edit — the proposed pattern saved under the same FinanceId for a plain (non-Critical) edit, or nothing at all when a Critical edit is about to break off instead. Forward-only (planning/28): a Critical edit always breaks off, so its FinancialPattern-side save is two rows under two different FinanceIds (the truncated original plus a brand-new successor), written by PerformImplicitEarmarkChanges — never _proposedPattern saved as-is under _financeId.</summary>
     private void PerformSave()
     {
-        if (IsChangeCritical)
+        // A Critical edit of the CURRENT segment breaks off — its FinancialPattern
+        // rows (a truncated original plus a new successor) are written by
+        // PerformImplicitEarmarkChanges instead, so nothing is saved here. But a
+        // Critical edit of an EARLIER segment (one with a later segment) is saved
+        // in place, its own occurrences changing, so it goes through the normal
+        // save.
+        if (IsChangeCritical && !_chainHasSuccessor)
         {
             return;
         }
@@ -1818,7 +1860,7 @@ public sealed class FinancePatternSaveConfirmation
     }
 
     /// <summary>[WRITES FILE] Carries out whatever Item C/D/E/F (planning/25 — the mechanism, the gap-folding rule, the retroactive-correction ruling, and the multiple-EarMarkPatterns ruling, respectively) decided. Real today for: a break-off with 0 or 1 existing EarMarkPattern (PerformSingleSuccessorBreakOff); a break-off that consolidates more than one (PerformMultiPlanBreakOff, forced or chosen); a single-plan retroactive correction's own narrowing (NarrowSurvivingPlanIfNeeded); a multi-plan retroactive correction's own in-place consolidation, forced or chosen (ConsolidateSurvivingPlansIfNeeded, backed by EarmarkConsolidation.Consolidate); and — new 2026-08-14 — that same retroactive-correction side's own amount-only scaling, when the plans are kept separate rather than consolidated (ScaleSurvivingPlansIfNeeded, backed by the new EarmarkScaling.Scale). Still TODO: keeping multiple plans separate on the BREAK-OFF side at all (with or without scaling), and keeping them separate on the retroactive-correction side for a start_date change specifically (only the amount-only case is resolved).</summary>
-    /// <summary>[WRITES FILE] Carries out whatever DetermineChainConditionsIfApplicable/the confirmation decided for planning/27's own Phase 1 — resolves the chain boundary (stay linked, via BreakOffFactory.ExtendStart/ExtendUntil, or left broken), the Amount/shape cascade, and the trivial-fields cascade against the rest of the same-Source chain. A no-op whenever _chainContext is null (brand-new pattern) or none of TouchesChainBoundary/ChangeCanCascade/TrivialFieldsCanCascade are true — which, per DetermineChainConditionsIfApplicable's own !IsChangeCritical gate, also means _proposedPattern is guaranteed to have actually been saved verbatim under _financeId by the PerformSave call just before this one, not superseded by a break-off. Absorbing a neighbor here means deleting its WHOLE FinancialPattern row, plus every EarMarkPattern and ManualEarmark under its own FinanceId (EarMarkPatternRepository.Delete(financeId)'s own existing two-table cascade) — the FinancialPattern-level absorb this document's own text describes as "genuinely orphaning everything," unlike the EarMarkPattern-chain case where nothing is orphaned.</summary>
+    /// <summary>[WRITES FILE] Carries out whatever DetermineChainConditionsIfApplicable/the confirmation decided for planning/27's own Phase 1 — resolves the chain boundary (stay linked, via BreakOffFactory.ExtendStart/ExtendUntil, or left broken), the Amount/shape cascade, and the trivial-fields cascade against the rest of the same-Source chain. A no-op whenever _chainContext is null (brand-new pattern) or none of TouchesChainBoundary/ChangeCanCascade/TrivialFieldsCanCascade are true — and whenever it DOES run, _proposedPattern was saved verbatim under _financeId by the PerformSave call just before it (either a plain non-Critical edit, or an EARLIER-segment edit — Critical but with a later segment — both of which PerformSave writes in place); only a CURRENT-segment break-off skips that save, and its chain conditions are all suppressed there (no successor to reach), so this method never runs for it. Absorbing a neighbor here means deleting its WHOLE FinancialPattern row, plus every EarMarkPattern and ManualEarmark under its own FinanceId (EarMarkPatternRepository.Delete(financeId)'s own existing two-table cascade) — the FinancialPattern-level absorb this document's own text describes as "genuinely orphaning everything," unlike the EarMarkPattern-chain case where nothing is orphaned.</summary>
     private void PerformChainChangesIfApplicable()
     {
         if (_chainContext is not { } context || (!TouchesChainBoundary && !ChangeCanCascade && !TrivialFieldsCanCascade))
@@ -1969,7 +2011,12 @@ public sealed class FinancePatternSaveConfirmation
     /// <summary>[WRITES FILE] Carries out whatever Item C/D/E/F (planning/25 — the mechanism, the gap-folding rule, the retroactive-correction ruling, and the multiple-EarMarkPatterns ruling. Forward-only (planning/28): carries out the break-off a Critical edit triggers — a single freshly-proposed successor (PerformSingleSuccessorBreakOff), or one combined successor when more than one EarMarkPattern already funds the goal (PerformMultiPlanBreakOff). A non-Critical edit does nothing here. Keeping multiple plans separate through a break-off is still unbuilt (header TODO item 2).</summary>
     private void PerformImplicitEarmarkChanges()
     {
-        if (!IsChangeCritical)
+        // Break off only for a Critical edit of the CURRENT segment. A Critical
+        // edit of an EARLIER segment (one with a later segment) is saved in place
+        // by PerformSave and cascaded forward by PerformChainChangesIfApplicable,
+        // never broken off — forward-only's "open the earliest segment, change
+        // flows forward from there."
+        if (!IsChangeCritical || _chainHasSuccessor)
         {
             return;
         }

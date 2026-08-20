@@ -118,6 +118,7 @@ public partial class MainWindow : Window
         };
         ExpenseForm.RequestForecast = EnsureForecast;
         ExpenseForm.PatternSaved = OnExpensePatternSaved;
+        ExpenseForm.PickChainSegment = PickChainSegmentToEdit;
 
         EarmarkForm.RequestForecast = EnsureForecast;
 
@@ -1193,13 +1194,23 @@ public partial class MainWindow : Window
                     // and pattern is still the original, now-superseded values.
                     var goal = _financialPatterns.GetByFinanceId(plan.FinanceId) ?? pattern;
                     EarmarkForm.LoadPattern(plan, goal);
+                    SwitchToTab("Earmark");
+                }
+                else if (pattern.Amount < 0m)
+                {
+                    // A brand-new outflow with no plan yet opens a blank Earmark
+                    // form so the user can create one.
+                    EarmarkForm.LoadForNewPattern();
+                    SwitchToTab("Earmark");
                 }
                 else
                 {
-                    EarmarkForm.LoadForNewPattern();
+                    // Income never gets a savings plan of its own, so there's
+                    // nothing to open on the Earmark tab — "Save and Plan" lands
+                    // back on the Forecast tab, the same as "Save and Skip
+                    // planning" already does.
+                    SwitchToTab("Forecast");
                 }
-
-                SwitchToTab("Earmark");
             },
         };
 
@@ -1292,6 +1303,14 @@ public partial class MainWindow : Window
     {
         var picker = new EarmarkPatternPickerWindow(plans) { Owner = this };
         return picker.ShowDialog() == true ? picker.SelectedPlan : plans[0];
+    }
+
+    /// <summary>[UI] What ExpenseForm.PickChainSegment calls (wired in the constructor) — shows ChainSegmentPickerWindow so the user can choose which segment of a break-off chain to open. Returns the chosen segment, or null on Cancel (ExpenseFormPanel then keeps the current segment).</summary>
+    /// <param name="segments">Every FinancialPattern in the chain (same Source) — always more than one; ExpenseFormPanel only calls this when there's a real choice.</param>
+    private FinancialPattern? PickChainSegmentToEdit(IReadOnlyList<FinancialPattern> segments)
+    {
+        var picker = new ChainSegmentPickerWindow(segments) { Owner = this };
+        return picker.ShowDialog() == true ? picker.SelectedSegment : null;
     }
 
     /// <summary>[CALC] Every scheduled outflow reserves through its own Allocation Plan (Stage 1's allocation model — planning/14), proposed at creation from the current as-of date and the user's income. Income never gets one (A-1). The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed. Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this outflow's own account (planning/17, F33) — a paycheck filed under a different account never actually funds this one.</summary>

@@ -91,6 +91,14 @@ public partial class ExpenseFormPanel : UserControl
     // so Save can leave the form exactly as it was rather than clearing it.
     public Func<FinancialPattern, int, bool, bool, bool>? PatternSaved { get; set; }
 
+    // Opens a picker for WHICH segment of a break-off chain to edit, shown by
+    // MainWindow (ChainSegmentPickerWindow). Given every same-Source segment,
+    // it returns the one the user chose. Only consulted when a chain has more
+    // than one segment; null (nothing wired) or a cancelled pick falls back to
+    // the current segment — the always-land-on-current behavior from before
+    // this picker existed.
+    public Func<IReadOnlyList<FinancialPattern>, FinancialPattern?>? PickChainSegment { get; set; }
+
     /// <summary>[UI] Fires whenever IsDirty or IsPopulated could have changed, so MainWindow can restyle this form's tab header live.</summary>
     public event EventHandler? StateChanged;
 
@@ -210,12 +218,36 @@ public partial class ExpenseFormPanel : UserControl
         ClearDirty();
     }
 
-    /// <summary>[STEP] Loads an existing pattern for editing — FinanceId is fixed. Also reachable by picking it from this form's own instance picker, not just the list tab's "Edit Selected." planning/15/16's own "silent redirect" ruling: opening an old, already-superseded segment of a break-off/renewal chain always lands on the CURRENT one instead — no warning, no escape hatch, matching what was designed but never wired in until now (planning/24).</summary>
-    /// <param name="existing">The pattern picked to load for editing — may be redirected to a later segment sharing its own Source.</param>
-    /// <param name="currentAccountId">Which account the PICKED pattern is currently filed under — re-resolved against the redirected pattern's own FinanceId instead, on the (rare) chance a chain crosses accounts.</param>
-    public void LoadPattern(FinancialPattern existing, int currentAccountId)
+    /// <summary>[CALC] Works out which segment of a break-off chain to open: the current one, or — when the chain has more than one segment and a picker is wired — whichever the user picked. A standalone pattern, an unwired picker, or a cancelled pick falls back to the current segment.</summary>
+    private FinancialPattern ChooseSegmentToLoad(FinancialPattern existing)
     {
         var current = BreakOffFactory.FindCurrentSegment(existing, _allPatterns);
+
+        var segments = _allPatterns
+            .Where(pattern => pattern.Source == existing.Source)
+            .Append(existing) // always a candidate, even if the caller's list omits it
+            .DistinctBy(pattern => pattern.FinanceId)
+            .ToList();
+
+        // No per-segment "expired" flag exists yet (05's divergence registry —
+        // Expired is permanently false today), so nothing is filtered out here;
+        // once real multi-page history/expiry exists, exclude expired segments
+        // at this point so they never appear as options.
+
+        if (segments.Count <= 1 || PickChainSegment is null)
+        {
+            return current;
+        }
+
+        return PickChainSegment(segments) ?? current;
+    }
+
+    /// <summary>[STEP] Loads a pattern for editing — FinanceId is fixed. Also reachable from this form's own instance picker, not just the list tab's "Edit Selected." When the pattern is part of a break-off/renewal chain with more than one segment, a second popup (ChainSegmentPickerWindow, via PickChainSegment) lets the user choose WHICH segment to open — the older "always land on the current segment" redirect (planning/15/16/24) is replaced by an explicit choice, so an earlier segment can be opened on purpose (planning/28's "open the earliest segment you want changed"). A standalone pattern, an unwired picker, or a cancelled pick still loads the current segment.</summary>
+    /// <param name="existing">The pattern picked to load for editing — the actual segment opened is whatever the picker returns (or the current one).</param>
+    /// <param name="currentAccountId">Which account the PICKED pattern is currently filed under — re-resolved against the chosen segment's own FinanceId, on the (rare) chance a chain crosses accounts.</param>
+    public void LoadPattern(FinancialPattern existing, int currentAccountId)
+    {
+        var current = ChooseSegmentToLoad(existing);
         if (current.FinanceId != existing.FinanceId)
         {
             currentAccountId = _accountIdByFinanceId.GetValueOrDefault(current.FinanceId, currentAccountId);

@@ -500,18 +500,15 @@ either chain type (shown whenever EITHER `PlanTouchesChainBoundary`/`TouchesChai
   `FinancialPatternRepository.Delete(financeId)` — the same order `DeleteByTransferId` already uses for
   its own three-table cascade. `StayLinkedWarningText`'s own content names this plainly when it applies:
   which segment, its date range, and how many of its own `EarMarkPattern`s go with it.
-- **A deliberate scope limit, found while wiring this in, not decided in advance:** `TouchesChainBoundary`/
-  `ChangeCanCascade`/`TrivialFieldsCanCascade` are gated on `!IsChangeCritical`. When a Critical edit's
+- **A deliberate scope limit, found while wiring this in, not decided in advance — RESOLVED and BUILT
+  2026-08-19, see the "Editing an earlier segment" section below:** `TouchesChainBoundary`/
+  `ChangeCanCascade`/`TrivialFieldsCanCascade` were gated on `!IsChangeCritical`. When a Critical edit's
   own default answer is "break off" (Item C), `_proposedPattern` is never actually saved under
   `_financeId` verbatim — a truncated original plus a brand-new successor get saved instead — so whatever
-  Start/Until the user typed (the one that might reach into a predecessor/successor) never lands on the
-  existing chain the way this mechanism assumes. The "correct it everywhere" answer WOULD make Phase 1's
-  own question valid too, but that answer isn't known until Item C's own confirmation fires, and this
-  method runs before it — composing "a chain question that only sometimes matters, depending on a
-  DIFFERENT question's own answer on the same page" was judged too easy to get subtly wrong to build
-  under this session's own time pressure. Narrowed to the always-safe case instead. **Worth a real answer
-  from the author before widening it, not a guess** — this is the one place Phase 1 is less complete than
-  its own settled rules technically call for.
+  Start/Until the user typed never lands on the existing chain the way this mechanism assumes. Narrowed to
+  the always-safe case instead, flagged as **"worth a real answer from the author before widening it."**
+  The answer came 2026-08-19: the gate was hiding a genuine gap, and closing it revealed a deeper one —
+  see below.
 
 **A real bug found and fixed along the way, affecting Phase 2 too, not just this new code:**
 `ExtendStart`'s own outer filter (`otherPlans.Where(plan => plan.DatePattern.Start < current.DatePattern.Start)`)
@@ -539,6 +536,65 @@ neighbor no-op, the `!IsChangeCritical` gate proven directly, the concurrent-pat
 cascade forward/declined, trivial-fields cascade default/chosen, the Source warning, cancel). **Suite:
 470 green** (343 domain + 58 scenario + 69 app, up from 445), 0 warnings on a clean rebuild. Verified the
 app still launches clean (same baseline check as every other pass this session).
+
+## Editing an earlier segment — the picker + edit-in-place-and-cascade · BUILT 2026-08-19
+
+**The gap, and how it surfaced.** Asked to compose the deferred cascade above (un-gate the chain
+questions for a Critical edit), grounding in the code found the whole finance-side forward cascade was
+**unreachable in the UI** — for a reason that turned out to be a real, separate bug. `ExpenseFormPanel.LoadPattern`
+**always redirected editing to the current segment** (the silent-redirect ruling from
+[15](15-stage2-pattern-lifetime.md)/[16](16-stage3-break-off.md), wired in by
+[24](24-app-layer-known-gaps.md)) — so the only segment you could ever open was the latest one, which by
+definition has no *later* segment to cascade to. Confirmed by a throwaway test: editing an earlier
+segment (had it been reachable) **crashed** — the forward-only break-off tries to split "from today," but
+an earlier segment already ended, so `BreakOffFactory.BreakOff`'s own boundary validation throws.
+
+**The conflict in the notes, named plainly (author's own point: this should have been settled already).**
+Three settled rulings disagreed and nobody had reconciled them:
+- **[16](16-stage3-break-off.md) F24** — editing and break-off ("Change starting on a date") are two
+  **separate, deliberately-chosen** actions; auto-routing an edit through break-off is explicitly called
+  wrong. **F25** — a break-off cut date may be in the past.
+- **[28](28-refactoring-the-save-confirmation.md)'s forward-only ruling contradicts itself:** "a Critical
+  edit **always** breaks off from today" vs. "to affect earlier history the user **opens the earliest
+  segment** they want changed; the change flows forward from there." The second is the intended behavior;
+  the first is what made the earlier-segment edit crash.
+- **The silent-redirect** ("always land on the current segment") forecloses "open the earliest segment"
+  entirely.
+
+**The resolution (author, 2026-08-19).** The silent-redirect was never a deliberate choice — it was
+[24](24-app-layer-known-gaps.md)'s bug-fix over-reaching. It's replaced by an explicit **segment picker**:
+selecting a bill/paycheck that's part of a chain opens a second popup (`ChainSegmentPickerWindow`) listing
+its segments by full date range, the current one in **bold**; the user picks which to open. (Expired
+segments are meant to be excluded — there's no per-segment expiry today, so nothing is filtered yet; the
+filter point is marked in `ExpenseFormPanel.ChooseSegmentToLoad`.) Then:
+- **Editing the CURRENT segment (no later segment)** — a Critical edit still **breaks off from today**,
+  unchanged. `BreakOffFactory.BreakOff`, exactly as before.
+- **Editing an EARLIER segment (one with a later segment in its chain)** — is **saved in place, its own
+  occurrences changing** (the author: "of course its own occurrences should change too — that's why the
+  user has that segment open"), and offers **"carry this change forward to the later segments?"**
+  (`CascadeForward`). This is forward-only's own "open the earliest segment; the change flows forward from
+  there," finally wired up — **not** a break-off, so it doesn't crash. The **cascade default is carry-
+  forward** (author, 2026-08-19; the planning/27-round-2 "$80→$100" worry — don't silently overwrite a
+  deliberately-different later segment — is handled by the question being asked at all, so the later value
+  is only ever changed on the user's own confirmation).
+
+**Assumption implication (`1.2.3.10.a5`, [03 Ch.20](../../03-assumptions-glossary.md#chapter-20-editing-a-finance-pattern-with-existing-history)).**
+That assumption protects already-occurred history from a *default* edit silently rewriting it — which is
+why editing the CURRENT segment breaks off. Deliberately **opening an earlier segment** through the picker
+is the sanctioned override the assumption's own "the user opens the earliest segment" escape hatch always
+intended: editing it in place is a chosen, confirmed change to that segment's own history, not a silent one.
+
+**What was built.** `ChainSegmentPickerWindow` (+ `ExpenseFormPanel.PickChainSegment` /
+`ChooseSegmentToLoad`, `MainWindow.PickChainSegmentToEdit`) for the picker;
+`FinancePatternSaveConfirmation` now routes on a new `_chainHasSuccessor` — `TouchesChainBoundary`/
+`ChangeCanCascade`/`TrivialFieldsCanCascade` un-gated (the current-segment break-off suppresses itself
+via `!hasSuccessor`), `PerformSave`/`PerformImplicitEarmarkChanges` save-in-place-vs-break-off on it, and
+the confirmation suppresses the break-off/consolidation/plan-shape machinery for an earlier-segment edit
+(its `BuildDescription` names the case instead). 3 new end-to-end tests in `FinancePatternSaveConfirmationChainTests`
+(cascade-forward default, decline-cascade, the confirmation asks-to-cascade-not-break-off). **Suite: 486
+green** (352 domain + 58 scenario + 76 app), 0 warnings. **Not manually click-tested** — the picker window
+and the confirmation popup are both suite-invisible WPF (the app tests use a delegate double), so a real
+launch-and-click is still owed.
 
 ## Not started
 
