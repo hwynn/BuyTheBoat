@@ -1239,7 +1239,7 @@ public partial class MainWindow : Window
         return true;
     }
 
-    /// <summary>[STEP] What EarmarkForm.PatternSaved calls (wired in the constructor) — planning/27's own migration target, now resolved: routes every Savings-plan save through FinancePatternSaveConfirmation's EarMarkPattern-editing constructor instead of a plain repository save, so a Start/Until edit that touches a chain neighbor, or an Amount/schedule edit with later segments to carry it to, goes through EditingHistoryConfirmationWindow first.</summary>
+    /// <summary>[STEP] What EarmarkForm.PatternSaved calls (wired in the constructor) — planning/27's own migration target, now resolved: routes every Savings-plan save through EarmarkPatternSaveConfirmation instead of a plain repository save, so a Start/Until edit that touches a chain neighbor, or an Amount/schedule edit with later segments to carry it to, goes through EditingHistoryConfirmationWindow first.</summary>
     /// <param name="pattern">The form's current field values — what the user typed, before any stay-linked/cascade resolution Run() might apply.</param>
     /// <param name="savedStart">The plan's own Start as it's actually saved today, or the same as pattern's own Start for a brand-new plan (EarmarkFormPanel's own _loadedPlanStart).</param>
     private bool OnEarmarkPatternSaved(EarMarkPattern pattern, DateOnly savedStart)
@@ -1248,7 +1248,7 @@ public partial class MainWindow : Window
             ?? throw new InvalidOperationException(
                 $"No FinancialPattern found for finance_id {pattern.FinanceId} — a savings plan's own goal should always exist by the time it's saved.");
 
-        var confirmation = new FinancePatternSaveConfirmation(
+        var confirmation = new EarmarkPatternSaveConfirmation(
             pattern,
             savedStart,
             goal,

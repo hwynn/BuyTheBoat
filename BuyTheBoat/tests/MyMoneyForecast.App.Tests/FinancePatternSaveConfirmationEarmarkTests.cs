@@ -601,10 +601,10 @@ public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
         HorizonEndDate = new DateOnly(2025, 12, 31),
     });
 
-    private FinancePatternSaveConfirmation Confirmation(EarMarkPattern proposedPlan, DateOnly savedStart, FinancialPattern goal)
+    private EarmarkPatternSaveConfirmation Confirmation(EarMarkPattern proposedPlan, DateOnly savedStart, FinancialPattern goal)
     {
         var forecast = Forecast();
-        return new FinancePatternSaveConfirmation(proposedPlan, savedStart, goal, () => forecast, new FinancePatternRepositories
+        return new EarmarkPatternSaveConfirmation(proposedPlan, savedStart, goal, () => forecast, new FinancePatternRepositories
         {
             FinancialPatterns = _financialPatterns,
             EarMarkPatterns = _earMarkPatterns,

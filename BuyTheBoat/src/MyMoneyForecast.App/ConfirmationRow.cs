@@ -7,8 +7,8 @@ namespace MyMoneyForecast.App;
 // list of these, top to bottom, most-vital first, and returns the user's
 // choices — it never decides which rows exist, in what order, or that one
 // answer might make another question relevant. A wrapper
-// (FinancePatternSaveConfirmation today; EarmarkPatternSaveConfirmation once
-// split out) owns all of that and hands the popup a finished list.
+// (FinancePatternSaveConfirmation for a bill/paycheck, EarmarkPatternSaveConfirmation
+// for a savings plan) owns all of that and hands the popup a finished list.
 //
 // See planning/28-refactoring-the-save-confirmation.md for the full design:
 // the four row kinds below, the two-layout front-end contract, and the staged
@@ -96,8 +96,9 @@ public static class ConfirmationRowIds
 // The user's answer, as the raw selections the popup reports — one option
 // index per ChoiceRow it drew, keyed by row Id, plus any picked plan shape and
 // checkbox riders. The popup doesn't interpret these (it never knew what a row
-// meant); the wrapper (FinancePatternSaveConfirmation.Run/RunForPlan) reads
-// each index back into a decision. A row the popup never drew is simply absent
+// meant); the wrapper (FinancePatternSaveConfirmation.Run or
+// EarmarkPatternSaveConfirmation.Run) reads each index back into a decision,
+// each keying off the same ConfirmationRowIds. A row the popup never drew is simply absent
 // from the map — the wrapper treats absent as that row's own safe default, so
 // a headless caller (or a test) can return a bare Proceed and still get the
 // settled defaults for every question.
