@@ -328,7 +328,7 @@ public sealed class FinancePatternSaveConfirmation
     // EarMarkPattern (F27's relaxation of 3.11.1.a1 — sequential from an
     // earlier Restructure/break-off, or concurrent, item 9's shape).
     // TODO: not computed yet.
-    public bool HasMultipleEarmarkPatterns { get; private set; }
+    private bool HasMultipleEarmarkPatterns { get; set; }
 
     // Item F's feasibility test result: true when the changed field(s) make
     // it impossible to keep multiple EarMarkPatterns separate (the
@@ -336,28 +336,27 @@ public sealed class FinancePatternSaveConfirmation
     // isn't offered as a choice there, it's announced. False means keeping
     // them separate is workable, and the user gets asked instead.
     // TODO: not computed yet.
-    public bool ConsolidationNeeded { get; private set; }
+    private bool ConsolidationNeeded { get; set; }
 
     // Whether "Save and Skip planning" was clicked rather than "Save and
     // Plan" — no navigation happens either way, so no plan-picking question
     // and no suggestion popup fire regardless of anything else here. Set at
     // construction, not computed.
-    public bool UserSkippedPlanning { get; }
+    private bool UserSkippedPlanning { get; }
 
     // planning/25's Item G: which of _planShapeCandidates the user picked,
     // when there was a choice to make at all — null means "use Propose's
     // own default," both when _planShapeCandidates was empty (nothing to
     // choose between) and when the user was offered a choice and picked the
     // default anyway. Matched back to its own full ProposedAllocationPlan by
-    // reference in PerformSingleSuccessorBreakOff. internal set — the same
-    // testing seam as UserChooseAlterPast above.
-    public EarMarkPattern? ChosenPlanShape { get; internal set; }
+    // reference in PerformSingleSuccessorBreakOff.
+    private EarMarkPattern? ChosenPlanShape { get; set; }
 
     // Whether the resulting plan (after whatever above has been resolved) is
     // worth suggesting a fix for — the Concerning popup's own trigger,
     // sourced from PlanHealthState.IsWorthWarningAbout. TODO: not computed
     // yet.
-    public bool ChangeWarrantsSuggestions { get; private set; }
+    private bool ChangeWarrantsSuggestions { get; set; }
 
     // planning/27's own Phase 1 — the FinancialPattern break-off chain's "does
     // this edit touch a neighbor's boundary" and "can this Amount/shape change
@@ -365,8 +364,8 @@ public sealed class FinancePatternSaveConfirmation
     // Set together: a save can touch a boundary, be cascade-eligible, both, or
     // neither. (The EarMarkPattern-chain equivalents live on the sibling
     // EarmarkPatternSaveConfirmation now, not here.)
-    public bool TouchesChainBoundary { get; private set; }
-    public bool ChangeCanCascade { get; private set; }
+    private bool TouchesChainBoundary { get; set; }
+    private bool ChangeCanCascade { get; set; }
 
     // Phase 1's own third question, with no EarMarkPattern equivalent at
     // all (Priority/Mandatory/Description/AutoRenew have no analog there) —
@@ -375,7 +374,7 @@ public sealed class FinancePatternSaveConfirmation
     // free. Unlike Amount/shape, defaults to NOT cascading (see
     // UserChoseCascadeTrivialFields below) — the one place Phase 1 doesn't
     // mirror Amount/shape's own default.
-    public bool TrivialFieldsCanCascade { get; private set; }
+    private bool TrivialFieldsCanCascade { get; set; }
 
     // planning/27's own Source row: "warn, don't block." "" whenever Source
     // didn't change, or changed on a segment with no predecessor/successor
@@ -383,7 +382,7 @@ public sealed class FinancePatternSaveConfirmation
     // real sentence otherwise, naming what disconnects — shown as a plain
     // warning block, not tied to any radio choice, since there's no choice
     // to make here; the edit proceeds either way.
-    public string SourceChangeWarning { get; private set; } = "";
+    private string SourceChangeWarning { get; set; } = "";
 
     // The paycheck-association cascade's own trigger — true when at least
     // one OTHER FinancialPattern's currently-active savings plan was paced
@@ -393,31 +392,28 @@ public sealed class FinancePatternSaveConfirmation
     // are about _financeId's own predecessor/successor chain; this is about
     // OTHER, unrelated FinancialPatterns' own plans), and only ever relevant
     // to a FinancialPattern edit — a savings plan itself is never income.
-    public bool PacedBillsCanCascade { get; private set; }
+    private bool PacedBillsCanCascade { get; set; }
 
     // The user's answer to "stay linked in the chain, or let it break" —
-    // meaningless unless TouchesChainBoundary is true. internal set — a
-    // testing seam, same reasoning as UserChooseAlterPast above. No explicit
-    // default was ever settled the way cascading forward's was — true (stay
-    // linked) is this class's own reasoned choice, matching the one option
-    // that's never destructive on its own, not something stated outright.
-    // (The EarMarkPattern chain's own answer lives on EarmarkPatternSaveConfirmation.)
-    public bool UserChoseStayLinked { get; internal set; } = true;
+    // meaningless unless TouchesChainBoundary is true. No explicit default
+    // was ever settled the way cascading forward's was — true (stay linked)
+    // is this class's own reasoned choice, matching the one option that's
+    // never destructive on its own, not something stated outright. (The
+    // EarMarkPattern chain's own answer lives on EarmarkPatternSaveConfirmation.)
+    private bool UserChoseStayLinked { get; set; } = true;
 
     // The user's answer to "cascade forward, or just this segment" —
     // meaningless unless ChangeCanCascade is true. Defaults to true — SETTLED,
     // cascading forward is the system default for an Amount/shape change.
-    // internal set, same testing-seam reasoning as above.
-    public bool UserChoseCascadeForward { get; internal set; } = true;
+    private bool UserChoseCascadeForward { get; set; } = true;
 
     // The user's answer to Phase 1's own trivial-fields question —
     // meaningless unless TrivialFieldsCanCascade is true. Defaults to
     // FALSE, unlike UserChoseCascadeForward above — SETTLED (round 3):
     // "default stays 'just this segment' — nothing about today's actual
     // behavior changes for anyone who accepts the row's own default."
-    // Trivial fields have no savings-plan counterpart. internal set, same
-    // testing-seam reasoning as UserChooseAlterPast above.
-    public bool UserChoseCascadeTrivialFields { get; internal set; }
+    // Trivial fields have no savings-plan counterpart.
+    private bool UserChoseCascadeTrivialFields { get; set; }
 
     // The user's answer to the paycheck-association cascade — meaningless
     // unless PacedBillsCanCascade is true. Defaults to FALSE — "offered as a
@@ -425,9 +421,8 @@ public sealed class FinancePatternSaveConfirmation
     // named for) means declining is the safe no-op, same reasoning as
     // UserChoseCascadeTrivialFields above, and more so here: re-pacing a
     // bill's plan is a real, visible change to its own money movement, not
-    // just a trivial-field copy. internal set, same testing-seam reasoning
-    // as UserChooseAlterPast above.
-    public bool UserChoseToRepaceBills { get; internal set; }
+    // just a trivial-field copy.
+    private bool UserChoseToRepaceBills { get; set; }
 
     // The overall Trivial/Critical/Concerning categorization's own top-level
     // flag: true when this save needs to go through the
@@ -435,7 +430,7 @@ public sealed class FinancePatternSaveConfirmation
     // from MightAlterPast, since the author's final categorization table may
     // end up computing this from more than one condition — not necessarily a
     // synonym once built out. TODO: not computed yet.
-    public bool IsChangeCritical { get; private set; }
+    private bool IsChangeCritical { get; set; }
 
     /// <summary>[CALC] Builds the orchestrator for one Save click. Nothing is looked up or shown yet — call Run to actually do the work.</summary>
     /// <param name="financeId">The FinancialPattern being edited (or created, if this is a new one).</param>

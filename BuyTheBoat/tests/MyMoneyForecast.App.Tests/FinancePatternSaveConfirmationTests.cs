@@ -8,19 +8,13 @@ namespace MyMoneyForecast.App.Tests;
 // Exercises FinancePatternSaveConfirmation end to end against a real
 // (temporary) SQLite file — same shape as Scenario.Tests' own repository
 // tests, just for the App-layer orchestrator instead of the repositories
-// directly. Most [Fact]s drive Run() itself, never a private method
-// directly — a scenario's own data (which fields changed, whether
-// history/a plan/multiple plans exist) determines which of planning/25's
-// Items C-F actually fires, since AskForGuidanceOnImplicitChanges'
-// placeholder always answers every question with its safest,
-// least-destructive default until a real popup exists (see that class's own
-// STATUS note). The one exception is the retroactive-correction narrowing
-// test near the bottom: Run() can never reach that path today (its own
-// gate, UserChooseAlterPast, is permanently false under the placeholder), so
-// it calls DetermineConditions/NarrowSurvivingPlanIfNeeded directly instead —
-// both internal specifically for this, via MyMoneyForecast.App.csproj's
-// InternalsVisibleTo grant. One [Fact] per named case — add to this set
-// rather than growing any one test as more of Items C-F get built for real.
+// directly. Every [Fact] drives Run(): a scenario's own data (which fields
+// changed, whether history / a plan / multiple plans exist) determines which
+// of planning/25's Items C-F actually fires, and each test wires a
+// ConfirmImplicitChanges double to answer the questions it expects — or leaves
+// it unset, in which case DefaultOutcome answers every question with its
+// safest, least-destructive default. One [Fact] per named case — add to this
+// set rather than growing any one test as more of Items C-F get built for real.
 public class FinancePatternSaveConfirmationTests : IDisposable
 {
     private static readonly DateOnly AsOf = new(2025, 6, 15);
