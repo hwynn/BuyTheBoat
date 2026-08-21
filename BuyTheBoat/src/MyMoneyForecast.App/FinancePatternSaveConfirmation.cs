@@ -1332,6 +1332,11 @@ public sealed class FinancePatternSaveConfirmation
         var toSave = new Dictionary<int, FinancialPattern>();
         var toDelete = new List<int>();
 
+        // The predecessor a forward Start move stretched over the vacated period,
+        // if any — M2's reverse-break-off (below) migrates this goal's own dropped
+        // plan occurrences under it once every finance-row change here is saved.
+        FinancialPattern? extendedPredecessor = null;
+
         var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart < context.Saved.DatePattern.ActiveStart).ToList();
         var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart).ToList();
 
@@ -1348,6 +1353,7 @@ public sealed class FinancePatternSaveConfirmation
                 if (result.AdjustedNeighbor is { } adjusted)
                 {
                     toSave[adjusted.FinanceId] = adjusted;
+                    extendedPredecessor = adjusted; // stretched over the vacated period — the reverse-break-off's home
                 }
             }
 
@@ -1419,6 +1425,43 @@ public sealed class FinancePatternSaveConfirmation
             // FinancialPatternRepository.DeleteByTransferId already uses.
             _repositories.EarMarkPatterns.Delete(financeId);
             _repositories.FinancialPatterns.Delete(financeId);
+        }
+
+        if (extendedPredecessor is { } predecessor)
+        {
+            PreserveDroppedOccurrencesUnderPredecessor(predecessor);
+        }
+    }
+
+    /// <summary>[WRITES FILE] M2's cut-occurrence preservation (reverse break-off): when a Start move forward drops repeated occurrences from this goal's own plans AND a predecessor segment has just stretched to cover the vacated period, those occurrences survive as a new EarMarkPattern under that predecessor rather than being let go — the user's own conscious contribution schedule for those dates. Only ever fires for a FUTURE in-place Start move (a Critical, past-touching one breaks off instead), so the plans hold no accumulated real money yet: the migrated plan starts at 0m and simply re-generates the dropped occurrences under the predecessor's finance_id. A dropped span with no occurrence is let go (nothing to preserve). ASSUMPTION (M2 piece 2, to compose with later pieces): the predecessor's OWN plan is not also stretched over the period (piece 3 — extend-outward), so the migrated plan sits contiguously after it with no overlap to merge (M1); once those land this joins them. Reads the original (pre-clamp) plans from _frontTruncations, captured before any save, and runs last so the predecessor's own stretched row is already persisted (the migrated plan must validate against it).</summary>
+    /// <param name="predecessor">The predecessor segment, freshly stretched to cover the vacated period.</param>
+    private void PreserveDroppedOccurrencesUnderPredecessor(FinancialPattern predecessor)
+    {
+        if (_frontTruncations is not { } front)
+        {
+            return;
+        }
+
+        var vacatedEnd = _proposedPattern.DatePattern.ActiveStart.AddDays(-1);
+
+        foreach (var droppedPlan in front.PlansStartingBeforeNewStart)
+        {
+            var droppedOccurrences = droppedPlan.DatePattern.GetOccurrences(droppedPlan.DatePattern.ActiveStart, vacatedEnd);
+            if (droppedOccurrences.Count == 0)
+            {
+                continue; // the dropped span held no occurrence — nothing to preserve
+            }
+
+            var migrated = EarMarkPattern.Create(
+                new EarMarkPatternOptions
+                {
+                    FinanceId = predecessor.FinanceId,
+                    DatePattern = droppedPlan.DatePattern.WithUntil(vacatedEnd), // keep its Start and rhythm, end at the vacated boundary
+                    Amount = droppedPlan.Amount,
+                    StartingAllocation = 0m,
+                },
+                predecessor);
+            _repositories.EarMarkPatterns.Save(migrated);
         }
     }
 

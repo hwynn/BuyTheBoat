@@ -849,6 +849,33 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 9, 1)); // clamped to the goal's new Start
     }
 
+    // M2 piece 2 — the reverse-break-off. Future chain: old rent P (Jul-Aug) ->
+    // new rent C (Sep-Dec), C has a plan. Pushing C's Start to Nov stays linked,
+    // so P stretches to cover Sep-Oct. C's Sep/Oct plan contributions are dropped
+    // from C, but survive as a new plan under P — the user's own conscious
+    // contribution schedule for those dates, not silently let go.
+    [Fact]
+    public void Moving_a_future_segments_start_forward_preserves_its_plans_dropped_occurrences_under_the_predecessor()
+    {
+        var predecessor = Bill(1, "Rent", -1_500m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var current = Bill(2, "Rent", -1_800m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(predecessor, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _earMarkPatterns.Save(Plan(current, -1_800m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        var editedCurrent = Bill(2, "Rent", -1_800m, new DateOnly(2025, 11, 1), new DateOnly(2025, 12, 1));
+        Confirmation(2, editedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var plans = _earMarkPatterns.GetAll();
+        plans.Count.ShouldBe(2); // C's clamped plan plus the one preserved under P
+
+        plans.Single(p => p.FinanceId == 2).DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 11, 1)); // C's plan clamped forward
+
+        var preserved = plans.Single(p => p.FinanceId == 1); // migrated under the predecessor
+        preserved.Amount.ShouldBe(-1_800m); // the same contribution rate the user set up
+        preserved.DatePattern.GetOccurrences().ShouldBe([new DateOnly(2025, 9, 1), new DateOnly(2025, 10, 1)]); // exactly the dropped days
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
