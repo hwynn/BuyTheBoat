@@ -445,7 +445,7 @@ public static class BreakOffFactory
                 continue;
             }
 
-            neighbor = pattern.WithStart(newUntil.AddDays(1));
+            neighbor = pattern.ReanchoredToStartOn(newUntil.AddDays(1));
             break;
         }
 

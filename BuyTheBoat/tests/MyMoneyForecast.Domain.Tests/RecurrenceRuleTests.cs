@@ -419,6 +419,51 @@ public class RecurrenceRuleTests
         a.ActiveSpansOverlap(adjacent).ShouldBeFalse();
     }
 
+    [Fact]
+    public void ReanchoredToStartOn_forward_keeps_an_interval_gt_1_cadences_phase()
+    {
+        // Biweekly Fridays anchored 2025-01-03. Re-anchoring the span to begin
+        // mid-cycle (a Monday) must keep landing on the SAME Fridays, not
+        // re-phase to every-other-week-from-Monday the way raw WithStart would.
+        var biweeklyFridays = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Weekly,
+            Interval = 2,
+            ByDay = [DayOfWeek.Friday],
+            DtStart = new DateOnly(2025, 1, 3),
+            Until = new DateOnly(2025, 6, 30),
+        });
+
+        var reanchored = biweeklyFridays.ReanchoredToStartOn(new DateOnly(2025, 1, 20)); // a Monday, mid-cycle
+
+        reanchored.ActiveStart.ShouldBe(new DateOnly(2025, 1, 20)); // the span begins exactly where asked
+        reanchored.GetOccurrences()[0].ShouldBe(new DateOnly(2025, 1, 31)); // the next real Friday on the same grid
+        reanchored.GetOccurrences().ShouldAllBe(date => biweeklyFridays.GetOccurrences().Contains(date)); // same phase, a subset
+    }
+
+    [Fact]
+    public void ReanchoredToStartOn_backward_extends_the_same_phase_earlier()
+    {
+        // Biweekly Fridays anchored 2025-03-07. Growing the span backward to
+        // 2025-01-20 must add the EARLIER Fridays on the same grid, not re-phase.
+        var biweeklyFridays = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Weekly,
+            Interval = 2,
+            ByDay = [DayOfWeek.Friday],
+            DtStart = new DateOnly(2025, 3, 7),
+            Until = new DateOnly(2025, 6, 30),
+        });
+
+        var reanchored = biweeklyFridays.ReanchoredToStartOn(new DateOnly(2025, 1, 20));
+
+        reanchored.ActiveStart.ShouldBe(new DateOnly(2025, 1, 20));
+        var occurrences = reanchored.GetOccurrences();
+        occurrences.ShouldContain(new DateOnly(2025, 1, 24)); // an earlier Friday, added on the same grid
+        occurrences.ShouldContain(new DateOnly(2025, 3, 7)); // the original anchor, phase intact
+        occurrences.ShouldAllBe(date => date.DayOfWeek == DayOfWeek.Friday);
+    }
+
     private static RecurrenceRule MonthlySpan(DateOnly start, DateOnly until) => RecurrenceRule.Create(new RecurrenceRuleOptions
     {
         Frequency = RecurrenceFrequency.Monthly,

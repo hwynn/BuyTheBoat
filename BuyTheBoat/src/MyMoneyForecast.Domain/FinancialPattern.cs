@@ -92,13 +92,27 @@ public sealed class FinancialPattern
         AutoRenew = AutoRenew,
     });
 
-    /// <summary>[CALC] Returns a copy of this pattern starting on the given date instead — every other field unchanged. Used by BreakOffFactory's own chain-boundary resolution (planning/27) when "stay linked" needs to nudge a predecessor's own Start forward, or a successor's own Start backward, to stay contiguous. Safe the same way RecurrenceRule.WithStart itself is — Start plays no part in building the underlying recurrence pattern, only Frequency/Interval/ByDay/ByMonthDay/Until/Count do.</summary>
-    /// <param name="start">The new Start date.</param>
+    /// <summary>[CALC] Returns a copy with its rrule DtStart anchor moved to the given date — every other field unchanged. WARNING: this re-phases an interval>1 (or implicit-by-rule) cadence, since DtStart is the RFC 5545 anchor; use it only when re-anchoring the rhythm is intended (a direct Start edit). To relink a chain neighbor while keeping its rhythm, use ReanchoredToStartOn.</summary>
+    /// <param name="start">The new rrule anchor date.</param>
     public FinancialPattern WithStart(DateOnly start) => Create(new FinancialPatternOptions
     {
         FinanceId = FinanceId,
         Source = Source,
         DatePattern = DatePattern.WithStart(start),
+        Amount = Amount,
+        Priority = Priority,
+        Mandatory = Mandatory,
+        Description = Description,
+        AutoRenew = AutoRenew,
+    });
+
+    /// <summary>[CALC] Returns a copy re-anchored so its active span begins on the given date, keeping its cadence phase — every other field unchanged. Used by BreakOffFactory's chain-boundary resolution to nudge a successor's own start to stay contiguous without silently re-phasing an interval>1 neighbor.</summary>
+    /// <param name="newActiveStart">Where the re-anchored pattern's active span should begin.</param>
+    public FinancialPattern ReanchoredToStartOn(DateOnly newActiveStart) => Create(new FinancialPatternOptions
+    {
+        FinanceId = FinanceId,
+        Source = Source,
+        DatePattern = DatePattern.ReanchoredToStartOn(newActiveStart),
         Amount = Amount,
         Priority = Priority,
         Mandatory = Mandatory,

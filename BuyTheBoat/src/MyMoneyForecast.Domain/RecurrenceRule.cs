@@ -111,6 +111,61 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     };
 
+    /// <summary>[CALC] A copy re-anchored so its active span begins on the given date while KEEPING its cadence phase — the safe replacement for WithStart when relinking a chain. Its occurrences stay on the same rhythm (unlike WithStart, which re-phases an interval>1 or implicit-by-rule pattern); only where the span begins, and how far back that rhythm reaches when it grows earlier, changes. Until, amount, and shape are untouched.</summary>
+    /// <param name="newActiveStart">Where the re-anchored pattern's active span should begin.</param>
+    public RecurrenceRule ReanchoredToStartOn(DateOnly newActiveStart)
+    {
+        // Walk this rule's own anchor back by whole cadence periods until it
+        // sits on or before the new start, so the phase grid is defined across
+        // the whole new span — needed when a segment grows backward. Stepping
+        // by exact periods never changes which dates the rhythm lands on, only
+        // how early it can be enumerated from.
+        var anchor = DtStart;
+        for (var guard = 0; anchor > newActiveStart && guard < 6000; guard++)
+        {
+            anchor = StepBackOnePeriod(anchor);
+        }
+
+        // The re-anchored DtStart is the first occurrence on that phase grid on
+        // or after the new start; a lead-in (ActiveFrom) fills the gap when it
+        // lands later, so the active span still begins exactly where asked.
+        var grid = Create(new RecurrenceRuleOptions
+        {
+            Frequency = Frequency,
+            Interval = Interval,
+            ByDay = ByDay,
+            ByMonthDay = ByMonthDay,
+            DtStart = anchor,
+            Until = Until >= anchor ? Until : anchor,
+            ExcludedDates = ExcludedDates,
+        });
+        var onOrAfter = grid.GetOccurrences(newActiveStart, grid.Until);
+        var newDtStart = onOrAfter.Count > 0 ? onOrAfter[0] : newActiveStart;
+
+        return Create(new RecurrenceRuleOptions
+        {
+            Frequency = Frequency,
+            Interval = Interval,
+            ByDay = ByDay,
+            ByMonthDay = ByMonthDay,
+            DtStart = newDtStart,
+            ActiveFrom = newDtStart > newActiveStart ? newActiveStart : null,
+            Until = Until,
+            ExcludedDates = ExcludedDates,
+        });
+    }
+
+    /// <summary>[CALC] This date one cadence period earlier — a day/week/month/year step scaled by Interval — for walking an anchor back without shifting phase.</summary>
+    /// <param name="date">The date to step back from.</param>
+    private DateOnly StepBackOnePeriod(DateOnly date) => Frequency switch
+    {
+        RecurrenceFrequency.Daily => date.AddDays(-Interval),
+        RecurrenceFrequency.Weekly => date.AddDays(-7 * Interval),
+        RecurrenceFrequency.Monthly => date.AddMonths(-Interval),
+        RecurrenceFrequency.Yearly => date.AddYears(-Interval),
+        _ => throw new ArgumentOutOfRangeException(nameof(Frequency), Frequency, "Unknown frequency."),
+    };
+
     /// <summary>[CALC] Returns a copy of this rule with its ActiveFrom lead-in set to the given date — everything else, including which dates it occurs on, stays the same.</summary>
     /// <param name="activeFrom">The new lead-in date.</param>
     public RecurrenceRule WithActiveFrom(DateOnly activeFrom) => Create(new RecurrenceRuleOptions

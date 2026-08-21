@@ -932,6 +932,43 @@ public class BreakOffFactoryTests
     }
 
     [Fact]
+    public void ExtendUntil_keeps_an_interval_gt_1_successors_cadence_phase_when_it_nudges_the_start()
+    {
+        // A biweekly-Friday successor (grid: Jun 6, 20, Jul 4, 18, ...). Growing
+        // current's Until to Jul 8 nudges the successor's start to Jul 9 — which
+        // lands in an "off" week of that biweekly grid. It must stay on the
+        // successor's OWN Fridays (M3), not silently re-phase onto a Jul-9-
+        // anchored cadence the way raw WithStart(newUntil+1) would.
+        var current = BiweeklyFridayRent(-1_600m, new DateOnly(2025, 1, 3), new DateOnly(2025, 5, 30), id: 1);
+        var successor = BiweeklyFridayRent(-1_800m, new DateOnly(2025, 6, 6), new DateOnly(2025, 12, 26), id: 2);
+
+        var result = BreakOffFactory.ExtendUntil(current, [successor], new DateOnly(2025, 7, 8));
+
+        var neighbor = result.AdjustedNeighbor!;
+        neighbor.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 9)); // contiguous with current's new Until
+        neighbor.DatePattern.GetOccurrences().ShouldNotBeEmpty();
+        // Every remaining occurrence is one the successor's own grid already had
+        // — phase intact. Raw WithStart(Jul 9) would drift onto Jul 11, 25, ...
+        neighbor.DatePattern.GetOccurrences().ShouldAllBe(date => successor.DatePattern.GetOccurrences().Contains(date));
+    }
+
+    private static FinancialPattern BiweeklyFridayRent(decimal amount, DateOnly start, DateOnly until, int id) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = id,
+            Source = "Rent",
+            Amount = amount,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Weekly,
+                Interval = 2,
+                ByDay = [DayOfWeek.Friday],
+                DtStart = start,
+                Until = until,
+            }),
+        });
+
+    [Fact]
     public void ExtendUntil_absorbs_the_successor_entirely_when_it_fully_reaches()
     {
         var current = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");

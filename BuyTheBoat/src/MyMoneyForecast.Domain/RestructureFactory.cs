@@ -235,7 +235,7 @@ public static class RestructureFactory
                 new EarMarkPatternOptions
                 {
                     FinanceId = plan.FinanceId,
-                    DatePattern = plan.DatePattern.WithStart(newUntil.AddDays(1)),
+                    DatePattern = plan.DatePattern.ReanchoredToStartOn(newUntil.AddDays(1)),
                     Amount = plan.Amount,
                     StartingAllocation = plan.StartingAllocation,
                 },
