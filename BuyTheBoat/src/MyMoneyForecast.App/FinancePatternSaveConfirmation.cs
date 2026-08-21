@@ -256,26 +256,36 @@ public sealed class FinancePatternSaveConfirmation
     // reference in PerformSingleSuccessorBreakOff, not reconstructed.
     public sealed record PlanShapeCandidate(string Label, ProposedAllocationPlan Plan);
 
-    // What ApplyBackTruncationsIfNeeded needs to fix 3.11.2.a2's back
+    // What ApplyBackTruncationsIfNeeded needs to fix 3.11.2.a2's back (Until)
     // boundary, worked out by DetermineBackTruncationsIfApplicable before
     // anything is saved — null means every existing EarMarkPattern already
     // fits inside the proposed pattern's own Until (most edits; always true
     // for a brand-new pattern, since DetermineConditions's own early return
-    // leaves nothing here to find). Unlike _narrowingPlan, NOT gated on
-    // IsChangeCritical or HasMultipleEarmarkPatterns — see this class's own
-    // "Back-boundary invariant" header note for why. KNOWN GAP: doesn't
-    // compose with _narrowingPlan when both would touch the very same single
-    // plan (Critical, exactly one existing plan, Start moved forward AND
-    // Until shortened in the same edit) — NarrowSurvivingPlanIfNeeded's own
-    // call to PatternTruncation.StartOn preserves the plan's PRE-edit Until
-    // rather than reclamping it, a gap that predates this field and isn't
-    // fixed by it. Left as-is rather than guessed at; the reported crash
-    // this field fixes can't reach it (HasMultipleEarmarkPatterns is true
-    // there, so _narrowingPlan is always null).
+    // leaves nothing here to find). NOT gated on IsChangeCritical or
+    // HasMultipleEarmarkPatterns — see this class's own "Back-boundary
+    // invariant" header note for why. The Start (front) boundary has its own
+    // mirror, _frontTruncations, just below.
     private BackTruncationPlan? _backTruncations;
 
     private sealed record BackTruncationPlan(
         IReadOnlyList<EarMarkPattern> PlansExceedingNewUntil,
+        IReadOnlyList<DateOnly> OrphanedManualEarmarkDates);
+
+    // The front-boundary mirror of _backTruncations (M2): what
+    // ApplyFrontTruncationsIfNeeded needs to keep 3.11.2.a2 holding when the
+    // proposed pattern's own Start moves FORWARD in place — a non-Critical
+    // future edit; a Critical one breaks off instead and never saves in place,
+    // so this only ever fixes a future-dated pattern's own plans. Without it a
+    // plan left starting before the new Start violates the earmark-span-within-
+    // goal-span invariant, and the next EarMarkPatternRepository.GetAll()
+    // re-validation throws — the Start-side twin of the crash _backTruncations
+    // already fixes on the Until side. Worked out before anything is saved,
+    // same "read before write" timing; null when every plan already starts on
+    // or after the new Start.
+    private FrontTruncationPlan? _frontTruncations;
+
+    private sealed record FrontTruncationPlan(
+        IReadOnlyList<EarMarkPattern> PlansStartingBeforeNewStart,
         IReadOnlyList<DateOnly> OrphanedManualEarmarkDates);
 
     // planning/27's own Phase 1 — the saved pattern plus every other
@@ -535,6 +545,12 @@ public sealed class FinancePatternSaveConfirmation
         // — including MainWindow's own startup read — until the database
         // was reset.
         DetermineBackTruncationsIfApplicable();
+
+        // The front-boundary twin (M2): the same invariant, and the same
+        // "read before write" timing, for a Start moving forward in place —
+        // otherwise a plan left starting before the new Start crashes the next
+        // GetAll() exactly as an over-long Until used to.
+        DetermineFrontTruncationsIfApplicable();
 
         // SETTLED 2026-08-11 (author): Item F's own question applies
         // regardless of which Item E path gets chosen — it is NOT
@@ -914,6 +930,31 @@ public sealed class FinancePatternSaveConfirmation
         _backTruncations = new BackTruncationPlan(plansExceedingNewUntil, orphanedDates);
     }
 
+    /// <summary>[READS FILE] The front-boundary mirror of DetermineBackTruncationsIfApplicable (M2): works out whether any existing EarMarkPattern now starts BEFORE the proposed pattern's own Start — 3.11.2.a2 has to keep holding after ANY save — and if so, everything ApplyFrontTruncationsIfNeeded needs: which plans start too early, and which ManualEarmarks now fall before it and need deleting. Stored in _frontTruncations, same "read before PerformSave writes anything" reasoning as the back side. Runs unconditionally, not gated on IsChangeCritical — a Start moving forward in place (only ever a non-Critical future edit; a Critical one breaks off instead) is exempt from ASKING but never from keeping its plans valid. internal for the same reason DetermineBackTruncationsIfApplicable is — so a test can call it directly ahead of ApplyFrontTruncationsIfNeeded.</summary>
+    internal void DetermineFrontTruncationsIfApplicable()
+    {
+        var forecast = _requestForecast();
+        var newStart = _proposedPattern.DatePattern.ActiveStart;
+
+        var plansStartingBeforeNewStart = forecast.Book.EarMarkPatternsFor(_financeId)
+            .Where(plan => plan.DatePattern.ActiveStart < newStart)
+            .ToList();
+
+        if (plansStartingBeforeNewStart.Count == 0)
+        {
+            return; // every existing plan already starts on or after the new Start — nothing to fix
+        }
+
+        // Safe here — nothing has been saved yet this Run(), so every
+        // ManualEarmark still validates against its own (unchanged) plan.
+        var orphanedDates = _repositories.ManualEarmarks.GetAll()
+            .Where(earmark => earmark.FinanceId == _financeId && earmark.Date < newStart)
+            .Select(earmark => earmark.Date)
+            .ToList();
+
+        _frontTruncations = new FrontTruncationPlan(plansStartingBeforeNewStart, orphanedDates);
+    }
+
     /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. Was a single hardcoded XAML string until 2026-08-17, when ConsolidationNeeded was widened to also force consolidation for a start_date change, not just a recurrence-shape one — the old text ("because the schedule itself is changing") would have been actively wrong for a start-only edit.</summary>
     private string DescribeConsolidationForcedReason()
     {
@@ -1207,6 +1248,7 @@ public sealed class FinancePatternSaveConfirmation
 
         _repositories.FinancialPatterns.Save(_proposedPattern, _accountId);
         ApplyBackTruncationsIfNeeded();
+        ApplyFrontTruncationsIfNeeded();
     }
 
     /// <summary>[WRITES FILE] Carries out the fix DetermineBackTruncationsIfApplicable already worked out (before anything was saved): deletes any ManualEarmark now dated after the goal's own new Until, then brings every EarMarkPattern that still exceeds it back in line — truncated via PatternTruncation.EndOn (the same domain primitive a plain stop/break-off already uses to keep a plan's Until from exceeding its goal's) when it still has some active span left inside the new range, or deleted outright when its own Start is already past the new Until (EndOn can't shorten a plan to end before it begins — that plan was never going to contribute anything under the new range at all). A no-op whenever _backTruncations is null — every existing plan already fit, or DetermineBackTruncationsIfApplicable was never called. Called from inside PerformSave, right after the FinancialPattern save it depends on — see this class's own "Back-boundary invariant" header note for why this runs unconditionally rather than only alongside Items B/E/F's own confirmation.</summary>
@@ -1224,6 +1266,11 @@ public sealed class FinancePatternSaveConfirmation
 
         foreach (var plan in fix.PlansExceedingNewUntil)
         {
+            if (_frontTruncations is { } front && front.PlansStartingBeforeNewStart.Any(p => p.DatePattern.DtStart == plan.DatePattern.DtStart))
+            {
+                continue; // also starts before the new Start — ApplyFrontTruncationsIfNeeded reconciles both its boundaries
+            }
+
             if (plan.DatePattern.ActiveStart > _proposedPattern.DatePattern.Until)
             {
                 _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
@@ -1232,6 +1279,44 @@ public sealed class FinancePatternSaveConfirmation
 
             var truncated = PatternTruncation.EndOn(_proposedPattern, plan, _proposedPattern.DatePattern.Until).Plan!;
             _repositories.EarMarkPatterns.Save(truncated);
+        }
+    }
+
+    /// <summary>[WRITES FILE] The front-boundary mirror of ApplyBackTruncationsIfNeeded (M2): carries out the fix DetermineFrontTruncationsIfApplicable worked out before anything was saved — deletes any ManualEarmark now dated before the goal's own new Start, then brings every EarMarkPattern that still starts before it back in line — its own Start clamped forward via PatternTruncation.StartOn (phase-preserving) when active span survives inside the new range, or deleted outright when its own Until is already before the new Start. absorbedBalance is 0m: a Start moving forward in place is only ever a non-Critical FUTURE edit (a Critical one breaks off), so the dropped occurrences are forecasted, not real accumulated money — there's nothing yet to carry forward beyond whatever StartingAllocation the plan already held. Unlike EndOn, StartOn can move the plan's DtStart (its persistence key), so this deletes the pre-clamp row before saving the re-anchored one. A plan straddling BOTH boundaries is reconciled here (Start then Until), and ApplyBackTruncationsIfNeeded skips it to avoid re-creating its old-key row. A no-op whenever _frontTruncations is null. Called from inside PerformSave, right after the FinancialPattern save.</summary>
+    private void ApplyFrontTruncationsIfNeeded()
+    {
+        if (_frontTruncations is not { } fix)
+        {
+            return;
+        }
+
+        var newStart = _proposedPattern.DatePattern.ActiveStart;
+
+        foreach (var date in fix.OrphanedManualEarmarkDates)
+        {
+            _repositories.ManualEarmarks.Delete(_financeId, date);
+        }
+
+        foreach (var plan in fix.PlansStartingBeforeNewStart)
+        {
+            if (plan.DatePattern.Until < newStart)
+            {
+                _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+                continue;
+            }
+
+            var clamped = PatternTruncation.StartOn(plan, _proposedPattern, newStart, absorbedBalance: 0m);
+            if (clamped.DatePattern.Until > _proposedPattern.DatePattern.Until)
+            {
+                // Straddles both boundaries — clamp the far end too, so this one
+                // plan is fully reconciled here rather than split across the two
+                // appliers (whose keys would otherwise collide once StartOn moves
+                // this plan's own DtStart).
+                clamped = PatternTruncation.EndOn(_proposedPattern, clamped, _proposedPattern.DatePattern.Until).Plan!;
+            }
+
+            _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+            _repositories.EarMarkPatterns.Save(clamped);
         }
     }
 

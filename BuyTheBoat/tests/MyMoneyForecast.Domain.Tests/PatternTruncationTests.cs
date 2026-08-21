@@ -167,7 +167,7 @@ public class PatternTruncationTests
     }
 
     [Fact]
-    public void StartOn_clears_any_existing_lead_in_since_the_new_start_is_the_new_earliest_boundary()
+    public void StartOn_replaces_an_existing_lead_in_with_the_new_start()
     {
         var goal = MonthlyBill(-300m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1))
             .WithActiveFrom(new DateOnly(2024, 10, 1));
@@ -189,8 +189,12 @@ public class PatternTruncationTests
 
         var trimmed = PatternTruncation.StartOn(plan, goal, new DateOnly(2025, 6, 15), absorbedBalance: 200m);
 
-        trimmed.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
+        // The old Oct-2024 lead-in is gone; the new active span begins at the
+        // new start, with a fresh lead-in to the first occurrence (Jul 1) that
+        // now lands after it — a phase-preserving re-anchor, not a raw move.
         trimmed.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 6, 15));
+        trimmed.DatePattern.ToOptions().ActiveFrom.ShouldBe(new DateOnly(2025, 6, 15));
+        trimmed.DatePattern.GetOccurrences()[0].ShouldBe(new DateOnly(2025, 7, 1));
     }
 
     [Fact]

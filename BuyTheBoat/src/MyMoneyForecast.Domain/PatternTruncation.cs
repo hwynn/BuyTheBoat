@@ -54,12 +54,12 @@ public static class PatternTruncation
         return new TruncatedPattern(truncatedPattern, truncatedPlan);
     }
 
-    /// <summary>[CALC] Moves a savings plan's own Start forward to a chosen date — the front-boundary counterpart to EndOn — absorbing whatever it held immediately before that date into its StartingAllocation. Recurrence shape (frequency/interval/day constraints) is unchanged, so which dates the plan lands on from the new Start onward is unaffected; only the search window moves. Any lead-in (ActiveFrom) is cleared — the new Start is the plan's new earliest boundary, so an earlier one is no longer meaningful. Doesn't touch ManualEarmarks dated before the new Start — the caller's job, since this is a pure domain method with no repository access (planning/25's Item E).</summary>
+    /// <summary>[CALC] Moves a savings plan's active span forward to begin on a chosen date — the front-boundary counterpart to EndOn — absorbing whatever it held immediately before that date into its StartingAllocation. Re-anchored phase-preserving (ReanchoredToStartOn), so the dates it lands on from the new start onward stay on the same rhythm; any old lead-in reaching further back is replaced by the new start (with a fresh lead-in to the first occurrence when that lands later). Doesn't touch ManualEarmarks dated before the new start — the caller's job, since this is a pure domain method with no repository access (planning/25's Item E).</summary>
     /// <param name="plan">The plan to trim.</param>
     /// <param name="goal">The goal it funds — validated against, same as EarMarkPattern.Create.</param>
-    /// <param name="newStart">The plan's new Start. Must be strictly after its current Start — a request to move into an existing ActiveFrom lead-in (between ActiveFrom and Start) isn't covered here; see this method's own callers for that gap.</param>
+    /// <param name="newStart">The plan's new active-span start. Must be strictly after its current start.</param>
     /// <param name="absorbedBalance">Whatever the plan held immediately before newStart — read by the caller off the live forecast, since a pure domain method has no forecast of its own to read (same reasoning as BreakOffRequest.CarriedOverJarBalance). Added on top of whatever StartingAllocation the plan already had.</param>
-    /// <returns>A plan with the same finance id, rate, and recurrence shape, starting from newStart, its StartingAllocation increased by absorbedBalance.</returns>
+    /// <returns>A plan with the same finance id, rate, and recurrence shape, its active span starting from newStart, its StartingAllocation increased by absorbedBalance.</returns>
     public static EarMarkPattern StartOn(EarMarkPattern plan, FinancialPattern goal, DateOnly newStart, decimal absorbedBalance)
     {
         if (newStart <= plan.DatePattern.ActiveStart)
@@ -69,21 +69,11 @@ public static class PatternTruncation
                 nameof(newStart));
         }
 
-        var trimmedDatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-        {
-            Frequency = plan.DatePattern.Frequency,
-            Interval = plan.DatePattern.Interval,
-            ByDay = plan.DatePattern.ByDay,
-            ByMonthDay = plan.DatePattern.ByMonthDay,
-            DtStart = newStart,
-            Until = plan.DatePattern.Until,
-        });
-
         return EarMarkPattern.Create(
             new EarMarkPatternOptions
             {
                 FinanceId = plan.FinanceId,
-                DatePattern = trimmedDatePattern,
+                DatePattern = plan.DatePattern.ReanchoredToStartOn(newStart),
                 Amount = plan.Amount,
                 StartingAllocation = plan.StartingAllocation + absorbedBalance,
             },

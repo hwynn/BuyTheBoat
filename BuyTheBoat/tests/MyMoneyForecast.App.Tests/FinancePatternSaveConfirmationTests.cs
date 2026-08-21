@@ -829,6 +829,26 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
     // ---- shared scenario-building helpers ----------------------------------
 
+    // M2's front-truncation — the Start-side twin of the back-truncation
+    // crash fix. A future bill (starts after AsOf, so editing its Start is
+    // non-Critical and saves in place) whose Start is pushed later leaves its
+    // plan starting before it — a 3.11.2.a2 violation that used to crash the
+    // next EarMarkPatternRepository.GetAll(). The clamp brings the plan in line.
+    [Fact]
+    public void Moving_a_future_goals_start_forward_clamps_its_plan_and_doesnt_crash_the_next_read()
+    {
+        var bill = Bill(1, "Gym", -40m, new DateOnly(2025, 8, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 8, 1), new DateOnly(2025, 12, 1)));
+
+        var editedBill = Bill(1, "Gym", -40m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        Confirmation(1, editedBill, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var plans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 1).ToList(); // reads back without throwing
+        plans.ShouldHaveSingleItem();
+        plans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 9, 1)); // clamped to the goal's new Start
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
