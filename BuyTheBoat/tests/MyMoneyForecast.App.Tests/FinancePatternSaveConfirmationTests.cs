@@ -948,6 +948,27 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // and its plan was re-rated to match
     }
 
+    // Cross-boundary Q6, slice 2 — the shape-change forced consolidation. The
+    // later segment is funded by two concurrent plans; changing the current
+    // segment's recurrence shape and carrying it forward moves the later
+    // segment's occurrence dates, so keeping its plans separate isn't workable —
+    // they're folded into one plan re-aligned to the new schedule.
+    [Fact]
+    public void Carrying_a_shape_change_forward_folds_a_later_segments_plans_into_one()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31), byMonthDay: 1);
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1), byMonthDay: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var reshapedCurrent = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31), byMonthDay: 15);
+        Confirmation(1, reshapedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        _earMarkPatterns.GetAll().Count(p => p.FinanceId == 2).ShouldBe(1); // the two concurrent plans were folded into one
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

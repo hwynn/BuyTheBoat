@@ -1556,7 +1556,7 @@ public sealed class FinancePatternSaveConfirmation
         ReconcileCascadedSuccessorSavingsPlans(cascadeTouchedSuccessors);
     }
 
-    /// <summary>[WRITES FILE] After an Amount/shape change carries forward onto later chain segments, brings each touched successor's OWN savings plan back in line with the new figure — so the carry-forward doesn't leave a later segment saving toward the old one (planning/28's cross-boundary Q6). SLICE 1: handles only the single-EarMarkPattern, amount-only case, re-rated in place by the same proportional EarmarkScaling.Scale a directly-edited goal uses (choosing "carry forward" is itself the consent, so no extra question). Still to come: a shape change (needs EarmarkConsolidation to re-align the dates) and a successor with MORE THAN ONE plan (needs the combine-or-keep-separate question) — both left untouched here, so those successors' plans stay as they were for now.</summary>
+    /// <summary>[WRITES FILE] After an Amount/shape change carries forward onto later chain segments, brings each touched successor's OWN savings plan back in line with the new figure — so the carry-forward doesn't leave a later segment saving toward the old one (planning/28's cross-boundary Q6). Choosing "carry forward" is itself the consent, so nothing here asks again. A shape change forces consolidation into one re-aligned plan (EarmarkConsolidation.Consolidate) regardless of plan count — the settled rule, since moving the occurrence dates means every plan's own timing has to be re-derived, which one fresh plan does correctly and individually re-dating several doesn't. An amount-only change on a single plan is re-rated proportionally in place (EarmarkScaling.Scale). Still to come: an amount-only change on a successor with MORE THAN ONE plan — that needs the combine-or-keep-separate question, and is left untouched here for now.</summary>
     /// <param name="touched">Each cascade-touched successor as (pre-cascade pattern, cascaded pattern), in no particular order.</param>
     private void ReconcileCascadedSuccessorSavingsPlans(IReadOnlyList<(FinancialPattern Before, FinancialPattern After)> touched)
     {
@@ -1569,17 +1569,26 @@ public sealed class FinancePatternSaveConfirmation
 
         foreach (var (before, after) in touched)
         {
-            var amountChanged = before.Amount != after.Amount;
-            var shapeChanged = !before.DatePattern.HasSameShapeAs(after.DatePattern);
-            if (!amountChanged || shapeChanged)
+            var plans = book.EarMarkPatternsFor(after.FinanceId);
+            if (plans.Count == 0)
             {
-                continue; // slice 1 handles only an amount-only carry-forward
+                continue; // nothing funding this successor to reconcile
             }
 
-            var plans = book.EarMarkPatternsFor(after.FinanceId);
-            if (plans.Count != 1)
+            if (!before.DatePattern.HasSameShapeAs(after.DatePattern))
             {
-                continue; // a multi-plan successor needs the combine-or-keep-separate question (a later slice)
+                ConsolidateSuccessorPlans(after, plans); // shape moved the dates — forced re-align, no keep-separate choice
+                continue;
+            }
+
+            if (before.Amount == after.Amount)
+            {
+                continue; // dates and amount both unchanged for this successor
+            }
+
+            if (plans.Count > 1)
+            {
+                continue; // amount-only with several plans — needs the combine-or-keep-separate question (a later slice)
             }
 
             foreach (var scaled in EarmarkScaling.Scale(new ScaleRequest
@@ -1592,6 +1601,27 @@ public sealed class FinancePatternSaveConfirmation
                 _repositories.EarMarkPatterns.Save(scaled); // Scale keeps each plan's own (FinanceId, Start) — an in-place update
             }
         }
+    }
+
+    /// <summary>[WRITES FILE] Folds every EarMarkPattern funding one cascade-touched successor into a single plan re-aligned to its new schedule (EarmarkConsolidation.Consolidate), deleting the old rows and saving the one replacement. Used when a carry-forward changes the recurrence shape, where keeping the plans separate isn't workable — each would need its own timing re-derived against the moved dates.</summary>
+    /// <param name="goal">The successor in its cascaded (new-shape) form — what the consolidated plan is sized and validated against.</param>
+    /// <param name="plans">Its existing savings plans, to fold into one.</param>
+    private void ConsolidateSuccessorPlans(FinancialPattern goal, IReadOnlyList<EarMarkPattern> plans)
+    {
+        var consolidated = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = plans,
+            ManualEarmarksForThisGoal = _repositories.ManualEarmarks.GetAll().Where(earmark => earmark.FinanceId == goal.FinanceId).ToList(),
+            AllPatterns = _repositories.FinancialPatterns.GetAll(),
+            CurrentJar = JarOn(_requestForecast().AsOfDate, goal.FinanceId),
+        }).ConsolidatedPlan;
+
+        foreach (var plan in plans)
+        {
+            _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+        }
+        _repositories.EarMarkPatterns.Save(consolidated);
     }
 
     /// <summary>[WRITES FILE] M2's cut-occurrence preservation (reverse break-off): when a Start move forward drops repeated occurrences from this goal's own plans AND a predecessor segment has just stretched to cover the vacated period, those occurrences survive as a new EarMarkPattern under that predecessor rather than being let go — the user's own conscious contribution schedule for those dates. Only ever fires for a FUTURE in-place Start move (a Critical, past-touching one breaks off instead), so the plans hold no accumulated real money yet: the migrated plan starts at 0m and simply re-generates the dropped occurrences under the predecessor's finance_id. A dropped span with no occurrence is let go (nothing to preserve). ASSUMPTION (M2 piece 2, to compose with later pieces): the predecessor's OWN plan is not also stretched over the period (piece 3 — extend-outward), so the migrated plan sits contiguously after it with no overlap to merge (M1); once those land this joins them. Reads the original (pre-clamp) plans from _frontTruncations, captured before any save, and runs last so the predecessor's own stretched row is already persisted (the migrated plan must validate against it).</summary>
