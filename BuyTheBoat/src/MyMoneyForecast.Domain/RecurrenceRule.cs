@@ -98,14 +98,19 @@ public sealed class RecurrenceRule
     /// <param name="other">The pattern to check for an overlapping span.</param>
     public bool ActiveSpansOverlap(RecurrenceRule other) => ActiveStart <= other.Until && other.ActiveStart <= Until;
 
+    /// <summary>[CALC] Whether two rules share the same recurrence SHAPE — Frequency, Interval, ByDay, and ByMonthDay — ignoring where each begins and ends. What tells an amount-only edit apart from one that also moves the occurrence dates.</summary>
+    /// <param name="other">The rule to compare shapes with.</param>
+    public bool HasSameShapeAs(RecurrenceRule other) =>
+        Frequency == other.Frequency
+        && Interval == other.Interval
+        && ByDay.SequenceEqual(other.ByDay)
+        && ByMonthDay.SequenceEqual(other.ByMonthDay);
+
     /// <summary>[CALC] Whether a single rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences — nothing shifted, added, or dropped. Needs the same recurrence shape (Frequency/Interval/ByDay/ByMonthDay), the same phase, and no gap between them a merged rule would fill in. The rrule half of EarMarkPattern.CanJoinWithoutConsequence (M1's silent join); a pair whose merge WOULD move a date is a genuine difference, left for a with-consequence consolidation instead.</summary>
     /// <param name="other">The rule to test merging with.</param>
     public bool CanMergeWith(RecurrenceRule other)
     {
-        if (Frequency != other.Frequency
-            || Interval != other.Interval
-            || !ByDay.SequenceEqual(other.ByDay)
-            || !ByMonthDay.SequenceEqual(other.ByMonthDay))
+        if (!HasSameShapeAs(other))
         {
             return false;
         }

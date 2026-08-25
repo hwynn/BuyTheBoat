@@ -1448,6 +1448,12 @@ public sealed class FinancePatternSaveConfirmation
         // plan occurrences under it once every finance-row change here is saved.
         FinancialPattern? extendedPredecessor = null;
 
+        // Later segments the Amount/shape cascade actually touched, each as
+        // (pre-cascade, cascaded) — their own savings plans get reconciled to the
+        // new figure once the finance rows are saved (cross-boundary Q6), so a
+        // carry-forward doesn't leave a later segment saving toward the old one.
+        var cascadeTouchedSuccessors = new List<(FinancialPattern Before, FinancialPattern After)>();
+
         var predecessors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart < context.Saved.DatePattern.ActiveStart).ToList();
         var successors = context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart).ToList();
 
@@ -1497,9 +1503,13 @@ public sealed class FinancePatternSaveConfirmation
                 .Select(pattern => toSave.TryGetValue(pattern.FinanceId, out var adjusted) ? adjusted : pattern)
                 .ToList();
 
-            foreach (var cascaded in BreakOffFactory.CascadeForward(_proposedPattern.DatePattern, _proposedPattern.Amount, stillStanding))
+            var cascaded = BreakOffFactory.CascadeForward(_proposedPattern.DatePattern, _proposedPattern.Amount, stillStanding);
+            for (var i = 0; i < cascaded.Count; i++)
             {
-                toSave[cascaded.FinanceId] = cascaded;
+                // CascadeForward preserves stillStanding's order, so index i pairs
+                // each successor's pre-cascade shape with its cascaded one.
+                toSave[cascaded[i].FinanceId] = cascaded[i];
+                cascadeTouchedSuccessors.Add((stillStanding[i], cascaded[i]));
             }
         }
 
@@ -1541,6 +1551,46 @@ public sealed class FinancePatternSaveConfirmation
         if (extendedPredecessor is { } predecessor)
         {
             PreserveDroppedOccurrencesUnderPredecessor(predecessor);
+        }
+
+        ReconcileCascadedSuccessorSavingsPlans(cascadeTouchedSuccessors);
+    }
+
+    /// <summary>[WRITES FILE] After an Amount/shape change carries forward onto later chain segments, brings each touched successor's OWN savings plan back in line with the new figure — so the carry-forward doesn't leave a later segment saving toward the old one (planning/28's cross-boundary Q6). SLICE 1: handles only the single-EarMarkPattern, amount-only case, re-rated in place by the same proportional EarmarkScaling.Scale a directly-edited goal uses (choosing "carry forward" is itself the consent, so no extra question). Still to come: a shape change (needs EarmarkConsolidation to re-align the dates) and a successor with MORE THAN ONE plan (needs the combine-or-keep-separate question) — both left untouched here, so those successors' plans stay as they were for now.</summary>
+    /// <param name="touched">Each cascade-touched successor as (pre-cascade pattern, cascaded pattern), in no particular order.</param>
+    private void ReconcileCascadedSuccessorSavingsPlans(IReadOnlyList<(FinancialPattern Before, FinancialPattern After)> touched)
+    {
+        if (touched.Count == 0)
+        {
+            return;
+        }
+
+        var book = _requestForecast().Book;
+
+        foreach (var (before, after) in touched)
+        {
+            var amountChanged = before.Amount != after.Amount;
+            var shapeChanged = !before.DatePattern.HasSameShapeAs(after.DatePattern);
+            if (!amountChanged || shapeChanged)
+            {
+                continue; // slice 1 handles only an amount-only carry-forward
+            }
+
+            var plans = book.EarMarkPatternsFor(after.FinanceId);
+            if (plans.Count != 1)
+            {
+                continue; // a multi-plan successor needs the combine-or-keep-separate question (a later slice)
+            }
+
+            foreach (var scaled in EarmarkScaling.Scale(new ScaleRequest
+            {
+                Goal = after,
+                PreviousGoalAmount = before.Amount,
+                SurvivingPlans = plans,
+            }))
+            {
+                _repositories.EarMarkPatterns.Save(scaled); // Scale keeps each plan's own (FinanceId, Start) — an in-place update
+            }
         }
     }
 

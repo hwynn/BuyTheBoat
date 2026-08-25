@@ -928,6 +928,26 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plan.DatePattern.Until.ShouldBe(new DateOnly(2025, 4, 1)); // untouched — it never tracked the goal's end
     }
 
+    // Cross-boundary Q6, slice 1 — the single-plan re-rate. A two-segment Rent
+    // chain whose later segment is funded by one plan: raising the current
+    // segment's amount and carrying it forward must re-rate that later plan to
+    // match, not leave it saving toward the old figure.
+    [Fact]
+    public void Carrying_an_amount_change_forward_re_rates_a_later_segments_single_savings_plan()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        Confirmation(1, raisedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // the later bill cascaded
+        _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // and its plan was re-rated to match
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
