@@ -98,6 +98,31 @@ public sealed class RecurrenceRule
     /// <param name="other">The pattern to check for an overlapping span.</param>
     public bool ActiveSpansOverlap(RecurrenceRule other) => ActiveStart <= other.Until && other.ActiveStart <= Until;
 
+    /// <summary>[CALC] Whether a single rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences — nothing shifted, added, or dropped. Needs the same recurrence shape (Frequency/Interval/ByDay/ByMonthDay), the same phase, and no gap between them a merged rule would fill in. The rrule half of EarMarkPattern.CanJoinWithoutConsequence (M1's silent join); a pair whose merge WOULD move a date is a genuine difference, left for a with-consequence consolidation instead.</summary>
+    /// <param name="other">The rule to test merging with.</param>
+    public bool CanMergeWith(RecurrenceRule other)
+    {
+        if (Frequency != other.Frequency
+            || Interval != other.Interval
+            || !ByDay.SequenceEqual(other.ByDay)
+            || !ByMonthDay.SequenceEqual(other.ByMonthDay))
+        {
+            return false;
+        }
+
+        var mergedStart = ActiveStart < other.ActiveStart ? ActiveStart : other.ActiveStart;
+        var mergedUntil = Until > other.Until ? Until : other.Until;
+        var merged = ReanchoredToStartOn(mergedStart).WithUntil(mergedUntil);
+
+        var union = GetOccurrences()
+            .Concat(other.GetOccurrences())
+            .Distinct()
+            .OrderBy(date => date)
+            .ToList();
+
+        return merged.GetOccurrences().SequenceEqual(union);
+    }
+
     /// <summary>[CALC] This rule's full state as options, raw DtStart anchor and ActiveFrom included — for persistence/serialization that must round-trip the exact rule. Ordinary callers want ActiveStart and the span methods, not this.</summary>
     public RecurrenceRuleOptions ToOptions() => new()
     {

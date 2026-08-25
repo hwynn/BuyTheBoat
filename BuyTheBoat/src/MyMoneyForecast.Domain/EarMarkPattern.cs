@@ -74,4 +74,43 @@ public sealed class EarMarkPattern
 
         return new EarMarkPattern(options);
     }
+
+    /// <summary>[CALC] Whether two savings plans under one goal can be folded into a single plan with no change anyone would notice (M1's silent join) — same Amount, and recurrence shapes that merge to exactly the union of their occurrences (RecurrenceRule.CanMergeWith). A true result means JoinedWith yields an identical contribution schedule, so there's no user choice worth asking about; a false one is a genuine difference, left for a with-consequence consolidation to resolve. StartingAllocation is not part of the test — the join simply sums the two jars.</summary>
+    /// <param name="a">One plan.</param>
+    /// <param name="b">The other plan — expected to already share a's FinanceId.</param>
+    public static bool CanJoinWithoutConsequence(EarMarkPattern a, EarMarkPattern b) =>
+        a.Amount == b.Amount && a.DatePattern.CanMergeWith(b.DatePattern);
+
+    /// <summary>[CALC] Folds this plan and another under the same goal into one plan covering the union of their spans — same Amount and recurrence shape, its jar the sum of the two StartingAllocations. Call only when CanJoinWithoutConsequence(this, other) holds (it's re-checked, and rejected otherwise): the merged schedule is then identical to running the two separately. Validated against the goal, same as Create.</summary>
+    /// <param name="other">The plan to join with — must share this plan's FinanceId and Amount and have a mergeable shape.</param>
+    /// <param name="goal">The FinancialPattern both plans fund — validated against.</param>
+    public EarMarkPattern JoinedWith(EarMarkPattern other, FinancialPattern goal)
+    {
+        if (other.FinanceId != FinanceId)
+        {
+            throw new ArgumentException(
+                $"Can't join plans under different goals ({FinanceId} vs {other.FinanceId}).",
+                nameof(other));
+        }
+
+        if (!CanJoinWithoutConsequence(this, other))
+        {
+            throw new ArgumentException(
+                "These two plans can't be joined without consequence — they need the same Amount and a mergeable shape.",
+                nameof(other));
+        }
+
+        var mergedStart = DatePattern.ActiveStart < other.DatePattern.ActiveStart ? DatePattern.ActiveStart : other.DatePattern.ActiveStart;
+        var mergedUntil = DatePattern.Until > other.DatePattern.Until ? DatePattern.Until : other.DatePattern.Until;
+
+        return Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = FinanceId,
+                DatePattern = DatePattern.ReanchoredToStartOn(mergedStart).WithUntil(mergedUntil),
+                Amount = Amount,
+                StartingAllocation = StartingAllocation + other.StartingAllocation,
+            },
+            goal);
+    }
 }
