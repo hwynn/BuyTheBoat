@@ -288,6 +288,25 @@ public sealed class FinancePatternSaveConfirmation
         IReadOnlyList<EarMarkPattern> PlansStartingBeforeNewStart,
         IReadOnlyList<DateOnly> OrphanedManualEarmarkDates);
 
+    // The OUTWARD counterpart to the two truncations (M2 piece 3): when the
+    // proposed pattern's own Start or Until moves OUTWARD in place (Until later,
+    // or a future Start earlier), a plan that shared that exact boundary tracks
+    // it out too — the same "a shared boundary means the plan follows the goal"
+    // rule the truncations enforce on the way in, now on the way out, adding
+    // occurrences at the plan's own rhythm and amount. Worked out before anything
+    // is saved (it needs the goal's OLD boundary, gone once PerformSave writes the
+    // new one); null when no boundary moved outward, or no plan shared the one
+    // that did. SCOPE (piece 3): only the directly-edited goal's OWN plans, not a
+    // chain neighbor stretched by ExtendStart/ExtendUntil — that case overlaps the
+    // reverse-break-off and waits on the silent join (M1) to settle the overlap.
+    // The "[bill] occurs N more times" announcement and the over/underfund health
+    // check are deferred too; the extend itself is silent, like the truncations.
+    private BoundaryExtensionPlan? _boundaryExtensions;
+
+    private sealed record BoundaryExtensionPlan(
+        IReadOnlyList<EarMarkPattern> PlansSharingOldStart,
+        IReadOnlyList<EarMarkPattern> PlansSharingOldUntil);
+
     // planning/27's own Phase 1 — the saved pattern plus every other
     // same-Source FinancialPattern (concurrent ones already excluded — see
     // DetermineChainConditionsIfApplicable's own note), captured before
@@ -551,6 +570,12 @@ public sealed class FinancePatternSaveConfirmation
         // otherwise a plan left starting before the new Start crashes the next
         // GetAll() exactly as an over-long Until used to.
         DetermineFrontTruncationsIfApplicable();
+
+        // The outward twin of the two truncations (M2 piece 3): a boundary of the
+        // goal moving OUT, with a plan that shared it, means that plan grows to
+        // keep tracking it. Same "read the old boundary before PerformSave writes
+        // the new one" timing as its inward siblings.
+        DetermineBoundaryExtensionsIfApplicable();
 
         // SETTLED 2026-08-11 (author): Item F's own question applies
         // regardless of which Item E path gets chosen — it is NOT
@@ -955,6 +980,32 @@ public sealed class FinancePatternSaveConfirmation
         _frontTruncations = new FrontTruncationPlan(plansStartingBeforeNewStart, orphanedDates);
     }
 
+    /// <summary>[READS FILE] The OUTWARD counterpart to the two Determine…Truncations (M2 piece 3): works out whether the proposed pattern's own Start or Until has moved OUTWARD from what's saved (Until later, or a future Start earlier) and, if so, which of its plans shared that exact boundary and should therefore track it out — captured before PerformSave overwrites the goal's old boundary. Stored in _boundaryExtensions; null when nothing moved outward, or no plan shared the moved boundary. Scoped to the directly-edited goal's own plans only (see the field's own note). internal so a test can call it directly ahead of ApplyBoundaryExtensionsIfNeeded.</summary>
+    internal void DetermineBoundaryExtensionsIfApplicable()
+    {
+        var saved = _repositories.FinancialPatterns.GetByFinanceId(_financeId);
+        if (saved is null)
+        {
+            return; // brand-new pattern — no old boundary to have moved outward from
+        }
+
+        var plans = _requestForecast().Book.EarMarkPatternsFor(_financeId);
+
+        var sharingOldUntil = _proposedPattern.DatePattern.Until > saved.DatePattern.Until
+            ? plans.Where(plan => plan.DatePattern.Until == saved.DatePattern.Until).ToList()
+            : [];
+        var sharingOldStart = _proposedPattern.DatePattern.ActiveStart < saved.DatePattern.ActiveStart
+            ? plans.Where(plan => plan.DatePattern.ActiveStart == saved.DatePattern.ActiveStart).ToList()
+            : [];
+
+        if (sharingOldStart.Count == 0 && sharingOldUntil.Count == 0)
+        {
+            return; // nothing moved outward, or no plan shared the boundary that did
+        }
+
+        _boundaryExtensions = new BoundaryExtensionPlan(sharingOldStart, sharingOldUntil);
+    }
+
     /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. Was a single hardcoded XAML string until 2026-08-17, when ConsolidationNeeded was widened to also force consolidation for a start_date change, not just a recurrence-shape one — the old text ("because the schedule itself is changing") would have been actively wrong for a start-only edit.</summary>
     private string DescribeConsolidationForcedReason()
     {
@@ -1249,6 +1300,7 @@ public sealed class FinancePatternSaveConfirmation
         _repositories.FinancialPatterns.Save(_proposedPattern, _accountId);
         ApplyBackTruncationsIfNeeded();
         ApplyFrontTruncationsIfNeeded();
+        ApplyBoundaryExtensionsIfNeeded();
     }
 
     /// <summary>[WRITES FILE] Carries out the fix DetermineBackTruncationsIfApplicable already worked out (before anything was saved): deletes any ManualEarmark now dated after the goal's own new Until, then brings every EarMarkPattern that still exceeds it back in line — truncated via PatternTruncation.EndOn (the same domain primitive a plain stop/break-off already uses to keep a plan's Until from exceeding its goal's) when it still has some active span left inside the new range, or deleted outright when its own Start is already past the new Until (EndOn can't shorten a plan to end before it begins — that plan was never going to contribute anything under the new range at all). A no-op whenever _backTruncations is null — every existing plan already fit, or DetermineBackTruncationsIfApplicable was never called. Called from inside PerformSave, right after the FinancialPattern save it depends on — see this class's own "Back-boundary invariant" header note for why this runs unconditionally rather than only alongside Items B/E/F's own confirmation.</summary>
@@ -1318,6 +1370,65 @@ public sealed class FinancePatternSaveConfirmation
             _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
             _repositories.EarMarkPatterns.Save(clamped);
         }
+    }
+
+    /// <summary>[WRITES FILE] The OUTWARD counterpart to the two Apply…Truncations (M2 piece 3): carries out the extend DetermineBoundaryExtensionsIfApplicable worked out — each plan that shared the goal's own now-outward-moved boundary grows to match it, adding occurrences at its own rhythm and amount. Until-outward keeps the plan's DtStart (WithUntil), so its persistence key is stable and Save just replaces it; Start-outward re-anchors phase-preserving (ReanchoredToStartOn — the same primitive StartOn uses) and can move DtStart, so that path deletes the old-key row first. A plan sharing BOTH outward-moved boundaries is grown on both in one rewrite. Skips a plan a truncation already owns this Run() (the rare edit moving one boundary out and the other in on the same plan) to avoid colliding on its key — that plan keeps its truncated shape, not yet extended. A no-op whenever _boundaryExtensions is null. Called from inside PerformSave, right after the two ApplyTruncations.</summary>
+    private void ApplyBoundaryExtensionsIfNeeded()
+    {
+        if (_boundaryExtensions is not { } ext)
+        {
+            return;
+        }
+
+        var newStart = _proposedPattern.DatePattern.ActiveStart;
+        var newUntil = _proposedPattern.DatePattern.Until;
+
+        foreach (var plan in ext.PlansSharingOldStart.Concat(ext.PlansSharingOldUntil).DistinctBy(plan => plan.DatePattern.DtStart))
+        {
+            if (IsAlreadyOwnedByATruncation(plan))
+            {
+                continue;
+            }
+
+            var key = plan.DatePattern.DtStart;
+            var extendsUntil = ext.PlansSharingOldUntil.Any(p => p.DatePattern.DtStart == key);
+            var extendsStart = ext.PlansSharingOldStart.Any(p => p.DatePattern.DtStart == key);
+
+            var grownPattern = plan.DatePattern;
+            if (extendsUntil)
+            {
+                grownPattern = grownPattern.WithUntil(newUntil);
+            }
+            if (extendsStart)
+            {
+                grownPattern = grownPattern.ReanchoredToStartOn(newStart); // preserves the Until just set above
+            }
+
+            var extended = EarMarkPattern.Create(
+                new EarMarkPatternOptions
+                {
+                    FinanceId = plan.FinanceId,
+                    DatePattern = grownPattern,
+                    Amount = plan.Amount,
+                    StartingAllocation = plan.StartingAllocation,
+                },
+                _proposedPattern);
+
+            if (extendsStart)
+            {
+                _repositories.EarMarkPatterns.Delete(plan.FinanceId, key); // ReanchoredToStartOn can move the key
+            }
+            _repositories.EarMarkPatterns.Save(extended);
+        }
+    }
+
+    /// <summary>[CALC] Whether a plan is already being rewritten this Run() by one of the two truncations — so ApplyBoundaryExtensionsIfNeeded leaves it alone rather than colliding on its persistence key. True only in the rare edit that moves one of a plan's boundaries outward while the other moves inward.</summary>
+    /// <param name="plan">The plan an extension is considering rewriting.</param>
+    private bool IsAlreadyOwnedByATruncation(EarMarkPattern plan)
+    {
+        var key = plan.DatePattern.DtStart;
+        return (_backTruncations is { } back && back.PlansExceedingNewUntil.Any(p => p.DatePattern.DtStart == key))
+            || (_frontTruncations is { } front && front.PlansStartingBeforeNewStart.Any(p => p.DatePattern.DtStart == key));
     }
 
     /// <summary>[WRITES FILE] Carries out whatever Item C/D/E/F (planning/25 — the mechanism, the gap-folding rule, the retroactive-correction ruling, and the multiple-EarMarkPatterns ruling, respectively) decided. Real today for: a break-off with 0 or 1 existing EarMarkPattern (PerformSingleSuccessorBreakOff); a break-off that consolidates more than one (PerformMultiPlanBreakOff, forced or chosen); a single-plan retroactive correction's own narrowing (NarrowSurvivingPlanIfNeeded); a multi-plan retroactive correction's own in-place consolidation, forced or chosen (ConsolidateSurvivingPlansIfNeeded, backed by EarmarkConsolidation.Consolidate); and — new 2026-08-14 — that same retroactive-correction side's own amount-only scaling, when the plans are kept separate rather than consolidated (ScaleSurvivingPlansIfNeeded, backed by the new EarmarkScaling.Scale). Still TODO: keeping multiple plans separate on the BREAK-OFF side at all (with or without scaling), and keeping them separate on the retroactive-correction side for a start_date change specifically (only the amount-only case is resolved).</summary>

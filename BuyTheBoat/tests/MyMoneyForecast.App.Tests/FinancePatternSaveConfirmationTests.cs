@@ -876,6 +876,58 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         preserved.DatePattern.GetOccurrences().ShouldBe([new DateOnly(2025, 9, 1), new DateOnly(2025, 10, 1)]); // exactly the dropped days
     }
 
+    // M2 piece 3 — extend-outward. A plan whose Until matched its goal's own Until
+    // shared that boundary, so pushing the goal's end_date later carries the plan
+    // out with it, adding contributions at the plan's own rhythm.
+    [Fact]
+    public void Extending_a_goals_end_date_grows_a_plan_that_shared_that_end_to_match()
+    {
+        var bill = Bill(1, "Gym", -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 1)));
+
+        var extendedBill = Bill(1, "Gym", -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 11, 1));
+        Confirmation(1, extendedBill, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var plan = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 1);
+        plan.DatePattern.Until.ShouldBe(new DateOnly(2025, 11, 1)); // grew to the goal's new end
+        plan.DatePattern.GetOccurrences().ShouldContain(new DateOnly(2025, 11, 1)); // and the new months are really there
+    }
+
+    // The Start-side twin: a future goal's Start pulled earlier carries a plan
+    // that shared it back too, phase-preserving.
+    [Fact]
+    public void Moving_a_future_goals_start_earlier_grows_a_plan_that_shared_that_start_to_match()
+    {
+        var bill = Bill(1, "Gym", -40m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        var extendedBill = Bill(1, "Gym", -40m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 1));
+        Confirmation(1, extendedBill, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var plan = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 1);
+        plan.DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1)); // grew back to the goal's new start
+        plan.DatePattern.GetOccurrences().ShouldContain(new DateOnly(2025, 7, 1)); // the newly-covered months are really there
+    }
+
+    // The boundary really has to be SHARED — a plan that deliberately ended
+    // before its goal never tracked the goal's end, so extending the goal leaves
+    // it exactly where it was.
+    [Fact]
+    public void Extending_a_goals_end_date_leaves_a_plan_that_ended_earlier_alone()
+    {
+        var bill = Bill(1, "Gym", -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 4, 1))); // ends Apr; goal ends Aug
+
+        var extendedBill = Bill(1, "Gym", -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 11, 1));
+        Confirmation(1, extendedBill, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var plan = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 1);
+        plan.DatePattern.Until.ShouldBe(new DateOnly(2025, 4, 1)); // untouched — it never tracked the goal's end
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
