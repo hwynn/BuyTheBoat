@@ -91,6 +91,20 @@ public static class ConfirmationRowIds
     public const string Cascade = "cascade";
     public const string TrivialFieldsCascade = "trivial-fields-cascade";
     public const string PacedBillsCascade = "paced-bills-cascade";
+
+    // One combine-or-keep-separate question per later finance pattern the edited
+    // finance pattern's amount change is carried forward onto that's funded by
+    // more than one earmark pattern (cross-boundary Q6). The id carries the later
+    // finance pattern's finance_id, since there can be several at once —
+    // deliberately its own row kind, never the break-off Consolidation above, so
+    // the two never share behavior (the break-off folds into a new segment; this
+    // folds a later finance pattern's earmark patterns in place, or scales them
+    // if kept separate).
+    public const string CrossBoundaryConsolidationPrefix = "cross-boundary-consolidation-";
+
+    /// <summary>[CALC] The row id of the cross-boundary combine-or-keep-separate question for one later segment, by its finance_id.</summary>
+    /// <param name="financeId">The later segment the question is about.</param>
+    public static string CrossBoundaryConsolidation(int financeId) => CrossBoundaryConsolidationPrefix + financeId;
 }
 
 // The user's answer, as the raw selections the popup reports — one option

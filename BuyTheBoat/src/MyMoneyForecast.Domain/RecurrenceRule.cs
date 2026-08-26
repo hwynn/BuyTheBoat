@@ -106,7 +106,7 @@ public sealed class RecurrenceRule
         && ByDay.SequenceEqual(other.ByDay)
         && ByMonthDay.SequenceEqual(other.ByMonthDay);
 
-    /// <summary>[CALC] Whether a single rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences — nothing shifted, added, or dropped. Needs the same recurrence shape (Frequency/Interval/ByDay/ByMonthDay), the same phase, and no gap between them a merged rule would fill in. The rrule half of EarMarkPattern.CanJoinWithoutConsequence (M1's silent join); a pair whose merge WOULD move a date is a genuine difference, left for a with-consequence consolidation instead.</summary>
+    /// <summary>[CALC] Whether a single rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences — nothing shifted, added, or dropped. Needs the same recurrence shape (Frequency/Interval/ByDay/ByMonthDay), the same cadence, and no gap between them a merged rule would fill in. The rrule half of EarMarkPattern.CanJoinWithoutConsequence (M1's silent join); a pair whose merge WOULD move a date is a genuine difference, left for a with-consequence consolidation instead.</summary>
     /// <param name="other">The rule to test merging with.</param>
     public bool CanMergeWith(RecurrenceRule other)
     {
@@ -141,14 +141,14 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     };
 
-    /// <summary>[CALC] A copy re-anchored so its active span begins on the given date while KEEPING its cadence phase — the safe replacement for WithStart when relinking a chain. Its occurrences stay on the same rhythm (unlike WithStart, which re-phases an interval>1 or implicit-by-rule pattern); only where the span begins, and how far back that rhythm reaches when it grows earlier, changes. Until, amount, and shape are untouched.</summary>
-    /// <param name="newActiveStart">Where the re-anchored pattern's active span should begin.</param>
+    /// <summary>[CALC] A copy whose active span begins on the given date while KEEPING its cadence — the safe replacement for WithStart when relinking a chain. Its occurrences stay on the same days (unlike WithStart, which shifts an interval>1 or implicit-by-rule pattern onto different days); only where the span begins, and how far back that cadence reaches when it grows earlier, changes. Until, amount, and shape are untouched.</summary>
+    /// <param name="newActiveStart">Where the pattern's active span should begin.</param>
     public RecurrenceRule ReanchoredToStartOn(DateOnly newActiveStart)
     {
         // Walk this rule's own anchor back by whole cadence periods until it
-        // sits on or before the new start, so the phase grid is defined across
-        // the whole new span — needed when a segment grows backward. Stepping
-        // by exact periods never changes which dates the rhythm lands on, only
+        // sits on or before the new start, so its recurring days are defined
+        // across the whole new span — needed when a segment grows backward.
+        // Stepping by exact periods never changes which dates it lands on, only
         // how early it can be enumerated from.
         var anchor = DtStart;
         for (var guard = 0; anchor > newActiveStart && guard < 6000; guard++)
@@ -156,9 +156,9 @@ public sealed class RecurrenceRule
             anchor = StepBackOnePeriod(anchor);
         }
 
-        // The re-anchored DtStart is the first occurrence on that phase grid on
-        // or after the new start; a lead-in (ActiveFrom) fills the gap when it
-        // lands later, so the active span still begins exactly where asked.
+        // The new DtStart is the first occurrence on or after the new start; a
+        // lead-in (ActiveFrom) fills the gap when it lands later, so the active
+        // span still begins exactly where asked.
         var grid = Create(new RecurrenceRuleOptions
         {
             Frequency = Frequency,
@@ -185,7 +185,7 @@ public sealed class RecurrenceRule
         });
     }
 
-    /// <summary>[CALC] This date one cadence period earlier — a day/week/month/year step scaled by Interval — for walking an anchor back without shifting phase.</summary>
+    /// <summary>[CALC] This date one cadence period earlier — a day/week/month/year step scaled by Interval — for walking an anchor back without shifting the cadence.</summary>
     /// <param name="date">The date to step back from.</param>
     private DateOnly StepBackOnePeriod(DateOnly date) => Frequency switch
     {
@@ -224,7 +224,7 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     });
 
-    /// <summary>[CALC] Returns a copy with its rrule DtStart anchor moved to the given date — Until, ActiveFrom, and the rest stay the same. WARNING: for interval>1 or an implicit by-rule this re-phases the whole cadence (DtStart is the RFC 5545 anchor), so use it only when re-anchoring the rhythm is actually intended; ReanchoredToStartOn preserves phase instead.</summary>
+    /// <summary>[CALC] Returns a copy with its rrule DtStart anchor moved to the given date — Until, ActiveFrom, and the rest stay the same. WARNING: for interval>1 or an implicit by-rule this shifts the whole cadence onto different days (DtStart is the RFC 5545 anchor), so use it only when moving which days it lands on is actually intended; ReanchoredToStartOn keeps the cadence instead.</summary>
     /// <param name="start">The new rrule anchor date.</param>
     public RecurrenceRule WithStart(DateOnly start) => Create(new RecurrenceRuleOptions
     {

@@ -969,6 +969,57 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.GetAll().Count(p => p.FinanceId == 2).ShouldBe(1); // the two concurrent plans were folded into one
     }
 
+    // Cross-boundary Q6, slice 3 — the multi-plan combine-or-keep-separate choice,
+    // asked as its OWN row (never the break-off Consolidation one). Combine folds
+    // the later segment's plans in place.
+    [Fact]
+    public void Carrying_an_amount_change_forward_combines_a_later_segments_plans_when_the_user_chooses_to()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var confirmation = Confirmation(1, raisedCurrent, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            request.HasRow(ConfirmationRowIds.CrossBoundaryConsolidation(2)).ShouldBeTrue(); // asked as its own distinct row
+            return new ConfirmationOutcome
+            {
+                Proceed = true,
+                ChosenOptionIndex = new Dictionary<string, int> { [ConfirmationRowIds.CrossBoundaryConsolidation(2)] = 1 }, // combine
+            };
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        _earMarkPatterns.GetAll().Count(p => p.FinanceId == 2).ShouldBe(1); // folded into one
+    }
+
+    // The default (and headless) answer is keep-separate — each plan scaled
+    // proportionally to the new amount, both rows preserved.
+    [Fact]
+    public void Carrying_an_amount_change_forward_keeps_a_later_segments_plans_separate_by_default()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        Confirmation(1, raisedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue(); // no delegate — default keep-separate
+
+        var plans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 2).ToList();
+        plans.Count.ShouldBe(2); // both kept, scaled by the same 1.2 ratio
+        plans.ShouldContain(p => p.Amount == -720m); // -600 * 1.2
+        plans.ShouldContain(p => p.Amount == -480m); // -400 * 1.2
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

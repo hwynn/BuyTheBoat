@@ -25,7 +25,18 @@ internal sealed record RowInputs
     public string TrivialFieldsCascadeDescription { get; init; } = "";
     public bool PacedBillsCanCascade { get; init; }
     public string PacedBillsCascadeDescription { get; init; } = "";
+
+    // One entry per later finance pattern the edited finance pattern's amount
+    // change is carried forward onto that's funded by more than one earmark
+    // pattern — each becomes its own cross-boundary combine-or-keep-separate
+    // ChoiceRow. Empty unless the amount change is actually carried forward onto
+    // such a finance pattern.
+    public IReadOnlyList<CrossBoundaryConsolidationInput> CrossBoundaryConsolidations { get; init; } = [];
 }
+
+// One later segment that needs a cross-boundary combine-or-keep-separate question,
+// identified by its finance_id, with a short label naming which segment it is.
+internal sealed record CrossBoundaryConsolidationInput(int FinanceId, string Label);
 
 // The one row-projection both save-confirmation wrappers share
 // (FinancePatternSaveConfirmation and EarmarkPatternSaveConfirmation). Each
@@ -114,6 +125,26 @@ internal static class ConfirmationRowBuilder
                 [
                     new ChoiceOption("Apply it going forward too", "", r.CascadeDescription),
                     new ChoiceOption("Only this segment", "", r.CascadeDescription),
+                ],
+                DefaultIndex: 0,
+                Layout: OptionLayout.Stacked));
+        }
+
+        // Cross-boundary Q6 (planning/28): one question per later finance pattern
+        // the edited finance pattern's amount change is carried forward onto that's
+        // funded by more than one earmark pattern. Its OWN row kind, never the
+        // break-off Consolidation above — the two do different things and never
+        // appear together (an edit is a break-off or a carry-forward, not both).
+        // Flat for now; the reveal that nests these under the cascade choice is a
+        // later pass. Default "keep them separate" (0) — the less-destructive
+        // option, matching the break-off row's own default.
+        foreach (var crossBoundary in r.CrossBoundaryConsolidations)
+        {
+            rows.Add(new ChoiceRow(ConfirmationRowIds.CrossBoundaryConsolidation(crossBoundary.FinanceId),
+                $"A later segment ({crossBoundary.Label}) has more than one savings plan. When this change carries forward to it, what should happen to them?",
+                [
+                    new ChoiceOption("Keep them separate", "", ""),
+                    new ChoiceOption("Combine them into one", "", ""),
                 ],
                 DefaultIndex: 0,
                 Layout: OptionLayout.Stacked));

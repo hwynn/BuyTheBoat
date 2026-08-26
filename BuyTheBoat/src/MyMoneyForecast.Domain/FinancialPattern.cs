@@ -92,7 +92,7 @@ public sealed class FinancialPattern
         AutoRenew = AutoRenew,
     });
 
-    /// <summary>[CALC] Returns a copy with its rrule DtStart anchor moved to the given date — every other field unchanged. WARNING: this re-phases an interval>1 (or implicit-by-rule) cadence, since DtStart is the RFC 5545 anchor; use it only when re-anchoring the rhythm is intended (a direct Start edit). To relink a chain neighbor while keeping its rhythm, use ReanchoredToStartOn.</summary>
+    /// <summary>[CALC] Returns a copy with its rrule DtStart anchor moved to the given date — every other field unchanged. WARNING: this shifts an interval>1 (or implicit-by-rule) cadence onto different days, since DtStart is the RFC 5545 anchor; use it only when moving which days it lands on is intended (a direct Start edit). To relink a chain neighbor while keeping its cadence, use ReanchoredToStartOn.</summary>
     /// <param name="start">The new rrule anchor date.</param>
     public FinancialPattern WithStart(DateOnly start) => Create(new FinancialPatternOptions
     {
@@ -106,8 +106,8 @@ public sealed class FinancialPattern
         AutoRenew = AutoRenew,
     });
 
-    /// <summary>[CALC] Returns a copy re-anchored so its active span begins on the given date, keeping its cadence phase — every other field unchanged. Used by BreakOffFactory's chain-boundary resolution to nudge a successor's own start to stay contiguous without silently re-phasing an interval>1 neighbor.</summary>
-    /// <param name="newActiveStart">Where the re-anchored pattern's active span should begin.</param>
+    /// <summary>[CALC] Returns a copy whose active span begins on the given date, keeping its cadence — every other field unchanged. Used by BreakOffFactory's chain-boundary resolution to nudge a successor's own start to stay contiguous without silently shifting an interval>1 neighbor onto different days.</summary>
+    /// <param name="newActiveStart">Where the pattern's active span should begin.</param>
     public FinancialPattern ReanchoredToStartOn(DateOnly newActiveStart) => Create(new FinancialPatternOptions
     {
         FinanceId = FinanceId,
