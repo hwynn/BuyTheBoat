@@ -1020,6 +1020,32 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plans.ShouldContain(p => p.Amount == -480m); // -400 * 1.2
     }
 
+    // Dynamic reveal — the cross-boundary question is nested under the cascade
+    // "apply going forward" option, so the popup shows it only when the user
+    // actually carries the change forward, not as a flat, always-visible row.
+    [Fact]
+    public void The_cross_boundary_question_is_nested_under_the_carry_forward_option()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, raisedCurrent, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+        confirmation.Run();
+
+        captured.ShouldNotBeNull();
+        captured!.Rows.OfType<ChoiceRow>().ShouldNotContain(r => r.Id == ConfirmationRowIds.CrossBoundaryConsolidation(2)); // not a top-level row
+        var cascade = captured.Rows.OfType<ChoiceRow>().Single(r => r.Id == ConfirmationRowIds.Cascade);
+        cascade.Options[0].Children.OfType<ChoiceRow>().ShouldContain(r => r.Id == ConfirmationRowIds.CrossBoundaryConsolidation(2)); // nested under "apply going forward"
+        cascade.Options[1].Children.ShouldBeEmpty(); // nothing under "only this segment"
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

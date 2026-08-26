@@ -27,11 +27,14 @@ namespace MyMoneyForecast.App;
 public partial class EditingHistoryConfirmationWindow : Window
 {
     // One entry per ChoiceRow drawn — its radios (in option order), its options
-    // (for the consequence text), and the footer TextBlock under them. Keyed by
-    // row Id so ToOutcome can report each selection and the one shared
-    // OnOptionChecked handler can refresh the right footer.
+    // (for the consequence text), the footer TextBlock under them, and the
+    // per-option child-row panel (null for a leaf option) shown only while that
+    // option is selected (dynamic reveal). Keyed by row Id so ToOutcome can
+    // report each selection and the one shared OnOptionChecked handler can
+    // refresh the right footer and child panels.
     private sealed record ChoiceRowControls(
-        IReadOnlyList<RadioButton> Radios, IReadOnlyList<ChoiceOption> Options, TextBlock Footer);
+        IReadOnlyList<RadioButton> Radios, IReadOnlyList<ChoiceOption> Options, TextBlock Footer,
+        IReadOnlyList<FrameworkElement?> ChildPanels);
 
     private readonly Dictionary<string, ChoiceRowControls> _choiceRows = new();
 
@@ -105,11 +108,13 @@ public partial class EditingHistoryConfirmationWindow : Window
         };
 
         var radios = new List<RadioButton>(row.Options.Count);
+        var childPanels = new List<FrameworkElement?>(row.Options.Count);
         for (var i = 0; i < row.Options.Count; i++)
         {
+            var option = row.Options[i];
             var radio = new RadioButton
             {
-                Content = row.Options[i].Label,
+                Content = option.Label,
                 // Unique GroupName per row keeps each question's radios
                 // mutually exclusive without bleeding into the next question's.
                 GroupName = row.Id,
@@ -120,12 +125,34 @@ public partial class EditingHistoryConfirmationWindow : Window
             radio.Checked += OnOptionChecked;
             radios.Add(radio);
             optionsPanel.Children.Add(radio);
+
+            // An option's own child rows (dynamic reveal) — built recursively and
+            // indented under it, shown only while this option is selected. Their
+            // own ChoiceRows register themselves in _choiceRows too (via
+            // BuildRowControl), so ToOutcome reports their selections like any
+            // other, whether or not they happen to be visible.
+            if (option.Children.Count > 0)
+            {
+                var childPanel = new StackPanel { Margin = new Thickness(22, 2, 0, 6) };
+                foreach (var child in option.Children)
+                {
+                    childPanel.Children.Add(BuildRowControl(child));
+                }
+
+                childPanel.Visibility = i == row.DefaultIndex ? Visibility.Visible : Visibility.Collapsed;
+                childPanels.Add(childPanel);
+                optionsPanel.Children.Add(childPanel);
+            }
+            else
+            {
+                childPanels.Add(null);
+            }
         }
 
         container.Children.Add(optionsPanel);
         container.Children.Add(footer);
 
-        var controls = new ChoiceRowControls(radios, row.Options, footer);
+        var controls = new ChoiceRowControls(radios, row.Options, footer, childPanels);
         _choiceRows[row.Id] = controls;
         UpdateConsequenceFooter(controls); // set the footer for the default selection up front
 
@@ -141,6 +168,21 @@ public partial class EditingHistoryConfirmationWindow : Window
         if (sender is RadioButton { Tag: string rowId } && _choiceRows.TryGetValue(rowId, out var controls))
         {
             UpdateConsequenceFooter(controls);
+            RefreshChildPanels(controls);
+        }
+    }
+
+    // Show the selected option's child rows and hide the rest — the dynamic
+    // reveal. A group's radios fire Checked on the newly-selected one, so
+    // refreshing every option's panel here keeps them all in sync.
+    private static void RefreshChildPanels(ChoiceRowControls controls)
+    {
+        for (var i = 0; i < controls.Radios.Count; i++)
+        {
+            if (controls.ChildPanels[i] is { } panel)
+            {
+                panel.Visibility = controls.Radios[i].IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
     }
 

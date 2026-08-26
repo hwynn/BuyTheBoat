@@ -42,7 +42,15 @@ public sealed record ChoiceRow(
 // warning/consequence footer shown under the options while THIS option is the
 // selected one — "" for an option with no downside, so the footer escalates as
 // the user picks a riskier choice while the default option stays safe.
-public sealed record ChoiceOption(string Label, string Detail, string Consequence);
+public sealed record ChoiceOption(string Label, string Detail, string Consequence)
+{
+    // Rows this option unlocks while it's the selected one (dynamic reveal):
+    // they appear indented under it in the popup and disappear when another
+    // option is picked — so a follow-up question only shows when it's actually
+    // relevant. Empty for a leaf option. The wrapper builds the tree; the popup
+    // shows/hides mechanically, at most three levels deep (planning/28).
+    public IReadOnlyList<ConfirmationRow> Children { get; init; } = [];
+}
 
 // Choose one of several labelled candidate plan shapes (planning/25 Item G) —
 // each candidate carries its own preview, so this is its own kind rather than

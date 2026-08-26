@@ -116,35 +116,35 @@ internal static class ConfirmationRowBuilder
         }
 
         // "Cascade forward or not" for an Amount/shape change. The always-shown
-        // description rides as both options' consequence. Mirrors
-        // CascadeSection.
+        // description rides as both options' consequence. Mirrors CascadeSection.
+        // The cross-boundary Q6 questions (planning/28) nest under the "apply
+        // going forward" option — they only matter if the change actually carries
+        // forward, so the popup shows them only while that option is selected,
+        // instead of as flat rows always visible. One per later finance pattern
+        // the amount change reaches that's funded by more than one earmark
+        // pattern; each its OWN row kind, never the break-off Consolidation above
+        // (the two do different things and never appear together — an edit is a
+        // break-off or a carry-forward, not both). Default "keep them separate"
+        // (0) — the less-destructive option, matching the break-off row's default.
         if (r.ChangeCanCascade || r.PlanChangeCanCascade)
         {
+            var carryForwardChildren = r.CrossBoundaryConsolidations
+                .Select(crossBoundary => (ConfirmationRow)new ChoiceRow(
+                    ConfirmationRowIds.CrossBoundaryConsolidation(crossBoundary.FinanceId),
+                    $"A later segment ({crossBoundary.Label}) has more than one savings plan. What should happen to them?",
+                    [
+                        new ChoiceOption("Keep them separate", "", ""),
+                        new ChoiceOption("Combine them into one", "", ""),
+                    ],
+                    DefaultIndex: 0,
+                    Layout: OptionLayout.Stacked))
+                .ToList();
+
             rows.Add(new ChoiceRow(ConfirmationRowIds.Cascade,
                 "This change could also apply to later segments in the chain. What do you want to do?",
                 [
-                    new ChoiceOption("Apply it going forward too", "", r.CascadeDescription),
+                    new ChoiceOption("Apply it going forward too", "", r.CascadeDescription) { Children = carryForwardChildren },
                     new ChoiceOption("Only this segment", "", r.CascadeDescription),
-                ],
-                DefaultIndex: 0,
-                Layout: OptionLayout.Stacked));
-        }
-
-        // Cross-boundary Q6 (planning/28): one question per later finance pattern
-        // the edited finance pattern's amount change is carried forward onto that's
-        // funded by more than one earmark pattern. Its OWN row kind, never the
-        // break-off Consolidation above — the two do different things and never
-        // appear together (an edit is a break-off or a carry-forward, not both).
-        // Flat for now; the reveal that nests these under the cascade choice is a
-        // later pass. Default "keep them separate" (0) — the less-destructive
-        // option, matching the break-off row's own default.
-        foreach (var crossBoundary in r.CrossBoundaryConsolidations)
-        {
-            rows.Add(new ChoiceRow(ConfirmationRowIds.CrossBoundaryConsolidation(crossBoundary.FinanceId),
-                $"A later segment ({crossBoundary.Label}) has more than one savings plan. When this change carries forward to it, what should happen to them?",
-                [
-                    new ChoiceOption("Keep them separate", "", ""),
-                    new ChoiceOption("Combine them into one", "", ""),
                 ],
                 DefaultIndex: 0,
                 Layout: OptionLayout.Stacked));
