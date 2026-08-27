@@ -1183,6 +1183,43 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.GetAll().Count(p => p.FinanceId == 1).ShouldBe(2); // grown $1000 plan + migrated $800 plan, kept separate
     }
 
+    // The shrink mirror of the grow case: a neighbor pulled SMALLER by keeping the
+    // chain linked has its own plan clamped, so it can't exceed the neighbor's new
+    // span and crash the next read.
+    [Fact]
+    public void Keeping_the_chain_linked_clamps_a_shrunk_predecessors_own_plan()
+    {
+        var predecessor = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 10, 31));
+        var current = Bill(2, "Rent", -1000m, new DateOnly(2025, 11, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(predecessor, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _earMarkPatterns.Save(Plan(predecessor, -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 10, 31)));
+
+        var movedCurrent = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)); // start pulled back to Sep
+        Confirmation(2, movedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var predecessorPlans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 1).ToList(); // reads back without throwing
+        predecessorPlans.ShouldHaveSingleItem();
+        predecessorPlans[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 8, 31)); // clamped to the predecessor's new end
+    }
+
+    [Fact]
+    public void Keeping_the_chain_linked_clamps_a_shrunk_successors_own_plan()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        var extended = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 10, 31)); // end extended into T's span
+        Confirmation(1, extended, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var successorPlans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 2).ToList(); // reads back without throwing
+        successorPlans.ShouldHaveSingleItem();
+        successorPlans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 11, 1)); // clamped to the successor's new start
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

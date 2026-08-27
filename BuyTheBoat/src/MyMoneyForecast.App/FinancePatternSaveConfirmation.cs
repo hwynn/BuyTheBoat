@@ -1620,14 +1620,14 @@ public sealed class FinancePatternSaveConfirmation
 
         if (extendedPredecessor is { } predecessor)
         {
-            ExtendNeighborPlansToMatchStretch(predecessors.First(p => p.FinanceId == predecessor.FinanceId), predecessor); // #5
+            FitNeighborPlansToItsNewSpan(predecessors.First(p => p.FinanceId == predecessor.FinanceId), predecessor); // grow or clamp the stretched predecessor's own plans
             PreserveDroppedOccurrencesUnderPredecessor(predecessor); // reverse-break-off (piece 2)
             JoinMergeableEarmarkPatterns(predecessor); // M1 — fold the stretched plan and the migrated one together when identical
         }
 
         if (extendedSuccessor is { } successor)
         {
-            ExtendNeighborPlansToMatchStretch(successors.First(s => s.FinanceId == successor.FinanceId), successor); // #5
+            FitNeighborPlansToItsNewSpan(successors.First(s => s.FinanceId == successor.FinanceId), successor); // grow or clamp the stretched successor's own plans
             JoinMergeableEarmarkPatterns(successor); // M1
         }
 
@@ -1740,45 +1740,79 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] #5, the chain-side-effect twin of ApplyBoundaryExtensionsIfNeeded: when keeping the chain linked stretches a neighbor's span outward (a predecessor's Until grown forward, or a successor's Start grown backward), grows the neighbor's OWN earmark patterns that shared the moved boundary to match — so a stretched neighbor keeps funding its whole new span, not just the part it covered before. Until-outward keeps each plan's DtStart (WithUntil, an in-place update); Start-outward moves the Start earlier while keeping the same cadence (ReanchoredToStartOn) and can move DtStart, so that path deletes the old-key row first. An earmark pattern that ended before the neighbor's old boundary didn't share it and is left alone. Only handles GROWTH — a neighbor that instead shrank needs its plans clamped, a separate gap.</summary>
+    /// <summary>[WRITES FILE] Brings a stretched chain neighbor's OWN earmark patterns in line with its new span, so keeping the boundary linked leaves the neighbor's savings valid and covering the right range (3.11.2.a2) — the chain-side-effect twin of the directly-edited goal's own boundary work. If the neighbor GREW (a predecessor's end forward, or a successor's start backward), each earmark pattern that shared the moved boundary grows to match (WithUntil / ReanchoredToStartOn). If it SHRANK (an end pulled back, or a start pushed forward), each earmark pattern now falling outside is clamped to the new span (PatternTruncation.EndOn / StartOn), or deleted outright when it's now entirely outside. Silent — a required consequence of the user's own "keep it linked" choice, exactly as the directly-edited goal's own boundary is kept valid. A clamped-forward start absorbs no balance (0m, matching the directly-edited front-truncation), which under-counts a non-future neighbor whose dropped days had already accrued — a known limit of that shared shape, not a crash.</summary>
     /// <param name="oldNeighbor">The neighbor before the boundary move.</param>
-    /// <param name="newNeighbor">The neighbor after — what the grown earmark patterns are sized and validated against.</param>
-    private void ExtendNeighborPlansToMatchStretch(FinancialPattern oldNeighbor, FinancialPattern newNeighbor)
+    /// <param name="newNeighbor">The neighbor after — what the adjusted earmark patterns are sized and validated against.</param>
+    private void FitNeighborPlansToItsNewSpan(FinancialPattern oldNeighbor, FinancialPattern newNeighbor)
     {
         var plans = _requestForecast().Book.EarMarkPatternsFor(newNeighbor.FinanceId);
+        var newSpan = newNeighbor.DatePattern;
 
-        if (newNeighbor.DatePattern.Until > oldNeighbor.DatePattern.Until)
+        // The neighbor's end moved.
+        if (newSpan.Until > oldNeighbor.DatePattern.Until)
         {
+            // Grew forward — grow each plan that shared the old end.
             foreach (var plan in plans.Where(plan => plan.DatePattern.Until == oldNeighbor.DatePattern.Until))
             {
-                var grown = EarMarkPattern.Create(
+                _repositories.EarMarkPatterns.Save(EarMarkPattern.Create(
                     new EarMarkPatternOptions
                     {
                         FinanceId = plan.FinanceId,
-                        DatePattern = plan.DatePattern.WithUntil(newNeighbor.DatePattern.Until),
+                        DatePattern = plan.DatePattern.WithUntil(newSpan.Until),
                         Amount = plan.Amount,
                         StartingAllocation = plan.StartingAllocation,
                     },
-                    newNeighbor);
-                _repositories.EarMarkPatterns.Save(grown);
+                    newNeighbor));
+            }
+        }
+        else if (newSpan.Until < oldNeighbor.DatePattern.Until)
+        {
+            // Pulled back — clamp each plan that now ends past it, or delete one that's now entirely past it.
+            foreach (var plan in plans.Where(plan => plan.DatePattern.Until > newSpan.Until))
+            {
+                if (plan.DatePattern.ActiveStart > newSpan.Until)
+                {
+                    _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+                    continue;
+                }
+
+                _repositories.EarMarkPatterns.Save(PatternTruncation.EndOn(newNeighbor, plan, newSpan.Until).Plan!);
             }
         }
 
-        if (newNeighbor.DatePattern.ActiveStart < oldNeighbor.DatePattern.ActiveStart)
+        // The neighbor's start moved.
+        if (newSpan.ActiveStart < oldNeighbor.DatePattern.ActiveStart)
         {
+            // Grew backward — grow each plan that shared the old start.
             foreach (var plan in plans.Where(plan => plan.DatePattern.ActiveStart == oldNeighbor.DatePattern.ActiveStart))
             {
                 var grown = EarMarkPattern.Create(
                     new EarMarkPatternOptions
                     {
                         FinanceId = plan.FinanceId,
-                        DatePattern = plan.DatePattern.ReanchoredToStartOn(newNeighbor.DatePattern.ActiveStart),
+                        DatePattern = plan.DatePattern.ReanchoredToStartOn(newSpan.ActiveStart),
                         Amount = plan.Amount,
                         StartingAllocation = plan.StartingAllocation,
                     },
                     newNeighbor);
-                _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+                _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart); // ReanchoredToStartOn can move the key
                 _repositories.EarMarkPatterns.Save(grown);
+            }
+        }
+        else if (newSpan.ActiveStart > oldNeighbor.DatePattern.ActiveStart)
+        {
+            // Pushed forward — clamp each plan that now begins before it, or delete one that's now entirely before it.
+            foreach (var plan in plans.Where(plan => plan.DatePattern.ActiveStart < newSpan.ActiveStart))
+            {
+                if (plan.DatePattern.Until < newSpan.ActiveStart)
+                {
+                    _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+                    continue;
+                }
+
+                var clamped = PatternTruncation.StartOn(plan, newNeighbor, newSpan.ActiveStart, absorbedBalance: 0m);
+                _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart); // StartOn can move the key
+                _repositories.EarMarkPatterns.Save(clamped);
             }
         }
     }
