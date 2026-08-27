@@ -5,19 +5,18 @@ using Shouldly;
 
 namespace MyMoneyForecast.App.Tests;
 
-// Exercises FinancePatternSaveConfirmation's OTHER constructor — the
-// EarMarkPattern-editing entry point (planning/27), distinct from the
-// FinancialPattern-editing one FinancePatternSaveConfirmationTests already
-// covers. Same real-SQLite-temp-file shape as that file; every [Fact] drives
-// Run() itself.
-public class FinancePatternSaveConfirmationEarmarkTests : IDisposable
+// Exercises EarmarkPatternSaveConfirmation — the EarMarkPattern-editing save
+// path (planning/27), the sibling of FinancePatternSaveConfirmation that
+// FinancePatternSaveConfirmationTests covers. Same real-SQLite-temp-file shape
+// as that file; every [Fact] drives Run() itself.
+public class EarmarkPatternSaveConfirmationTests : IDisposable
 {
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"mymoneyforecast-earmark-test-{Guid.NewGuid()}.db");
     private readonly FinancialPatternRepository _financialPatterns;
     private readonly EarMarkPatternRepository _earMarkPatterns;
     private readonly ManualEarmarkRepository _manualEarmarks;
 
-    public FinancePatternSaveConfirmationEarmarkTests()
+    public EarmarkPatternSaveConfirmationTests()
     {
         var database = new PatternDatabase(_databasePath);
         _financialPatterns = new FinancialPatternRepository(database);

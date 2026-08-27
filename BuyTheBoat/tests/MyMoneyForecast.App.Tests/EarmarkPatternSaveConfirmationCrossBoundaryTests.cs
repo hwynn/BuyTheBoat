@@ -9,18 +9,18 @@ namespace MyMoneyForecast.App.Tests;
 // LAST EarMarkPattern in one finance_id's own chain reach across a
 // FinancialPattern-level break-off into the successor segment's own,
 // different-finance_id plan. Distinct scenario from
-// FinancePatternSaveConfirmationEarmarkTests (which never involves more than
+// EarmarkPatternSaveConfirmationTests (which never involves more than
 // one FinancialPattern), so its own file — same real-SQLite-temp-file shape,
 // same Goal/Plan/Monthly/Forecast/Confirmation helper style, plus a second
 // goal helper (SuccessorGoal) for the far side of the break.
-public class FinancePatternSaveConfirmationCrossBoundaryTests : IDisposable
+public class EarmarkPatternSaveConfirmationCrossBoundaryTests : IDisposable
 {
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"mymoneyforecast-crossboundary-test-{Guid.NewGuid()}.db");
     private readonly FinancialPatternRepository _financialPatterns;
     private readonly EarMarkPatternRepository _earMarkPatterns;
     private readonly ManualEarmarkRepository _manualEarmarks;
 
-    public FinancePatternSaveConfirmationCrossBoundaryTests()
+    public EarmarkPatternSaveConfirmationCrossBoundaryTests()
     {
         var database = new PatternDatabase(_databasePath);
         _financialPatterns = new FinancialPatternRepository(database);
