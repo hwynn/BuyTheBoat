@@ -488,28 +488,22 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.GetAll().ShouldBeEmpty(); // income never gets a jar, predecessor or successor
     }
 
-    // planning/25's Item F, the keep-them-separate sub-case — FIXED
-    // 2026-08-17. Used to be a deliberate, documented no-op: keeping plans
-    // separate under a break-off's new finance_id is a materially
-    // different, still-unbuilt mechanism (each plan would need its own
-    // successor, not one combined fresh one), so nothing was saved at all
-    // — not even the FinancialPattern itself — whenever the user picked
-    // (or, via DefaultOutcome, defaulted to) "keep separate."
-    // Found and fixed the same day, once that silence turned out to be a
-    // real gap rather than a safe placeholder: a Save button that silently
-    // does nothing is worse than one that combines plans the user didn't
-    // explicitly ask to combine. PerformImplicitEarmarkChanges now always
-    // consolidates on the break-off side, matching the recurrence-shape
-    // case below exactly — see that method's own comment.
+    // planning/25's Item F, the keep-them-separate sub-case — now honored
+    // (2026-08-27). With more than one surviving plan and nothing forcing
+    // consolidation (amount-only, so the schedule/start are untouched), the
+    // user's default "keep them separate" stands: the successor gets one plan
+    // per surviving plan, each continuing its own rate at its own cadence,
+    // rather than folding into one. The finance_id's one combined jar balance
+    // rides on a single successor plan. Was a documented no-op before it was
+    // built, then a fall-back-to-consolidating stopgap; this is the real thing.
     [Fact]
-    public void A_break_off_with_multiple_surviving_plans_kept_separate_falls_back_to_consolidating_rather_than_a_silent_no_op()
+    public void A_break_off_with_multiple_surviving_plans_keeps_them_separate_by_default()
     {
         var bill = Bill(1, "Car Lease Payment", -420m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
         _financialPatterns.Save(bill, accountId: 1);
 
-        // Two concurrent funders on the same goal (F27) — same shape as
-        // PatternRepositoryTests' own multi-plan coverage, just concurrent
-        // rather than sequential.
+        // Two concurrent funders on the same goal (F27) — different rates, so
+        // they'd never be merged back together even if offered the chance.
         _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
         _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
 
@@ -519,25 +513,118 @@ public class FinancePatternSaveConfirmationTests : IDisposable
             .Single(jar => jar.FinanceId == 1).ExpectedAmount;
         var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // amount only — recurrence shape untouched
 
-        Confirmation(1, editedBill, accountId: 1, forecast).Run();
+        Confirmation(1, editedBill, accountId: 1, forecast).Run(); // no delegate — takes the "keep separate" default
 
         var patterns = _financialPatterns.GetAll();
-        patterns.Count.ShouldBe(2); // the break-off happened — no longer a silent no-op
+        patterns.Count.ShouldBe(2); // the break-off happened
         patterns.Single(p => p.FinanceId == 1).DatePattern.Until.ShouldBe(AsOf.AddDays(-1));
         patterns.Single(p => p.FinanceId == 2).Amount.ShouldBe(-500m);
+
+        var plans = _earMarkPatterns.GetAll();
+        plans.Count(p => p.FinanceId == 1).ShouldBe(2); // both originals, truncated
+        plans.Where(p => p.FinanceId == 1).ShouldAllBe(p => p.DatePattern.Until == AsOf.AddDays(-1));
+
+        var successorPlans = plans.Where(p => p.FinanceId == 2).ToList();
+        successorPlans.Count.ShouldBe(2); // one per surviving plan — kept separate, not folded into one
+        successorPlans.Select(p => p.Amount).ShouldBe(new[] { -300m, -120m }, ignoreOrder: true); // each keeps its own rate
+        successorPlans.Sum(p => p.StartingAllocation).ShouldBe(expectedCarriedOverBalance); // the one combined jar's balance, carried once
+    }
+
+    // The other side of the same Item F question: when the user explicitly picks
+    // "combine them into one," the break-off folds every surviving plan into a
+    // single freshly-proposed successor plan seeded with the combined jar balance
+    // — the same result a forced (shape/start-change) consolidation produces.
+    [Fact]
+    public void A_break_off_combines_multiple_surviving_plans_when_the_user_chooses_to()
+    {
+        var bill = Bill(1, "Car Lease Payment", -420m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
+
+        var forecast = Forecast();
+        var expectedCarriedOverBalance = forecast.GetTimeline(1)
+            .Last(entry => entry.Date <= AsOf).Snapshot.FundJars
+            .Single(jar => jar.FinanceId == 1).ExpectedAmount;
+        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // amount only
+
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
+        confirmation.ConfirmImplicitChanges = request => Confirm.Proceed().ChoseConsolidation();
+
+        confirmation.Run().ShouldBeTrue();
 
         var plans = _earMarkPatterns.GetAll();
         plans.Count.ShouldBe(3); // both original plans, truncated, plus ONE consolidated successor
         plans.Count(p => p.FinanceId == 1).ShouldBe(2);
 
-        var successorPlan = plans.Single(p => p.FinanceId == 2); // exactly one — consolidated, not two, and NOT the "keep separate" the user asked for but this mechanism can't yet honor
+        var successorPlan = plans.Single(p => p.FinanceId == 2); // exactly one — folded into the combined plan the user asked for
         successorPlan.StartingAllocation.ShouldBe(expectedCarriedOverBalance);
     }
 
+    // The keep-separate funding question (2026-08-27): raising the amount leaves
+    // the kept-separate plans contributing at the old, now-too-low total, so the
+    // confirmation offers to re-rate them to meet the new amount — its OWN nested
+    // question under "keep them separate," never a top-level row and never merged
+    // into the keep-separate/combine choice.
+    [Fact]
+    public void Keeping_plans_separate_that_would_misfund_the_new_amount_offers_to_adjust_them()
+    {
+        var bill = Bill(1, "Car Lease Payment", -420m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
+
+        var forecast = Forecast();
+        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // bigger — the old rates fall short
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run().ShouldBeTrue();
+
+        captured.ShouldNotBeNull();
+        captured!.HasRow(ConfirmationRowIds.KeepSeparateFunding).ShouldBeTrue(); // offered
+        captured.Rows.OfType<ChoiceRow>().ShouldNotContain(r => r.Id == ConfirmationRowIds.KeepSeparateFunding); // not a top-level row
+        var consolidation = captured.Rows.OfType<ChoiceRow>().Single(r => r.Id == ConfirmationRowIds.Consolidation);
+        consolidation.Options[0].Children.OfType<ChoiceRow>().ShouldContain(r => r.Id == ConfirmationRowIds.KeepSeparateFunding); // nested under "keep them separate"
+    }
+
+    // Taking that offer re-rates the kept-separate plans by one shared ratio so
+    // they still keep their own relative split but together meet the new amount —
+    // the plans stay several, their amounts move off the raw carried-over rates,
+    // and their 300:120 proportion is preserved. (That the re-rated total actually
+    // funds the goal is EarmarkScalingTests' job; here we prove the wiring applies
+    // the scale, where the default "leave them" — tested above — keeps them raw.)
+    [Fact]
+    public void Adjusting_kept_separate_plans_re_rates_them_proportionally_off_their_raw_rates()
+    {
+        var bill = Bill(1, "Car Lease Payment", -420m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
+
+        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => Confirm.Proceed().ChoseToAdjustKeptSeparatePlans();
+
+        confirmation.Run().ShouldBeTrue();
+
+        var successorPlans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 2).ToList();
+        successorPlans.Count.ShouldBe(2); // still separate — one per surviving plan
+        successorPlans.ShouldNotContain(p => p.Amount == -300m); // re-rated off...
+        successorPlans.ShouldNotContain(p => p.Amount == -120m); // ...the raw carried-over rates
+
+        var magnitudes = successorPlans.Select(p => Math.Abs(p.Amount)).OrderByDescending(x => x).ToList();
+        (magnitudes[0] / magnitudes[1]).ShouldBe(2.5m, 0.02m); // the 300:120 split is preserved through the scale
+    }
+
     // planning/25's Item F, the forced-consolidation sub-case: the
-    // recurrence shape changing makes ConsolidationNeeded true regardless of
-    // UserChooseConsolidation's own (placeholder) value, so this — unlike
-    // the amount-only case above — actually reaches PerformMultiPlanBreakOff.
+    // recurrence shape changing makes ConsolidationNeeded true, which combines
+    // regardless of the user's keep-separate/combine pick — the plans can't keep
+    // their own occurrence dates onto a differently shaped successor. So this,
+    // unlike the amount-only case above, consolidates even on the default answer.
     [Fact]
     public void A_recurrence_shape_change_with_multiple_surviving_plans_forces_a_consolidated_break_off()
     {
@@ -678,35 +765,6 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         proceeded.ShouldBeFalse();
         _financialPatterns.GetAll().Single().Amount.ShouldBe(-100m); // untouched — the cancel took effect
-    }
-
-    // The caveat that makes the break-off-side fallback above (and the
-    // amount-only "keep separate" offer it applies to) an honest choice
-    // rather than a silent trap — only relevant when "keep separate" is a
-    // real, currently-offered option (amount-only, multi-plan, Critical).
-    [Fact]
-    public void The_break_off_keep_separate_caveat_shows_whenever_keep_separate_is_actually_offered()
-    {
-        var bill = Bill(1, "Car Lease Payment", -420m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
-        _financialPatterns.Save(bill, accountId: 1);
-        _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
-        _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
-
-        var forecast = Forecast();
-        var editedBill = Bill(1, bill.Source, -500m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // amount only
-
-        string? capturedCaveat = null;
-        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
-        confirmation.ConfirmImplicitChanges = request =>
-        {
-            capturedCaveat = request.AnnouncementText(ConfirmationRowIds.ConsolidationCaveat);
-            return Confirm.Proceed();
-        };
-
-        confirmation.Run().ShouldBeTrue();
-
-        capturedCaveat.ShouldNotBeNullOrEmpty();
-        capturedCaveat.ShouldContain("today forward");
     }
 
     // The three tests below answer a different question than the three

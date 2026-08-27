@@ -19,10 +19,16 @@ internal static class Confirm
     public static ConfirmationOutcome ChoseToRepaceBills(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.PacedBillsCascade, 0);
     public static ConfirmationOutcome ChoseToLeavePacedBills(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.PacedBillsCascade, 1);
 
-    // consolidation — [0] keep separate, [1] combine. The wrapper doesn't read
-    // this today (a break-off always consolidates), but a test can still state
-    // the user's pick.
+    // consolidation — [0] keep separate (default), [1] combine. On a break-off
+    // that isn't forcing consolidation, this decides whether the surviving plans
+    // fold into one successor or each keep their own.
     public static ConfirmationOutcome ChoseConsolidation(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.Consolidation, 1);
+
+    // keep-separate funding — [0] adjust to meet the goal (the popup's pre-selection),
+    // [1] leave as-is. Nested under "keep them separate"; only read on a keep-separate
+    // break-off whose plans would over/underfund the new amount.
+    public static ConfirmationOutcome ChoseToAdjustKeptSeparatePlans(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.KeepSeparateFunding, 0);
+    public static ConfirmationOutcome ChoseToLeaveKeptSeparatePlansAsIs(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.KeepSeparateFunding, 1);
 
     // chain-boundary — [0] stay linked, [1] let it break.
     public static ConfirmationOutcome ChoseToLetChainBreak(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.ChainBoundary, 1);

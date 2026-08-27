@@ -92,7 +92,9 @@ public static class ConfirmationRowIds
 {
     public const string AlterPast = "alter-past";
     public const string Consolidation = "consolidation";
-    public const string ConsolidationCaveat = "consolidation-caveat";
+    // Nested under Consolidation's "keep them separate": offers to re-rate the
+    // kept-separate plans so they meet the new amount instead of over/underfunding it.
+    public const string KeepSeparateFunding = "keep-separate-funding";
     public const string ConsolidationForced = "consolidation-forced";
     public const string SourceChange = "source-change";
     public const string ChainBoundary = "chain-boundary";

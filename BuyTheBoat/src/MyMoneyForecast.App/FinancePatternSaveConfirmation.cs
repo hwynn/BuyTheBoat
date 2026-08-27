@@ -332,6 +332,15 @@ public sealed class FinancePatternSaveConfirmation
     private ConsolidationSizing _chosenSizing = ConsolidationSizing.MeetGoal;
     private ConsolidationSpread _chosenSpread = ConsolidationSpread.AcrossPaydays;
 
+    // What keeping this break-off's plans separate would leave the new segment
+    // funded at — a dry-run of the keep-separate break-off, re-rated to meet the
+    // goal (EarmarkScaling.ScaleToMeetGoal), computed before anything is saved.
+    // Null unless a keep-separate break-off is actually on the table; carries the
+    // proportionally-corrected plans and the current-vs-needed totals. Only offered
+    // as a question when the two totals differ (the plans over/underfund the new
+    // amount) — see DetermineKeepSeparateFundingIfApplicable.
+    private MeetGoalScalingResult? _keepSeparateFunding;
+
     // planning/27's own Phase 1 — the saved pattern plus every other
     // same-Source FinancialPattern (concurrent ones already excluded — see
     // DetermineChainConditionsIfApplicable's own note), captured before
@@ -478,6 +487,24 @@ public sealed class FinancePatternSaveConfirmation
     // just a trivial-field copy.
     private bool UserChoseToRepaceBills { get; set; }
 
+    // The user's answer to Item F's "keep them separate / combine them into
+    // one" question on a break-off — meaningless unless HasMultipleEarmarkPatterns
+    // is true and ConsolidationNeeded is false (a shape/start change forces
+    // consolidation regardless). Defaults to FALSE (keep separate): that's the
+    // Consolidation row's own default, and the less-destructive option — the
+    // break-off keeps one successor plan per surviving plan rather than folding
+    // them into one.
+    private bool UserChoseCombinePlans { get; set; }
+
+    // The user's answer to the nested "these kept-separate plans over/underfund
+    // the new amount — adjust them to meet it?" question — meaningless unless the
+    // keep-separate funding question was actually shown (_keepSeparateFunding is
+    // set and its totals differ). Defaults to FALSE: keeping each plan's own rate
+    // untouched is the safe no-op, and nothing re-rates money when no one was
+    // asked (headless). The popup pre-selects "adjust," mirroring the consolidate
+    // sizing question, but declining stays the default a bare Proceed reads back.
+    private bool UserChoseToAdjustKeptSeparatePlans { get; set; }
+
     // The overall Trivial/Critical/Concerning categorization's own top-level
     // flag: true when this save needs to go through the
     // confirmation-and-choice flow at all. Kept as its own property, distinct
@@ -608,6 +635,14 @@ public sealed class FinancePatternSaveConfirmation
         // own row, deliberately never the break-off Consolidation one.
         DetermineCrossBoundaryConsolidationsIfApplicable();
 
+        // The funding side of the break-off's own keep-separate choice: if keeping
+        // this segment's several plans separate would over/underfund the new
+        // amount, work out the proportional correction now so the confirmation can
+        // offer it — its own nested question, computed after the chain conditions
+        // it depends on (_chainHasSuccessor). Runs before anything is saved, same
+        // as its sibling Determine* calls.
+        DetermineKeepSeparateFundingIfApplicable();
+
         // SETTLED 2026-08-11 (author): Item F's own question applies
         // regardless of which Item E path gets chosen — it is NOT
         // break-off-only. What "consolidate" means differs by path: for
@@ -630,6 +665,8 @@ public sealed class FinancePatternSaveConfirmation
             UserChoseCascadeForward = ChoseCascadeForward(outcome);
             UserChoseCascadeTrivialFields = ChoseCascadeTrivialFields(outcome);
             UserChoseToRepaceBills = ChoseToRepaceBills(outcome);
+            UserChoseCombinePlans = ChoseCombinePlans(outcome);
+            UserChoseToAdjustKeptSeparatePlans = ChoseToAdjustKeptSeparatePlans(outcome);
             _successorCombineChoices = _crossBoundaryConsolidations.ToDictionary(
                 successor => successor.FinanceId,
                 // [1] combine, [0] keep separate (the default, also for a headless caller).
@@ -696,6 +733,16 @@ public sealed class FinancePatternSaveConfirmation
     // leave them. Absent (headless) reads as leave — nothing re-paces money
     // when no one was actually asked.
     private static bool ChoseToRepaceBills(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.PacedBillsCascade) == 0;
+
+    // consolidation: [0] keep separate (default, also headless), [1] combine.
+    // Only consulted for a break-off that ISN'T forcing consolidation (a
+    // shape/start change forces it regardless of this answer).
+    private static bool ChoseCombinePlans(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.Consolidation) == 1;
+
+    // keep-separate funding: [0] adjust to meet the goal (the popup's own
+    // pre-selection), [1] leave them. Absent (headless) reads as leave — each
+    // plan keeps its own rate, nothing re-rates money when no one was asked.
+    private static bool ChoseToAdjustKeptSeparatePlans(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.KeepSeparateFunding) == 0;
 
     // consolidation sizing: [0] meet the goal (default, also headless), [1] keep the current rate.
     private static ConsolidationSizing ChoseConsolidationSizing(ConfirmationOutcome outcome) =>
@@ -1095,6 +1142,65 @@ public sealed class FinancePatternSaveConfirmation
             && book.AllFinancialPatterns().Count(pattern => pattern.Amount > 0m) == 1;
     }
 
+    /// <summary>[READS FILE] Dry-runs the break-off's own keep-separate outcome and re-rates it to meet the goal, so the confirmation knows whether keeping this segment's several plans separate would leave the new amount over/underfunded — the trigger for the nested "adjust them to meet it?" question. Only a current-segment break-off whose plans could actually stay separate (more than one, no forced consolidation); a no-op otherwise. Reads the current forecast before anything is saved, same as its sibling Determine* calls; the dry-run's own new finance_id is throwaway — only the current-vs-needed totals are kept, so the real break-off recomputes the correction against the real successor at execution time.</summary>
+    private void DetermineKeepSeparateFundingIfApplicable()
+    {
+        // The same gate PerformImplicitEarmarkChanges routes a keep-separate
+        // break-off under: a Critical edit of the CURRENT segment (not an
+        // earlier one that cascades in place), more than one plan, and nothing
+        // forcing them to consolidate.
+        if (!IsChangeCritical || _chainHasSuccessor || !HasMultipleEarmarkPatterns || ConsolidationNeeded)
+        {
+            return;
+        }
+
+        var saved = _repositories.FinancialPatterns.GetByFinanceId(_financeId);
+        if (saved is null)
+        {
+            return;
+        }
+
+        var forecast = _requestForecast();
+        var cutDate = forecast.AsOfDate;
+
+        // The break-off needs the cut strictly after the segment's own start
+        // (BreakOffFactory.ValidateCutBoundaries) — PerformSingleSuccessorBreakOff's
+        // own documented sharp edge. When it doesn't hold there's no break-off to
+        // preview a funding gap for.
+        if (cutDate <= saved.DatePattern.ActiveStart)
+        {
+            return;
+        }
+
+        var result = BreakOffFactory.BreakOffKeepingPlansSeparate(new MultiPlanBreakOffRequest
+        {
+            Predecessor = saved,
+            PredecessorPlans = forecast.Book.EarMarkPatternsFor(_financeId),
+            CutDate = cutDate,
+            SuccessorFinanceId = forecast.Book.NextFinanceId(),
+            SuccessorAmount = _proposedPattern.Amount,
+            SuccessorSchedule = BuildSuccessorSchedule(cutDate),
+            CarriedOverJarBalance = JarBalanceOn(cutDate, _financeId),
+            AllPatterns = forecast.Book.AllFinancialPatterns(),
+        });
+
+        _keepSeparateFunding = EarmarkScaling.ScaleToMeetGoal(result.Successor, result.SuccessorPlans);
+    }
+
+    /// <summary>[CALC] The nested keep-separate funding question's own wording — "" whenever there's no gap to correct (the plans already fund the new amount, or no keep-separate break-off is on the table), so the row isn't shown at all. Names which way it's off (short of, or more than) so the ask isn't a bare yes/no, matching the "show the consequence" standard.</summary>
+    private string DescribeKeepSeparateFundingQuestion()
+    {
+        if (_keepSeparateFunding is not { } funding || Math.Abs(funding.CurrentTotal - funding.NeededTotal) < 0.01m)
+        {
+            return "";
+        }
+
+        var problem = funding.CurrentTotal < funding.NeededTotal
+            ? "won't fully cover"
+            : "would set aside more than";
+        return $"Kept separate, these savings plans {problem} the new amount. Adjust their contributions to meet it?";
+    }
+
     /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. Was a single hardcoded XAML string until 2026-08-17, when ConsolidationNeeded was widened to also force consolidation for a start_date change, not just a recurrence-shape one — the old text ("because the schedule itself is changing") would have been actively wrong for a start-only edit.</summary>
     private string DescribeConsolidationForcedReason()
     {
@@ -1110,17 +1216,6 @@ public sealed class FinancePatternSaveConfirmation
             _ => "the start date itself is",
         };
         return $"Because {whatChanged} changing, its savings plans will be combined into one.";
-    }
-
-    /// <summary>[CALC] Warns, ahead of the choice rather than after it, that Item C's own "break off" answer always combines multiple plans regardless of what's picked in the Consolidation row — "" whenever there's nothing to warn about (no real choice being offered at all, or the edit isn't Critical so there's no break-off/alter-past ambiguity in the first place). Found 2026-08-17: "keep separate" through a break-off was never built (PerformImplicitEarmarkChanges' own comment) and used to silently save nothing at all when picked; fixed to fall back to consolidating instead, which makes this row's own "keep separate" option genuinely misleading without a caveat explaining when it doesn't actually apply.</summary>
-    private string DescribeConsolidationCaveat()
-    {
-        if (!HasMultipleEarmarkPatterns || ConsolidationNeeded || !IsChangeCritical)
-        {
-            return "";
-        }
-
-        return "If you choose to apply this only from today forward (above), these plans will always be combined into one regardless of this choice — keeping them separate through a break-off isn't supported yet.";
     }
 
     /// <summary>[READS FILE] Builds what ConfirmImplicitChanges needs to render the Item B/C/E/F confirmation, plus planning/27's own Phase 1 questions (chain boundary, Amount/shape cascade, trivial-fields cascade, Source-change warning) — everything DetermineConditions/DetermineChainConditionsIfApplicable already worked out, plus a plain-language description of what changed. [READS FILE] because the chain-boundary/cascade previews below dry-run BreakOffFactory calls and read EarMarkPatternsFor for the absorb warning's own plan count — safe here, same as everywhere else in this class, since nothing has been saved yet this Run(). TODO: doesn't yet name the specific amount/date that would be orphaned by a retroactive correction (Item E's own "show the consequence, not just a yes/no" — mockups/editing-history-confirmation-mockups.html, Popup 1 · B) — the generic description below is a simpler first cut.</summary>
@@ -1141,7 +1236,7 @@ public sealed class FinancePatternSaveConfirmation
             HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns && !editingEarlierSegment,
             ConsolidationNeeded = ConsolidationNeeded && !editingEarlierSegment,
             ConsolidationForcedReason = editingEarlierSegment ? "" : DescribeConsolidationForcedReason(),
-            ConsolidationCaveat = editingEarlierSegment ? "" : DescribeConsolidationCaveat(),
+            KeepSeparateFundingQuestion = editingEarlierSegment ? "" : DescribeKeepSeparateFundingQuestion(),
             TouchesChainBoundary = TouchesChainBoundary,
             ChangeCanCascade = ChangeCanCascade,
             TrivialFieldsCanCascade = TrivialFieldsCanCascade,
@@ -1968,12 +2063,27 @@ public sealed class FinancePatternSaveConfirmation
         // today. The retroactive "correct it everywhere" path was removed,
         // along with its narrowing (NarrowSurvivingPlanIfNeeded), in-place
         // consolidation (ConsolidateSurvivingPlansIfNeeded) and amount-only
-        // scaling (ScaleSurvivingPlansIfNeeded). Multiple existing plans are
-        // combined into the one freshly-proposed successor; keeping them
-        // separate through a break-off is still unbuilt (header TODO item 2).
+        // scaling (ScaleSurvivingPlansIfNeeded).
+        //
+        // Item F's own question, honored at last (2026-08-27): with more than
+        // one existing plan, the user's "keep them separate / combine them into
+        // one" pick decides which break-off runs. Combining folds every plan
+        // into one freshly-proposed successor; keeping them separate gives the
+        // successor one plan per surviving plan, each continuing its own rate.
+        // A shape/start change (ConsolidationNeeded) forces the combine, since
+        // the plans can't keep their own occurrence dates onto a differently
+        // shaped successor — same forced case the popup announces rather than asks.
         if (HasMultipleEarmarkPatterns)
         {
-            PerformMultiPlanBreakOff();
+            if (ConsolidationNeeded || UserChoseCombinePlans)
+            {
+                PerformMultiPlanBreakOff();
+            }
+            else
+            {
+                PerformMultiPlanKeepSeparateBreakOff();
+            }
+
             return;
         }
 
@@ -2152,6 +2262,54 @@ public sealed class FinancePatternSaveConfirmation
         if (result.SuccessorStartingEarmark is { } startingEarmark)
         {
             _repositories.ManualEarmarks.Save(startingEarmark);
+        }
+    }
+
+    /// <summary>[WRITES FILE] The more-than-one-existing-plan case of Item C's break-off when Item F's question resolves to keeping them separate (the user's pick, only reachable when the schedule/start isn't forcing consolidation): every surviving plan is truncated the day before the cut, and the successor gets ONE plan per surviving plan — each continuing its own rate at its own cadence from the cut forward, rather than folding into one. The finance_id's one combined jar balance carries on the first successor plan. Otherwise identical to PerformMultiPlanBreakOff — see that method for the cut-date note.</summary>
+    private void PerformMultiPlanKeepSeparateBreakOff()
+    {
+        var saved = GetSavedPatternOrThrow();
+        var forecast = _requestForecast();
+        var cutDate = forecast.AsOfDate;
+
+        var predecessorPlans = forecast.Book.EarMarkPatternsFor(_financeId);
+
+        var result = BreakOffFactory.BreakOffKeepingPlansSeparate(new MultiPlanBreakOffRequest
+        {
+            Predecessor = saved,
+            PredecessorPlans = predecessorPlans,
+            CutDate = cutDate,
+            SuccessorFinanceId = forecast.Book.NextFinanceId(),
+            SuccessorAmount = _proposedPattern.Amount,
+            SuccessorSchedule = BuildSuccessorSchedule(cutDate),
+            CarriedOverJarBalance = JarBalanceOn(cutDate, _financeId),
+            AllPatterns = forecast.Book.AllFinancialPatterns(),
+        });
+
+        // Same reasoning as PerformSingleSuccessorBreakOff's own note: the new
+        // successor segment is the current one now, wherever the plans landed.
+        _navigationFinanceId = result.Successor.FinanceId;
+
+        // If the user took the offer to correct the funding (the nested
+        // keep-separate question), re-rate every successor plan proportionally so
+        // they together meet the new amount; otherwise each keeps its own raw
+        // rate, over/underfunding and all. Recomputed here against the real
+        // successor rather than reusing the dry-run's throwaway one.
+        var successorPlans = UserChoseToAdjustKeptSeparatePlans
+            ? EarmarkScaling.ScaleToMeetGoal(result.Successor, result.SuccessorPlans).ScaledPlans
+            : result.SuccessorPlans;
+
+        _repositories.FinancialPatterns.Save(result.Predecessor, _accountId);
+        _repositories.FinancialPatterns.Save(result.Successor, _accountId);
+
+        foreach (var truncatedPlan in result.PredecessorPlans)
+        {
+            _repositories.EarMarkPatterns.Save(truncatedPlan);
+        }
+
+        foreach (var successorPlan in successorPlans)
+        {
+            _repositories.EarMarkPatterns.Save(successorPlan);
         }
     }
 

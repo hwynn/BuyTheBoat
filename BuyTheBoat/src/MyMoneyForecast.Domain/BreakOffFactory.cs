@@ -98,6 +98,19 @@ public sealed record MultiPlanBreakOffResult
     public required ManualEarmark? SuccessorStartingEarmark { get; init; }
 }
 
+// The keep-separate counterpart to MultiPlanBreakOffResult (Item F's own "keep
+// separate through a break-off"): the successor keeps ONE plan PER surviving
+// predecessor plan (SuccessorPlans, not a single SuccessorPlan), each continuing
+// its own rate, rather than folding them all into one. No SuccessorStartingEarmark
+// — the carried jar balance rides on the first plan's own StartingAllocation.
+public sealed record MultiPlanKeepSeparateResult
+{
+    public required FinancialPattern Predecessor { get; init; }
+    public required IReadOnlyList<EarMarkPattern> PredecessorPlans { get; init; }
+    public required FinancialPattern Successor { get; init; }
+    public required IReadOnlyList<EarMarkPattern> SuccessorPlans { get; init; }
+}
+
 // Everything a periodic RENEWAL of an "ongoing" pattern needs. Deliberately
 // narrower than BreakOffRequest: there is no SuccessorAmount or
 // SuccessorSchedule-SHAPE field, because renewal changes NOTHING about the
@@ -274,6 +287,55 @@ public static class BreakOffFactory
             Successor = proposal.Outflow,
             SuccessorPlan = successorPlan,
             SuccessorStartingEarmark = proposal.StartingEarmark,
+        };
+    }
+
+    /// <summary>[CALC] Item F's "keep separate through a break-off" (planning/25): breaks a chain segment off at the cut like BreakOff does — same truncated predecessor, same new successor pattern — but instead of folding the predecessor's several plans into one, gives the successor one plan PER surviving plan, each continuing its own rate at its own cadence from the cut under the new finance_id. The carried jar balance rides on the first plan's own StartingAllocation, since the new finance_id has one combined jar and where the balance sits doesn't change what that jar reads. The request's ChosenSuccessorPlan/SpreadEvenlyWithNoIncome go unused — no single successor shape is proposed.</summary>
+    /// <param name="request">The same break-off request the consolidating overload takes.</param>
+    public static MultiPlanKeepSeparateResult BreakOffKeepingPlansSeparate(MultiPlanBreakOffRequest request)
+    {
+        ValidateCutBoundaries(request.Predecessor, request.CutDate, request.SuccessorFinanceId, request.SuccessorSchedule);
+
+        var predecessorLastDay = request.CutDate.AddDays(-1);
+        var truncatedPredecessor = request.Predecessor.WithUntil(predecessorLastDay);
+        var truncatedPlans = request.PredecessorPlans
+            .Select(plan => PatternTruncation.EndOn(request.Predecessor, plan, predecessorLastDay).Plan!)
+            .ToList();
+
+        var successor = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = request.SuccessorFinanceId,
+            Source = request.Predecessor.Source,
+            Description = request.Predecessor.Description,
+            DatePattern = RecurrenceRule.Create(request.SuccessorSchedule),
+            Amount = request.SuccessorAmount,
+            Priority = request.Predecessor.Priority,
+            Mandatory = request.Predecessor.Mandatory,
+            AutoRenew = request.Predecessor.AutoRenew,
+        });
+
+        var successorPlans = request.PredecessorPlans
+            .Select((plan, index) => EarMarkPattern.Create(
+                new EarMarkPatternOptions
+                {
+                    FinanceId = request.SuccessorFinanceId,
+                    // Re-anchored to the successor's own start so it stays inside
+                    // the successor's span (3.11.2.a2), keeping its own cadence.
+                    DatePattern = plan.DatePattern
+                        .ReanchoredToStartOn(successor.DatePattern.ActiveStart)
+                        .WithUntil(successor.DatePattern.Until),
+                    Amount = plan.Amount,
+                    StartingAllocation = index == 0 ? Math.Max(0m, request.CarriedOverJarBalance) : 0m,
+                },
+                successor))
+            .ToList();
+
+        return new MultiPlanKeepSeparateResult
+        {
+            Predecessor = truncatedPredecessor,
+            PredecessorPlans = truncatedPlans,
+            Successor = successor,
+            SuccessorPlans = successorPlans,
         };
     }
 

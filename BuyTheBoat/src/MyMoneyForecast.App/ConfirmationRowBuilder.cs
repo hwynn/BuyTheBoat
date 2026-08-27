@@ -12,7 +12,13 @@ internal sealed record RowInputs
     public bool HasMultipleEarmarkPatterns { get; init; }
     public bool ConsolidationNeeded { get; init; }
     public string ConsolidationForcedReason { get; init; } = "";
-    public string ConsolidationCaveat { get; init; } = "";
+
+    // The nested "these kept-separate plans over/underfund the new amount — adjust
+    // them?" question's own wording, or "" when there's no funding gap to correct
+    // (so the row isn't shown). Rides under the Consolidation row's "keep them
+    // separate" option, revealed only while that option is picked.
+    public string KeepSeparateFundingQuestion { get; init; } = "";
+
     public string SourceChangeWarning { get; init; } = "";
     public bool TouchesChainBoundary { get; init; }
     public bool PlanTouchesChainBoundary { get; init; }
@@ -71,25 +77,39 @@ internal static class ConfirmationRowBuilder
 
         // Item F's consolidation choice — only when there's a real choice to
         // make (more than one plan, and the schedule/start date isn't forcing
-        // consolidation). Mirrors ConsolidationAskSection.
+        // consolidation). Mirrors ConsolidationAskSection. Both answers are now
+        // honored on a break-off (keep-separate gives the successor one plan per
+        // surviving plan), so this no longer carries a "not supported yet" caveat.
         if (r.HasMultipleEarmarkPatterns && !r.ConsolidationNeeded)
         {
+            // When keeping them separate would over/underfund the new amount, a
+            // nested question offers to re-rate them to meet it — revealed only
+            // while "keep them separate" is the pick (combining folds them into
+            // one instead, so it never applies there). Its OWN row, never merged
+            // into the keep-separate/combine choice above: that one decides
+            // whether the plans stay several, this one how much each contributes.
+            List<ConfirmationRow> keepSeparateChildren = string.IsNullOrEmpty(r.KeepSeparateFundingQuestion)
+                ? []
+                :
+                [
+                    new ChoiceRow(ConfirmationRowIds.KeepSeparateFunding,
+                        r.KeepSeparateFundingQuestion,
+                        [
+                            new ChoiceOption("Adjust them to meet the goal", "", ""),
+                            new ChoiceOption("Leave them as they are (may miss the goal)", "", ""),
+                        ],
+                        DefaultIndex: 0,
+                        Layout: OptionLayout.Stacked),
+                ];
+
             rows.Add(new ChoiceRow(ConfirmationRowIds.Consolidation,
                 "It has more than one savings plan. What do you want to do?",
                 [
-                    new ChoiceOption("Keep them separate", "", ""),
+                    new ChoiceOption("Keep them separate", "", "") { Children = keepSeparateChildren },
                     new ChoiceOption("Combine them into one", "", ""),
                 ],
                 DefaultIndex: 0,
                 Layout: OptionLayout.Stacked));
-
-            // The always-shown caveat that a break-off combines plans
-            // regardless of this choice — its own line, not tied to a radio
-            // (mirrors ConsolidationCaveatText).
-            if (!string.IsNullOrEmpty(r.ConsolidationCaveat))
-            {
-                rows.Add(new AnnouncementRow(ConfirmationRowIds.ConsolidationCaveat, r.ConsolidationCaveat));
-            }
         }
 
         // Item F's forced case — announced, not asked. Mirrors

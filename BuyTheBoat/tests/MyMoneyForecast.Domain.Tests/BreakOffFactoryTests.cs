@@ -492,6 +492,90 @@ public class BreakOffFactoryTests
         }));
     }
 
+    // BreakOffKeepingPlansSeparate — Item F's "keep separate through a
+    // break-off." Same truncated predecessor as the consolidating overload, but
+    // one successor plan per surviving plan instead of one combined fresh one.
+
+    [Fact]
+    public void Keeping_plans_separate_gives_the_successor_one_plan_per_surviving_plan()
+    {
+        var carLease = MonthlyBill(-420m, 1, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var planA = MonthlyPlan(carLease, -300m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var planB = MonthlyPlan(carLease, -120m, new DateOnly(2025, 1, 2), new DateOnly(2027, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOffKeepingPlansSeparate(new MultiPlanBreakOffRequest
+        {
+            Predecessor = carLease,
+            PredecessorPlans = [planA, planB],
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -500m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2027, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [carLease],
+        });
+
+        result.SuccessorPlans.Count.ShouldBe(2); // one per surviving plan — not folded into one
+        result.SuccessorPlans.ShouldAllBe(plan => plan.FinanceId == 2);
+        result.SuccessorPlans.Select(plan => plan.Amount).ShouldBe(new[] { -300m, -120m }, ignoreOrder: true); // each keeps its own rate
+        // Each continues from the successor's own start, inside its span (3.11.2.a2).
+        result.SuccessorPlans.ShouldAllBe(plan => plan.DatePattern.ActiveStart >= result.Successor.DatePattern.ActiveStart);
+        result.SuccessorPlans.ShouldAllBe(plan => plan.DatePattern.Until == new DateOnly(2027, 1, 1));
+    }
+
+    [Fact]
+    public void Keeping_plans_separate_truncates_every_surviving_predecessor_plan_to_the_cut()
+    {
+        var carLease = MonthlyBill(-420m, 1, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var planA = MonthlyPlan(carLease, -300m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var planB = MonthlyPlan(carLease, -120m, new DateOnly(2025, 1, 2), new DateOnly(2027, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOffKeepingPlansSeparate(new MultiPlanBreakOffRequest
+        {
+            Predecessor = carLease,
+            PredecessorPlans = [planA, planB],
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -500m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2027, 1, 1)),
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [carLease],
+        });
+
+        result.Predecessor.DatePattern.Until.ShouldBe(new DateOnly(2025, 6, 30));
+        result.PredecessorPlans.Count.ShouldBe(2);
+        result.PredecessorPlans.ShouldAllBe(plan => plan.DatePattern.Until == new DateOnly(2025, 6, 30));
+    }
+
+    [Fact]
+    public void Keeping_plans_separate_carries_the_one_combined_balance_on_a_single_successor_plan()
+    {
+        // Same as the consolidating overload: a finance_id has one jar however
+        // many plans feed it, so there is one balance to carry — it rides on a
+        // single successor plan, not split across them.
+        var carLease = MonthlyBill(-420m, 1, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var planA = MonthlyPlan(carLease, -300m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
+        var planB = MonthlyPlan(carLease, -120m, new DateOnly(2025, 1, 2), new DateOnly(2027, 1, 1));
+        var cutDate = new DateOnly(2025, 7, 1);
+
+        var result = BreakOffFactory.BreakOffKeepingPlansSeparate(new MultiPlanBreakOffRequest
+        {
+            Predecessor = carLease,
+            PredecessorPlans = [planA, planB],
+            CutDate = cutDate,
+            SuccessorFinanceId = 2,
+            SuccessorAmount = -500m,
+            SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2027, 1, 1)),
+            CarriedOverJarBalance = 610m,
+            AllPatterns = [carLease],
+        });
+
+        result.SuccessorPlans.Sum(plan => plan.StartingAllocation).ShouldBe(610m); // the whole balance, carried once
+        result.SuccessorPlans.Count(plan => plan.StartingAllocation > 0m).ShouldBe(1); // on exactly one plan
+    }
+
     // Renew — periodic renewal for "ongoing" patterns (planning/15, worked
     // through with the author 2026-07-29). Distinct from BreakOff: nothing
     // about the bill changes, only how far out it reaches.
