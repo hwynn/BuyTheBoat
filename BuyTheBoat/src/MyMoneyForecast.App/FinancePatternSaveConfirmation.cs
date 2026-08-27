@@ -1549,7 +1549,12 @@ public sealed class FinancePatternSaveConfirmation
             }
         }
 
-        if (ChangeCanCascade && UserChoseCascadeForward)
+        // Gated on UserChoseStayLinked too: breaking the chain leaves no forward
+        // chain to carry the change onto (planning/28's "break ⇒ no forward chain
+        // ⇒ Q4 gone"), matching the popup hiding this question under "let the
+        // chain break." UserChoseStayLinked defaults true, so an amount-only edit
+        // with no chain-boundary question still cascades as before.
+        if (ChangeCanCascade && UserChoseCascadeForward && UserChoseStayLinked)
         {
             // Cascades onto whatever successors are still standing after
             // boundary resolution above — including one just date-adjusted

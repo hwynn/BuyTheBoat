@@ -229,7 +229,12 @@ public sealed class EarmarkPatternSaveConfirmation
             }
         }
 
-        if (PlanChangeCanCascade && UserChoseCascadeForward && successors.Count > 0)
+        // Gated on UserChoseStayLinked too (both branches): breaking the chain
+        // leaves no forward chain to carry the change onto (planning/28's "break
+        // ⇒ no forward chain"), matching the popup hiding this question under
+        // "let the chain break." UserChoseStayLinked defaults true, so a plan
+        // with no chain-boundary question still cascades as before.
+        if (PlanChangeCanCascade && UserChoseCascadeForward && UserChoseStayLinked && successors.Count > 0)
         {
             // Cascades onto whatever successors are still standing after
             // boundary resolution above — including one just date-adjusted
@@ -248,7 +253,7 @@ public sealed class EarmarkPatternSaveConfirmation
                 toSave[cascaded.DatePattern.DtStart] = cascaded;
             }
         }
-        else if (PlanChangeCanCascade && UserChoseCascadeForward && crossBoundaryTarget is not null && crossBoundaryGoal is not null)
+        else if (PlanChangeCanCascade && UserChoseCascadeForward && UserChoseStayLinked && crossBoundaryTarget is not null && crossBoundaryGoal is not null)
         {
             // planning/27's "fourth relationship" — the far side belongs to
             // a DIFFERENT finance_id than everything else this method

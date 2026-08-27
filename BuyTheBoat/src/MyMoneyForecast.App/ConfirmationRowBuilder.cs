@@ -100,32 +100,18 @@ internal static class ConfirmationRowBuilder
             rows.Add(new AnnouncementRow(ConfirmationRowIds.SourceChange, r.SourceChangeWarning));
         }
 
-        // "Stay linked or break" — shared by both chain types (only one is ever
-        // true per request). Each option carries its own consequence, shown
-        // while it's the selected one. Mirrors ChainBoundarySection.
-        if (r.TouchesChainBoundary || r.PlanTouchesChainBoundary)
-        {
-            rows.Add(new ChoiceRow(ConfirmationRowIds.ChainBoundary,
-                "This plan is part of a chain. Should it stay connected to its neighbor?",
-                [
-                    new ChoiceOption("Keep it linked — adjust the neighboring segment to match", "", r.StayLinkedWarning),
-                    new ChoiceOption("Let the chain break", "", r.LetItBreakWarning),
-                ],
-                DefaultIndex: 0,
-                Layout: OptionLayout.Stacked));
-        }
-
-        // "Cascade forward or not" for an Amount/shape change. The always-shown
-        // description rides as both options' consequence. Mirrors CascadeSection.
-        // The cross-boundary Q6 questions (planning/28) nest under the "apply
-        // going forward" option — they only matter if the change actually carries
-        // forward, so the popup shows them only while that option is selected,
-        // instead of as flat rows always visible. One per later finance pattern
-        // the amount change reaches that's funded by more than one earmark
-        // pattern; each its OWN row kind, never the break-off Consolidation above
-        // (the two do different things and never appear together — an edit is a
-        // break-off or a carry-forward, not both). Default "keep them separate"
-        // (0) — the less-destructive option, matching the break-off row's default.
+        // "Cascade forward or not" for an Amount/shape change, built first so it
+        // can be nested under the chain question below. The cross-boundary Q6
+        // questions (planning/28) nest under its "apply going forward" option —
+        // they only matter if the change actually carries forward, so the popup
+        // shows them only while that option is selected, instead of as flat rows
+        // always visible. One per later finance pattern the amount change reaches
+        // that's funded by more than one earmark pattern; each its OWN row kind,
+        // never the break-off Consolidation above (the two do different things
+        // and never appear together — an edit is a break-off or a carry-forward,
+        // not both). Default "keep them separate" (0) — the less-destructive
+        // option, matching the break-off row's default.
+        ChoiceRow? cascadeRow = null;
         if (r.ChangeCanCascade || r.PlanChangeCanCascade)
         {
             var carryForwardChildren = r.CrossBoundaryConsolidations
@@ -140,14 +126,39 @@ internal static class ConfirmationRowBuilder
                     Layout: OptionLayout.Stacked))
                 .ToList();
 
-            rows.Add(new ChoiceRow(ConfirmationRowIds.Cascade,
+            cascadeRow = new ChoiceRow(ConfirmationRowIds.Cascade,
                 "This change could also apply to later segments in the chain. What do you want to do?",
                 [
                     new ChoiceOption("Apply it going forward too", "", r.CascadeDescription) { Children = carryForwardChildren },
                     new ChoiceOption("Only this segment", "", r.CascadeDescription),
                 ],
                 DefaultIndex: 0,
+                Layout: OptionLayout.Stacked);
+        }
+
+        // "Stay linked or break" — shared by both chain types (only one is ever
+        // true per request). The cascade question nests under "keep it linked":
+        // breaking the chain leaves no forward chain to carry the change onto
+        // (planning/28's "break ⇒ no forward chain ⇒ Q4 gone"), so the popup hides
+        // it there — and the wrapper gates the cascade on the stay-linked answer
+        // to match. Each option carries its own consequence, shown while selected.
+        if (r.TouchesChainBoundary || r.PlanTouchesChainBoundary)
+        {
+            rows.Add(new ChoiceRow(ConfirmationRowIds.ChainBoundary,
+                "This plan is part of a chain. Should it stay connected to its neighbor?",
+                [
+                    new ChoiceOption("Keep it linked — adjust the neighboring segment to match", "", r.StayLinkedWarning)
+                    {
+                        Children = cascadeRow is null ? [] : [cascadeRow],
+                    },
+                    new ChoiceOption("Let the chain break", "", r.LetItBreakWarning),
+                ],
+                DefaultIndex: 0,
                 Layout: OptionLayout.Stacked));
+        }
+        else if (cascadeRow is not null)
+        {
+            rows.Add(cascadeRow); // no chain boundary in play — the cascade question stands on its own
         }
 
         // Phase 1's trivial-fields cascade (Priority/Mandatory/Description/

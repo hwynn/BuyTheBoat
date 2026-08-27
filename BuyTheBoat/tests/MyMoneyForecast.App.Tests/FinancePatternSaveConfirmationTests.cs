@@ -1046,6 +1046,65 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         cascade.Options[1].Children.ShouldBeEmpty(); // nothing under "only this segment"
     }
 
+    // Completing planning/28's Q3 -> Q4 -> Q6 tree: when an edit touches the chain
+    // boundary AND the amount, the cascade question nests under "keep it linked" —
+    // breaking the chain leaves nothing forward to carry the change onto.
+    [Fact]
+    public void The_cascade_question_is_nested_under_keep_it_linked_when_the_edit_also_touches_the_boundary()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+
+        var edited = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 15)); // end date AND amount changed
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, edited, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+        confirmation.Run();
+
+        captured.ShouldNotBeNull();
+        captured!.Rows.OfType<ChoiceRow>().ShouldNotContain(r => r.Id == ConfirmationRowIds.Cascade); // not a top-level row
+        var chainBoundary = captured.Rows.OfType<ChoiceRow>().Single(r => r.Id == ConfirmationRowIds.ChainBoundary);
+        chainBoundary.Options[0].Children.OfType<ChoiceRow>().ShouldContain(r => r.Id == ConfirmationRowIds.Cascade); // nested under "keep it linked"
+        chainBoundary.Options[1].Children.ShouldBeEmpty(); // nothing under "let the chain break"
+    }
+
+    [Fact]
+    public void Breaking_the_chain_stops_the_amount_from_carrying_forward()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+
+        var edited = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 15));
+        var confirmation = Confirmation(1, edited, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => new ConfirmationOutcome
+        {
+            Proceed = true,
+            ChosenOptionIndex = new Dictionary<string, int> { [ConfirmationRowIds.ChainBoundary] = 1 }, // let the chain break
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1000m); // the later segment keeps its old amount — the change didn't carry forward
+    }
+
+    [Fact]
+    public void Keeping_the_chain_linked_still_carries_the_amount_forward()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+
+        var edited = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 15));
+        Confirmation(1, edited, accountId: 1, Forecast()).Run().ShouldBeTrue(); // default: keep linked + apply going forward
+
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // carried forward, since the chain stayed linked
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
