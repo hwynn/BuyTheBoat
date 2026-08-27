@@ -32,6 +32,12 @@ internal sealed record RowInputs
     // ChoiceRow. Empty unless the amount change is actually carried forward onto
     // such a finance pattern.
     public IReadOnlyList<CrossBoundaryConsolidationInput> CrossBoundaryConsolidations { get; init; } = [];
+
+    // Whether a consolidation is on the table this save, so the two consolidate-
+    // strategy questions apply — sizing always, spread only when a clear income
+    // exists (otherwise both spreads land on the same result).
+    public bool ShowConsolidationSizing { get; init; }
+    public bool ShowConsolidationSpread { get; init; }
 }
 
 // One later segment that needs a cross-boundary combine-or-keep-separate question,
@@ -125,6 +131,34 @@ internal static class ConfirmationRowBuilder
                     DefaultIndex: 0,
                     Layout: OptionLayout.Stacked))
                 .ToList();
+
+            // The two consolidate-strategy questions ride alongside the Q6 rows,
+            // under "apply going forward" — they matter whenever a consolidation
+            // happens downstream (a chosen combine, or a forced shape-change fold).
+            // Sizing always; spread only when a clear income makes the two differ.
+            if (r.ShowConsolidationSizing)
+            {
+                carryForwardChildren.Add(new ChoiceRow(ConfirmationRowIds.ConsolidationSizing,
+                    "When savings plans get combined, how should the combined plan be sized?",
+                    [
+                        new ChoiceOption("Adjust it to meet the goal", "", ""),
+                        new ChoiceOption("Keep saving at the current rate (may miss the goal)", "", ""),
+                    ],
+                    DefaultIndex: 0,
+                    Layout: OptionLayout.Stacked));
+            }
+
+            if (r.ShowConsolidationSpread)
+            {
+                carryForwardChildren.Add(new ChoiceRow(ConfirmationRowIds.ConsolidationSpread,
+                    "And how should the combined plan's contributions be spread?",
+                    [
+                        new ChoiceOption("Across your paydays", "", ""),
+                        new ChoiceOption("Evenly over time", "", ""),
+                    ],
+                    DefaultIndex: 0,
+                    Layout: OptionLayout.Stacked));
+            }
 
             cascadeRow = new ChoiceRow(ConfirmationRowIds.Cascade,
                 "This change could also apply to later segments in the chain. What do you want to do?",

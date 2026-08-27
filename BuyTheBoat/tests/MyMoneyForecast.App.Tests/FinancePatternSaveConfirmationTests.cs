@@ -1220,6 +1220,57 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorPlans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 11, 1)); // clamped to the successor's new start
     }
 
+    // #2 — the consolidate-strategy picker. When a consolidation is on the table
+    // (here a later segment with two plans that could be combined), the sizing
+    // question appears nested under "apply going forward."
+    [Fact]
+    public void The_consolidate_sizing_question_appears_when_a_consolidation_is_possible()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, raisedCurrent, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+        confirmation.Run();
+
+        captured.ShouldNotBeNull();
+        var cascade = captured!.Rows.OfType<ChoiceRow>().Single(r => r.Id == ConfirmationRowIds.Cascade);
+        cascade.Options[0].Children.OfType<ChoiceRow>().ShouldContain(r => r.Id == ConfirmationRowIds.ConsolidationSizing); // nested under "apply going forward"
+    }
+
+    [Fact]
+    public void Combining_with_keep_current_rate_holds_the_plans_own_rate_not_the_goal()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var confirmation = Confirmation(1, raisedCurrent, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => new ConfirmationOutcome
+        {
+            Proceed = true,
+            ChosenOptionIndex = new Dictionary<string, int>
+            {
+                [ConfirmationRowIds.CrossBoundaryConsolidation(2)] = 1, // combine
+                [ConfirmationRowIds.ConsolidationSizing] = 1, // keep the current rate
+            },
+        };
+        confirmation.Run().ShouldBeTrue();
+
+        var plan = _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2);
+        plan.Amount.ShouldBe(-900m); // combined current schedule ($3,600 over 4 months), not the goal's $1,200
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

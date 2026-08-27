@@ -113,6 +113,13 @@ public static class ConfirmationRowIds
     /// <summary>[CALC] The row id of the cross-boundary combine-or-keep-separate question for one later segment, by its finance_id.</summary>
     /// <param name="financeId">The later segment the question is about.</param>
     public static string CrossBoundaryConsolidation(int financeId) => CrossBoundaryConsolidationPrefix + financeId;
+
+    // The two consolidate-strategy questions (planning/28), shown whenever a
+    // consolidation is on the table: how the folded plan is sized (meet the goal
+    // vs keep the current rate) and how it's spread (across paydays vs evenly).
+    // One pair for the whole save, applied to every consolidation it makes.
+    public const string ConsolidationSizing = "consolidation-sizing";
+    public const string ConsolidationSpread = "consolidation-spread";
 }
 
 // The user's answer, as the raw selections the popup reports — one option

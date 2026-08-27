@@ -319,6 +319,19 @@ public sealed class FinancePatternSaveConfirmation
     // the outcome in Run, applied by ReconcileCascadedSuccessorSavingsPlans.
     private IReadOnlyDictionary<int, bool> _successorCombineChoices = new Dictionary<int, bool>();
 
+    // Whether a consolidation is on the table this save (a multi-plan successor the
+    // cascade touches, forced by a schedule change or offered as a combine), so the
+    // two consolidate-strategy questions apply. The spread one only differs when a
+    // single clear income exists to pace against.
+    private bool _consolidationStrategyApplies;
+    private bool _consolidationHasIncomeForSpread;
+
+    // The user's two consolidate-strategy answers, applied to every consolidation
+    // this save makes. Default to the long-standing behavior (meet the goal, pace to
+    // income) so a headless caller consolidates exactly as before.
+    private ConsolidationSizing _chosenSizing = ConsolidationSizing.MeetGoal;
+    private ConsolidationSpread _chosenSpread = ConsolidationSpread.AcrossPaydays;
+
     // planning/27's own Phase 1 — the saved pattern plus every other
     // same-Source FinancialPattern (concurrent ones already excluded — see
     // DetermineChainConditionsIfApplicable's own note), captured before
@@ -621,6 +634,8 @@ public sealed class FinancePatternSaveConfirmation
                 successor => successor.FinanceId,
                 // [1] combine, [0] keep separate (the default, also for a headless caller).
                 successor => Chosen(outcome, ConfirmationRowIds.CrossBoundaryConsolidation(successor.FinanceId)) == 1);
+            _chosenSizing = ChoseConsolidationSizing(outcome);
+            _chosenSpread = ChoseConsolidationSpread(outcome);
         }
 
         PerformSave();
@@ -681,6 +696,14 @@ public sealed class FinancePatternSaveConfirmation
     // leave them. Absent (headless) reads as leave — nothing re-paces money
     // when no one was actually asked.
     private static bool ChoseToRepaceBills(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.PacedBillsCascade) == 0;
+
+    // consolidation sizing: [0] meet the goal (default, also headless), [1] keep the current rate.
+    private static ConsolidationSizing ChoseConsolidationSizing(ConfirmationOutcome outcome) =>
+        Chosen(outcome, ConfirmationRowIds.ConsolidationSizing) == 1 ? ConsolidationSizing.KeepCurrentPace : ConsolidationSizing.MeetGoal;
+
+    // consolidation spread: [0] across paydays (default, also headless), [1] evenly.
+    private static ConsolidationSpread ChoseConsolidationSpread(ConfirmationOutcome outcome) =>
+        Chosen(outcome, ConfirmationRowIds.ConsolidationSpread) == 1 ? ConsolidationSpread.Evenly : ConsolidationSpread.AcrossPaydays;
 
     /// <summary>[CALC] Computes the nine conditions above against the current Savings Plan and the proposed edit. Everything here reads off the current, already-saved forecast — it does not yet simulate what the forecast would look like with the proposed edit actually applied, so ChangeWarrantsSuggestions in particular only catches a plan that's already concerning today, not one this specific edit would newly make concerning (the same gap planning/22 §3 already named for the Expense form's own passive status indicator). internal (not private) so FinancePatternSaveConfirmationTests can call it directly ahead of a method that Run() itself can't reach yet (NarrowSurvivingPlanIfNeeded) without needing Run()'s own placeholder guidance step to run too.</summary>
     internal void DetermineConditions()
@@ -1038,24 +1061,38 @@ public sealed class FinancePatternSaveConfirmation
 
         var book = _requestForecast().Book;
         var candidates = new List<FinancialPattern>();
+        var anyConsolidating = false;
 
         foreach (var successor in context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart))
         {
-            // Only an amount-only carry-forward is a real choice; a schedule change
-            // moves the occurrence dates and forces the earmark patterns to
-            // consolidate (no question).
-            if (successor.Amount == _proposedPattern.Amount || !successor.DatePattern.HasSameShapeAs(_proposedPattern.DatePattern))
+            var shapeChanged = !successor.DatePattern.HasSameShapeAs(_proposedPattern.DatePattern);
+            var amountChanged = successor.Amount != _proposedPattern.Amount;
+            if (!amountChanged && !shapeChanged)
             {
-                continue;
+                continue; // the carry-forward doesn't touch this successor
             }
 
-            if (book.EarMarkPatternsFor(successor.FinanceId).Count > 1)
+            if (book.EarMarkPatternsFor(successor.FinanceId).Count <= 1)
+            {
+                continue; // a single earmark pattern is re-rated/re-aligned, never consolidated
+            }
+
+            // Multi-earmark-pattern: a schedule change forces a fold; an amount-only
+            // change offers the combine-or-keep-separate question. Either way a
+            // consolidation is possible, so the two strategy questions apply.
+            anyConsolidating = true;
+            if (amountChanged && !shapeChanged)
             {
                 candidates.Add(successor);
             }
         }
 
         _crossBoundaryConsolidations = candidates;
+        _consolidationStrategyApplies = anyConsolidating;
+        // The spread question only differs when Consolidate's own AcrossPaydays would
+        // actually pace — i.e. exactly one income stream to pace against.
+        _consolidationHasIncomeForSpread = anyConsolidating
+            && book.AllFinancialPatterns().Count(pattern => pattern.Amount > 0m) == 1;
     }
 
     /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. Was a single hardcoded XAML string until 2026-08-17, when ConsolidationNeeded was widened to also force consolidation for a start_date change, not just a recurrence-shape one — the old text ("because the schedule itself is changing") would have been actively wrong for a start-only edit.</summary>
@@ -1121,6 +1158,8 @@ public sealed class FinancePatternSaveConfirmation
             CrossBoundaryConsolidations = _crossBoundaryConsolidations
                 .Select(successor => new CrossBoundaryConsolidationInput(successor.FinanceId, successor.Description))
                 .ToList(),
+            ShowConsolidationSizing = _consolidationStrategyApplies,
+            ShowConsolidationSpread = _consolidationHasIncomeForSpread,
         };
 
         return new ImplicitChangeConfirmationRequest
@@ -1699,6 +1738,8 @@ public sealed class FinancePatternSaveConfirmation
             ManualEarmarksForThisGoal = _repositories.ManualEarmarks.GetAll().Where(earmark => earmark.FinanceId == goal.FinanceId).ToList(),
             AllPatterns = _repositories.FinancialPatterns.GetAll(),
             CurrentJar = JarOn(_requestForecast().AsOfDate, goal.FinanceId),
+            Sizing = _chosenSizing,
+            Spread = _chosenSpread,
         }).ConsolidatedPlan;
 
         foreach (var plan in plans)
