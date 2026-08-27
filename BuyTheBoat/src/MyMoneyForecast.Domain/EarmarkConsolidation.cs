@@ -54,12 +54,40 @@ namespace MyMoneyForecast.Domain;
 // balance floored below MilestoneAmount) is added to A precisely to prevent
 // that — the new plan asks for exactly that much less, protecting the
 // surplus instead of erasing it.
+// How much the single consolidated plan should total — the first of the two
+// consolidate-strategy choices (planning/28). MeetGoal sizes it to exactly cover
+// the goal, net of what's already banked (no over- or under-shoot). KeepCurrentPace
+// instead keeps the surviving plans' own current scheduled pace (their amount-per-day
+// at full cadence — manual and skipped earmarks don't figure in), which may under-
+// or over-fund the goal: the user's call.
+public enum ConsolidationSizing
+{
+    MeetGoal,
+    KeepCurrentPace,
+}
+
+// How the consolidated plan's contributions are spread over its window — the second
+// choice, independent of the first. AcrossPaydays paces them to a single clear income
+// (falling back to Evenly when there's no usable one); Evenly spreads them across the
+// goal's own occurrences regardless.
+public enum ConsolidationSpread
+{
+    AcrossPaydays,
+    Evenly,
+}
+
 public sealed record ConsolidationRequest
 {
     public required FinancialPattern Goal { get; init; }
     public required IReadOnlyList<EarMarkPattern> SurvivingPlans { get; init; }
     public required IReadOnlyList<ManualEarmark> ManualEarmarksForThisGoal { get; init; }
     public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
+
+    // The two consolidate-strategy choices, each defaulting to the long-standing
+    // behavior (meet the goal, pace to income when there is one) so every existing
+    // caller is unaffected until it opts a user choice in.
+    public ConsolidationSizing Sizing { get; init; } = ConsolidationSizing.MeetGoal;
+    public ConsolidationSpread Spread { get; init; } = ConsolidationSpread.AcrossPaydays;
 
     // The live jar as of today (read by the caller off the current forecast
     // — a pure domain function has no forecast of its own, same reasoning as
@@ -127,11 +155,17 @@ public static class EarmarkConsolidation
                 .Sum(manual => manual.Amount)
             + (request.CurrentJar?.GlutSurplus ?? 0m);
 
-        // C = 0 (see this file's own header note) folds straight into this
-        // subtraction rather than appearing as its own term.
-        var total = Math.Max(0m, totalReleases - alreadyBanked);
+        // The first strategy choice sets the total. MeetGoal (C = 0, see this
+        // file's own header note): cover exactly what the goal will consume, net of
+        // what's already banked. KeepCurrentPace: ignore the goal and keep whatever
+        // the surviving plans were already scheduled to contribute over the window.
+        // Either way the already-banked money still carries forward as
+        // StartingAllocation below — only the ongoing ask differs.
+        var total = request.Sizing == ConsolidationSizing.KeepCurrentPace
+            ? CurrentScheduledTotal(request.SurvivingPlans, start, end)
+            : Math.Max(0m, totalReleases - alreadyBanked);
 
-        var (schedule, perOccurrence) = BuildSchedule(request.Goal, request.AllPatterns, start, end, total);
+        var (schedule, perOccurrence) = BuildSchedule(request.Goal, request.AllPatterns, request.Spread, start, end, total);
 
         var consolidatedPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -173,38 +207,43 @@ public static class EarmarkConsolidation
         return new ConsolidationResult { ConsolidatedPlan = consolidatedPlan, Start = start, End = end };
     }
 
-    /// <summary>[CALC] Picks the consolidated plan's own schedule and per-occurrence amount — paced to a single clear income stream's own rrule when exactly one exists and has occurrences in the window (AllocationPlanProposer's own "shape A"), or spread evenly across the goal's own occurrences otherwise (its "shape C," minus the single-occurrence special case, which doesn't apply here — a goal with multiple surviving plans to fold has already been contributed to more than once).</summary>
+    /// <summary>[CALC] Picks the consolidated plan's own schedule and per-occurrence amount for the chosen spread. AcrossPaydays paces to a single clear income stream's own rrule when exactly one exists with occurrences in the window (AllocationPlanProposer's own "shape A"), falling back to an even spread when there's no usable income; Evenly always spreads across the goal's own occurrences (the "shape C" fallback, minus the single-occurrence special case, which doesn't apply here — a goal with multiple surviving plans to fold has already been contributed to more than once).</summary>
     /// <param name="goal">The goal being funded.</param>
     /// <param name="allPatterns">Every pattern, to look for a single clear income stream to pace against.</param>
+    /// <param name="spread">Which way to spread the contributions — the second strategy choice.</param>
     /// <param name="start">The consolidated plan's own start.</param>
     /// <param name="end">The consolidated plan's own end — the goal's own Until.</param>
     /// <param name="total">The total the plan's contributions must sum to.</param>
     private static (RecurrenceRule Schedule, decimal PerOccurrence) BuildSchedule(
-        FinancialPattern goal, IReadOnlyList<FinancialPattern> allPatterns, DateOnly start, DateOnly end, decimal total)
+        FinancialPattern goal, IReadOnlyList<FinancialPattern> allPatterns, ConsolidationSpread spread, DateOnly start, DateOnly end, decimal total)
     {
-        var incomePatterns = allPatterns.Where(pattern => pattern.Amount > 0m).ToList();
-
-        if (incomePatterns.Count == 1)
+        if (spread == ConsolidationSpread.AcrossPaydays)
         {
-            var income = incomePatterns[0];
-            var planUntil = income.DatePattern.Until < end ? income.DatePattern.Until : end;
-            var paydayCount = income.DatePattern.GetOccurrences(start, planUntil).Count;
+            var incomePatterns = allPatterns.Where(pattern => pattern.Amount > 0m).ToList();
 
-            if (paydayCount > 0)
+            if (incomePatterns.Count == 1)
             {
-                var pacedSchedule = RecurrenceRule.Create(new RecurrenceRuleOptions
+                var income = incomePatterns[0];
+                var planUntil = income.DatePattern.Until < end ? income.DatePattern.Until : end;
+                var paydayCount = income.DatePattern.GetOccurrences(start, planUntil).Count;
+
+                if (paydayCount > 0)
                 {
-                    Frequency = income.DatePattern.Frequency,
-                    Interval = income.DatePattern.Interval,
-                    ByDay = income.DatePattern.ByDay,
-                    ByMonthDay = income.DatePattern.ByMonthDay,
-                    DtStart = start,
-                    Until = planUntil,
-                });
-                return (pacedSchedule, Math.Round(total / paydayCount, 2));
+                    var pacedSchedule = RecurrenceRule.Create(new RecurrenceRuleOptions
+                    {
+                        Frequency = income.DatePattern.Frequency,
+                        Interval = income.DatePattern.Interval,
+                        ByDay = income.DatePattern.ByDay,
+                        ByMonthDay = income.DatePattern.ByMonthDay,
+                        DtStart = start,
+                        Until = planUntil,
+                    });
+                    return (pacedSchedule, Math.Round(total / paydayCount, 2));
+                }
             }
         }
 
+        // Evenly, or AcrossPaydays with no usable income to pace against.
         var occurrenceCount = Math.Max(1, goal.DatePattern.GetOccurrences(start, end).Count);
         var spreadSchedule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
@@ -215,4 +254,12 @@ public static class EarmarkConsolidation
         });
         return (spreadSchedule, Math.Round(total / occurrenceCount, 2));
     }
+
+    /// <summary>[CALC] What the surviving plans are scheduled to contribute over the consolidation window at full cadence — the "keep the current pace" total: amount × occurrence-count per plan, counting every date the cadence would produce (skipped/excluded dates included) and ignoring manual earmarks, so neither a skip nor a one-off drags the ongoing pace down.</summary>
+    /// <param name="plans">The surviving plans being folded.</param>
+    /// <param name="start">The consolidation window's start.</param>
+    /// <param name="end">The consolidation window's end.</param>
+    private static decimal CurrentScheduledTotal(IReadOnlyList<EarMarkPattern> plans, DateOnly start, DateOnly end) =>
+        plans.Sum(plan => Math.Abs(plan.Amount)
+            * plan.DatePattern.WithExcludedDates([]).GetOccurrences(start, end).Count);
 }

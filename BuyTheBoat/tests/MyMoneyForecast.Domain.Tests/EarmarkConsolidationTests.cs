@@ -293,4 +293,102 @@ public class EarmarkConsolidationTests
             AllPatterns = [goal],
         }));
     }
+
+    // ---- The two consolidate-strategy choices (planning/28) ----
+
+    [Fact]
+    public void KeepCurrentPace_sizes_to_the_plans_current_scheduled_rate_not_the_goal()
+    {
+        // Two $100/month plans — $200/month combined — under a $300/month goal.
+        // KeepCurrentPace holds the $200 rate (under-funding the goal), rather than
+        // sizing up to the $300 the goal itself needs.
+        var goal = MonthlyGoal();
+        var plan1 = SurvivingPlan(goal, GoalStart, GoalEnd);
+        var plan2 = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan1, plan2],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal], // no income → spread evenly
+            Sizing = ConsolidationSizing.KeepCurrentPace,
+        });
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-200m); // the combined $200/month, not the goal's $300
+    }
+
+    [Fact]
+    public void MeetGoal_sizes_up_to_fully_fund_the_goal()
+    {
+        var goal = MonthlyGoal();
+        var plan1 = SurvivingPlan(goal, GoalStart, GoalEnd);
+        var plan2 = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan1, plan2],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+            Sizing = ConsolidationSizing.MeetGoal, // the default
+        });
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-300m); // sized up to fully fund the $300/month goal
+    }
+
+    [Fact]
+    public void Evenly_spreads_on_the_goals_occurrences_even_when_an_income_exists()
+    {
+        // An income exists, so AcrossPaydays would pace to its 25th-of-month
+        // schedule. Evenly ignores it and uses the goal's own 1st-of-month dates.
+        var goal = MonthlyGoal();
+        var income = MonthlyIncome(25, new DateOnly(2024, 6, 25), new DateOnly(2026, 1, 1));
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal, income],
+            Spread = ConsolidationSpread.Evenly,
+        });
+
+        result.ConsolidatedPlan.DatePattern.GetOccurrences().ShouldAllBe(date => date.Day == 1); // goal's 1st, not income's 25th
+    }
+
+    [Fact]
+    public void KeepCurrentPace_counts_skipped_dates_so_a_skip_doesnt_lower_the_rate()
+    {
+        // A plan skipping its Feb occurrence still counts at full monthly cadence,
+        // so keeping the current pace uses the un-skipped $100/month, not $75.
+        var goal = MonthlyGoal();
+        var planWithSkip = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    DtStart = GoalStart,
+                    Until = GoalEnd,
+                    ExcludedDates = [new DateOnly(2025, 2, 1)],
+                }),
+                Amount = -100m,
+            },
+            goal);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [planWithSkip],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+            Sizing = ConsolidationSizing.KeepCurrentPace,
+        });
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-100m); // 4 full occurrences × $100 / 4, not 3 skip-reduced
+    }
 }
