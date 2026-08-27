@@ -1105,6 +1105,84 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // carried forward, since the chain stayed linked
     }
 
+    // #5 — a chain neighbor stretched by keeping the boundary linked grows its OWN
+    // plan too. Predecessor case: pushing C's start to November stretches P's end
+    // forward to Oct 31, and P's own plan grows with it.
+    [Fact]
+    public void Keeping_the_chain_linked_grows_a_stretched_predecessors_own_plan()
+    {
+        var predecessor = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var current = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(predecessor, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _earMarkPatterns.Save(Plan(predecessor, -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31)));
+
+        var movedCurrent = Bill(2, "Rent", -1000m, new DateOnly(2025, 11, 1), new DateOnly(2025, 12, 1));
+        Confirmation(2, movedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var predecessorPlans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 1).ToList();
+        predecessorPlans.ShouldHaveSingleItem();
+        predecessorPlans[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 10, 31)); // grew to the predecessor's new end
+    }
+
+    // Successor case: pulling S's end back to June stretches T's start back to
+    // July 1, and T's own plan grows back with it.
+    [Fact]
+    public void Keeping_the_chain_linked_grows_a_stretched_successors_own_plan()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        var shortened = Bill(1, "Rent", -1000m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
+        Confirmation(1, shortened, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var successorPlans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 2).ToList();
+        successorPlans.ShouldHaveSingleItem();
+        successorPlans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1)); // grew back to the successor's new start
+    }
+
+    // #6 — M1's silent join. Both segments save at the same rate on the same
+    // rhythm, so the stretched predecessor's grown plan and the reverse-break-off's
+    // migrated plan end up identical over the same span and fold into one.
+    [Fact]
+    public void An_identical_stretched_plan_and_migrated_plan_are_silently_merged()
+    {
+        var predecessor = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var current = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(predecessor, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _earMarkPatterns.Save(Plan(predecessor, -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31)));
+        _earMarkPatterns.Save(Plan(current, -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        var movedCurrent = Bill(2, "Rent", -1000m, new DateOnly(2025, 11, 1), new DateOnly(2025, 12, 1));
+        Confirmation(2, movedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        var predecessorPlans = _earMarkPatterns.GetAll().Where(p => p.FinanceId == 1).ToList();
+        predecessorPlans.ShouldHaveSingleItem(); // grown + migrated folded into one
+        predecessorPlans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1));
+        predecessorPlans[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 10, 31));
+    }
+
+    // When they differ, they stay as two separate concurrent plans — not folded.
+    [Fact]
+    public void A_stretched_plan_and_a_differently_rated_migrated_plan_stay_separate()
+    {
+        var predecessor = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var current = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(predecessor, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _earMarkPatterns.Save(Plan(predecessor, -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31)));
+        _earMarkPatterns.Save(Plan(current, -800m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        var movedCurrent = Bill(2, "Rent", -1000m, new DateOnly(2025, 11, 1), new DateOnly(2025, 12, 1));
+        Confirmation(2, movedCurrent, accountId: 1, Forecast()).Run().ShouldBeTrue();
+
+        _earMarkPatterns.GetAll().Count(p => p.FinanceId == 1).ShouldBe(2); // grown $1000 plan + migrated $800 plan, kept separate
+    }
+
     private static FinancialPattern Bill(int financeId, string source, decimal amount, DateOnly start, DateOnly until, int? byMonthDay = null) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

@@ -1501,11 +1501,15 @@ public sealed class FinancePatternSaveConfirmation
         var toSave = new Dictionary<int, FinancialPattern>();
         var toDelete = new List<int>();
 
-        // The predecessor a forward Start move stretched over the days this
-        // segment no longer reaches, if any — M2's reverse-break-off (below)
-        // migrates this goal's own dropped earmark-pattern occurrences under it
-        // once every finance-row change here is saved.
+        // A chain neighbor stretched by keeping the boundary linked, if any:
+        // ExtendStart grows a predecessor's Until forward, ExtendUntil grows a
+        // successor's Start backward. Once every finance-row change here is saved,
+        // the neighbor's own savings plan is grown to match the stretch (#5), the
+        // reverse-break-off migrates any dropped occurrences under a predecessor
+        // (piece 2), and any earmark patterns left mergeable under one finance_id
+        // are silently joined (M1).
         FinancialPattern? extendedPredecessor = null;
+        FinancialPattern? extendedSuccessor = null;
 
         // The later finance patterns this finance pattern's own Amount/schedule
         // change was carried forward onto, each as (pre-cascade, carried-forward)
@@ -1545,6 +1549,7 @@ public sealed class FinancePatternSaveConfirmation
                 if (result.AdjustedNeighbor is { } adjusted)
                 {
                     toSave[adjusted.FinanceId] = adjusted;
+                    extendedSuccessor = adjusted; // stretched backward to stay contiguous — its plan grows to match (#5)
                 }
             }
         }
@@ -1615,7 +1620,15 @@ public sealed class FinancePatternSaveConfirmation
 
         if (extendedPredecessor is { } predecessor)
         {
-            PreserveDroppedOccurrencesUnderPredecessor(predecessor);
+            ExtendNeighborPlansToMatchStretch(predecessors.First(p => p.FinanceId == predecessor.FinanceId), predecessor); // #5
+            PreserveDroppedOccurrencesUnderPredecessor(predecessor); // reverse-break-off (piece 2)
+            JoinMergeableEarmarkPatterns(predecessor); // M1 — fold the stretched plan and the migrated one together when identical
+        }
+
+        if (extendedSuccessor is { } successor)
+        {
+            ExtendNeighborPlansToMatchStretch(successors.First(s => s.FinanceId == successor.FinanceId), successor); // #5
+            JoinMergeableEarmarkPatterns(successor); // M1
         }
 
         ReconcileCascadedSuccessorSavingsPlans(cascadeTouchedSuccessors);
@@ -1724,6 +1737,95 @@ public sealed class FinancePatternSaveConfirmation
                 },
                 predecessor);
             _repositories.EarMarkPatterns.Save(migrated);
+        }
+    }
+
+    /// <summary>[WRITES FILE] #5, the chain-side-effect twin of ApplyBoundaryExtensionsIfNeeded: when keeping the chain linked stretches a neighbor's span outward (a predecessor's Until grown forward, or a successor's Start grown backward), grows the neighbor's OWN earmark patterns that shared the moved boundary to match — so a stretched neighbor keeps funding its whole new span, not just the part it covered before. Until-outward keeps each plan's DtStart (WithUntil, an in-place update); Start-outward moves the Start earlier while keeping the same cadence (ReanchoredToStartOn) and can move DtStart, so that path deletes the old-key row first. An earmark pattern that ended before the neighbor's old boundary didn't share it and is left alone. Only handles GROWTH — a neighbor that instead shrank needs its plans clamped, a separate gap.</summary>
+    /// <param name="oldNeighbor">The neighbor before the boundary move.</param>
+    /// <param name="newNeighbor">The neighbor after — what the grown earmark patterns are sized and validated against.</param>
+    private void ExtendNeighborPlansToMatchStretch(FinancialPattern oldNeighbor, FinancialPattern newNeighbor)
+    {
+        var plans = _requestForecast().Book.EarMarkPatternsFor(newNeighbor.FinanceId);
+
+        if (newNeighbor.DatePattern.Until > oldNeighbor.DatePattern.Until)
+        {
+            foreach (var plan in plans.Where(plan => plan.DatePattern.Until == oldNeighbor.DatePattern.Until))
+            {
+                var grown = EarMarkPattern.Create(
+                    new EarMarkPatternOptions
+                    {
+                        FinanceId = plan.FinanceId,
+                        DatePattern = plan.DatePattern.WithUntil(newNeighbor.DatePattern.Until),
+                        Amount = plan.Amount,
+                        StartingAllocation = plan.StartingAllocation,
+                    },
+                    newNeighbor);
+                _repositories.EarMarkPatterns.Save(grown);
+            }
+        }
+
+        if (newNeighbor.DatePattern.ActiveStart < oldNeighbor.DatePattern.ActiveStart)
+        {
+            foreach (var plan in plans.Where(plan => plan.DatePattern.ActiveStart == oldNeighbor.DatePattern.ActiveStart))
+            {
+                var grown = EarMarkPattern.Create(
+                    new EarMarkPatternOptions
+                    {
+                        FinanceId = plan.FinanceId,
+                        DatePattern = plan.DatePattern.ReanchoredToStartOn(newNeighbor.DatePattern.ActiveStart),
+                        Amount = plan.Amount,
+                        StartingAllocation = plan.StartingAllocation,
+                    },
+                    newNeighbor);
+                _repositories.EarMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+                _repositories.EarMarkPatterns.Save(grown);
+            }
+        }
+    }
+
+    /// <summary>[WRITES FILE] M1's silent join (#6), applied to one goal: folds any two earmark patterns under it that can merge with no visible change (EarMarkPattern.CanJoinWithoutConsequence — same amount, same cadence, their occurrences a clean union) into one, repeating until none remain. Runs after a stretch has grown or re-homed plans under this goal (#5 + the reverse-break-off), where the neighbor's own grown plan and a migrated one can end up identical and covering the same span. A genuine difference (different amount or cadence) is left as two separate plans — a valid concurrent-funders shape, not folded behind the user's back.</summary>
+    /// <param name="goal">The goal whose earmark patterns to fold.</param>
+    private void JoinMergeableEarmarkPatterns(FinancialPattern goal)
+    {
+        var plans = _repositories.EarMarkPatterns.GetAll().Where(plan => plan.FinanceId == goal.FinanceId).ToList();
+        var originalKeys = plans.Select(plan => plan.DatePattern.DtStart).ToList();
+
+        bool folded;
+        do
+        {
+            folded = false;
+            for (var i = 0; i < plans.Count && !folded; i++)
+            {
+                for (var j = i + 1; j < plans.Count; j++)
+                {
+                    if (EarMarkPattern.CanJoinWithoutConsequence(plans[i], plans[j]))
+                    {
+                        var joined = plans[i].JoinedWith(plans[j], goal);
+                        plans.RemoveAt(j);
+                        plans.RemoveAt(i);
+                        plans.Add(joined);
+                        folded = true;
+                        break;
+                    }
+                }
+            }
+        }
+        while (folded);
+
+        if (plans.Count == originalKeys.Count)
+        {
+            return; // nothing merged — leave storage untouched
+        }
+
+        // Delete every original row first (so a fold landing on an existing key
+        // can't collide), then save the folded set.
+        foreach (var key in originalKeys)
+        {
+            _repositories.EarMarkPatterns.Delete(goal.FinanceId, key);
+        }
+        foreach (var plan in plans)
+        {
+            _repositories.EarMarkPatterns.Save(plan);
         }
     }
 
