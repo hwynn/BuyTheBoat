@@ -302,13 +302,17 @@ public sealed class FinancePatternSaveConfirmation
     // that did. SCOPE (piece 3): only the directly-edited goal's OWN plans, not a
     // chain neighbor stretched by ExtendStart/ExtendUntil — that case overlaps the
     // reverse-break-off and waits on the silent join (M1) to settle the overlap.
-    // The "[bill] occurs N more times" announcement and the over/underfund health
-    // check are deferred too; the extend itself is silent, like the truncations.
+    // The "[bill] occurs N more times" announcement now surfaces this (a
+    // BoundaryExtension row, 2026-08-27) — no longer silent; the over/underfund
+    // health check on the grown plan is still deferred.
     private BoundaryExtensionPlan? _boundaryExtensions;
 
     private sealed record BoundaryExtensionPlan(
         IReadOnlyList<EarMarkPattern> PlansSharingOldStart,
-        IReadOnlyList<EarMarkPattern> PlansSharingOldUntil);
+        IReadOnlyList<EarMarkPattern> PlansSharingOldUntil,
+        // How many more times the goal itself now occurs because the boundary
+        // moved out — what the "[bill] occurs N more times" announcement reports.
+        int AddedGoalOccurrences);
 
     // The later finance patterns this finance pattern's own Amount change will be
     // carried forward onto that are funded by MORE THAN ONE earmark pattern
@@ -679,7 +683,7 @@ public sealed class FinancePatternSaveConfirmation
         // under that same finance_id instead — a genuinely new mechanism,
         // not yet designed or built (see PerformImplicitEarmarkChanges's own
         // TODOs). One combined pass either way, per the note above.
-        if (IsChangeCritical || HasMultipleEarmarkPatterns || TouchesChainBoundary || ChangeCanCascade || TrivialFieldsCanCascade || !string.IsNullOrEmpty(SourceChangeWarning) || PacedBillsCanCascade || _goalHealthSuggestedPlan is not null || !string.IsNullOrEmpty(_concerningPlanNotice))
+        if (IsChangeCritical || HasMultipleEarmarkPatterns || TouchesChainBoundary || ChangeCanCascade || TrivialFieldsCanCascade || !string.IsNullOrEmpty(SourceChangeWarning) || PacedBillsCanCascade || _goalHealthSuggestedPlan is not null || !string.IsNullOrEmpty(_concerningPlanNotice) || _boundaryExtensions is { AddedGoalOccurrences: > 0 })
         {
             var outcome = ConfirmImplicitChanges?.Invoke(BuildConfirmationRequest()) ?? DefaultOutcome();
             if (!outcome.Proceed)
@@ -1133,7 +1137,30 @@ public sealed class FinancePatternSaveConfirmation
             return; // nothing moved outward, or no plan shared the boundary that did
         }
 
-        _boundaryExtensions = new BoundaryExtensionPlan(sharingOldStart, sharingOldUntil);
+        // How many more times the goal now occurs in the range the move opened up
+        // — the proposed pattern's own occurrences past the old Until, plus any
+        // before the old Start. Counted off the proposed (post-edit) shape, since
+        // that's what will actually occur going forward.
+        var addedPastOldUntil = _proposedPattern.DatePattern.Until > saved.DatePattern.Until
+            ? _proposedPattern.DatePattern.GetOccurrences(saved.DatePattern.Until.AddDays(1), _proposedPattern.DatePattern.Until).Count
+            : 0;
+        var addedBeforeOldStart = _proposedPattern.DatePattern.ActiveStart < saved.DatePattern.ActiveStart
+            ? _proposedPattern.DatePattern.GetOccurrences(_proposedPattern.DatePattern.ActiveStart, saved.DatePattern.ActiveStart.AddDays(-1)).Count
+            : 0;
+
+        _boundaryExtensions = new BoundaryExtensionPlan(sharingOldStart, sharingOldUntil, addedPastOldUntil + addedBeforeOldStart);
+    }
+
+    /// <summary>[CALC] The "[bill] occurs N more times" heads-up for a boundary that moved outward and grew a plan to track it — "" when no boundary extended a plan, or the move added no new occurrence. Names the goal's own added occurrences, and that its savings plan grows to keep pace (the money consequence of the otherwise-silent extend).</summary>
+    private string DescribeBoundaryExtensionAnnouncement()
+    {
+        if (_boundaryExtensions is not { AddedGoalOccurrences: > 0 } ext)
+        {
+            return "";
+        }
+
+        var times = ext.AddedGoalOccurrences == 1 ? "1 more time" : $"{ext.AddedGoalOccurrences} more times";
+        return $"{_proposedPattern.Source} now occurs {times} — its savings plan grows to keep pace.";
     }
 
     /// <summary>[READS FILE] Works out which later finance patterns this finance pattern's own Amount change will be carried forward onto that are funded by MORE THAN ONE earmark pattern (planning/28's cross-boundary Q6) — each needs its own combine-or-keep-separate question, since folding several earmark patterns into one is a real choice, not a forced one. Amount-only successors only: a schedule change moves the dates and forces them to consolidate with no question (ReconcileCascadedSuccessorSavingsPlans handles that directly). Stored in _crossBoundaryConsolidations for the confirmation to ask about; a no-op unless this change can actually be carried forward. Same "read before anything is saved" timing as its sibling Determine* calls. internal so a test can drive it directly.</summary>
@@ -1320,6 +1347,7 @@ public sealed class FinancePatternSaveConfirmation
             SourceChangeWarning = SourceChangeWarning,
             GoalHealthSuggestionQuestion = DescribeGoalHealthSuggestion(),
             ConcerningPlanNotice = _concerningPlanNotice,
+            BoundaryExtensionAnnouncement = DescribeBoundaryExtensionAnnouncement(),
             StayLinkedWarning = TouchesChainBoundary ? DescribeChainStayLinkedConsequence() : "",
             LetItBreakWarning = TouchesChainBoundary ? DescribeChainLetItBreakConsequence() : "",
             CascadeDescription = ChangeCanCascade ? DescribeChainCascadeConsequence() : "",

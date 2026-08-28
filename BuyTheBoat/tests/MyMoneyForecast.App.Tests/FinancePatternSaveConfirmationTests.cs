@@ -1047,6 +1047,30 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plan.DatePattern.GetOccurrences().ShouldContain(new DateOnly(2025, 11, 1)); // and the new months are really there
     }
 
+    // The extend-outward announcement (2026-08-27): growing a plan by moving the
+    // goal's boundary out is otherwise silent, so the save now surfaces a row
+    // naming how many more times the goal occurs.
+    [Fact]
+    public void Extending_a_goals_end_date_announces_how_many_more_times_it_occurs()
+    {
+        var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 1))); // shares the goal's end
+
+        var extendedBill = Bill(1, bill.Source, -40m, bill.DatePattern.ActiveStart, new DateOnly(2025, 11, 1)); // three months later
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, extendedBill, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run().ShouldBeTrue();
+
+        captured.ShouldNotBeNull();
+        var announcement = captured!.AnnouncementText(ConfirmationRowIds.BoundaryExtension);
+        announcement.ShouldContain("3 more times"); // Sep/Oct/Nov
+        announcement.ShouldContain("Gym Membership");
+    }
+
     // The Start-side twin: a future goal's Start pulled earlier carries a plan
     // that shared it back too, phase-preserving.
     [Fact]

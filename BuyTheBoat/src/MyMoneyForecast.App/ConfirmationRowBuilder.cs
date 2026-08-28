@@ -30,6 +30,10 @@ internal sealed record RowInputs
     // MessageBox), or "" when there's nothing worth surfacing. A plain
     // announcement — no choice attached.
     public string ConcerningPlanNotice { get; init; } = "";
+
+    // "[bill] occurs N more times" — the heads-up that moving a boundary outward
+    // grew a plan to keep pace. "" when no boundary extended a plan. Announcement.
+    public string BoundaryExtensionAnnouncement { get; init; } = "";
     public bool TouchesChainBoundary { get; init; }
     public bool PlanTouchesChainBoundary { get; init; }
     public string StayLinkedWarning { get; init; } = "";
@@ -162,6 +166,13 @@ internal static class ConfirmationRowBuilder
         if (!string.IsNullOrEmpty(r.ConcerningPlanNotice))
         {
             rows.Add(new AnnouncementRow(ConfirmationRowIds.ConcerningPlan, r.ConcerningPlanNotice));
+        }
+
+        // Moving a boundary outward grew a plan to keep pace — otherwise silent,
+        // so this names how many more times the goal now occurs. Announcement.
+        if (!string.IsNullOrEmpty(r.BoundaryExtensionAnnouncement))
+        {
+            rows.Add(new AnnouncementRow(ConfirmationRowIds.BoundaryExtension, r.BoundaryExtensionAnnouncement));
         }
 
         // "Cascade forward or not" for an Amount/shape change, built first so it

@@ -102,6 +102,8 @@ public static class ConfirmationRowIds
     public const string GoalHealthSuggestion = "goal-health-suggestion";
     // Plain heads-up that the plan is worth a look (the former post-save MessageBox).
     public const string ConcerningPlan = "concerning-plan";
+    // Heads-up that moving a boundary outward grew a plan — "[bill] occurs N more times".
+    public const string BoundaryExtension = "boundary-extension";
     public const string ChainBoundary = "chain-boundary";
     public const string Cascade = "cascade";
     public const string TrivialFieldsCascade = "trivial-fields-cascade";
