@@ -1168,9 +1168,8 @@ public partial class MainWindow : Window
             })
         {
             ConfirmImplicitChanges = ShowEditingHistoryConfirmation,
-            ShowSuggestion = ShowConcerningSuggestion,
             PickEarmarkPattern = PickEarmarkPatternToOpen,
-            NavigateToEarmarkForm = plan =>
+            NavigateToEarmarkForm = (plan, suggestedOverrides) =>
             {
                 if (isNew)
                 {
@@ -1193,7 +1192,7 @@ public partial class MainWindow : Window
                     // after a break-off, plan belongs to the new successor,
                     // and pattern is still the original, now-superseded values.
                     var goal = _financialPatterns.GetByFinanceId(plan.FinanceId) ?? pattern;
-                    EarmarkForm.LoadPattern(plan, goal);
+                    EarmarkForm.LoadPattern(plan, goal, suggestedOverrides);
                     SwitchToTab("Earmark");
                 }
                 else if (pattern.Amount < 0m)
@@ -1288,13 +1287,6 @@ public partial class MainWindow : Window
         var confirmWindow = new EditingHistoryConfirmationWindow(request) { Owner = this };
         var proceed = confirmWindow.ShowDialog() == true;
         return confirmWindow.ToOutcome(proceed);
-    }
-
-    /// <summary>[UI] The Concerning popup's own minimal, real form (2026-08-17) — a plain MessageBox naming the plan health concern FinancePatternSaveConfirmation.AskForSuggestions already worked out, matching this project's existing acknowledge-only MessageBox convention (see e.g. OnDeleteAccountClick's own "can't delete" case) rather than a bespoke Window. Deliberately not the elaborate strategy-picker planning/25 describes and defers — see ShowSuggestion's own field comment on FinancePatternSaveConfirmation for why.</summary>
-    /// <param name="message">The plain-language plan-health sentence to show — PlanHealthMessages.CurrentJarStateLine's own output, unchanged.</param>
-    private void ShowConcerningSuggestion(string message)
-    {
-        MessageBox.Show(this, message, "Worth a look", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     /// <summary>[UI] AskWhichEarmarkPatternToOpen's own real disambiguation, built 2026-08-17 — shows EarmarkPatternPickerWindow and returns whichever plan the user picked. Cancelling the picker (SelectedPlan stays null) falls back to the first plan in the list rather than opening nothing at all — Save has already committed by the time this runs, so there's always a real plan to land on somewhere, and refusing to pick one would only strand the user on whatever tab they started from.</summary>

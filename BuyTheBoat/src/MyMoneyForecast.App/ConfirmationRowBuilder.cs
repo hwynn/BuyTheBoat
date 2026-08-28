@@ -20,6 +20,16 @@ internal sealed record RowInputs
     public string KeepSeparateFundingQuestion { get; init; } = "";
 
     public string SourceChangeWarning { get; init; } = "";
+
+    // The goal-health suggestion's own accept/reject wording, or "" when there's
+    // no correction to offer (so the row isn't shown). Accepting pre-fills the
+    // single plan's form with the correction as an unsaved edit.
+    public string GoalHealthSuggestionQuestion { get; init; } = "";
+
+    // The plan's own health heads-up (the former post-save "Worth a look"
+    // MessageBox), or "" when there's nothing worth surfacing. A plain
+    // announcement — no choice attached.
+    public string ConcerningPlanNotice { get; init; } = "";
     public bool TouchesChainBoundary { get; init; }
     public bool PlanTouchesChainBoundary { get; init; }
     public string StayLinkedWarning { get; init; } = "";
@@ -124,6 +134,34 @@ internal static class ConfirmationRowBuilder
         if (!string.IsNullOrEmpty(r.SourceChangeWarning))
         {
             rows.Add(new AnnouncementRow(ConfirmationRowIds.SourceChange, r.SourceChangeWarning));
+        }
+
+        // The goal-health suggestion (planning/25): a single plan that no longer
+        // meets its edited goal, offered a correction to pre-fill its own form
+        // with. Accept is pre-selected (the healthy option); reject carries no
+        // consequence yet — reserved for cases where leaving it would actually
+        // break something (a paycheck/bill desync and the like).
+        // TODO: once more than one correction can be proposed, dedupe identical
+        // ones before this renders — never show two options suggesting the same
+        // thing (the author called this out as a must-check before rendering).
+        if (!string.IsNullOrEmpty(r.GoalHealthSuggestionQuestion))
+        {
+            rows.Add(new ChoiceRow(ConfirmationRowIds.GoalHealthSuggestion,
+                r.GoalHealthSuggestionQuestion,
+                [
+                    new ChoiceOption("Load the suggested amount", "", ""),
+                    new ChoiceOption("Leave it as is", "", ""),
+                ],
+                DefaultIndex: 0,
+                Layout: OptionLayout.Stacked));
+        }
+
+        // The plan's own health heads-up — a plain announcement, no choice. Was a
+        // separate post-save MessageBox; now it rides the confirmation like every
+        // other message this save surfaces.
+        if (!string.IsNullOrEmpty(r.ConcerningPlanNotice))
+        {
+            rows.Add(new AnnouncementRow(ConfirmationRowIds.ConcerningPlan, r.ConcerningPlanNotice));
         }
 
         // "Cascade forward or not" for an Amount/shape change, built first so it

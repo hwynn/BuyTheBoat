@@ -30,6 +30,11 @@ internal static class Confirm
     public static ConfirmationOutcome ChoseToAdjustKeptSeparatePlans(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.KeepSeparateFunding, 0);
     public static ConfirmationOutcome ChoseToLeaveKeptSeparatePlansAsIs(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.KeepSeparateFunding, 1);
 
+    // goal-health suggestion — [0] load the suggested correction (the popup's
+    // pre-selection), [1] leave the plan as-is.
+    public static ConfirmationOutcome AcceptedGoalHealthSuggestion(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.GoalHealthSuggestion, 0);
+    public static ConfirmationOutcome DeclinedGoalHealthSuggestion(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.GoalHealthSuggestion, 1);
+
     // chain-boundary — [0] stay linked, [1] let it break.
     public static ConfirmationOutcome ChoseToLetChainBreak(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.ChainBoundary, 1);
 

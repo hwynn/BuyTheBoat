@@ -18,8 +18,9 @@ namespace MyMoneyForecast.App;
 // shown through the ConfirmImplicitChanges delegate — deliberately minimal
 // (plain WPF controls, not the styled cards in
 // planning/mockups/editing-history-confirmation-mockups.html) but no longer
-// missing any of the Item B-G questions/warnings themselves: the Concerning
-// popup (AskForSuggestions/ShowSuggestion), the plan-disambiguation picker
+// missing any of the Item B-G questions/warnings themselves: the plan's health
+// heads-up (DetermineConcerningPlanNoticeIfApplicable — now an announcement row,
+// formerly a post-save MessageBox), the plan-disambiguation picker
 // (AskWhichEarmarkPatternToOpen/PickEarmarkPattern), and Item E's own named
 // consequence (AlterPastConsequence) all went from TODO/no-op to real,
 // tested mechanisms 2026-08-17. See this class's own bottom-of-header "TODO
@@ -187,8 +188,10 @@ namespace MyMoneyForecast.App;
 //    foundational ConfirmationRow.cs types exist, the DTO/popup reshape does
 //    not yet.
 //
-// 4. SMALLER gaps: AskForSuggestions' Concerning popup is deliberately
-//    minimal, not the full strategy-picker planning/25/28 describe;
+// 4. SMALLER gaps: the goal-health suggestion (DetermineGoalHealthSuggestionIfApplicable)
+//    is a v1 — a single amount-only correction offered accept/reject, not yet
+//    the full multi-option strategy-picker planning/25/28 describe (its reject
+//    warning is unbuilt, and identical options aren't deduped yet);
 //    PickEarmarkPatternToOpen falls back to the first plan on cancel rather
 //    than aborting navigation.
 //
@@ -340,6 +343,29 @@ public sealed class FinancePatternSaveConfirmation
     // as a question when the two totals differ (the plans over/underfund the new
     // amount) — see DetermineKeepSeparateFundingIfApplicable.
     private MeetGoalScalingResult? _keepSeparateFunding;
+
+    // The field overrides an accepted goal-health suggestion should pre-fill the
+    // Earmark form with (EarmarkFieldOverrideKeys → suggested value), passed into
+    // NavigateToEarmarkForm so the form opens with the correction as unsaved edits.
+    // Null until the user accepts a suggestion in the confirmation; a plain open
+    // otherwise. Single-plan only — the multi-plan cases resolve via implicit
+    // changes, where there's no single form to pre-fill.
+    private IReadOnlyDictionary<string, object?>? _acceptedSuggestionOverrides;
+
+    // The correction the goal-health suggestion offers — the single plan re-sized
+    // (via EarmarkScaling.ScaleToMeetGoal) to meet the EDITED goal, when it no
+    // longer does after this save. Null unless there's a real correction to offer;
+    // only its Amount is used today (the override the form pre-fills), though the
+    // whole proposed plan is kept so richer overrides can be added later. See
+    // DetermineGoalHealthSuggestionIfApplicable.
+    private EarMarkPattern? _goalHealthSuggestedPlan;
+
+    // The plan's own health heads-up, when it's worth warning about — the plain
+    // "Worth a look" sentence that used to be a separate post-save MessageBox,
+    // now shown as an announcement row so ALL of this save's messaging lives in
+    // the one confirmation this class drives (the author's own intent). "" when
+    // there's nothing to surface. See DetermineConcerningPlanNoticeIfApplicable.
+    private string _concerningPlanNotice = "";
 
     // planning/27's own Phase 1 — the saved pattern plus every other
     // same-Source FinancialPattern (concurrent ones already excluded — see
@@ -540,23 +566,13 @@ public sealed class FinancePatternSaveConfirmation
     // Invoked once Run() decides navigation should happen — matches this
     // project's existing PatternSaved/AccountSaved/ManualEarmarksSaved
     // callback idiom (set by MainWindow) rather than giving this class a
-    // direct reference to EarmarkFormPanel or the tab control. Null means
-    // "open a blank Earmark form" (mirrors MainWindow's own existing
-    // fallback when a pattern has no plan yet). Never invoked when
-    // UserSkippedPlanning is true.
-    public Action<EarMarkPattern?>? NavigateToEarmarkForm { get; set; }
-
-    // The Concerning popup's own callback, same idiom as NavigateToEarmarkForm
-    // just above — this class builds the message, MainWindow shows it, so
-    // this class stays WPF-free. Built 2026-08-17, deliberately minimal: a
-    // plain PlanHealthMessages.CurrentJarStateLine sentence, acknowledge-only
-    // — NOT the elaborate strategy-picker (pre-fill Suggested/Working-state
-    // values, one default suggested set or none) planning/25's own "Still
-    // open" section describes, which the author explicitly deferred and
-    // whose own specific strategies were never designed. Null (nothing
-    // wired up — most tests, and any host that hasn't connected one) means
-    // AskForSuggestions is a silent no-op, same as before this existed.
-    public Action<string>? ShowSuggestion { get; set; }
+    // direct reference to EarmarkFormPanel or the tab control. Null (the first
+    // argument) means "open a blank Earmark form" (mirrors MainWindow's own
+    // existing fallback when a pattern has no plan yet). Never invoked when
+    // UserSkippedPlanning is true. The second argument is an accepted
+    // suggestion's field overrides (EarmarkFieldOverrideKeys) to pre-fill the
+    // form with as unsaved edits, or null for a plain open.
+    public Action<EarMarkPattern?, IReadOnlyDictionary<string, object?>?>? NavigateToEarmarkForm { get; set; }
 
     // AskWhichEarmarkPatternToOpen's own disambiguation callback, same
     // delegate idiom as the two above — built 2026-08-17 (EarmarkPatternPickerWindow),
@@ -643,6 +659,17 @@ public sealed class FinancePatternSaveConfirmation
         // as its sibling Determine* calls.
         DetermineKeepSeparateFundingIfApplicable();
 
+        // The goal-health suggestion (planning/25's deferred picker): if editing
+        // this goal leaves its single savings plan out of step with it, work out
+        // a corrected plan to offer — accepting it pre-fills that plan's form with
+        // the fix as an unsaved edit. Its own accept/reject row.
+        DetermineGoalHealthSuggestionIfApplicable();
+
+        // The plan's own health heads-up (formerly a post-save MessageBox) — worked
+        // out here so it can ride the confirmation as an announcement row instead,
+        // keeping all of this save's messaging in the one place this class drives.
+        DetermineConcerningPlanNoticeIfApplicable();
+
         // SETTLED 2026-08-11 (author): Item F's own question applies
         // regardless of which Item E path gets chosen — it is NOT
         // break-off-only. What "consolidate" means differs by path: for
@@ -652,7 +679,7 @@ public sealed class FinancePatternSaveConfirmation
         // under that same finance_id instead — a genuinely new mechanism,
         // not yet designed or built (see PerformImplicitEarmarkChanges's own
         // TODOs). One combined pass either way, per the note above.
-        if (IsChangeCritical || HasMultipleEarmarkPatterns || TouchesChainBoundary || ChangeCanCascade || TrivialFieldsCanCascade || !string.IsNullOrEmpty(SourceChangeWarning) || PacedBillsCanCascade)
+        if (IsChangeCritical || HasMultipleEarmarkPatterns || TouchesChainBoundary || ChangeCanCascade || TrivialFieldsCanCascade || !string.IsNullOrEmpty(SourceChangeWarning) || PacedBillsCanCascade || _goalHealthSuggestedPlan is not null || !string.IsNullOrEmpty(_concerningPlanNotice))
         {
             var outcome = ConfirmImplicitChanges?.Invoke(BuildConfirmationRequest()) ?? DefaultOutcome();
             if (!outcome.Proceed)
@@ -673,6 +700,17 @@ public sealed class FinancePatternSaveConfirmation
                 successor => Chosen(outcome, ConfirmationRowIds.CrossBoundaryConsolidation(successor.FinanceId)) == 1);
             _chosenSizing = ChoseConsolidationSizing(outcome);
             _chosenSpread = ChoseConsolidationSpread(outcome);
+
+            // An accepted goal-health suggestion becomes the overrides the plan's
+            // form opens pre-filled with. Only its amount today; the whole proposed
+            // plan is on hand for richer overrides later.
+            if (_goalHealthSuggestedPlan is { } suggested && ChoseAcceptGoalHealthSuggestion(outcome))
+            {
+                _acceptedSuggestionOverrides = new Dictionary<string, object?>
+                {
+                    [EarmarkFieldOverrideKeys.Amount] = suggested.Amount,
+                };
+            }
         }
 
         PerformSave();
@@ -697,12 +735,7 @@ public sealed class FinancePatternSaveConfirmation
         if (!UserSkippedPlanning)
         {
             var target = AskWhichEarmarkPatternToOpen();
-            if (ChangeWarrantsSuggestions)
-            {
-                AskForSuggestions();
-            }
-
-            NavigateToEarmarkForm?.Invoke(target);
+            NavigateToEarmarkForm?.Invoke(target, _acceptedSuggestionOverrides);
         }
 
         return true;
@@ -743,6 +776,11 @@ public sealed class FinancePatternSaveConfirmation
     // pre-selection), [1] leave them. Absent (headless) reads as leave — each
     // plan keeps its own rate, nothing re-rates money when no one was asked.
     private static bool ChoseToAdjustKeptSeparatePlans(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.KeepSeparateFunding) == 0;
+
+    // goal-health suggestion: [0] load the suggested contribution (the popup's own
+    // pre-selection), [1] leave it. Absent (headless) reads as leave — the form
+    // opens plain, no correction pre-filled, when no one accepted one.
+    private static bool ChoseAcceptGoalHealthSuggestion(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.GoalHealthSuggestion) == 0;
 
     // consolidation sizing: [0] meet the goal (default, also headless), [1] keep the current rate.
     private static ConsolidationSizing ChoseConsolidationSizing(ConfirmationOutcome outcome) =>
@@ -1201,6 +1239,45 @@ public sealed class FinancePatternSaveConfirmation
         return $"Kept separate, these savings plans {problem} the new amount. Adjust their contributions to meet it?";
     }
 
+    /// <summary>[READS FILE] Works out whether the single savings plan under the edited goal would no longer meet it after this save — and if so, what corrected plan to suggest (EarmarkScaling.ScaleToMeetGoal: the plan's own schedule kept, the amount re-sized to the edited goal). Stored for the confirmation to offer as an accept/reject question, where accepting pre-fills the plan's form with the correction. Scoped to a single-plan, amount-only, non-break-off edit: the plan's span is unchanged (so it still fits the edited goal), a break-off already fresh-proposes a plan that meets the goal, several plans resolve via implicit changes (no single form to pre-fill), and "Save and skip planning" opens no form. A non-Critical edit also means the plan has no past occurrence, so scaling it is well-formed — no realized past contributions to mis-size against. Reads before anything is saved, like its sibling Determine* calls.</summary>
+    private void DetermineGoalHealthSuggestionIfApplicable()
+    {
+        if (UserSkippedPlanning
+            || IsChangeCritical
+            || HasMultipleEarmarkPatterns
+            || !_isAmountOnlyChange)
+        {
+            return;
+        }
+
+        var plan = _requestForecast().Book.EarMarkPatternsFor(_financeId).SingleOrDefault();
+        if (plan is null)
+        {
+            return;
+        }
+
+        // The plan is future here (a non-Critical edit has no past occurrence),
+        // so scaling it to the edited goal is well-formed. Same machinery the
+        // keep-separate funding uses; offered only when the plan doesn't already
+        // meet the edited goal (its current and needed totals differ).
+        var scaling = EarmarkScaling.ScaleToMeetGoal(_proposedPattern, [plan]);
+        if (Math.Abs(scaling.CurrentTotal - scaling.NeededTotal) >= 0.01m)
+        {
+            _goalHealthSuggestedPlan = scaling.ScaledPlans.Single();
+        }
+    }
+
+    /// <summary>[CALC] The goal-health suggestion question's own wording — "" when there's no correction to offer (so the row isn't shown). Names the suggested contribution so the choice isn't a bare yes/no.</summary>
+    private string DescribeGoalHealthSuggestion()
+    {
+        if (_goalHealthSuggestedPlan is not { } suggested)
+        {
+            return "";
+        }
+
+        return $"This change leaves the savings plan out of step with the goal. Load a suggested contribution of {Math.Abs(suggested.Amount):C} into the plan?";
+    }
+
     /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. Was a single hardcoded XAML string until 2026-08-17, when ConsolidationNeeded was widened to also force consolidation for a start_date change, not just a recurrence-shape one — the old text ("because the schedule itself is changing") would have been actively wrong for a start-only edit.</summary>
     private string DescribeConsolidationForcedReason()
     {
@@ -1241,6 +1318,8 @@ public sealed class FinancePatternSaveConfirmation
             ChangeCanCascade = ChangeCanCascade,
             TrivialFieldsCanCascade = TrivialFieldsCanCascade,
             SourceChangeWarning = SourceChangeWarning,
+            GoalHealthSuggestionQuestion = DescribeGoalHealthSuggestion(),
+            ConcerningPlanNotice = _concerningPlanNotice,
             StayLinkedWarning = TouchesChainBoundary ? DescribeChainStayLinkedConsequence() : "",
             LetItBreakWarning = TouchesChainBoundary ? DescribeChainLetItBreakConsequence() : "",
             CascadeDescription = ChangeCanCascade ? DescribeChainCascadeConsequence() : "",
@@ -1449,7 +1528,7 @@ public sealed class FinancePatternSaveConfirmation
         // BUILT 2026-08-17 — more than one EarMarkPattern survives, exactly
         // the existing FinancialPatternPickerWindow-style disambiguation
         // popup's own job, incorporated here via the same delegate idiom as
-        // ConfirmImplicitChanges/ShowSuggestion rather than fired
+        // ConfirmImplicitChanges/NavigateToEarmarkForm rather than fired
         // separately, so this class stays WPF-free. Falls back to the
         // first match — the original placeholder — whenever nothing's
         // wired up (most tests, and any host that hasn't connected one),
@@ -1458,21 +1537,26 @@ public sealed class FinancePatternSaveConfirmation
         return PickEarmarkPattern?.Invoke(savingsPlan) ?? savingsPlan[0];
     }
 
-    /// <summary>[READS FILE] The Concerning popup — BUILT 2026-08-17, deliberately minimal (see ShowSuggestion's own field comment for what's still not built on top of this). Reads a fresh PlanHealthState/FundJar off _navigationFinanceId (not _financeId — after a break-off, _financeId's own state is for the truncated, no-longer-current predecessor, same reasoning AskWhichEarmarkPatternToOpen's own field comment already gives) and hands PlanHealthMessages' own existing sentence — the same wording the Earmark form's own passive Summary aside already uses — to ShowSuggestion. A silent no-op whenever there's no PlanHealthState or no FundJar to read yet (a brand-new plan with nothing computed for it), or no delegate wired up.</summary>
-    private void AskForSuggestions()
+    /// <summary>[READS FILE] Works out the plan's own health heads-up — the "Worth a look" sentence (PlanHealthMessages.CurrentJarStateLine, the same wording the Earmark form's Summary aside uses) — for the confirmation to show as an announcement row, replacing the old separate post-save MessageBox. Only when the plan is worth warning about, its form is actually going to open, and it isn't a current-segment break-off (which replaces the plan with a freshly-proposed one that already meets the goal, so its old concern is moot). Reads _financeId — pre-save, before any break-off could move the current segment — so it needs no fresh forecast; "" whenever there's nothing to surface. Same read-before-save timing as its sibling Determine* calls.</summary>
+    private void DetermineConcerningPlanNoticeIfApplicable()
     {
+        if (!ChangeWarrantsSuggestions || UserSkippedPlanning || (IsChangeCritical && !_chainHasSuccessor))
+        {
+            return;
+        }
+
         var forecast = _requestForecast();
-        if (forecast.PlanHealthStates.FirstOrDefault(health => health.FinanceId == _navigationFinanceId) is not { } state)
+        if (forecast.PlanHealthStates.FirstOrDefault(health => health.FinanceId == _financeId) is not { } state)
         {
             return;
         }
 
-        if (JarOn(forecast.AsOfDate, _navigationFinanceId) is not { } jar)
+        if (JarOn(forecast.AsOfDate, _financeId) is not { } jar)
         {
             return;
         }
 
-        ShowSuggestion?.Invoke(PlanHealthMessages.CurrentJarStateLine(jar, state));
+        _concerningPlanNotice = PlanHealthMessages.CurrentJarStateLine(jar, state);
     }
 
     /// <summary>[WRITES FILE] Persists the FinancialPattern side of the edit — the proposed pattern saved under the same FinanceId for a plain (non-Critical) edit, or nothing at all when a Critical edit is about to break off instead. Forward-only (planning/28): a Critical edit always breaks off, so its FinancialPattern-side save is two rows under two different FinanceIds (the truncated original plus a brand-new successor), written by PerformImplicitEarmarkChanges — never _proposedPattern saved as-is under _financeId.</summary>

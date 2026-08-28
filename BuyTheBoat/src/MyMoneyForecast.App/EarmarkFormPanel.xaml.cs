@@ -178,10 +178,11 @@ public partial class EarmarkFormPanel : UserControl
         ClearDirty();
     }
 
-    /// <summary>[STEP] Loads an existing EarMarkPattern for editing — the goal is fixed (FinanceId is the link, and it can't change once created), only amount/timing can.</summary>
+    /// <summary>[STEP] Loads an existing EarMarkPattern for editing — the goal is fixed (FinanceId is the link, and it can't change once created), only amount/timing can. When a suggestion's overrides are passed, its values land on top of the saved ones as UNSAVED edits, so the form opens with the correction pre-filled and its Save button/tab already lit.</summary>
     /// <param name="existing">The savings plan to load for editing.</param>
     /// <param name="goal">The goal it's linked to.</param>
-    public void LoadPattern(EarMarkPattern existing, FinancialPattern goal)
+    /// <param name="suggestedOverrides">A suggestion's field values to prefer over the saved plan (EarmarkFieldOverrideKeys), or null for a plain load.</param>
+    public void LoadPattern(EarMarkPattern existing, FinancialPattern goal, IReadOnlyDictionary<string, object?>? suggestedOverrides = null)
     {
         _suppressEvents = true;
         ErrorText.Text = string.Empty;
@@ -203,6 +204,28 @@ public partial class EarmarkFormPanel : UserControl
         UpdateModeVisibility();
         UpdateSummary();
         ClearDirty();
+
+        // A suggestion's values land LAST, over the saved ones, with events live
+        // — so setting a field to something different from what was just loaded
+        // fires the same dirty-tracking a keystroke would, lighting up Save and
+        // the tab exactly as if the user had typed the correction. An override
+        // equal to the saved value changes no text, so the form stays clean.
+        ApplySuggestedOverrides(suggestedOverrides);
+    }
+
+    /// <summary>[UI] Lays a suggestion's field values over the just-loaded saved ones, with events live so a real change marks the form dirty through the normal path. A no-op when there are no overrides; an unknown key or a value of the wrong runtime type is skipped rather than throwing.</summary>
+    /// <param name="overrides">The suggested field values to prefer, or null for a plain load.</param>
+    private void ApplySuggestedOverrides(IReadOnlyDictionary<string, object?>? overrides)
+    {
+        if (overrides is null)
+        {
+            return;
+        }
+
+        if (overrides.TryGetValue(EarmarkFieldOverrideKeys.Amount, out var amountValue) && amountValue is decimal amount)
+        {
+            AmountTextBox.Text = Math.Abs(amount).ToString(CultureInfo.InvariantCulture);
+        }
     }
 
     /// <summary>[STEP] Turns an automatically-filled jar into a savings plan the user owns. Goal fixed, starting allocation pre-filled from what the jar already holds so pressing Save never moves money — it only changes what governs the jar from here on.</summary>

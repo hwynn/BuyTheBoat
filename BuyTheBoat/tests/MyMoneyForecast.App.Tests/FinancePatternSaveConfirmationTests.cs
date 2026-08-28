@@ -620,6 +620,92 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         (magnitudes[0] / magnitudes[1]).ShouldBe(2.5m, 0.02m); // the 300:120 split is preserved through the scale
     }
 
+    // The goal-health suggestion (planning/25's deferred picker, 2026-08-27):
+    // editing a FUTURE goal so its single plan no longer meets it offers a
+    // correction — an accept/reject question whose "accept" pre-fills that plan's
+    // own form with the fix as an unsaved edit (not saved implicitly, since there
+    // IS a single form we can open). userSkippedPlanning: false throughout — the
+    // suggestion only matters when a form actually opens.
+    [Fact]
+    public void Editing_a_goal_so_its_single_plan_falls_short_offers_a_correction_suggestion()
+    {
+        var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1)); // future — non-Critical
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1)));
+
+        var editedBill = Bill(1, bill.Source, -100m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // now needs far more
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), userSkippedPlanning: false);
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run().ShouldBeTrue();
+
+        captured.ShouldNotBeNull();
+        captured!.HasRow(ConfirmationRowIds.GoalHealthSuggestion).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Accepting_the_goal_health_suggestion_pre_fills_the_plan_form_with_the_corrected_amount()
+    {
+        var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1)));
+
+        var editedBill = Bill(1, bill.Source, -100m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+
+        IReadOnlyDictionary<string, object?>? capturedOverrides = null;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), userSkippedPlanning: false);
+        confirmation.ConfirmImplicitChanges = request => Confirm.Proceed().AcceptedGoalHealthSuggestion();
+        confirmation.NavigateToEarmarkForm = (_, overrides) => capturedOverrides = overrides;
+
+        confirmation.Run().ShouldBeTrue();
+
+        capturedOverrides.ShouldNotBeNull();
+        ((decimal)capturedOverrides![EarmarkFieldOverrideKeys.Amount]!).ShouldBe(-100m); // -40 scaled x2.5 to meet the -100 goal
+
+        _earMarkPatterns.GetAll().Single().Amount.ShouldBe(-40m); // the plan itself is NOT saved — the fix rides into the form for the user to save
+    }
+
+    [Fact]
+    public void Declining_the_goal_health_suggestion_opens_the_form_with_no_overrides()
+    {
+        var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1)));
+
+        var editedBill = Bill(1, bill.Source, -100m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+
+        var navigated = false;
+        IReadOnlyDictionary<string, object?>? capturedOverrides = null;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), userSkippedPlanning: false);
+        confirmation.ConfirmImplicitChanges = request => Confirm.Proceed().DeclinedGoalHealthSuggestion();
+        confirmation.NavigateToEarmarkForm = (_, overrides) => { navigated = true; capturedOverrides = overrides; };
+
+        confirmation.Run().ShouldBeTrue();
+
+        navigated.ShouldBeTrue();         // the form still opens...
+        capturedOverrides.ShouldBeNull(); // ...just with nothing pre-filled
+    }
+
+    [Fact]
+    public void No_goal_health_suggestion_when_the_single_plan_already_meets_the_edited_goal()
+    {
+        var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -100m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1))); // already saving -100/mo
+
+        var editedBill = Bill(1, bill.Source, -100m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // raise the goal to exactly what it's saving
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), userSkippedPlanning: false);
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run();
+
+        (captured?.HasRow(ConfirmationRowIds.GoalHealthSuggestion) ?? false).ShouldBeFalse(); // plan already meets it — nothing to offer
+    }
+
     // planning/25's Item F, the forced-consolidation sub-case: the
     // recurrence shape changing makes ConsolidationNeeded true, which combines
     // regardless of the user's keep-separate/combine pick — the plans can't keep
@@ -775,14 +861,15 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     // prompted directly by the user's own question about testing whether a
     // saved resolution actually satisfies what it was meant to fix.
 
-    // The Concerning popup — BUILT 2026-08-17, minimal (see ShowSuggestion's
-    // own field comment on FinancePatternSaveConfirmation). Independent of
-    // everything else that might also fire this save: the edit here is
-    // purely Trivial (Description only), proving ShowSuggestion fires on
-    // its own trigger (ChangeWarrantsSuggestions), not as a side effect of
-    // some other confirmation already being shown.
+    // The plan's health heads-up — was a separate post-save "Worth a look"
+    // MessageBox, now an announcement row in the confirmation (centralized
+    // 2026-08-27 at the author's request, so all of a save's messaging lives in
+    // this one system). Independent of everything else that might fire this save:
+    // the edit here is purely Trivial (Description only), so the notice row stands
+    // on its own trigger (ChangeWarrantsSuggestions), not as a side effect of some
+    // other question already showing.
     [Fact]
-    public void Save_and_plan_shows_a_concerning_suggestion_when_the_resulting_plan_is_worth_warning_about()
+    public void A_plan_worth_warning_about_shows_a_concerning_notice_row()
     {
         // A one-time, distant-due-date goal steadily accumulating toward it
         // — the same shape TransactionLogBookFactoryTests' own LiveGoal
@@ -836,13 +923,17 @@ public class FinancePatternSaveConfirmationTests : IDisposable
             DatePattern = goal.DatePattern,
         });
 
-        string? capturedSuggestion = null;
+        string? capturedNotice = null;
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast, userSkippedPlanning: false);
-        confirmation.ShowSuggestion = message => capturedSuggestion = message;
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            capturedNotice = request.AnnouncementText(ConfirmationRowIds.ConcerningPlan);
+            return Confirm.Proceed();
+        };
 
         confirmation.Run().ShouldBeTrue();
 
-        capturedSuggestion.ShouldNotBeNullOrEmpty();
+        capturedNotice.ShouldNotBeNullOrEmpty();
     }
 
     // AskWhichEarmarkPatternToOpen's own real disambiguation — BUILT
@@ -875,7 +966,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
             offeredPlans = plans;
             return plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2026, 1, 1)); // deliberately not the first one
         };
-        confirmation.NavigateToEarmarkForm = plan => navigatedTo = plan;
+        confirmation.NavigateToEarmarkForm = (plan, _) => navigatedTo = plan;
 
         confirmation.Run().ShouldBeTrue();
 

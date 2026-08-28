@@ -97,6 +97,11 @@ public static class ConfirmationRowIds
     public const string KeepSeparateFunding = "keep-separate-funding";
     public const string ConsolidationForced = "consolidation-forced";
     public const string SourceChange = "source-change";
+    // Accept/reject offer to pre-fill the single plan's form with a correction
+    // that meets the edited goal (planning/25's goal-health suggestion picker).
+    public const string GoalHealthSuggestion = "goal-health-suggestion";
+    // Plain heads-up that the plan is worth a look (the former post-save MessageBox).
+    public const string ConcerningPlan = "concerning-plan";
     public const string ChainBoundary = "chain-boundary";
     public const string Cascade = "cascade";
     public const string TrivialFieldsCascade = "trivial-fields-cascade";
