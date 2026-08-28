@@ -420,7 +420,7 @@ public sealed class FinancePatternSaveConfirmation
     // Whether this FinanceId's Savings Plan already has more than one
     // EarMarkPattern (F27's relaxation of 3.11.1.a1 — sequential from an
     // earlier Restructure/break-off, or concurrent, item 9's shape).
-    // TODO: not computed yet.
+    // Computed in DetermineConditions.
     private bool HasMultipleEarmarkPatterns { get; set; }
 
     // Item F's feasibility test result: true when the changed field(s) make
@@ -428,7 +428,7 @@ public sealed class FinancePatternSaveConfirmation
     // recurrence-shape case, planning/25 Item F's table) — consolidation
     // isn't offered as a choice there, it's announced. False means keeping
     // them separate is workable, and the user gets asked instead.
-    // TODO: not computed yet.
+    // Computed in DetermineConditions.
     private bool ConsolidationNeeded { get; set; }
 
     // Whether "Save and Skip planning" was clicked rather than "Save and
@@ -446,9 +446,9 @@ public sealed class FinancePatternSaveConfirmation
     private EarMarkPattern? ChosenPlanShape { get; set; }
 
     // Whether the resulting plan (after whatever above has been resolved) is
-    // worth suggesting a fix for — the Concerning popup's own trigger,
-    // sourced from PlanHealthState.IsWorthWarningAbout. TODO: not computed
-    // yet.
+    // worth suggesting a fix for — the concerning-plan notice row's own
+    // trigger, sourced from PlanHealthState.IsWorthWarningAbout. Computed in
+    // DetermineConditions.
     private bool ChangeWarrantsSuggestions { get; set; }
 
     // planning/27's own Phase 1 — the FinancialPattern break-off chain's "does
@@ -536,11 +536,10 @@ public sealed class FinancePatternSaveConfirmation
     private bool UserChoseToAdjustKeptSeparatePlans { get; set; }
 
     // The overall Trivial/Critical/Concerning categorization's own top-level
-    // flag: true when this save needs to go through the
-    // confirmation-and-choice flow at all. Kept as its own property, distinct
-    // from MightAlterPast, since the author's final categorization table may
-    // end up computing this from more than one condition — not necessarily a
-    // synonym once built out. TODO: not computed yet.
+    // flag: true when a restricted field (start/amount/recurrence shape) changed
+    // AND the saved pattern already has an occurrence on or before today — i.e.
+    // the edit reaches history, so it breaks off from today rather than saving
+    // in place. Computed in DetermineConditions.
     private bool IsChangeCritical { get; set; }
 
     /// <summary>[CALC] Builds the orchestrator for one Save click. Nothing is looked up or shown yet — call Run to actually do the work.</summary>
