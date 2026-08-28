@@ -11,7 +11,7 @@ namespace MyMoneyForecast.App;
 // Mirrors FinancialPatternPickerWindow's own shape (a plain grid +
 // Select/Cancel) rather than inventing a new one — only fires when more
 // than one EarMarkPattern genuinely survives for one goal (F27's own
-// sequential-chain or concurrent-funders shapes), the same rare case that
+// sequential-chain or concurrent earmark patterns shapes), the same rare case that
 // window's own doc comment describes for FinancialPattern.
 public partial class EarmarkPatternPickerWindow : Window
 {

@@ -183,7 +183,7 @@ public static class RestructureFactory
         return plans.OrderByDescending(plan => plan.DatePattern.ActiveStart).First();
     }
 
-    /// <summary>[CALC] Whether two EarMarkPatterns sharing one finance_id are genuinely concurrent (F27 — e.g. two household-partner funders both live at once) rather than sequential chain neighbors. The one shared definition of "overlap" for this whole file — FindCurrentPlan's own pairwise check above, extracted so FinancePatternSaveConfirmation.RunForPlan can rule out a concurrent plan before ever treating it as a predecessor/successor, instead of re-deriving the same test a second way.</summary>
+    /// <summary>[CALC] Whether two EarMarkPatterns sharing one finance_id are genuinely concurrent (F27 — e.g. two household-partner earmark patterns both live at once) rather than sequential chain neighbors. The one shared definition of "overlap" for this whole file — FindCurrentPlan's own pairwise check above, extracted so FinancePatternSaveConfirmation.RunForPlan can rule out a concurrent plan before ever treating it as a predecessor/successor, instead of re-deriving the same test a second way.</summary>
     /// <returns>True when the two plans' own active spans (ActiveStart–Until) share any day.</returns>
     public static bool SpansOverlap(EarMarkPattern a, EarMarkPattern b) =>
         a.DatePattern.ActiveSpansOverlap(b.DatePattern);

@@ -258,7 +258,7 @@ public class RestructureFactoryTests
 
     // planning/24's own Item-G gap, fixed 2026-08-16: FindCurrentPlan is what
     // lets DeterminePlanShapeCandidatesIfApplicable tell a genuine sequential
-    // chain apart from F27's concurrent-funder shape.
+    // chain apart from F27's concurrent earmark pattern shape.
     [Fact]
     public void FindCurrentPlan_picks_the_plan_with_the_latest_start_among_a_sequential_chain()
     {
@@ -272,7 +272,7 @@ public class RestructureFactoryTests
     [Fact]
     public void FindCurrentPlan_returns_null_when_two_plans_own_active_spans_overlap()
     {
-        // F27's own concurrent-funder shape (e.g. two household partners) —
+        // F27's own concurrent earmark pattern shape (e.g. two household partners) —
         // both plans genuinely active at once, so there's no single
         // "current" one to pick.
         var goal = Goal(-5_000m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));

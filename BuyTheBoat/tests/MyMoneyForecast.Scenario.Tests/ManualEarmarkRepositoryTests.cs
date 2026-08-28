@@ -112,7 +112,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
     public void Concurrent_plans_on_the_same_goal_dont_crash_GetAll_and_validate_against_the_right_one()
     {
         // More than one EarMarkPattern may share a finance id (a second
-        // concurrent funder, or a break-off predecessor+successor).
+        // concurrent earmark pattern, or a break-off predecessor+successor).
         // GetAll() used to key its lookup dictionary by FinanceId alone,
         // throwing "same key already added" the moment two plans shared
         // one. Two non-overlapping segments here (like a real break-off)

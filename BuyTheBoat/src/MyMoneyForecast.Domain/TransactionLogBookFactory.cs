@@ -367,7 +367,7 @@ public static class TransactionLogBookFactory
         // stored pattern amount is negative (its sign convention is "effect
         // on free balance"); an event's ExpectedAmount is positive-into-jar,
         // so the sign flips here. planning/17, item 9 (F30): two patterns
-        // sharing a finance_id (concurrent funders) can land on the same
+        // sharing a finance_id (concurrent earmark patterns) can land on the same
         // day, so this merges rather than always appending — the repeated
         // counterpart to MergeOrAppendIsolatedEarmark below.
         foreach (var earmark in input.EarMarkPatterns)
@@ -481,7 +481,7 @@ public static class TransactionLogBookFactory
             // (reset-at-release, proven by its own tests) — reused here for
             // its last point rather than re-deriving a second, narrower
             // formula. from is the earliest of this finance_id's own plans'
-            // ActiveStart, matching how a concurrent second funder is
+            // ActiveStart, matching how a concurrent second earmark pattern is
             // already handled everywhere else this needs an anchor date.
             var earliestActiveStart = plans.Min(plan => plan.DatePattern.ActiveStart);
             var milestoneTrajectory = ComputeMilestoneTrajectory(plans, goal, earliestActiveStart, asOfDate);
@@ -805,7 +805,7 @@ public static class TransactionLogBookFactory
         return (isDeallocationDay, pairedTransactions.Select(paired => paired.FinanceId).ToList());
     }
 
-    /// <summary>[CALC] Merges an amount into an existing repeated earmark event for the same jar/day if one exists, otherwise appends a new one — two EarMarkPatterns sharing a finance id (concurrent funders) can generate an occurrence on the same day, and only one repeated earmark per finance id per day may exist (3.13.8.1.a2). A repeated and an isolated earmark for the same jar/day still coexist as two separate events.</summary>
+    /// <summary>[CALC] Merges an amount into an existing repeated earmark event for the same jar/day if one exists, otherwise appends a new one — two EarMarkPatterns sharing a finance id (concurrent earmark patterns) can generate an occurrence on the same day, and only one repeated earmark per finance id per day may exist (3.13.8.1.a2). A repeated and an isolated earmark for the same jar/day still coexist as two separate events.</summary>
     /// <param name="events">The day's earmark events; merged into or appended to in place.</param>
     /// <param name="financeId">Which jar the earmark is for.</param>
     /// <param name="amount">The amount to merge in.</param>
@@ -1027,7 +1027,7 @@ public static class TransactionLogBookFactory
             // below rather than kept as its own property — the threshold is
             // double the SMALLEST repeated EarMarkPattern amount in this
             // Savings Plan (not the goal's own amount), since a plan can
-            // have more than one concurrent funder at different rates.
+            // have more than one concurrent earmark pattern at different rates.
             var isWorthWarningAbout = DetermineIsWorthWarningAbout(
                 goalsByFinanceId[financeId], shortfall, currentShortfall, currentOverfunded,
                 pageByFinanceId[financeId], asOfDate,

@@ -33,7 +33,7 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
     public IReadOnlyList<ManualEarmark> GetAll()
     {
         // Grouped by FinanceId, not keyed by it alone: a finance id can have
-        // more than one EarMarkPattern (a second concurrent funder, or a
+        // more than one EarMarkPattern (a second concurrent earmark pattern, or a
         // break-off predecessor+successor pair), so a stored earmark is
         // validated against whichever sibling plan actually covers its
         // date, not just whichever one happened to load first (see

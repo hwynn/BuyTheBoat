@@ -140,7 +140,7 @@ public partial class EarmarkFormPanel : UserControl
     {
         _goals = goals;
 
-        // A goal can have more than one EarMarkPattern (concurrent funders,
+        // A goal can have more than one EarMarkPattern (concurrent earmark patterns,
         // or a break-off/restructure chain), so this groups and keeps each
         // goal's most-recently-started one rather than a plain ToDictionary,
         // which throws on the duplicate key. A disambiguation picker for the
@@ -1132,7 +1132,7 @@ public partial class EarmarkFormPanel : UserControl
         // the due date), not just today onward — MilestoneAmount is pure
         // pattern math and needs no real transaction history. Gathers every
         // EarMarkPattern sharing this FinanceId (a goal can have more than
-        // one — concurrent funders, or a break-off chain).
+        // one — concurrent earmark patterns, or a break-off chain).
         var patternsForMilestone = _forecast?.Accounts
             .SelectMany(account => account.Page.EarmarkPatterns)
             .Where(p => p.FinanceId == goal.FinanceId)
@@ -1287,7 +1287,7 @@ public partial class EarmarkFormPanel : UserControl
         // EarMarkPattern (plan) — but the aside (asideLine/
         // asideSecondaryLine) and the health figures behind it
         // (IsChronicShortfall/IsChronicOverfund, GoalShortfall) are summed
-        // across every plan sharing this finance_id, concurrent funders
+        // across every plan sharing this finance_id, concurrent earmark patterns
         // included (patternsForMilestone, right above). Found via Storage
         // Unit Rental in the field: two concurrent plans ($35 + $25) against
         // a $50 bill — this one plan's own $35 narrative sat right next to a
@@ -1301,7 +1301,7 @@ public partial class EarmarkFormPanel : UserControl
         var hasConcurrentPlan = patternsForMilestone.Any(other =>
             other.DatePattern.ActiveStart != plan.DatePattern.ActiveStart && // a different row, not this same plan read back
             // Overlaps this plan's own active span — F27's "concurrent
-            // funder" shape, as opposed to a break-off/restructure chain's
+            // earmark pattern" shape, as opposed to a break-off/restructure chain's
             // sequential segments, which never overlap by construction (a
             // predecessor's own Until always ends the day before its
             // successor's own Start — "connected at the start/end," not
@@ -1453,7 +1453,7 @@ public partial class EarmarkFormPanel : UserControl
         }
     }
 
-    /// <summary>[CALC] A goal can have more than one EarMarkPattern funding it concurrently (e.g. two household partners each contributing) — this gathers every one actually funding the goal, with whichever ONE is currently loaded/being edited in this form (matched by Start, the same resolution key _patternsByFinanceId uses) replaced by its live, not-yet-saved version; every other concurrent funder passes through unchanged from the saved data. Live checks need this explicitly — the saved-state path already gathers every pattern by FinanceId.</summary>
+    /// <summary>[CALC] A goal can have more than one EarMarkPattern funding it concurrently (e.g. two household partners each contributing) — this gathers every one actually funding the goal, with whichever ONE is currently loaded/being edited in this form (matched by Start, the same resolution key _patternsByFinanceId uses) replaced by its live, not-yet-saved version; every other concurrent earmark pattern passes through unchanged from the saved data. Live checks need this explicitly — the saved-state path already gathers every pattern by FinanceId.</summary>
     /// <param name="goal">The goal whose funding patterns to gather.</param>
     /// <param name="proposed">The not-yet-saved version of the pattern currently being edited.</param>
     private IReadOnlyList<EarMarkPattern> GetPatternsForLiveCheck(FinancialPattern goal, EarMarkPattern proposed)
@@ -1467,7 +1467,7 @@ public partial class EarmarkFormPanel : UserControl
     }
 
     /// <summary>[CALC] A live (ExpectedAmount, MilestoneAmount) reading for today, computed purely from the proposed pattern's own schedule, no forecast required. The trick: ComputeMilestoneTrajectory already walks "accumulate, reset to 0 on release" starting from 0. Seed that same walk with a real starting balance instead of 0, and the two walks are provably identical from the first reset onward — a reset always drives both to exactly 0, erasing whatever the starting balance was worth by then. So: once this goal has released at least once since ActiveStart, live ExpectedAmount equals live MilestoneAmount exactly (today's true pace, no reason to reseed); before any release has happened yet, it's just startingTotal + MilestoneAmount (nothing has erased the offset). Known, deliberate gap: like ComputeMilestoneTrajectory itself, this doesn't model manual earmarks beyond the starting point (a real mid-plan top-up on an existing plan isn't reflected).</summary>
-    /// <param name="patterns">Every pattern funding the goal (see GetPatternsForLiveCheck), so a goal with more than one concurrent funder is still computed correctly.</param>
+    /// <param name="patterns">Every pattern funding the goal (see GetPatternsForLiveCheck), so a goal with more than one concurrent earmark pattern is still computed correctly.</param>
     /// <param name="proposed">The not-yet-saved version of the pattern currently being edited.</param>
     /// <param name="goal">The goal being funded.</param>
     /// <param name="startingTotal">What was already in the jar before this plan's own contributions began.</param>

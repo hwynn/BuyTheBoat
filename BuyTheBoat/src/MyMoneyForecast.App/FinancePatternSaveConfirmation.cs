@@ -1965,11 +1965,11 @@ public sealed class FinancePatternSaveConfirmation
             return;
         }
 
-        var vacatedEnd = _proposedPattern.DatePattern.ActiveStart.AddDays(-1);
+        var dayBeforeNewStart = _proposedPattern.DatePattern.ActiveStart.AddDays(-1);
 
         foreach (var droppedPlan in front.PlansStartingBeforeNewStart)
         {
-            var droppedOccurrences = droppedPlan.DatePattern.GetOccurrences(droppedPlan.DatePattern.ActiveStart, vacatedEnd);
+            var droppedOccurrences = droppedPlan.DatePattern.GetOccurrences(droppedPlan.DatePattern.ActiveStart, dayBeforeNewStart);
             if (droppedOccurrences.Count == 0)
             {
                 continue; // the dropped span held no occurrence — nothing to preserve
@@ -1979,7 +1979,7 @@ public sealed class FinancePatternSaveConfirmation
                 new EarMarkPatternOptions
                 {
                     FinanceId = predecessor.FinanceId,
-                    DatePattern = droppedPlan.DatePattern.WithUntil(vacatedEnd), // keep its Start and cadence, ending the day before this segment's new start
+                    DatePattern = droppedPlan.DatePattern.WithUntil(dayBeforeNewStart), // keep its Start and cadence, ending the day before this segment's new start
                     Amount = droppedPlan.Amount,
                     StartingAllocation = 0m,
                 },
@@ -2065,7 +2065,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] M1's silent join (#6), applied to one goal: folds any two earmark patterns under it that can merge with no visible change (EarMarkPattern.CanJoinWithoutConsequence — same amount, same cadence, their occurrences a clean union) into one, repeating until none remain. Runs after a stretch has grown or re-homed plans under this goal (#5 + the reverse-break-off), where the neighbor's own grown plan and a migrated one can end up identical and covering the same span. A genuine difference (different amount or cadence) is left as two separate plans — a valid concurrent-funders shape, not folded behind the user's back.</summary>
+    /// <summary>[WRITES FILE] M1's silent join (#6), applied to one goal: folds any two earmark patterns under it that can merge with no visible change (EarMarkPattern.CanJoinWithoutConsequence — same amount, same cadence, their occurrences a clean union) into one, repeating until none remain. Runs after a stretch has grown or re-homed plans under this goal (#5 + the reverse-break-off), where the neighbor's own grown plan and a migrated one can end up identical and covering the same span. A genuine difference (different amount or cadence) is left as two separate plans — a valid concurrent earmark patterns shape, not folded behind the user's back.</summary>
     /// <param name="goal">The goal whose earmark patterns to fold.</param>
     private void JoinMergeableEarmarkPatterns(FinancialPattern goal)
     {

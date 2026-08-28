@@ -141,7 +141,7 @@ public partial class ExpenseFormPanel : UserControl
 
         // Grouped, not keyed straight off FinanceId — same reasoning as
         // EarmarkFormPanel's own SetContext: a goal can have more than one
-        // EarMarkPattern (a concurrent second funder, or a break-off/
+        // EarMarkPattern (a concurrent second earmark pattern, or a break-off/
         // restructure chain), so this keeps each goal's most-recently-
         // started segment.
         _patternsByFinanceId = earMarkPatterns

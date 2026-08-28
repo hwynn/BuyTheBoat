@@ -2980,7 +2980,7 @@ public class TransactionLogBookFactoryTests
         shortfall.AmountAllocatedByDueDate.ShouldBe(1_500m);
     }
 
-    // planning/17, item 9 (F30): two concurrent funders (e.g. a household
+    // planning/17, item 9 (F30): two concurrent earmark patterns (e.g. a household
     // partner's own paycheck starts funding the same goal) can generate an
     // occurrence on the same day — merged into ONE event, summing the
     // amounts, not two separate events (3.13.8.1.a2).

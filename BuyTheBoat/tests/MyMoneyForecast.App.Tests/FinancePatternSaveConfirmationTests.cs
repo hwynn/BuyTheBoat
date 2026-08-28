@@ -356,7 +356,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     }
 
     // Regression lock, 2026-08-16: the fix above must not reach into F27's
-    // own concurrent-funder case, where the author's own ruling (planning/25's
+    // own concurrent earmark pattern case, where the author's own ruling (planning/25's
     // Item G closing note) says no shape choice should be offered at all —
     // "it'll already be complicated enough" once the not-yet-built
     // size-both-plans-in-unison mechanism exists.
@@ -365,7 +365,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     {
         var bill = Bill(1, "Storage Unit Rental", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(bill, accountId: 1);
-        // Two concurrent funders (F27), staggered by a day, both active
+        // Two concurrent earmark patterns (F27), staggered by a day, both active
         // across nearly the whole range — same shape this file's own
         // A_break_off_with_multiple_surviving_plans_kept_separate_is_a_safe_no_op_for_now
         // already uses for the concurrent case.
@@ -502,7 +502,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var bill = Bill(1, "Car Lease Payment", -420m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
         _financialPatterns.Save(bill, accountId: 1);
 
-        // Two concurrent funders on the same goal (F27) — different rates, so
+        // Two concurrent earmark patterns on the same goal (F27) — different rates, so
         // they'd never be merged back together even if offered the chance.
         _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
         _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));

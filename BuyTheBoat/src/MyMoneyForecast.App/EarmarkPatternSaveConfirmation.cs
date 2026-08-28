@@ -97,12 +97,12 @@ public sealed class EarmarkPatternSaveConfirmation
 
         // F27 allows two shapes for more than one EarMarkPattern under one
         // finance_id: a genuine sequential chain (RestructureFactory), or
-        // concurrent, overlapping funders — a different, still only
+        // concurrent, overlapping earmark patterns — a different, still only
         // partially built case that planning/27 explicitly settled must NOT
         // get chain-boundary/cascade treatment. Filtering to
         // !SpansOverlap(plan, saved) here — before hasPredecessor/hasSuccessor
         // are even computed — is what keeps a concurrent plan (e.g. the
-        // Storage Unit Rental seed scenario's own two funders) from being
+        // Storage Unit Rental seed scenario's own two earmark patterns) from being
         // mistaken for a sequential neighbor and absorbed/cascaded-onto by
         // PerformEarmarkSave below, which trusts this same filtered list.
         var otherPlans = allPlansForGoal

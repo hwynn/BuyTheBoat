@@ -201,7 +201,7 @@ public class EarmarkPatternSaveConfirmationTests : IDisposable
     }
 
     // Found while grounding the UI-wiring work, not asked for — a genuinely
-    // concurrent plan (F27: two funders both live at once, e.g. the "Storage
+    // concurrent plan (F27: two earmark patterns both live at once, e.g. the "Storage
     // Unit Rental" seed scenario) must NEVER be mistaken for a sequential
     // chain neighbor. Before this was guarded, otherPlans filtered purely on
     // Start comparison, so a concurrent plan with a later Start than the one

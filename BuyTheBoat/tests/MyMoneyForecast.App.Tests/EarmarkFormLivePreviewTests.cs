@@ -63,7 +63,7 @@ public class EarmarkFormLivePreviewTests : IDisposable
         var draft = Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
 
         // EarmarkFormPanel.GetLiveJarAmounts, reproduced: single plan, no
-        // concurrent funder, so GetPatternsForLiveCheck's own list is just
+        // concurrent earmark pattern, so GetPatternsForLiveCheck's own list is just
         // [draft]; startingTotal is 0 (no StartingAllocation, no manual
         // earmark dated exactly on ActiveStart).
         var liveTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(

@@ -4,7 +4,7 @@ using MyMoneyForecast.Persistence;
 // [WRITES FILE] Resets the app's real local database and repopulates it with a varied
 // household's worth of sample data — accounts, bills, a paycheck, one-time
 // and repeating goals, savings plans, manual adjustments, a recurring
-// transfer, a break-off chain, and a second concurrent funder on one goal —
+// transfer, a break-off chain, and a second concurrent earmark pattern on one goal —
 // built entirely through the domain's own Create() methods, the real
 // factories (AllocationPlanProposer, BreakOffFactory), and the real
 // repositories, so nothing here can be invalid in a way hand-written SQL
@@ -371,7 +371,7 @@ earMarkPatterns.Save(tripPlanPartner);
 var carRepairPlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = carRepair.FinanceId, DatePattern = Weekly(asOfDate.AddDays(-11), asOfDate.AddDays(3)), Amount = -50m }, carRepair);
 earMarkPatterns.Save(carRepairPlan);
 
-Console.WriteLine("Savings plans: Rent, Car Insurance ($100/mo, matches mockup), Trip to Japan (+ a second concurrent funder, F27), Emergency car repair (deliberately underfunded)");
+Console.WriteLine("Savings plans: Rent, Car Insurance ($100/mo, matches mockup), Trip to Japan (+ a second concurrent earmark pattern, F27), Emergency car repair (deliberately underfunded)");
 
 // ---- Manual earmarks (one-off adjustments) --------------------------------
 
@@ -407,7 +407,7 @@ Console.WriteLine("Manual earmarks: +$200 on Trip to Japan (Jul 4), +$50 on Car 
 // leaving nothing real to see get carried over or absorbed.
 
 // Item F (planning/25 — multiple existing EarMarkPatterns sharing a
-// finance_id): two concurrent funders. Edit the due date (e.g. the 1st ->
+// finance_id): two concurrent earmark patterns. Edit the due date (e.g. the 1st ->
 // the 15th) and save — the schedule itself changing makes ConsolidationNeeded
 // true, so the popup should ANNOUNCE the combine rather than ask, and the
 // two plans should become one under a new finance id once saved.
