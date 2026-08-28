@@ -94,6 +94,30 @@ public class AllocationPlanProposerTests
         result.Plan.Amount.ShouldBeGreaterThan(-600m);
     }
 
+    // Regression (2026-08-27) for the double-counting-income trap: a break-off
+    // truncates an income's predecessor row but never deletes it, so it lingers
+    // with a positive Amount forever. A bare "Amount > 0" income count then saw
+    // TWO income streams (the dead predecessor + the live successor) for every
+    // future plan, and — since pacing only fires for exactly one — silently
+    // dropped every plan to the front-loaded fallback. Here the live biweekly
+    // income should still pace the plan (Weekly/2, a fraction of the bill); under
+    // the bug it front-loads to the bill's own Monthly cadence at the full amount.
+    [Fact]
+    public void A_broken_off_incomes_truncated_predecessor_does_not_derail_pacing()
+    {
+        var liveIncome = BiweeklyIncome(1000m, new DateOnly(2025, 1, 3), new DateOnly(2027, 1, 1), id: 100);
+        // The same paycheck's own earlier version, truncated when it was broken
+        // off last year — a positive Amount that stopped paying before AsOf.
+        var brokenOffPredecessor = BiweeklyIncome(900m, new DateOnly(2023, 1, 6), new DateOnly(2024, 12, 31), id: 101);
+        var bill = MonthlyBill(-600m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, liveIncome, brokenOffPredecessor], AsOf);
+
+        result.Plan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Weekly); // paced, not front-loaded
+        result.Plan.DatePattern.Interval.ShouldBe(2);
+        result.Plan.Amount.ShouldBeGreaterThan(-600m); // a fraction per payday, not the full amount
+    }
+
     // Found 2026-08-14: the plan's contributions used to land on Wednesdays
     // (asOfDate's own weekday) instead of the income's real Fridays — a
     // silent phase loss from anchoring Start at asOfDate while copying

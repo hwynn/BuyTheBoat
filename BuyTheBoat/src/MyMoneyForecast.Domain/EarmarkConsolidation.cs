@@ -219,7 +219,10 @@ public static class EarmarkConsolidation
     {
         if (spread == ConsolidationSpread.AcrossPaydays)
         {
-            var incomePatterns = allPatterns.Where(pattern => pattern.Amount > 0m).ToList();
+            // Only income actually paying in the consolidation window — a broken-off
+            // income's truncated predecessor would otherwise count as a phantom second
+            // stream and collapse the paced spread (see AllocationPlanProposer.ActiveIncomeStreams).
+            var incomePatterns = AllocationPlanProposer.ActiveIncomeStreams(allPatterns, start, end);
 
             if (incomePatterns.Count == 1)
             {

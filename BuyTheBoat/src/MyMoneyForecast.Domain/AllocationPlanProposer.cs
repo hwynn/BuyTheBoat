@@ -91,6 +91,16 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 // above; only the orchestration around them changed.
 public static class AllocationPlanProposer
 {
+    /// <summary>[CALC] The income streams worth pacing a plan against over a window — positive-amount patterns that ACTUALLY have a payday in [from, to]. The date filter is load-bearing, not cosmetic: once any income is ever broken off, its truncated predecessor row keeps a positive Amount forever (a break-off truncates, never deletes), so a bare "Amount > 0" count sees it as a second, phantom income stream for every future plan — and since pacing only kicks in for exactly ONE clear income, that phantom silently collapses the paced shape to the even/front-loaded fallback. Requiring a real payday in the window drops the dead predecessor (it stopped paying before the window) while keeping genuine concurrent earners.</summary>
+    /// <param name="allPatterns">Every pattern to scan for income.</param>
+    /// <param name="from">Start of the window a plan would pace its contributions across.</param>
+    /// <param name="to">End of that window.</param>
+    public static IReadOnlyList<FinancialPattern> ActiveIncomeStreams(
+        IReadOnlyList<FinancialPattern> allPatterns, DateOnly from, DateOnly to) =>
+        allPatterns
+            .Where(pattern => pattern.Amount > 0m && pattern.DatePattern.GetOccurrences(from, to).Count > 0)
+            .ToList();
+
     /// <summary>[CALC] Proposes a default Allocation Plan for a newly-created outflow — paced against a single clear income stream when one exists, or front-loaded/spread otherwise. See this class's own header for the three shapes.</summary>
     /// <param name="outflow">The newly-created bill, goal, or transfer leg needing a plan.</param>
     /// <param name="allPatterns">Every other pattern, to look for a single clear income stream to pace against.</param>
@@ -123,7 +133,7 @@ public static class AllocationPlanProposer
         var billAmount = Math.Abs(preparedOutflow.Amount);
         var billUntil = preparedOutflow.DatePattern.Until;
 
-        var incomePatterns = allPatterns.Where(pattern => pattern.Amount > 0m).ToList();
+        var incomePatterns = ActiveIncomeStreams(allPatterns, asOfDate, billUntil);
 
         if (incomePatterns.Count == 1)
         {

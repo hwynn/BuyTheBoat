@@ -1080,16 +1080,17 @@ public partial class EarmarkFormPanel : UserControl
     /// <summary>[UI] Rebuilds the Summary region (narrative sentence, chart, and the two aside lines) from PlanHealthState/FundJar data, in both Savings-plan and One-off mode. In One-off mode the aside folds in whatever's currently typed on top of the saved reading, live. Known gap: asideLine/asideSecondaryLine (the text figures, not the chart) read the saved PlanHealthState once one exists, rather than a live recompute of an in-progress edit — full parity would mean re-running the whole forecast on every keystroke. When no saved PlanHealthState exists yet, the live fallback further below already covers the text too.</summary>
     private void UpdateSummary()
     {
-        // TODO (reported 2026-08-20): landing on this form right after saving a
-        // bill — especially an earlier-segment edit that cascades forward — the
-        // Summary here didn't update. It should ALWAYS visualize the savings
-        // plan in the state it would be in once those changes are saved, not a
-        // stale earlier reading. Two suspects: (1) _forecast is the snapshot
-        // handed in at the last Load(...) and isn't re-pulled (RequestForecast)
-        // after the save that navigated us here, so it still shows the pre-save
-        // world; (2) the live-preview gap already noted on this method and in
-        // SummaryRegion (typed-but-unsaved values aren't folded into the chart).
-        // Not urgent — noted so it isn't lost.
+        // Suspect (1) FIXED 2026-08-27 (reported 2026-08-20): landing on this form
+        // right after saving a bill — especially an earlier-segment edit that
+        // cascades forward — used to show a stale Summary, because _forecast was
+        // the pre-save snapshot the confirmation ran against, never re-pulled after
+        // the save that navigated here. MainWindow's own NavigateToEarmarkForm now
+        // recomputes the forecast (RefreshForecast) before handing it in via
+        // SetContext, so this reads the post-save world.
+        // Still open, suspect (2): the live-preview gap already noted on this method
+        // and in SummaryRegion — typed-but-unsaved values aren't folded into the
+        // chart, so a suggestion's pre-filled (but not-yet-saved) amount doesn't
+        // move the Summary until it's actually saved.
         UpdateStartingPointRegion();
 
         if (_selectedGoal is not { } goal)

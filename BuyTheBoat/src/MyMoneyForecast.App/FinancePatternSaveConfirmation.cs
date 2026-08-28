@@ -1202,9 +1202,13 @@ public sealed class FinancePatternSaveConfirmation
         _crossBoundaryConsolidations = candidates;
         _consolidationStrategyApplies = anyConsolidating;
         // The spread question only differs when Consolidate's own AcrossPaydays would
-        // actually pace — i.e. exactly one income stream to pace against.
+        // actually pace — i.e. exactly one income stream to pace against. "Still
+        // paying on or after today" (not a bare Amount > 0) so a broken-off income's
+        // truncated predecessor doesn't count as a phantom second stream and suppress
+        // the question (same trap as AllocationPlanProposer.ActiveIncomeStreams).
+        var asOfToday = _requestForecast().AsOfDate;
         _consolidationHasIncomeForSpread = anyConsolidating
-            && book.AllFinancialPatterns().Count(pattern => pattern.Amount > 0m) == 1;
+            && book.AllFinancialPatterns().Count(pattern => pattern.Amount > 0m && pattern.DatePattern.Until >= asOfToday) == 1;
     }
 
     /// <summary>[READS FILE] Dry-runs the break-off's own keep-separate outcome and re-rates it to meet the goal, so the confirmation knows whether keeping this segment's several plans separate would leave the new amount over/underfunded — the trigger for the nested "adjust them to meet it?" question. Only a current-segment break-off whose plans could actually stay separate (more than one, no forced consolidation); a no-op otherwise. Reads the current forecast before anything is saved, same as its sibling Determine* calls; the dry-run's own new finance_id is throwaway — only the current-vs-needed totals are kept, so the real break-off recomputes the correction against the real successor at execution time.</summary>

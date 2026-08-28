@@ -1182,6 +1182,18 @@ public partial class MainWindow : Window
                     plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
                 }
 
+                // The save (and any AutoCreateAllocationPlan just above) changed
+                // the data, but _lastForecast is still the pre-save snapshot the
+                // confirmation ran against. Recompute it BEFORE refreshing the form
+                // contexts, so the Earmark Summary we're about to land on shows the
+                // post-save state rather than a stale reading (EarmarkFormPanel.UpdateSummary's
+                // own TODO). Guarded on there being a forecast to re-run at all —
+                // with none, the Summary already shows its own no-forecast state.
+                if (_lastForecast is { } shown)
+                {
+                    RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
+                }
+
                 RefreshGrids();
                 RefreshExpenseFormContext();
                 RefreshEarmarkFormContext();
