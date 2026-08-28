@@ -867,9 +867,13 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     // this one system). Independent of everything else that might fire this save:
     // the edit here is purely Trivial (Description only), so the notice row stands
     // on its own trigger (ChangeWarrantsSuggestions), not as a side effect of some
-    // other question already showing.
-    [Fact]
-    public void A_plan_worth_warning_about_shows_a_concerning_notice_row()
+    // other question already showing. Shown on BOTH save buttons — "Save and plan"
+    // (false) and "Save and skip planning" (true) — a plan-health warning is worth
+    // seeing whether or not the plan form is about to open (author's call).
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_plan_worth_warning_about_shows_a_concerning_notice_row(bool skippedPlanning)
     {
         // A one-time, distant-due-date goal steadily accumulating toward it
         // — the same shape TransactionLogBookFactoryTests' own LiveGoal
@@ -924,7 +928,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         });
 
         string? capturedNotice = null;
-        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast, userSkippedPlanning: false);
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast, userSkippedPlanning: skippedPlanning);
         confirmation.ConfirmImplicitChanges = request =>
         {
             capturedNotice = request.AnnouncementText(ConfirmationRowIds.ConcerningPlan);

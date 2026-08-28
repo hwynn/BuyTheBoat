@@ -1537,10 +1537,10 @@ public sealed class FinancePatternSaveConfirmation
         return PickEarmarkPattern?.Invoke(savingsPlan) ?? savingsPlan[0];
     }
 
-    /// <summary>[READS FILE] Works out the plan's own health heads-up — the "Worth a look" sentence (PlanHealthMessages.CurrentJarStateLine, the same wording the Earmark form's Summary aside uses) — for the confirmation to show as an announcement row, replacing the old separate post-save MessageBox. Only when the plan is worth warning about, its form is actually going to open, and it isn't a current-segment break-off (which replaces the plan with a freshly-proposed one that already meets the goal, so its old concern is moot). Reads _financeId — pre-save, before any break-off could move the current segment — so it needs no fresh forecast; "" whenever there's nothing to surface. Same read-before-save timing as its sibling Determine* calls.</summary>
+    /// <summary>[READS FILE] Works out the plan's own health heads-up — the "Worth a look" sentence (PlanHealthMessages.CurrentJarStateLine, the same wording the Earmark form's Summary aside uses) — for the confirmation to show as an announcement row, replacing the old separate post-save MessageBox. Only when the plan is worth warning about and it isn't a current-segment break-off (which replaces the plan with a freshly-proposed one that already meets the goal, so its old concern is moot). Surfaced whether or not the user is heading to the plan form — a plan-health warning is worth seeing either way (author's call, 2026-08-27, when this moved into the confirmation). Reads _financeId — pre-save, before any break-off could move the current segment — so it needs no fresh forecast; "" whenever there's nothing to surface. Same read-before-save timing as its sibling Determine* calls.</summary>
     private void DetermineConcerningPlanNoticeIfApplicable()
     {
-        if (!ChangeWarrantsSuggestions || UserSkippedPlanning || (IsChangeCritical && !_chainHasSuccessor))
+        if (!ChangeWarrantsSuggestions || (IsChangeCritical && !_chainHasSuccessor))
         {
             return;
         }
