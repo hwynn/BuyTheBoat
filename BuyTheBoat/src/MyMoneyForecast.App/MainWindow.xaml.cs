@@ -107,11 +107,19 @@ public partial class MainWindow : Window
         // planning/21 Philosophy 5/7: same standing-tab treatment as Earmark
         // above. Each panel does its own validation (AccountFormPanel's
         // uniqueness check included) — these callbacks are purely "persist
-        // what came back, then refresh." Known gap: unlike Earmark's save,
-        // these two don't refresh the shown forecast (planning/24).
+        // what came back, then refresh." Both now recompute the shown forecast
+        // after saving (an account's own starting balance feeds it), matching
+        // Earmark's save — closing the planning/24 gap that used to sit here.
         AccountForm.AccountSaved = account =>
         {
             _accounts.Save(account);
+            // The saved account changed the world; recompute so the Forecast tab
+            // we're switching to reflects it, not the pre-save snapshot.
+            if (_lastForecast is { } shown)
+            {
+                RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
+            }
+
             RefreshAccountsGrid();
             RefreshExpenseFormContext();
             SwitchToTab("Forecast");
@@ -1239,6 +1247,15 @@ public partial class MainWindow : Window
             if (isNew)
             {
                 AutoCreateAllocationPlan(pattern, accountId);
+            }
+
+            // Recompute the forecast before switching to it, so the Forecast tab
+            // reflects the just-saved edit rather than the pre-save snapshot — the
+            // same refresh the "Save and Plan" path (NavigateToEarmarkForm) already
+            // does, closing the planning/24 gap for this branch too.
+            if (_lastForecast is { } shown)
+            {
+                RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
             }
 
             RefreshGrids();

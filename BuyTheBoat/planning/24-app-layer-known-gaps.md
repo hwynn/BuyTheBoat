@@ -42,7 +42,15 @@ release, once saved, changes that day's `ExpectedAmount` in the next real foreca
 preview* gap itself is UI-layer and would need either UI test automation or the logic extracted
 out of code-behind into something Domain-testable.
 
-### Account/Expense saves don't refresh the shown forecast — Earmark's does
+### Account/Expense saves don't refresh the shown forecast — Earmark's does — FIXED 2026-08-27
+
+**Fix:** both save paths now recompute the shown forecast before landing on the Forecast tab, the same
+way Earmark's save already did. `AccountForm.AccountSaved` and the `ExpenseForm.PatternSaved` "Save and
+skip planning" branch each call `RefreshForecast(shown.AsOfDate, shown.HorizonEndDate)` (guarded on
+`_lastForecast is { } shown`) after persisting. The "Save and Plan" branch was already covered separately
+the same day by `NavigateToEarmarkForm` recomputing the forecast before opening the plan form (which also
+fixed the stale-Summary gap in `EarmarkFormPanel.UpdateSummary`). WPF-lifecycle wiring, no test harness —
+verified by a clean build and the full suite staying green.
 
 **Where:** `src/MyMoneyForecast.App/MainWindow.xaml.cs`, the `AccountForm.AccountSaved` and
 `ExpenseForm.PatternSaved` callbacks (constructor).
