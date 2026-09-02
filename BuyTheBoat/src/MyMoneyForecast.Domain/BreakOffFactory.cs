@@ -35,6 +35,15 @@ public sealed record BreakOffRequest
     // user picked the default) falls back to the same internal Propose call
     // this class has always made.
     public ProposedAllocationPlan? ChosenSuccessorPlan { get; init; }
+
+    // The affordability ceilings for the successor's FRESHLY-PROPOSED plan —
+    // used only on the fallback path (ChosenSuccessorPlan null), since a
+    // supplied ChosenSuccessorPlan was already sized by whoever picked it.
+    // Both null leaves that fallback uncapped, the default for callers that
+    // don't size against a forecast. SuccessorStartingEarmarkCeiling caps the
+    // one-off front-load; SuccessorOngoingRateCeiling caps the per-cycle rate.
+    public decimal? SuccessorStartingEarmarkCeiling { get; init; }
+    public decimal? SuccessorOngoingRateCeiling { get; init; }
 }
 
 // The truncated predecessor plus everything the successor needs — the same
@@ -82,6 +91,12 @@ public sealed record MultiPlanBreakOffRequest
     // ordinary case) falls back to the same internal Propose call this class
     // has always made.
     public ProposedAllocationPlan? ChosenSuccessorPlan { get; init; }
+
+    // Same as BreakOffRequest's own fields of these names — the affordability
+    // ceilings for the successor's freshly-proposed plan, applied only on the
+    // fallback path (ChosenSuccessorPlan null). Both null leaves it uncapped.
+    public decimal? SuccessorStartingEarmarkCeiling { get; init; }
+    public decimal? SuccessorOngoingRateCeiling { get; init; }
 }
 
 // PredecessorPlans replaces the single, nullable PredecessorPlan — every
@@ -200,7 +215,9 @@ public static class BreakOffFactory
         }
 
         var proposal = request.ChosenSuccessorPlan
-            ?? AllocationPlanProposer.Propose(successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
+            ?? AllocationPlanProposer.Propose(successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome,
+                startingEarmarkCeiling: request.SuccessorStartingEarmarkCeiling,
+                ongoingRateCeiling: request.SuccessorOngoingRateCeiling);
 
         var successorPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -268,7 +285,9 @@ public static class BreakOffFactory
         }
 
         var proposal = request.ChosenSuccessorPlan
-            ?? AllocationPlanProposer.Propose(successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome);
+            ?? AllocationPlanProposer.Propose(successor, request.AllPatterns, request.CutDate, request.SpreadEvenlyWithNoIncome,
+                startingEarmarkCeiling: request.SuccessorStartingEarmarkCeiling,
+                ongoingRateCeiling: request.SuccessorOngoingRateCeiling);
 
         var successorPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions

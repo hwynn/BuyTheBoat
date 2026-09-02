@@ -24,12 +24,17 @@ namespace MyMoneyForecast.Domain.Tests;
 //     AutoCreateAllocationPlan and the paycheck re-pace cascade.
 //   - A proposed plan's ongoing per-cycle rate → AffordabilityCeiling.For (the range ceiling), ChangeKind.
 //     Implicit: AutoCreateAllocationPlan and the paycheck re-pace cascade (OngoingRateCeilingFor).
-// The cross-boundary and ongoing-rate caps' own bind-when-tight math is proven at the domain level
-// (EarmarkScalingTests, EarmarkConsolidationTests, AllocationPlanProposerTests); a dedicated tight-balance
-// App test for them is skipped deliberately — see the note beside the cross-boundary cascade cases in
-// FinancePatternSaveConfirmationTests. The links no test reaches are in MainWindow (AutoCreateAllocationPlan
-// and ForecastOmitting, which builds the real ForecastOptions the re-forecasts run on) — those stay
-// hand-verified.
+//   - Break-off successor plans → the "Recommended" candidate (AllocationPlanProposer.Propose) and, for the
+//     no-candidate cases (no existing plan, or a concurrent set), BreakOffFactory's own fallback via the two
+//     SuccessorPlan ceilings on its requests — both ChangeKind.Suggestion, keyed on the edited chain (the
+//     successor isn't saved yet, so it shares the predecessor as the tier/window proxy). The default
+//     (unpicked) break-off reuses the capped Recommended candidate rather than an uncapped re-derivation.
+// Every wrapper routes through one core, CeilingOmitting(omitFinanceId, target, changeKind, startingEarmark).
+// The domain cap math is proven per-function (EarmarkScalingTests, EarmarkConsolidationTests,
+// AllocationPlanProposerTests); the App wiring is bound under a tight balance in The_goal_health_suggestion...,
+// A_carried_forward_re_rate..., The_break_off_recommended_candidate..., and A_break_off_with_no_candidate_picker....
+// The links no test reaches are in MainWindow (AutoCreateAllocationPlan and ForecastOmitting, which builds the
+// real ForecastOptions the re-forecasts run on) — those stay hand-verified.
 public class AffordabilityCeilingTests
 {
     private static readonly DateOnly AsOf = new(2026, 1, 1);

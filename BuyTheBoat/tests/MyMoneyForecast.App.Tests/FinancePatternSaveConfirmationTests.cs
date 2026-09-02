@@ -291,6 +291,81 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         savedSuccessor.StartingAllocation.ShouldBe(realCarriedOverBalance);
     }
 
+    // The break-off "Recommended" candidate is held to what the funds can afford, the same as every other
+    // suggestion — and, crucially, taking the DEFAULT (not picking a candidate explicitly) saves that same
+    // capped plan rather than an uncapped re-derivation. Raising the bill wants a ~2000/cycle plan, but with
+    // only ~600 free the plan is knowingly underfunded rather than reserving money that isn't there; the "Keep
+    // the same schedule/amount" candidates beside it deliberately stay uncapped. Income covers the bill so free
+    // funds hold near the injected balance, keeping the ceiling stable.
+    [Fact]
+    public void The_break_off_recommended_candidate_is_held_to_what_the_free_funds_can_afford()
+    {
+        var income = Bill(100, "Job", 3000m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var bill = Bill(1, "Storage Unit", -1000m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(income, accountId: 1);
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -1000m, bill.DatePattern.ActiveStart, bill.DatePattern.Until));
+
+        // ~600 free in the room re-forecast (income covers the bill, so free funds hold near this balance).
+        Func<IReadOnlySet<int>, ForecastResult> tightRoom = omitIds =>
+            TransactionLogBookFactory.CreateForecast((ForecastOptionsForTest() with { StartingBalance = 600m }).WithoutPlansFor(omitIds));
+
+        var editedBill = Bill(1, bill.Source, -2000m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), tightRoom);
+
+        decimal? shownRecommendedRate = null;
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            shownRecommendedRate = Math.Abs(request.PlanShapeCandidates.Single(c => c.Label == "Recommended").Plan.Plan.Amount);
+            return Confirm.Proceed(); // take the default — no explicit pick, the common path
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        // The picker shows a capped "Recommended", and taking the default saves that same capped plan.
+        shownRecommendedRate!.Value.ShouldBeLessThan(1000m);
+        var savedRate = Math.Abs(_earMarkPatterns.GetAll().Single(p => p.FinanceId != 1).Amount); // the successor (a new id)
+        savedRate.ShouldBeLessThan(1000m);          // held below the ~2000/cycle the raise wants — the ceiling bound it
+        savedRate.ShouldBeGreaterThan(0m);          // still a real, positive contribution
+        savedRate.ShouldBe(shownRecommendedRate.Value); // saved == shown, no preview/save divergence
+    }
+
+    // The break-off FALLBACK — a genuinely concurrent multi-plan set builds no candidate picker, so
+    // BreakOffFactory proposes the one consolidated successor plan itself. That fresh proposal is capped too:
+    // with only ~600 free, the raised bill's ~2000/cycle consolidated plan is held down rather than
+    // over-reserving. This is the path with no shown candidate to fall back to.
+    [Fact]
+    public void A_break_off_with_no_candidate_picker_still_caps_the_fallback_plan()
+    {
+        var income = Bill(100, "Job", 3000m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var bill = Bill(1, "Storage Unit", -1000m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        _financialPatterns.Save(income, accountId: 1);
+        _financialPatterns.Save(bill, accountId: 1);
+        // Two concurrent plans → no single "current" plan → no candidate picker → the fallback path.
+        _earMarkPatterns.Save(Plan(bill, -600m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
+        _earMarkPatterns.Save(Plan(bill, -400m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
+
+        Func<IReadOnlySet<int>, ForecastResult> tightRoom = omitIds =>
+            TransactionLogBookFactory.CreateForecast((ForecastOptionsForTest() with { StartingBalance = 600m }).WithoutPlansFor(omitIds));
+
+        var editedBill = Bill(1, bill.Source, -2000m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), tightRoom);
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            captured = request;
+            return Confirm.Proceed().ChoseConsolidation();
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        captured!.PlanShapeCandidates.ShouldBeEmpty(); // confirms this really is the no-picker fallback path
+        var savedRate = Math.Abs(_earMarkPatterns.GetAll().Single(p => p.FinanceId != 1).Amount); // the consolidated successor
+        savedRate.ShouldBeLessThan(1000m); // ~2000/cycle wanted, held under the ~600 ceiling
+        savedRate.ShouldBeGreaterThan(0m);
+    }
+
     // planning/24's own Item-G gap, fixed 2026-08-16: a Savings Plan that's
     // already been restructured once (two sequential EarMarkPatterns sharing
     // one finance_id — an earlier, since-superseded segment plus the one

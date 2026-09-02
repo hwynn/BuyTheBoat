@@ -575,53 +575,43 @@ public sealed class FinancePatternSaveConfirmation
         _requestForecastOmitting = requestForecastOmitting;
     }
 
-    /// <summary>[READS FILE] Works out the most a change to `target`'s savings plan may set aside without over-committing — the affordability ceiling, measured against a re-forecast with this goal's whole chain of plans omitted (the "room for these plans" basis, so the plan's own current contributions count as available to it). Feeds the cap on the goal-health suggestion and the keep-separate funding correction. Null when no omitting-forecast source is wired (headless tests), which leaves those scalings uncapped.</summary>
+    /// <summary>[READS FILE] The affordability ceiling for `target`, measured on a re-forecast with `omitFinanceId`'s whole chain of savings plans left out — the "room for these plans" basis, so the plans being resized count their own current contributions as available rather than already-spent. Returns the single-date front-load ceiling when `startingEarmark` is true, otherwise the range ceiling that bounds an ongoing per-cycle contribution. Null when no omitting-forecast source is wired (headless tests). The three wrappers below fix its two knobs per caller: which chain to omit (the edited pattern's or the target's own) and which of the two ceilings.</summary>
+    /// <param name="omitFinanceId">Whose chain of plans to leave out of the re-forecast — the edited pattern's (_financeId) when the target belongs to that same chain, or the target's own when it doesn't.</param>
     /// <param name="target">The goal or bill whose plan is being sized.</param>
     /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
-    private decimal? AffordabilityCeilingFor(FinancialPattern target, ChangeKind changeKind)
+    /// <param name="startingEarmark">True for the single-date front-load ceiling; false for the range (ongoing-rate) ceiling.</param>
+    private decimal? CeilingOmitting(int omitFinanceId, FinancialPattern target, ChangeKind changeKind, bool startingEarmark)
     {
         if (_requestForecastOmitting is null)
         {
             return null;
         }
 
-        var omitted = _requestForecastOmitting(_requestForecast().Book.ChainFinanceIds(_financeId));
+        var omitted = _requestForecastOmitting(_requestForecast().Book.ChainFinanceIds(omitFinanceId));
         var page = omitted.Accounts.FirstOrDefault(account => account.AccountId == _accountId)?.Page
             ?? omitted.PrimaryAccountPage;
-        return AffordabilityCeiling.For(page, target, omitted.AsOfDate, changeKind);
+        return startingEarmark
+            ? AffordabilityCeiling.ForStartingEarmark(page, target, omitted.AsOfDate, changeKind)
+            : AffordabilityCeiling.For(page, target, omitted.AsOfDate, changeKind);
     }
 
-    /// <summary>[READS FILE] Works out the most a proposed starting (front-load) earmark for `target` may set aside on the as-of day — the single-date affordability ceiling, measured with `target`'s own chain of plans omitted (its front-load shouldn't count against itself). Keyed on the target rather than the edited pattern, since a paycheck re-pace front-loads OTHER bills. Null when no omitting-forecast source is wired.</summary>
+    /// <summary>[READS FILE] The most a change to `target`'s savings plan may set aside per cycle without over-committing — the range ceiling, measured with the EDITED pattern's whole chain of plans omitted. Feeds the goal-health suggestion, the keep-separate funding correction, and the cross-boundary cascade (whose successors share the edited pattern's chain). Null when no omitting-forecast source is wired, which leaves those scalings uncapped.</summary>
+    /// <param name="target">The goal or bill whose plan is being sized (in the edited pattern's chain).</param>
+    /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
+    private decimal? AffordabilityCeilingFor(FinancialPattern target, ChangeKind changeKind) =>
+        CeilingOmitting(_financeId, target, changeKind, startingEarmark: false);
+
+    /// <summary>[READS FILE] The most a proposed starting (front-load) earmark for `target` may set aside on the as-of day — the single-date ceiling, measured with `target`'s OWN chain of plans omitted (its front-load shouldn't count against itself). Keyed on the target rather than the edited pattern, since a paycheck re-pace front-loads OTHER bills. Null when no omitting-forecast source is wired.</summary>
     /// <param name="target">The bill whose starting earmark is being sized.</param>
     /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
-    private decimal? StartingEarmarkCeilingFor(FinancialPattern target, ChangeKind changeKind)
-    {
-        if (_requestForecastOmitting is null)
-        {
-            return null;
-        }
+    private decimal? StartingEarmarkCeilingFor(FinancialPattern target, ChangeKind changeKind) =>
+        CeilingOmitting(target.FinanceId, target, changeKind, startingEarmark: true);
 
-        var omitted = _requestForecastOmitting(_requestForecast().Book.ChainFinanceIds(target.FinanceId));
-        var page = omitted.Accounts.FirstOrDefault(account => account.AccountId == _accountId)?.Page
-            ?? omitted.PrimaryAccountPage;
-        return AffordabilityCeiling.ForStartingEarmark(page, target, omitted.AsOfDate, changeKind);
-    }
-
-    /// <summary>[READS FILE] Works out the most a re-proposed plan for `target` may reserve per cycle — the range affordability ceiling, measured with `target`'s own chain of plans omitted (the "room for these plans" basis, so the plan's own current contributions count as available to it). Keyed on the target rather than the edited pattern, since a paycheck re-pace re-proposes OTHER bills, which don't share the edited paycheck's chain. Feeds the cap on a re-proposed plan's ongoing rate. Null when no omitting-forecast source is wired.</summary>
+    /// <summary>[READS FILE] The most a re-proposed plan for `target` may reserve per cycle — the range ceiling, measured with `target`'s OWN chain of plans omitted. Keyed on the target rather than the edited pattern, since a paycheck re-pace re-proposes OTHER bills, which don't share the edited paycheck's chain. Null when no omitting-forecast source is wired.</summary>
     /// <param name="target">The bill whose plan is being re-proposed.</param>
     /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
-    private decimal? OngoingRateCeilingFor(FinancialPattern target, ChangeKind changeKind)
-    {
-        if (_requestForecastOmitting is null)
-        {
-            return null;
-        }
-
-        var omitted = _requestForecastOmitting(_requestForecast().Book.ChainFinanceIds(target.FinanceId));
-        var page = omitted.Accounts.FirstOrDefault(account => account.AccountId == _accountId)?.Page
-            ?? omitted.PrimaryAccountPage;
-        return AffordabilityCeiling.For(page, target, omitted.AsOfDate, changeKind);
-    }
+    private decimal? OngoingRateCeilingFor(FinancialPattern target, ChangeKind changeKind) =>
+        CeilingOmitting(target.FinanceId, target, changeKind, startingEarmark: false);
 
     // Invoked once Run() decides navigation should happen — matches this
     // project's existing PatternSaved/AccountSaved/ManualEarmarksSaved
@@ -1098,7 +1088,14 @@ public sealed class FinancePatternSaveConfirmation
             // unconditionally, regardless of which candidate is chosen — see
             // its own header comment). Same real number "Keep the same
             // schedule"/"Keep the same amount" below already show.
-            new("Recommended", AllocationPlanProposer.Propose(successor, allPatterns, cutDate, carriedOverJarBalance: carriedOverJarBalance)),
+            // Held to what the funds can afford, like the new-expense default — both ceilings measured against
+            // the EDITED goal's chain, not the successor's own: the successor isn't saved yet, and though it
+            // shares that Source its own chain lookup would find nothing to free up. Suggestion tier since the
+            // user reviews and picks this from the candidate list.
+            new("Recommended", AllocationPlanProposer.Propose(successor, allPatterns, cutDate,
+                carriedOverJarBalance: carriedOverJarBalance,
+                startingEarmarkCeiling: CeilingOmitting(_financeId, successor, ChangeKind.Suggestion, startingEarmark: true),
+                ongoingRateCeiling: CeilingOmitting(_financeId, successor, ChangeKind.Suggestion, startingEarmark: false))),
         };
 
         if (AllocationPlanProposer.ProposeSameSchedule(successor, existingPlan, carriedOverJarBalance, manualEarmarks, allPatterns, cutDate) is { } sameSchedule)
@@ -2346,14 +2343,17 @@ public sealed class FinancePatternSaveConfirmation
         var predecessorPlan = forecast.Book.EarMarkPatternsFor(_financeId).SingleOrDefault();
 
         // planning/25's Item G — matched back to its own full
-        // ProposedAllocationPlan (StartingEarmark included) by reference,
-        // not reconstructed from ChosenPlanShape alone. Null whenever
-        // ChosenPlanShape is null (no choice was offered, or the default was
-        // picked) or doesn't match any candidate this same Run() actually
-        // offered (a stray value set outside the real flow) — either way,
-        // BreakOffFactory falls back to computing its own default.
-        var chosenSuccessorPlan = _planShapeCandidates
-            .FirstOrDefault(candidate => candidate.Plan.Plan == ChosenPlanShape)?.Plan;
+        // ProposedAllocationPlan (StartingEarmark included) by reference. When
+        // the user takes the default rather than picking explicitly (or sets a
+        // stray value that matches nothing), fall back to the "Recommended"
+        // candidate this Run() built — which is affordability-capped — rather
+        // than to BreakOffFactory's own uncapped re-derivation, so the plan
+        // saved is the one the picker actually showed. Null only when no
+        // candidate was offered at all (no existing plan to draw one from), in
+        // which case BreakOffFactory computes its own default.
+        var chosenSuccessorPlan = (_planShapeCandidates
+            .FirstOrDefault(candidate => candidate.Plan.Plan == ChosenPlanShape)
+            ?? _planShapeCandidates.FirstOrDefault(candidate => candidate.Label == "Recommended"))?.Plan;
 
         var result = BreakOffFactory.BreakOff(new BreakOffRequest
         {
@@ -2366,6 +2366,11 @@ public sealed class FinancePatternSaveConfirmation
             CarriedOverJarBalance = predecessorPlan is null ? 0m : JarBalanceOn(cutDate, _financeId),
             AllPatterns = forecast.Book.AllFinancialPatterns(),
             ChosenSuccessorPlan = chosenSuccessorPlan,
+            // Only the fallback (no candidate to fall back to — no existing plan) path uses these. Size the
+            // successor's fresh plan against the predecessor as a proxy target: it shares the successor's
+            // mandatory-ness, priority, Source and end date, so the tier and window come out the same.
+            SuccessorStartingEarmarkCeiling = chosenSuccessorPlan is null ? CeilingOmitting(_financeId, saved, ChangeKind.Suggestion, startingEarmark: true) : null,
+            SuccessorOngoingRateCeiling = chosenSuccessorPlan is null ? CeilingOmitting(_financeId, saved, ChangeKind.Suggestion, startingEarmark: false) : null,
         });
 
         // The successor is now the current segment — post-save navigation
@@ -2402,13 +2407,14 @@ public sealed class FinancePatternSaveConfirmation
         var predecessorPlans = forecast.Book.EarMarkPatternsFor(_financeId);
 
         // planning/25's Item G — same lookup PerformSingleSuccessorBreakOff
-        // already does: matched back to its own full ProposedAllocationPlan
-        // by reference, not reconstructed from ChosenPlanShape alone. Null
-        // whenever no choice was offered (a genuinely concurrent set) or the
-        // default was picked — either way, BreakOff falls back to its own
-        // internal Propose call.
-        var chosenSuccessorPlan = _planShapeCandidates
-            .FirstOrDefault(candidate => candidate.Plan.Plan == ChosenPlanShape)?.Plan;
+        // already does, and the same fall-back to the affordability-capped
+        // "Recommended" candidate when the user takes the default rather than
+        // picking explicitly, so the saved plan matches what the picker showed.
+        // Null only when no candidate was offered at all (a genuinely
+        // concurrent set), in which case BreakOff computes its own default.
+        var chosenSuccessorPlan = (_planShapeCandidates
+            .FirstOrDefault(candidate => candidate.Plan.Plan == ChosenPlanShape)
+            ?? _planShapeCandidates.FirstOrDefault(candidate => candidate.Label == "Recommended"))?.Plan;
 
         var result = BreakOffFactory.BreakOff(new MultiPlanBreakOffRequest
         {
@@ -2421,6 +2427,10 @@ public sealed class FinancePatternSaveConfirmation
             CarriedOverJarBalance = JarBalanceOn(cutDate, _financeId),
             AllPatterns = forecast.Book.AllFinancialPatterns(),
             ChosenSuccessorPlan = chosenSuccessorPlan,
+            // Only the fallback (a genuinely concurrent set — no candidate) path uses these; same predecessor-
+            // as-proxy-target reasoning as PerformSingleSuccessorBreakOff.
+            SuccessorStartingEarmarkCeiling = chosenSuccessorPlan is null ? CeilingOmitting(_financeId, saved, ChangeKind.Suggestion, startingEarmark: true) : null,
+            SuccessorOngoingRateCeiling = chosenSuccessorPlan is null ? CeilingOmitting(_financeId, saved, ChangeKind.Suggestion, startingEarmark: false) : null,
         });
 
         // Same reasoning as PerformSingleSuccessorBreakOff's own note: the
