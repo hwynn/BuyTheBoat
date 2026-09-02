@@ -107,10 +107,11 @@ public sealed record ConsolidationResult
 
 public static class EarmarkConsolidation
 {
-    /// <summary>[CALC] Folds every surviving EarMarkPattern for one goal into a single freshly-sized plan, spanning from the earliest surviving plan's own start through the goal's own end — sized so its contributions exactly cover what the goal will consume in that window, net of what's already banked (including any protected glut surplus). Paces to a single clear income stream the same way AllocationPlanProposer's own paced shape does, or spreads evenly across the goal's own occurrences otherwise.</summary>
+    /// <summary>[CALC] Folds every surviving EarMarkPattern for one goal into a single freshly-sized plan, spanning from the earliest surviving plan's own start through the goal's own end — sized so its contributions exactly cover what the goal will consume in that window, net of what's already banked (including any protected glut surplus). Paces to a single clear income stream the same way AllocationPlanProposer's own paced shape does, or spreads evenly across the goal's own occurrences otherwise. When an affordability ceiling is given and the per-cycle contribution would exceed it, the contribution is held to the ceiling instead — the one plan stays knowingly underfunded rather than reserving money that isn't there. That cap is silent (no flag): consolidation is an implicit in-place correction, not a suggestion the user weighs.</summary>
     /// <param name="request">The goal, every surviving plan, the manual earmarks already dated for it, every pattern (for income-stream detection), and the live jar to check for a glut to protect.</param>
+    /// <param name="affordabilityCeiling">The most the consolidated plan's per-cycle contribution may be, from AffordabilityCeiling.For (as room FOR this goal's plans). When meeting the goal would exceed it the one plan is held to it instead. Null leaves it uncapped; a ceiling of 0 or less is treated as no cap, an already-over-committed window being out of scope for a fold.</param>
     /// <returns>The one consolidated plan, plus the window it was sized against.</returns>
-    public static ConsolidationResult Consolidate(ConsolidationRequest request)
+    public static ConsolidationResult Consolidate(ConsolidationRequest request, decimal? affordabilityCeiling = null)
     {
         if (request.SurvivingPlans.Count == 0)
         {
@@ -166,6 +167,14 @@ public static class EarmarkConsolidation
             : Math.Max(0m, totalReleases - alreadyBanked);
 
         var (schedule, perOccurrence) = BuildSchedule(request.Goal, request.AllPatterns, request.Spread, start, end, total);
+
+        // Hold the one plan's per-cycle contribution under the affordability ceiling. Only the ongoing ask is
+        // capped: the already-banked money still carries forward as StartingAllocation below untouched — the
+        // cap protects funds that aren't there yet, not the ones already in the jar.
+        if (affordabilityCeiling is decimal ceiling && ceiling > 0m && perOccurrence > ceiling)
+        {
+            perOccurrence = ceiling;
+        }
 
         var consolidatedPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions

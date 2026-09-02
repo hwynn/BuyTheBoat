@@ -391,4 +391,62 @@ public class EarmarkConsolidationTests
 
         result.ConsolidatedPlan.Amount.ShouldBe(-100m); // 4 full occurrences × $100 / 4, not 3 skip-reduced
     }
+
+    // The affordability cap on the one consolidated plan's per-cycle contribution — silent (no result flag),
+    // like Scale, since a fold is an implicit in-place correction the user doesn't weigh.
+
+    [Fact]
+    public void The_consolidated_plans_per_cycle_contribution_is_held_under_the_affordability_ceiling()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        // Fully funding wants $300/occurrence ($1,200 / 4), but only $200 can be spared → held to $200.
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+        }, affordabilityCeiling: 200m);
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-200m); // knowingly underfunds rather than reserving what isn't there
+    }
+
+    [Fact]
+    public void The_consolidated_plan_is_uncapped_when_the_ceiling_covers_the_full_contribution()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        // Ceiling above the $300/occurrence the goal needs → the fold meets it in full.
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+        }, affordabilityCeiling: 400m);
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-300m);
+    }
+
+    [Fact]
+    public void The_already_banked_money_still_carries_forward_when_the_ongoing_rate_is_capped()
+    {
+        var goal = MonthlyGoal();
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd, startingAllocation: 150m);
+
+        // The cap only touches the ongoing ask — the $150 already banked still rides forward untouched.
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal],
+        }, affordabilityCeiling: 100m);
+
+        result.ConsolidatedPlan.Amount.ShouldBe(-100m);              // ongoing rate held to the ceiling
+        result.ConsolidatedPlan.StartingAllocation.ShouldBe(150m);   // banked money preserved regardless
+    }
 }

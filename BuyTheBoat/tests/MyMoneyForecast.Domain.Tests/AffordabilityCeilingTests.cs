@@ -10,14 +10,26 @@ namespace MyMoneyForecast.Domain.Tests;
 // branch's ceiling is a checkable number.
 //
 // How the App wires this (FinancePatternSaveConfirmation, exercised by FinancePatternSaveConfirmationTests
-// with the cap inert under a generous balance): the goal-health suggestion passes ChangeKind.Suggestion;
-// the keep-separate funding correction (both its dry-run preview and its real save) passes
-// ChangeKind.Implicit; and the "room for these plans" basis comes from re-forecasting with the goal's whole
-// chain of plans omitted (TransactionLogBook.ChainFinanceIds + ForecastOptions.WithoutPlansFor, both tested).
-// Starting earmarks size themselves the same way via AffordabilityCeiling.ForStartingEarmark, both
-// ChangeKind.Implicit: AutoCreateAllocationPlan (a new bill's front-load) and the paycheck re-pace cascade.
-// The links no test reaches are in MainWindow (AutoCreateAllocationPlan and ForecastOmitting, which builds
-// the real ForecastOptions the re-forecasts run on) — those stay hand-verified.
+// with the cap inert under a generous balance, and bound once under a tight one in
+// The_goal_health_suggestion_is_held_to_what_the_free_funds_can_afford). Every site sizes against the "room
+// for these plans" basis — a re-forecast with the target's whole chain of plans omitted
+// (TransactionLogBook.ChainFinanceIds + ForecastOptions.WithoutPlansFor, both tested):
+//   - Goal-health suggestion → ScaleToMeetGoal, ChangeKind.Suggestion.
+//   - Keep-separate funding correction (dry-run preview and real save) → ScaleToMeetGoal, ChangeKind.Implicit.
+//   - Cross-boundary carry-forward cascade (ReconcileCascadedSuccessorSavingsPlans): an amount-only re-rate
+//     → EarmarkScaling.Scale; a shape-change or combine fold → EarmarkConsolidation.Consolidate; both
+//     ChangeKind.Implicit, keyed on the successor (which shares the edited chain's Source, so the same
+//     AffordabilityCeilingFor omission covers it). Silent caps — no suggestion prompt.
+//   - Starting (front-load) earmarks → AffordabilityCeiling.ForStartingEarmark, ChangeKind.Implicit:
+//     AutoCreateAllocationPlan and the paycheck re-pace cascade.
+//   - A proposed plan's ongoing per-cycle rate → AffordabilityCeiling.For (the range ceiling), ChangeKind.
+//     Implicit: AutoCreateAllocationPlan and the paycheck re-pace cascade (OngoingRateCeilingFor).
+// The cross-boundary and ongoing-rate caps' own bind-when-tight math is proven at the domain level
+// (EarmarkScalingTests, EarmarkConsolidationTests, AllocationPlanProposerTests); a dedicated tight-balance
+// App test for them is skipped deliberately — see the note beside the cross-boundary cascade cases in
+// FinancePatternSaveConfirmationTests. The links no test reaches are in MainWindow (AutoCreateAllocationPlan
+// and ForecastOmitting, which builds the real ForecastOptions the re-forecasts run on) — those stay
+// hand-verified.
 public class AffordabilityCeilingTests
 {
     private static readonly DateOnly AsOf = new(2026, 1, 1);

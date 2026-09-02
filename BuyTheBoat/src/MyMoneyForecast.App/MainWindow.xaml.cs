@@ -1360,14 +1360,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Cap the starting front-load at what the day can spare (the affordability ceiling), measured on a
-        // re-forecast with this bill's own plans omitted so its front-load isn't counted against itself.
+        // Cap the front-load and the ongoing rate at what the funds can spare (the affordability ceiling),
+        // both measured on a re-forecast with this bill's own plans omitted so they aren't counted against
+        // themselves — the single-date ceiling for the front-load, the range ceiling for the per-cycle rate.
         var room = ForecastOmitting(new HashSet<int> { pattern.FinanceId });
         var roomPage = room.Accounts.FirstOrDefault(account => account.AccountId == accountId)?.Page ?? room.PrimaryAccountPage;
         var startingCeiling = AffordabilityCeiling.ForStartingEarmark(roomPage, pattern, CurrentAsOfDate(), ChangeKind.Implicit);
+        var rateCeiling = AffordabilityCeiling.For(roomPage, pattern, CurrentAsOfDate(), ChangeKind.Implicit);
         var proposal = AllocationPlanProposer.Propose(
             pattern, _financialPatterns.GetByAccountExcludingTransferPatterns(accountId), CurrentAsOfDate(),
-            startingEarmarkCeiling: startingCeiling);
+            startingEarmarkCeiling: startingCeiling,
+            ongoingRateCeiling: rateCeiling);
         // The proposer may stretch the outflow's active span back to the as-of
         // date (planning/15, ActiveFrom) so its plan fits — persist that prepared
         // outflow, not the original, or the plan reads short against a goal whose

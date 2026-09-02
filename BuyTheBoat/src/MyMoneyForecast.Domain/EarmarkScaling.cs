@@ -48,10 +48,11 @@ public sealed record MeetGoalScalingResult
 
 public static class EarmarkScaling
 {
-    /// <summary>[CALC] Scales every surviving EarMarkPattern's own Amount by the same ratio the goal's own Amount just changed by — DatePattern, StartingAllocation, and FinanceId all carried over untouched.</summary>
+    /// <summary>[CALC] Scales every surviving EarMarkPattern's own Amount by the same ratio the goal's own Amount just changed by — DatePattern, StartingAllocation, and FinanceId all carried over untouched. When an affordability ceiling is given and the scaled combined contribution would exceed it, the ratio is held down so it doesn't — the plans stay knowingly underfunded rather than reserving money that isn't there. That cap is silent (no flag): this is the amount-only, in-place re-rate a cross-boundary cascade applies as an implicit change, not a suggestion the user weighs.</summary>
     /// <param name="request">The goal's new Amount (via Goal), its previous Amount, and every surviving plan to scale.</param>
+    /// <param name="affordabilityCeiling">The most the plans' combined per-cycle contribution may be, from AffordabilityCeiling.For (as room FOR these plans, since the cap compares the full combined contribution, not just the change). When scaling to the new amount would exceed it the plans are held to it instead. Null leaves the result uncapped. A ceiling of 0 or less is treated as no cap — an already-over-committed window is a different operation than re-rating.</param>
     /// <returns>One freshly-scaled EarMarkPattern per surviving plan, in the same order — same (FinanceId, Start) as before, so saving these is an in-place update, not a delete-and-recreate.</returns>
-    public static IReadOnlyList<EarMarkPattern> Scale(ScaleRequest request)
+    public static IReadOnlyList<EarMarkPattern> Scale(ScaleRequest request, decimal? affordabilityCeiling = null)
     {
         if (request.PreviousGoalAmount == 0m)
         {
@@ -60,6 +61,18 @@ public static class EarmarkScaling
         }
 
         var ratio = request.Goal.Amount / request.PreviousGoalAmount;
+
+        // Hold the scaled combined contribution under the affordability ceiling, the same conservative
+        // same-day treatment ScaleToMeetGoal uses: compare the summed per-cycle amount to the ceiling and
+        // pull the ratio down if it would overshoot. Silent here — the successor re-rate carries no prompt.
+        if (affordabilityCeiling is decimal ceiling && ceiling > 0m)
+        {
+            var combinedPerCycle = request.SurvivingPlans.Sum(plan => Math.Abs(plan.Amount));
+            if (combinedPerCycle > 0m && ceiling / combinedPerCycle < ratio)
+            {
+                ratio = ceiling / combinedPerCycle;
+            }
+        }
 
         return request.SurvivingPlans
             .Select(plan => EarMarkPattern.Create(

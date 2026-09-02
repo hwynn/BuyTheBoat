@@ -607,6 +607,22 @@ public sealed class FinancePatternSaveConfirmation
         return AffordabilityCeiling.ForStartingEarmark(page, target, omitted.AsOfDate, changeKind);
     }
 
+    /// <summary>[READS FILE] Works out the most a re-proposed plan for `target` may reserve per cycle — the range affordability ceiling, measured with `target`'s own chain of plans omitted (the "room for these plans" basis, so the plan's own current contributions count as available to it). Keyed on the target rather than the edited pattern, since a paycheck re-pace re-proposes OTHER bills, which don't share the edited paycheck's chain. Feeds the cap on a re-proposed plan's ongoing rate. Null when no omitting-forecast source is wired.</summary>
+    /// <param name="target">The bill whose plan is being re-proposed.</param>
+    /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
+    private decimal? OngoingRateCeilingFor(FinancialPattern target, ChangeKind changeKind)
+    {
+        if (_requestForecastOmitting is null)
+        {
+            return null;
+        }
+
+        var omitted = _requestForecastOmitting(_requestForecast().Book.ChainFinanceIds(target.FinanceId));
+        var page = omitted.Accounts.FirstOrDefault(account => account.AccountId == _accountId)?.Page
+            ?? omitted.PrimaryAccountPage;
+        return AffordabilityCeiling.For(page, target, omitted.AsOfDate, changeKind);
+    }
+
     // Invoked once Run() decides navigation should happen — matches this
     // project's existing PatternSaved/AccountSaved/ManualEarmarksSaved
     // callback idiom (set by MainWindow) rather than giving this class a
@@ -1967,12 +1983,14 @@ public sealed class FinancePatternSaveConfirmation
                 continue;
             }
 
+            // The successor shares this chain's Source, so AffordabilityCeilingFor already omits its plans —
+            // the re-rate is held to the room the whole chain's contributions free up.
             foreach (var scaled in EarmarkScaling.Scale(new ScaleRequest
             {
                 Goal = after,
                 PreviousGoalAmount = before.Amount,
                 SurvivingPlans = plans,
-            }))
+            }, affordabilityCeiling: AffordabilityCeilingFor(after, ChangeKind.Implicit)))
             {
                 _repositories.EarMarkPatterns.Save(scaled); // Scale keeps each plan's own (FinanceId, Start) — an in-place update
             }
@@ -1984,6 +2002,8 @@ public sealed class FinancePatternSaveConfirmation
     /// <param name="plans">Its existing earmark patterns, to fold into one.</param>
     private void ConsolidateSuccessorPlans(FinancialPattern goal, IReadOnlyList<EarMarkPattern> plans)
     {
+        // goal shares this chain's Source, so AffordabilityCeilingFor already omits its plans — the folded
+        // plan's ongoing contribution is held to the room the chain's contributions free up.
         var consolidated = EarmarkConsolidation.Consolidate(new ConsolidationRequest
         {
             Goal = goal,
@@ -1993,7 +2013,7 @@ public sealed class FinancePatternSaveConfirmation
             CurrentJar = JarOn(_requestForecast().AsOfDate, goal.FinanceId),
             Sizing = _chosenSizing,
             Spread = _chosenSpread,
-        }).ConsolidatedPlan;
+        }, affordabilityCeiling: AffordabilityCeilingFor(goal, ChangeKind.Implicit)).ConsolidatedPlan;
 
         foreach (var plan in plans)
         {
@@ -2179,7 +2199,8 @@ public sealed class FinancePatternSaveConfirmation
             var carriedOverJarBalance = JarBalanceOn(forecast.AsOfDate, oldPlan.FinanceId);
             var proposal = AllocationPlanProposer.Propose(bill, allPatterns, forecast.AsOfDate,
                 carriedOverJarBalance: carriedOverJarBalance,
-                startingEarmarkCeiling: StartingEarmarkCeilingFor(bill, ChangeKind.Implicit));
+                startingEarmarkCeiling: StartingEarmarkCeilingFor(bill, ChangeKind.Implicit),
+                ongoingRateCeiling: OngoingRateCeilingFor(bill, ChangeKind.Implicit));
 
             // Same "read before write" reasoning FindOrphanedManualEarmarkDates'
             // own call sites elsewhere already follow — safe here because

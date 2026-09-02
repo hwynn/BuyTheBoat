@@ -108,13 +108,15 @@ public static class AllocationPlanProposer
     /// <param name="spreadEvenlyWithNoIncome">Whether a single-occurrence outflow with no clear income spreads evenly across the remaining time (the default) or reserves the full amount immediately — pass false for a transfer's withdrawal, which stays plain with no adaptive behavior.</param>
     /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added 2026-08-15 specifically so Item G's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. See planning/26's own "the glut case" for why protecting that balance matters.</param>
     /// <param name="startingEarmarkCeiling">The most a proposed starting (front-load) earmark may set aside, from AffordabilityCeiling.ForStartingEarmark; null leaves it uncapped (the full first-occurrence amount), the default for callers not doing an affordability-sized proposal.</param>
+    /// <param name="ongoingRateCeiling">The most the plan's per-cycle contribution may reserve, from AffordabilityCeiling.For (the range ceiling, as room FOR this plan); when the paced/spread rate would exceed it the plan is held to it instead and knowingly underfunds the outflow. Null leaves the rate uncapped. A transfer's own immediate single contribution is never capped — it stays plain regardless. Same conservative same-day reading the scaling caps use: one cycle's contribution against the window's tightest free point, not a full cumulative solve.</param>
     public static ProposedAllocationPlan Propose(
         FinancialPattern outflow,
         IReadOnlyList<FinancialPattern> allPatterns,
         DateOnly asOfDate,
         bool spreadEvenlyWithNoIncome = true,
         decimal carriedOverJarBalance = 0m,
-        decimal? startingEarmarkCeiling = null)
+        decimal? startingEarmarkCeiling = null,
+        decimal? ongoingRateCeiling = null)
     {
         if (outflow.Amount >= 0m)
         {
@@ -147,15 +149,21 @@ public static class AllocationPlanProposer
             if (paydayCount > 0 && billOccurrenceCount > 0)
             {
                 return WithStartingAllocation(
-                    ProposePaced(preparedOutflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate, startingEarmarkCeiling),
+                    ProposePaced(preparedOutflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate, startingEarmarkCeiling, ongoingRateCeiling),
                     carriedOverJarBalance);
             }
         }
 
         return WithStartingAllocation(
-            ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate, spreadEvenlyWithNoIncome),
+            ProposeFrontLoaded(preparedOutflow, billAmount, billUntil, asOfDate, spreadEvenlyWithNoIncome, ongoingRateCeiling),
             carriedOverJarBalance);
     }
+
+    /// <summary>[CALC] Holds a proposed per-cycle contribution under an affordability ceiling — returns the ceiling when a positive one is given and the rate would exceed it, the rate itself otherwise (no ceiling, or it already fits). A ceiling of 0 or less never binds, so the returned rate is always positive whenever the rate coming in was.</summary>
+    /// <param name="rate">The uncapped per-cycle contribution magnitude (a positive number).</param>
+    /// <param name="ceiling">The most that may be reserved per cycle, or null for uncapped.</param>
+    private static decimal RateUnderCeiling(decimal rate, decimal? ceiling) =>
+        ceiling is decimal cap && cap > 0m && rate > cap ? cap : rate;
 
     /// <summary>[CALC] Applies a carried-over balance to an already-built proposal's own plan, as its StartingAllocation — a no-op (the exact same instance back) when there's nothing to carry over, so every caller that never passes one gets byte-for-byte the same result as before this parameter existed. Deliberately does NOT touch MaybeStartingEarmark's own separate one-off top-up (ProposePaced's own Shape A can still propose one on top of a nonzero StartingAllocation applied here) — that method only ever reasons about SCHEDULE TIMING (does the plan's own first contribution land late), not about whether a big enough carried-over balance already covers the gap on its own. Narrow, flagged rather than fixed: the two could theoretically double up for a goal that both has a single clear income stream funding it AND is being re-proposed with a real carried-over balance AND has its very next bill due before the next payday — teaching MaybeStartingEarmark about dollar-sufficiency, not just timing, is a bigger change than this fix is about.</summary>
     /// <param name="proposal">The already-built proposal to apply the balance to.</param>
@@ -437,6 +445,7 @@ public static class AllocationPlanProposer
     /// <param name="billOccurrenceCount">How many bill occurrences fall in the window.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
     /// <param name="startingEarmarkCeiling">Cap for the front-load earmark, passed through to MaybeStartingEarmark; null leaves it uncapped.</param>
+    /// <param name="ongoingRateCeiling">Cap for the per-payday contribution; when the paced rate would exceed it the plan is held to it and knowingly underfunds. Null leaves it uncapped.</param>
     private static ProposedAllocationPlan ProposePaced(
         FinancialPattern outflow,
         FinancialPattern income,
@@ -445,9 +454,12 @@ public static class AllocationPlanProposer
         int paydayCount,
         int billOccurrenceCount,
         DateOnly asOfDate,
-        decimal? startingEarmarkCeiling)
+        decimal? startingEarmarkCeiling,
+        decimal? ongoingRateCeiling)
     {
-        var perPayday = Math.Round(billAmount * billOccurrenceCount / paydayCount, 2);
+        // Held under the affordability ceiling — a bill we can't fully pace for stays knowingly underfunded
+        // (the forecast then reports the shortfall) rather than reserving money that isn't there.
+        var perPayday = RateUnderCeiling(Math.Round(billAmount * billOccurrenceCount / paydayCount, 2), ongoingRateCeiling);
 
         // Fixed 2026-08-14 — was: DtStart = asOfDate here, blindly. Copying
         // income's own Frequency/Interval/ByDay/ByMonthDay but anchoring at
@@ -485,12 +497,14 @@ public static class AllocationPlanProposer
     /// <param name="billUntil">The outflow's own end date.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
     /// <param name="spreadEvenlyWithNoIncome">For a single-occurrence outflow: whether to spread the amount evenly across the remaining time, or reserve it all immediately.</param>
+    /// <param name="ongoingRateCeiling">Cap for the per-cycle contribution — applied to a recurring outflow's own full-amount reservation and to a spread goal's installments, but NOT to a transfer's own immediate single contribution, which stays plain. Null leaves the rate uncapped.</param>
     private static ProposedAllocationPlan ProposeFrontLoaded(
         FinancialPattern outflow,
         decimal billAmount,
         DateOnly billUntil,
         DateOnly asOfDate,
-        bool spreadEvenlyWithNoIncome)
+        bool spreadEvenlyWithNoIncome,
+        decimal? ongoingRateCeiling)
     {
         // A single-occurrence outflow (a one-time goal, a one-off bill, a
         // one-off transfer) never generates one full contribution per
@@ -513,7 +527,7 @@ public static class AllocationPlanProposer
         if (isSingleOccurrence)
         {
             return spreadEvenlyWithNoIncome
-                ? ProposeSpreadEvenly(outflow, billAmount, billUntil, asOfDate)
+                ? ProposeSpreadEvenly(outflow, billAmount, billUntil, asOfDate, ongoingRateCeiling)
                 : ProposeImmediateSingleContribution(outflow, billAmount, billUntil, asOfDate);
         }
 
@@ -530,7 +544,9 @@ public static class AllocationPlanProposer
             {
                 FinanceId = outflow.FinanceId,
                 DatePattern = planPattern,
-                Amount = -billAmount,
+                // Held under the affordability ceiling — a recurring bill we can't fully reserve for stays
+                // knowingly underfunded rather than drawing money that isn't there.
+                Amount = -RateUnderCeiling(billAmount, ongoingRateCeiling),
             },
             outflow);
 
@@ -573,8 +589,9 @@ public static class AllocationPlanProposer
     /// <param name="billAmount">The outflow's own amount, split evenly across installments.</param>
     /// <param name="billUntil">The outflow's own end date.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
+    /// <param name="ongoingRateCeiling">Cap for each installment; when an even split would exceed it the plan is held to it and knowingly underfunds. Null leaves it uncapped.</param>
     private static ProposedAllocationPlan ProposeSpreadEvenly(
-        FinancialPattern outflow, decimal billAmount, DateOnly billUntil, DateOnly asOfDate)
+        FinancialPattern outflow, decimal billAmount, DateOnly billUntil, DateOnly asOfDate, decimal? ongoingRateCeiling)
     {
         var start = asOfDate <= billUntil ? asOfDate : billUntil;
         var installmentPattern = RecurrenceRule.Create(new RecurrenceRuleOptions
@@ -585,7 +602,9 @@ public static class AllocationPlanProposer
             Until = billUntil,
         });
         var occurrenceCount = installmentPattern.GetOccurrences().Count;
-        var installmentAmount = Math.Round(billAmount / occurrenceCount, 2);
+        // Held under the affordability ceiling — a goal we can't fully spread for stays knowingly
+        // underfunded rather than reserving money that isn't there.
+        var installmentAmount = RateUnderCeiling(Math.Round(billAmount / occurrenceCount, 2), ongoingRateCeiling);
 
         var plan = EarMarkPattern.Create(
             new EarMarkPatternOptions

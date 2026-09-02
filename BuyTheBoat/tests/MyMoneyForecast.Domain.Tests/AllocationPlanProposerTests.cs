@@ -301,6 +301,91 @@ public class AllocationPlanProposerTests
         result.StartingEarmark.ShouldBeNull();
     }
 
+    // The ongoing-rate affordability cap — a plan we can't fully afford stays knowingly underfunded rather
+    // than reserving money that isn't there. Applies to every self-adaptive shape; a transfer's own immediate
+    // contribution is deliberately exempt (it stays plain).
+
+    [Fact]
+    public void The_paced_rate_is_held_under_the_ongoing_affordability_ceiling()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        // Pacing wants -300/cycle (7 paydays, 7 bill occurrences), but only 200 can be spared → held to 200.
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf, ongoingRateCeiling: 200m);
+
+        result.Plan.Amount.ShouldBe(-200m);
+    }
+
+    [Fact]
+    public void The_paced_rate_is_uncapped_when_the_ceiling_covers_the_full_rate()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf, ongoingRateCeiling: 400m);
+
+        result.Plan.Amount.ShouldBe(-300m); // ceiling above the full paced rate → meets the bill
+    }
+
+    [Fact]
+    public void A_recurring_bill_with_no_income_holds_its_per_cycle_reservation_under_the_ceiling()
+    {
+        var bill = MonthlyBill(-500m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 6, 1));
+
+        // The front-loaded shape reserves the full 500/cycle; the ceiling pulls it down to 350.
+        var result = AllocationPlanProposer.Propose(bill, [bill], AsOf, ongoingRateCeiling: 350m);
+
+        result.Plan.Amount.ShouldBe(-350m);
+    }
+
+    [Fact]
+    public void A_spread_evenly_goal_holds_each_installment_under_the_ceiling()
+    {
+        var oneOff = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 5,
+            Source = "Trip to Japan",
+            Amount = -800m,
+            Mandatory = false,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                DtStart = new DateOnly(2025, 9, 1),
+                Count = 1,
+            }),
+        });
+
+        // Even installments would be 88.89 (800 / 9); the ceiling holds each to 50, underfunding the goal.
+        var result = AllocationPlanProposer.Propose(oneOff, [oneOff], AsOf, ongoingRateCeiling: 50m);
+
+        result.Plan.Amount.ShouldBe(-50m);
+    }
+
+    [Fact]
+    public void A_transfer_withdrawal_is_never_held_under_the_ongoing_ceiling()
+    {
+        var oneOffTransferWithdrawal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 5,
+            Source = "Transfer to Savings",
+            Amount = -800m,
+            Mandatory = false,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                DtStart = new DateOnly(2025, 9, 1),
+                Count = 1,
+            }),
+        });
+
+        // Even with a tight ceiling, a transfer stays plain — the full amount up front, no cap applied.
+        var result = AllocationPlanProposer.Propose(
+            oneOffTransferWithdrawal, [oneOffTransferWithdrawal], AsOf, spreadEvenlyWithNoIncome: false, ongoingRateCeiling: 50m);
+
+        result.Plan.Amount.ShouldBe(-800m);
+    }
+
     [Fact]
     public void More_than_one_income_stream_falls_back_to_the_front_loaded_shape()
     {

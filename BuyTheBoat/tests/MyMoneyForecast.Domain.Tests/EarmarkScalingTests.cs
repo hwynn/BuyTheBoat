@@ -321,4 +321,46 @@ public class EarmarkScalingTests
         result.ScaledPlans.Single(p => p.DatePattern.ByMonthDay[0] == 10).Amount.ShouldBe(-37.50m);
         result.CappedToAffordability.ShouldBeTrue();
     }
+
+    // Scale (the amount-only cross-boundary re-rate) — same affordability cap, but silent (no result flag).
+
+    [Fact]
+    public void Scale_holds_the_combined_contribution_under_the_affordability_ceiling()
+    {
+        var oldGoal = Goal(-300m);
+        var newGoal = Goal(-600m); // doubles → ratio 2
+        var planA = Plan(oldGoal, -180m, 1);
+        var planB = Plan(oldGoal, -120m, 2); // combined 300/cycle
+
+        // Doubling wants 600/cycle, but only 450 can be spared → ratio held to 1.5, shares (3:2) preserved.
+        var scaled = EarmarkScaling.Scale(new ScaleRequest
+        {
+            Goal = newGoal,
+            PreviousGoalAmount = oldGoal.Amount,
+            SurvivingPlans = [planA, planB],
+        }, affordabilityCeiling: 450m);
+
+        scaled.Single(p => p.DatePattern.ByMonthDay[0] == 1).Amount.ShouldBe(-270m); // -180 x 1.5
+        scaled.Single(p => p.DatePattern.ByMonthDay[0] == 2).Amount.ShouldBe(-180m); // -120 x 1.5
+    }
+
+    [Fact]
+    public void Scale_is_uncapped_when_the_ceiling_covers_the_new_amount()
+    {
+        var oldGoal = Goal(-300m);
+        var newGoal = Goal(-600m);
+        var planA = Plan(oldGoal, -180m, 1);
+        var planB = Plan(oldGoal, -120m, 2);
+
+        // Ceiling above the 600 the doubled goal wants → the full 2x scale goes through.
+        var scaled = EarmarkScaling.Scale(new ScaleRequest
+        {
+            Goal = newGoal,
+            PreviousGoalAmount = oldGoal.Amount,
+            SurvivingPlans = [planA, planB],
+        }, affordabilityCeiling: 700m);
+
+        scaled.Single(p => p.DatePattern.ByMonthDay[0] == 1).Amount.ShouldBe(-360m); // -180 x 2
+        scaled.Single(p => p.DatePattern.ByMonthDay[0] == 2).Amount.ShouldBe(-240m); // -120 x 2
+    }
 }

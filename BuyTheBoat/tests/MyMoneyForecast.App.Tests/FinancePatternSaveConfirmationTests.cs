@@ -1133,6 +1133,18 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plan.DatePattern.Until.ShouldBe(new DateOnly(2025, 4, 1)); // untouched — it never tracked the goal's end
     }
 
+    // Affordability on the cross-boundary cascade: the re-rate below (EarmarkScaling.Scale) and the fold two
+    // cases down (EarmarkConsolidation.Consolidate) both now pass an affordability ceiling — the successor's
+    // re-rated/folded plan can't reserve more free money than there is. Under these tests' generous 10,000
+    // balance the cap is inert, so the numbers are unchanged; its bind-when-tight math is proven at the domain
+    // level (EarmarkScalingTests / EarmarkConsolidationTests) and the AffordabilityCeilingFor helper it flows
+    // through is bound under a tight balance in The_goal_health_suggestion_is_held_to_what_the_free_funds_can_afford.
+    // A dedicated tight-balance test HERE is deliberately skipped: the "room for these plans" re-forecast omits
+    // the chain's PLANS but keeps its bills, so a recurring bill's releases drain the room-basis free funds at
+    // every occurrence (the same interaction ForecastOptionsTests had to design its fixture around). Landing the
+    // ceiling in the narrow "positive but below the re-rate target" band a binding assertion needs would take a
+    // balance finely tuned to the exact release schedule — brittle, for a mechanism already proven three ways.
+
     // Cross-boundary Q6, slice 1 — the single-plan re-rate. A two-segment Rent
     // chain whose later segment is funded by one plan: raising the current
     // segment's amount and carrying it forward must re-rate that later plan to
