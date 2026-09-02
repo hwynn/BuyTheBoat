@@ -43,6 +43,17 @@ public sealed record ForecastOptions
     // exactly as before, so the single-account API and its tests are
     // unaffected.
     public IReadOnlyList<AccountForecastInput>? Accounts { get; init; }
+
+    /// <summary>[CALC] Returns a copy of these options with the savings plans (EarMarkPatterns) for the given goals left out — the bills/goals themselves, manual earmarks, and everything else stay. Forecasting the result gives the "room if those goals had no plan" picture an affordability check needs: those plans' scheduled contributions no longer reserve free funds, so the free figure is the room available to fund them. An empty set returns the same plans, so a caller omitting nothing is unaffected.</summary>
+    /// <param name="financeIds">The goals/bills whose EarMarkPatterns to leave out.</param>
+    public ForecastOptions WithoutPlansFor(IReadOnlySet<int> financeIds) => this with
+    {
+        EarMarkPatterns = EarMarkPatterns.Where(pattern => !financeIds.Contains(pattern.FinanceId)).ToList(),
+        Accounts = Accounts?.Select(account => account with
+        {
+            EarMarkPatterns = account.EarMarkPatterns.Where(pattern => !financeIds.Contains(pattern.FinanceId)).ToList(),
+        }).ToList(),
+    };
 }
 
 // One account's slice of a forecast: its own seed balance and cushion, and the

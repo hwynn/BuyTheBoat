@@ -56,6 +56,54 @@ public class TransactionLogBookTests
         LogPages = pages,
     };
 
+    private static TransactionLogBook SinglePageBook(params FinancialPattern[] patterns)
+    {
+        var start = new DateOnly(2026, 1, 1);
+        var end = new DateOnly(2026, 12, 31);
+        return Book(new TransactionLogPage
+        {
+            StartDate = start,
+            EndDate = end,
+            AccountPages = new Dictionary<string, AccountTransactionPage>
+            {
+                ["Checking"] = AccountPage("Checking", start, end, patterns),
+            },
+        });
+    }
+
+    [Fact]
+    public void ChainFinanceIds_groups_every_same_source_segment()
+    {
+        var electric1 = OneOffPattern("Electric", new DateOnly(2026, 1, 1));
+        var electric2 = OneOffPattern("Electric", new DateOnly(2026, 6, 1)); // same Source = same chain
+        var rent = OneOffPattern("Rent", new DateOnly(2026, 1, 1));
+        var book = SinglePageBook(electric1, electric2, rent);
+
+        var chain = book.ChainFinanceIds(electric1.FinanceId);
+
+        chain.Count.ShouldBe(2);
+        chain.ShouldContain(electric1.FinanceId);
+        chain.ShouldContain(electric2.FinanceId);
+        chain.ShouldNotContain(rent.FinanceId);
+    }
+
+    [Fact]
+    public void ChainFinanceIds_returns_just_the_id_for_a_pattern_with_no_siblings()
+    {
+        var rent = OneOffPattern("Rent", new DateOnly(2026, 1, 1));
+        var book = SinglePageBook(rent, OneOffPattern("Electric", new DateOnly(2026, 1, 1)));
+
+        book.ChainFinanceIds(rent.FinanceId).ShouldBe([rent.FinanceId]);
+    }
+
+    [Fact]
+    public void ChainFinanceIds_returns_just_the_id_when_it_has_no_pattern_here()
+    {
+        var book = SinglePageBook(OneOffPattern("Rent", new DateOnly(2026, 1, 1)));
+
+        book.ChainFinanceIds(9999).ShouldBe([9999]);
+    }
+
     [Fact]
     public void AllFinancialPatterns_returns_a_single_account_page_s_patterns()
     {

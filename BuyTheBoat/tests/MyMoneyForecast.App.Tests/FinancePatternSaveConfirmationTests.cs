@@ -668,6 +668,34 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     }
 
     [Fact]
+    public void The_goal_health_suggestion_is_held_to_what_the_free_funds_can_afford()
+    {
+        var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1)));
+
+        var editedBill = Bill(1, bill.Source, -100m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+
+        // A near-empty balance: the "room for this plan" ceiling can't reach the -100/cycle the goal now
+        // needs, so the suggested contribution is held below it (the same edit with generous funds reads
+        // -100, in Accepting_the_goal_health_suggestion... above).
+        Func<IReadOnlySet<int>, ForecastResult> tightRoom = omitIds =>
+            TransactionLogBookFactory.CreateForecast((ForecastOptionsForTest() with { StartingBalance = 250m }).WithoutPlansFor(omitIds));
+
+        IReadOnlyDictionary<string, object?>? capturedOverrides = null;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), tightRoom, userSkippedPlanning: false);
+        confirmation.ConfirmImplicitChanges = request => Confirm.Proceed().AcceptedGoalHealthSuggestion();
+        confirmation.NavigateToEarmarkForm = (_, overrides) => capturedOverrides = overrides;
+
+        confirmation.Run().ShouldBeTrue();
+
+        capturedOverrides.ShouldNotBeNull();
+        var suggested = Math.Abs((decimal)capturedOverrides![EarmarkFieldOverrideKeys.Amount]!);
+        suggested.ShouldBeLessThan(100m); // capped below the -100 goal — the affordability ceiling bound it
+        suggested.ShouldBeGreaterThan(0m); // ...but a real, positive contribution, not zeroed out
+    }
+
+    [Fact]
     public void Declining_the_goal_health_suggestion_opens_the_form_with_no_overrides()
     {
         var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1));
@@ -1470,7 +1498,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         Until = until,
     });
 
-    private ForecastResult Forecast() => TransactionLogBookFactory.CreateForecast(new ForecastOptions
+    private ForecastOptions ForecastOptionsForTest() => new()
     {
         FinancialPatterns = _financialPatterns.GetAll(),
         EarMarkPatterns = _earMarkPatterns.GetAll(),
@@ -1478,15 +1506,34 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         StartingBalance = 10_000m,
         AsOfDate = AsOf,
         HorizonEndDate = HorizonEnd,
-    });
+    };
 
+    private ForecastResult Forecast() => TransactionLogBookFactory.CreateForecast(ForecastOptionsForTest());
+
+    // Confirmation is given a real omitting-forecast source here (unlike headless callers that leave it
+    // null), so the affordability ceiling actually runs in these tests. The generous 10,000 balance keeps
+    // the cap inert in the existing cases — the cap-when-it-binds math is proven in EarmarkScalingTests /
+    // AffordabilityCeilingTests; MainWindow's own ForecastOmitting (which builds the real options) is the
+    // one link no test reaches.
     private FinancePatternSaveConfirmation Confirmation(int financeId, FinancialPattern proposedPattern, int accountId, ForecastResult forecast, bool userSkippedPlanning = true) =>
         new(financeId, proposedPattern, accountId, userSkippedPlanning, () => forecast, new FinancePatternRepositories
         {
             FinancialPatterns = _financialPatterns,
             EarMarkPatterns = _earMarkPatterns,
             ManualEarmarks = _manualEarmarks,
-        });
+        },
+        omitIds => TransactionLogBookFactory.CreateForecast(ForecastOptionsForTest().WithoutPlansFor(omitIds)));
+
+    // Same, but with a caller-supplied "room for these plans" source — for exercising the affordability
+    // ceiling when it actually binds (a deliberately tight re-forecast).
+    private FinancePatternSaveConfirmation Confirmation(int financeId, FinancialPattern proposedPattern, int accountId, ForecastResult forecast, Func<IReadOnlySet<int>, ForecastResult> requestForecastOmitting, bool userSkippedPlanning = true) =>
+        new(financeId, proposedPattern, accountId, userSkippedPlanning, () => forecast, new FinancePatternRepositories
+        {
+            FinancialPatterns = _financialPatterns,
+            EarMarkPatterns = _earMarkPatterns,
+            ManualEarmarks = _manualEarmarks,
+        },
+        requestForecastOmitting);
 
     public void Dispose()
     {

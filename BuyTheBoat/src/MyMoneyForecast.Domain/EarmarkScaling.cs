@@ -39,6 +39,11 @@ public sealed record MeetGoalScalingResult
     // plans already meet the goal and ScaledPlans is unchanged.
     public required decimal CurrentTotal { get; init; }
     public required decimal NeededTotal { get; init; }
+
+    // Whether an affordability ceiling bound the result below what would meet the goal, so ScaledPlans
+    // deliberately underfunds it. False when no ceiling was given, or the goal fit under it. Not required:
+    // defaults to false, so the no-ceiling path reads as uncapped.
+    public bool CappedToAffordability { get; init; }
 }
 
 public static class EarmarkScaling
@@ -69,10 +74,11 @@ public static class EarmarkScaling
             .ToList();
     }
 
-    /// <summary>[CALC] Re-rates several EarMarkPatterns for one goal so that, kept separate, they TOGETHER exactly fund it — net of what's already banked — while keeping the same proportions between them. Used when a goal breaks off into a new segment at a different amount and the user keeps its plans separate: left as-is they'd over- or under-fund the new amount, and this offers the correction. Scales every plan's Amount by one shared ratio (needed ÷ current), which both hits the funded total and preserves each plan's relative share, so it's a genuine proportional split. The window and the "already banked" accounting mirror EarmarkConsolidation.Consolidate's MeetGoal exactly (releases over the goal's occurrences, minus summed StartingAllocation) — the difference is only that the total is split back across the plans instead of folded into one. DatePattern, StartingAllocation, and FinanceId are carried over untouched; a plan contributing nothing over the window (no occurrences) leaves everything unchanged rather than dividing by zero.</summary>
+    /// <summary>[CALC] Re-rates several EarMarkPatterns for one goal so that, kept separate, they TOGETHER exactly fund it — net of what's already banked — while keeping the same proportions between them. Used when a goal breaks off into a new segment at a different amount and the user keeps its plans separate: left as-is they'd over- or under-fund the new amount, and this offers the correction. Scales every plan's Amount by one shared ratio (needed ÷ current), which both hits the funded total and preserves each plan's relative share, so it's a genuine proportional split. The window and the "already banked" accounting mirror EarmarkConsolidation.Consolidate's MeetGoal exactly (releases over the goal's occurrences, minus summed StartingAllocation) — the difference is only that the total is split back across the plans instead of folded into one. DatePattern, StartingAllocation, and FinanceId are carried over untouched; a plan contributing nothing over the window (no occurrences) leaves everything unchanged rather than dividing by zero. When an affordability ceiling is given and meeting the goal would exceed it, the combined contribution is held to the ceiling instead — CappedToAffordability flags it, and the goal stays knowingly underfunded.</summary>
     /// <param name="goal">The goal these plans fund — its Amount and occurrences set the target.</param>
     /// <param name="plans">The separate plans to re-rate; their summed StartingAllocation is the "already banked" credit.</param>
-    public static MeetGoalScalingResult ScaleToMeetGoal(FinancialPattern goal, IReadOnlyList<EarMarkPattern> plans)
+    /// <param name="affordabilityCeiling">The most the plans' combined per-cycle contribution may be, from AffordabilityCeiling.For; when meeting the goal would exceed it the plans are held to it instead. Null leaves the result uncapped. See the body note for the two simplifications this makes.</param>
+    public static MeetGoalScalingResult ScaleToMeetGoal(FinancialPattern goal, IReadOnlyList<EarMarkPattern> plans, decimal? affordabilityCeiling = null)
     {
         // Same window Consolidate uses: from the earliest plan's own start (never
         // before the goal's own), through the goal's end.
@@ -91,14 +97,29 @@ public static class EarmarkScaling
         var currentTotal = plans.Sum(plan =>
             Math.Abs(plan.Amount) * plan.DatePattern.WithExcludedDates([]).GetOccurrences(start, end).Count);
 
-        // TODO (income-feasibility, deferred — reference-savings-plan-vocabulary's
-        // affordability gap): this raises each plan's amount with no check that the
-        // paycheck behind it can actually spare that much. This is exactly the spot
-        // that ceiling belongs — cap the scaled amounts to what the associated
-        // income supports, and when the cap can't reach neededTotal, the goal stays
-        // (knowingly) underfunded rather than promising money that isn't there.
         var ratio = currentTotal == 0m ? 1m : neededTotal / currentTotal;
 
+        // Hold the plans' combined per-cycle contribution under the affordability ceiling (resolving the
+        // old income-feasibility TODO with the free-funds ceiling, which supersedes the single-income idea).
+        // Two deliberate simplifications: (1) it treats the plans as if they all draw on the same day — the
+        // combined per-cycle sum vs the ceiling — so it never over-commits but can be conservative when their
+        // cadences don't actually coincide; (2) the ceiling must be computed as room FOR these plans (a
+        // forecast without their current contributions), since the cap compares the full combined
+        // contribution, not just the increase. A ceiling of 0 or less (an already-over-committed window) is
+        // out of scope — reducing existing commitments is a different operation than re-rating.
+        var cappedToAffordability = false;
+        if (affordabilityCeiling is decimal ceiling && ceiling > 0m)
+        {
+            var combinedPerCycle = plans.Sum(plan => Math.Abs(plan.Amount));
+            if (combinedPerCycle > 0m && ceiling / combinedPerCycle < ratio)
+            {
+                ratio = ceiling / combinedPerCycle;
+                cappedToAffordability = true;
+            }
+        }
+
+        // Apply the final ratio (goal-meeting, or the affordability cap when that binds) to every plan,
+        // keeping their relative shares.
         var scaled = plans
             .Select(plan => EarMarkPattern.Create(
                 new EarMarkPatternOptions
@@ -116,6 +137,7 @@ public static class EarmarkScaling
             ScaledPlans = scaled,
             CurrentTotal = currentTotal,
             NeededTotal = neededTotal,
+            CappedToAffordability = cappedToAffordability,
         };
     }
 }

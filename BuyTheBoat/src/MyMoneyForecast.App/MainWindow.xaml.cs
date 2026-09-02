@@ -509,21 +509,7 @@ public partial class MainWindow : Window
 
     private void RefreshForecast(DateOnly asOfDate, DateOnly horizonEndDate)
     {
-        var forecast = TransactionLogBookFactory.CreateForecast(new ForecastOptions
-        {
-            // Ignored when Accounts is set (there is always at least one account),
-            // but still required by the record.
-            FinancialPatterns = [],
-            EarMarkPatterns = [],
-            StartingBalance = 0m,
-            AsOfDate = asOfDate,
-            HorizonEndDate = horizonEndDate,
-            Accounts = BuildAccountInputs(),
-            // planning/14 item A-1: lets the household roll-up add a transfer's
-            // reservation back into free, so moving your own money never reads
-            // as household spending.
-            TransferWithdrawalFinanceIds = _financialPatterns.GetTransferWithdrawalFinanceIds(),
-        });
+        var forecast = TransactionLogBookFactory.CreateForecast(BuildForecastOptions(asOfDate, horizonEndDate));
 
         _lastForecast = forecast;
         var (balance, cushion) = AccountTotals();
@@ -535,6 +521,35 @@ public partial class MainWindow : Window
         ExportForecastSpreadsheetButton.IsEnabled = true;
 
         UpdateForecastButtonState();
+    }
+
+    /// <summary>[CALC] Builds the ForecastOptions for the current data over the given window — the shared input both RefreshForecast (the shown forecast) and ForecastOmitting (the affordability re-forecast) run through, so the two can't drift apart.</summary>
+    /// <param name="asOfDate">The as-of date.</param>
+    /// <param name="horizonEndDate">The horizon end date.</param>
+    private ForecastOptions BuildForecastOptions(DateOnly asOfDate, DateOnly horizonEndDate) => new()
+    {
+        // Ignored when Accounts is set (there is always at least one account),
+        // but still required by the record.
+        FinancialPatterns = [],
+        EarMarkPatterns = [],
+        StartingBalance = 0m,
+        AsOfDate = asOfDate,
+        HorizonEndDate = horizonEndDate,
+        Accounts = BuildAccountInputs(),
+        // planning/14 item A-1: lets the household roll-up add a transfer's
+        // reservation back into free, so moving your own money never reads
+        // as household spending.
+        TransferWithdrawalFinanceIds = _financialPatterns.GetTransferWithdrawalFinanceIds(),
+    };
+
+    /// <summary>[CALC] Re-runs the forecast with the given goals' savings plans omitted — the "room for these plans" view the save-confirmation's affordability ceiling sizes suggestions against. Same inputs and window as the shown forecast, just filtered; deliberately does NOT touch _lastForecast (a throwaway calculation, not the shown forecast).</summary>
+    /// <param name="omitFinanceIds">The goals whose EarMarkPatterns to leave out.</param>
+    private ForecastResult ForecastOmitting(IReadOnlySet<int> omitFinanceIds)
+    {
+        var asOfDate = _lastForecast?.AsOfDate ?? CurrentAsOfDate();
+        var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
+        return TransactionLogBookFactory.CreateForecast(
+            BuildForecastOptions(asOfDate, horizonEnd).WithoutPlansFor(omitFinanceIds));
     }
 
     /// <summary>[UI] "All accounts" plus one entry per account. Kept in step with the forecast so a renamed or deleted account can't linger in the filter.</summary>
@@ -1173,7 +1188,8 @@ public partial class MainWindow : Window
                 FinancialPatterns = _financialPatterns,
                 EarMarkPatterns = _earMarkPatterns,
                 ManualEarmarks = _manualEarmarks,
-            })
+            },
+            ForecastOmitting)
         {
             ConfirmImplicitChanges = ShowEditingHistoryConfirmation,
             PickEarmarkPattern = PickEarmarkPatternToOpen,
@@ -1344,8 +1360,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Cap the starting front-load at what the day can spare (the affordability ceiling), measured on a
+        // re-forecast with this bill's own plans omitted so its front-load isn't counted against itself.
+        var room = ForecastOmitting(new HashSet<int> { pattern.FinanceId });
+        var roomPage = room.Accounts.FirstOrDefault(account => account.AccountId == accountId)?.Page ?? room.PrimaryAccountPage;
+        var startingCeiling = AffordabilityCeiling.ForStartingEarmark(roomPage, pattern, CurrentAsOfDate(), ChangeKind.Implicit);
         var proposal = AllocationPlanProposer.Propose(
-            pattern, _financialPatterns.GetByAccountExcludingTransferPatterns(accountId), CurrentAsOfDate());
+            pattern, _financialPatterns.GetByAccountExcludingTransferPatterns(accountId), CurrentAsOfDate(),
+            startingEarmarkCeiling: startingCeiling);
         // The proposer may stretch the outflow's active span back to the as-of
         // date (planning/15, ActiveFrom) so its plan fits — persist that prepared
         // outflow, not the original, or the plan reads short against a goal whose

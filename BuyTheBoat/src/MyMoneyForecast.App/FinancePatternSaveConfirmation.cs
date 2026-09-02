@@ -215,6 +215,13 @@ public sealed class FinancePatternSaveConfirmation
     // cascade, mixed in with system-generated isolated earmarks, so there's
     // nothing clean to read there).
     private readonly Func<ForecastResult> _requestForecast;
+
+    // Re-runs the forecast with a set of goals' savings plans left out, for the "room for these plans"
+    // affordability basis (AffordabilityCeilingFor below). Null in tests/callers that don't size against a
+    // ceiling — the affordability caps then simply don't apply. In the running app it's provided by
+    // MainWindow, which is the one untestable link: it builds the same ForecastOptions RefreshForecast does,
+    // then WithoutPlansFor + CreateForecast.
+    private readonly Func<IReadOnlySet<int>, ForecastResult>? _requestForecastOmitting;
     private readonly FinancePatternRepositories _repositories;
 
     // Internal bookkeeping only, not one of the nine named properties — which
@@ -555,7 +562,8 @@ public sealed class FinancePatternSaveConfirmation
         int accountId,
         bool userSkippedPlanning,
         Func<ForecastResult> requestForecast,
-        FinancePatternRepositories repositories)
+        FinancePatternRepositories repositories,
+        Func<IReadOnlySet<int>, ForecastResult>? requestForecastOmitting = null)
     {
         _financeId = financeId;
         _navigationFinanceId = financeId;
@@ -564,6 +572,39 @@ public sealed class FinancePatternSaveConfirmation
         UserSkippedPlanning = userSkippedPlanning;
         _requestForecast = requestForecast;
         _repositories = repositories;
+        _requestForecastOmitting = requestForecastOmitting;
+    }
+
+    /// <summary>[READS FILE] Works out the most a change to `target`'s savings plan may set aside without over-committing — the affordability ceiling, measured against a re-forecast with this goal's whole chain of plans omitted (the "room for these plans" basis, so the plan's own current contributions count as available to it). Feeds the cap on the goal-health suggestion and the keep-separate funding correction. Null when no omitting-forecast source is wired (headless tests), which leaves those scalings uncapped.</summary>
+    /// <param name="target">The goal or bill whose plan is being sized.</param>
+    /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
+    private decimal? AffordabilityCeilingFor(FinancialPattern target, ChangeKind changeKind)
+    {
+        if (_requestForecastOmitting is null)
+        {
+            return null;
+        }
+
+        var omitted = _requestForecastOmitting(_requestForecast().Book.ChainFinanceIds(_financeId));
+        var page = omitted.Accounts.FirstOrDefault(account => account.AccountId == _accountId)?.Page
+            ?? omitted.PrimaryAccountPage;
+        return AffordabilityCeiling.For(page, target, omitted.AsOfDate, changeKind);
+    }
+
+    /// <summary>[READS FILE] Works out the most a proposed starting (front-load) earmark for `target` may set aside on the as-of day — the single-date affordability ceiling, measured with `target`'s own chain of plans omitted (its front-load shouldn't count against itself). Keyed on the target rather than the edited pattern, since a paycheck re-pace front-loads OTHER bills. Null when no omitting-forecast source is wired.</summary>
+    /// <param name="target">The bill whose starting earmark is being sized.</param>
+    /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
+    private decimal? StartingEarmarkCeilingFor(FinancialPattern target, ChangeKind changeKind)
+    {
+        if (_requestForecastOmitting is null)
+        {
+            return null;
+        }
+
+        var omitted = _requestForecastOmitting(_requestForecast().Book.ChainFinanceIds(target.FinanceId));
+        var page = omitted.Accounts.FirstOrDefault(account => account.AccountId == _accountId)?.Page
+            ?? omitted.PrimaryAccountPage;
+        return AffordabilityCeiling.ForStartingEarmark(page, target, omitted.AsOfDate, changeKind);
     }
 
     // Invoked once Run() decides navigation should happen — matches this
@@ -1252,7 +1293,8 @@ public sealed class FinancePatternSaveConfirmation
             AllPatterns = forecast.Book.AllFinancialPatterns(),
         });
 
-        _keepSeparateFunding = EarmarkScaling.ScaleToMeetGoal(result.Successor, result.SuccessorPlans);
+        var ceiling = AffordabilityCeilingFor(result.Successor, ChangeKind.Implicit);
+        _keepSeparateFunding = EarmarkScaling.ScaleToMeetGoal(result.Successor, result.SuccessorPlans, affordabilityCeiling: ceiling);
     }
 
     /// <summary>[CALC] The nested keep-separate funding question's own wording — "" whenever there's no gap to correct (the plans already fund the new amount, or no keep-separate break-off is on the table), so the row isn't shown at all. Names which way it's off (short of, or more than) so the ask isn't a bare yes/no, matching the "show the consequence" standard.</summary>
@@ -1290,7 +1332,8 @@ public sealed class FinancePatternSaveConfirmation
         // so scaling it to the edited goal is well-formed. Same machinery the
         // keep-separate funding uses; offered only when the plan doesn't already
         // meet the edited goal (its current and needed totals differ).
-        var scaling = EarmarkScaling.ScaleToMeetGoal(_proposedPattern, [plan]);
+        var ceiling = AffordabilityCeilingFor(_proposedPattern, ChangeKind.Suggestion);
+        var scaling = EarmarkScaling.ScaleToMeetGoal(_proposedPattern, [plan], affordabilityCeiling: ceiling);
         if (Math.Abs(scaling.CurrentTotal - scaling.NeededTotal) >= 0.01m)
         {
             _goalHealthSuggestedPlan = scaling.ScaledPlans.Single();
@@ -2134,7 +2177,9 @@ public sealed class FinancePatternSaveConfirmation
             }
 
             var carriedOverJarBalance = JarBalanceOn(forecast.AsOfDate, oldPlan.FinanceId);
-            var proposal = AllocationPlanProposer.Propose(bill, allPatterns, forecast.AsOfDate, carriedOverJarBalance: carriedOverJarBalance);
+            var proposal = AllocationPlanProposer.Propose(bill, allPatterns, forecast.AsOfDate,
+                carriedOverJarBalance: carriedOverJarBalance,
+                startingEarmarkCeiling: StartingEarmarkCeilingFor(bill, ChangeKind.Implicit));
 
             // Same "read before write" reasoning FindOrphanedManualEarmarkDates'
             // own call sites elsewhere already follow — safe here because
@@ -2410,9 +2455,12 @@ public sealed class FinancePatternSaveConfirmation
         // they together meet the new amount; otherwise each keeps its own raw
         // rate, over/underfunding and all. Recomputed here against the real
         // successor rather than reusing the dry-run's throwaway one.
-        var successorPlans = UserChoseToAdjustKeptSeparatePlans
-            ? EarmarkScaling.ScaleToMeetGoal(result.Successor, result.SuccessorPlans).ScaledPlans
-            : result.SuccessorPlans;
+        var successorPlans = result.SuccessorPlans;
+        if (UserChoseToAdjustKeptSeparatePlans)
+        {
+            var ceiling = AffordabilityCeilingFor(result.Successor, ChangeKind.Implicit);
+            successorPlans = EarmarkScaling.ScaleToMeetGoal(result.Successor, result.SuccessorPlans, affordabilityCeiling: ceiling).ScaledPlans;
+        }
 
         _repositories.FinancialPatterns.Save(result.Predecessor, _accountId);
         _repositories.FinancialPatterns.Save(result.Successor, _accountId);

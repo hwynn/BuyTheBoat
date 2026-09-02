@@ -255,6 +255,24 @@ Tags as of this writing, all of which are revisit sites for import
 - `OccurredDate` **cannot be in the future** — a user can't record a transaction
   in advance. A validation rule, already documented, not yet enforced anywhere.
 
+### Free-fund suggestions & the past-day affordability guard
+
+- **The affordability-ceiling calculations assume the forecast has no past.** *Raised 2026-08-31, while
+  building the free-funds methods on `AccountTransactionPage` — `AvailableFunds` / `AvailableFundsFor` /
+  `MinimumAvailableFunds`, selected by the `Frugality` tiers — that will size the "never suggest drawing
+  more than the user actually has" ceiling for earmark suggestions and implicit plan changes.* Both those
+  methods and the sizing that will consume them lean on two things that hold only while actuals are
+  shelved: a forecast page runs `[asOfDate, horizon]`, so no snapshot predates today (3.13.1.a1), and
+  `expected_free_amount` is future-only. The author's stated constraint: a suggestion, or the earmark it
+  places, must never drive `expected_free_amount` **below zero on a day before today.** Today that is
+  structurally unreachable — there are no past days to hit — so it is a latent guard, not live logic.
+  *What it blocks:* the moment actual-transaction history adds past-dated snapshots (so the app can show
+  how much money there was and where it went — the reason `BalanceSnapshot` carries both `full_amount` and
+  `expected_amount`), that guarantee evaporates and the affordability sizing needs a real check against
+  retroactively over-committing a past day. A code TODO on the methods marks the spot until then. This
+  sharpens the standing open question below — *"does importing history change what the forecast shows for
+  past days?"* — into one concrete rule any answer has to satisfy.
+
 ### Build sequencing
 
 [02](02-csharp-sqlite-build-plan.md) puts "expected/actual pairing and

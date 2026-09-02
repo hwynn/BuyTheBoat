@@ -281,4 +281,44 @@ public class EarmarkScalingTests
         withSkips.ScaledPlans.Single(p => p.DatePattern.ByMonthDay[0] == 10).Amount
             .ShouldBe(withoutSkips.ScaledPlans.Single(p => p.DatePattern.ByMonthDay[0] == 10).Amount);
     }
+
+    [Fact]
+    public void ScaleToMeetGoal_holds_the_combined_contribution_under_the_affordability_ceiling()
+    {
+        var goal = GoalFundedBy(-100m);
+        var plan = PlanOn(goal, -80m, 5);
+
+        // Meeting the goal wants -100/cycle, but only 90 can be spared → held to 90, goal knowingly underfunded.
+        var result = EarmarkScaling.ScaleToMeetGoal(goal, [plan], affordabilityCeiling: 90m);
+
+        result.ScaledPlans.Single().Amount.ShouldBe(-90m);
+        result.CappedToAffordability.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void ScaleToMeetGoal_is_uncapped_when_the_ceiling_covers_meeting_the_goal()
+    {
+        var goal = GoalFundedBy(-100m);
+        var plan = PlanOn(goal, -80m, 5);
+
+        var result = EarmarkScaling.ScaleToMeetGoal(goal, [plan], affordabilityCeiling: 150m);
+
+        result.ScaledPlans.Single().Amount.ShouldBe(-100m); // ceiling above the -100 needed → meets the goal
+        result.CappedToAffordability.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void ScaleToMeetGoal_capping_keeps_the_plans_relative_shares()
+    {
+        var goal = GoalFundedBy(-100m);
+        var planA = PlanOn(goal, -30m, 5);
+        var planB = PlanOn(goal, -50m, 10);
+
+        // 80/cycle now, 100 needed; ceiling 60 binds → both cut to a 60 total, 3:5 preserved.
+        var result = EarmarkScaling.ScaleToMeetGoal(goal, [planA, planB], affordabilityCeiling: 60m);
+
+        result.ScaledPlans.Single(p => p.DatePattern.ByMonthDay[0] == 5).Amount.ShouldBe(-22.50m);
+        result.ScaledPlans.Single(p => p.DatePattern.ByMonthDay[0] == 10).Amount.ShouldBe(-37.50m);
+        result.CappedToAffordability.ShouldBeTrue();
+    }
 }

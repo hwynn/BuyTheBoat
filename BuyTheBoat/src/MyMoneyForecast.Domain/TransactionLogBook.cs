@@ -58,4 +58,18 @@ public sealed record TransactionLogBook
     /// <param name="financeId">Which goal or bill's Savings Plan to return.</param>
     public IReadOnlyList<EarMarkPattern> EarMarkPatternsFor(int financeId) =>
         AllEarMarkPatterns().Where(pattern => pattern.FinanceId == financeId).ToList();
+
+    /// <summary>[CALC] Returns the FinanceIds of every FinancialPattern in the same break-off chain as the given one — every pattern sharing its Source, the app's own definition of a chain (a same-Source pattern with a different Start is a later segment). Returns just the id itself when it has no pattern in the book, or no same-Source siblings. Lets a caller omit a whole savings-plan chain from an affordability re-forecast, or treat a chain as one unit anywhere else.</summary>
+    /// <param name="financeId">A FinanceId anywhere in the chain.</param>
+    public IReadOnlySet<int> ChainFinanceIds(int financeId)
+    {
+        var patterns = AllFinancialPatterns();
+        if (patterns.FirstOrDefault(pattern => pattern.FinanceId == financeId)?.Source is not { } source)
+        {
+            return new HashSet<int> { financeId };
+        }
+
+        // Every pattern sharing the Source is a segment of the same chain.
+        return patterns.Where(pattern => pattern.Source == source).Select(pattern => pattern.FinanceId).ToHashSet();
+    }
 }

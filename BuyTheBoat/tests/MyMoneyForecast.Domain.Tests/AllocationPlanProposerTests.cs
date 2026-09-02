@@ -163,6 +163,41 @@ public class AllocationPlanProposerTests
     }
 
     [Fact]
+    public void A_starting_earmark_is_capped_at_the_affordability_ceiling()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 10, new DateOnly(2025, 1, 10), new DateOnly(2025, 6, 10));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf, startingEarmarkCeiling: 120m);
+
+        // The full front-load would be 300, but only 120 can be spared that day.
+        result.StartingEarmark.ShouldNotBeNull();
+        result.StartingEarmark!.Amount.ShouldBe(120m);
+    }
+
+    [Fact]
+    public void A_starting_earmark_is_left_whole_when_the_ceiling_covers_it()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 10, new DateOnly(2025, 1, 10), new DateOnly(2025, 6, 10));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf, startingEarmarkCeiling: 500m);
+
+        result.StartingEarmark!.Amount.ShouldBe(300m); // ceiling above the full amount → uncapped
+    }
+
+    [Fact]
+    public void No_starting_earmark_when_the_day_cannot_afford_even_a_partial_front_load()
+    {
+        var income = MonthlyIncome(3000m, 25, new DateOnly(2024, 1, 25), new DateOnly(2027, 1, 1));
+        var bill = MonthlyBill(-300m, 10, new DateOnly(2025, 1, 10), new DateOnly(2025, 6, 10));
+
+        var result = AllocationPlanProposer.Propose(bill, [bill, income], AsOf, startingEarmarkCeiling: 0m);
+
+        result.StartingEarmark.ShouldBeNull();
+    }
+
+    [Fact]
     public void No_income_front_loads_the_full_amount_on_the_bills_cadence()
     {
         // No income at all: the plan reserves the full amount every cycle,

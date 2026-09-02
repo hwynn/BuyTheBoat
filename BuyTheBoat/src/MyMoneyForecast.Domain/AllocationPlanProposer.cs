@@ -107,12 +107,14 @@ public static class AllocationPlanProposer
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the plan starts contributing from.</param>
     /// <param name="spreadEvenlyWithNoIncome">Whether a single-occurrence outflow with no clear income spreads evenly across the remaining time (the default) or reserves the full amount immediately — pass false for a transfer's withdrawal, which stays plain with no adaptive behavior.</param>
     /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added 2026-08-15 specifically so Item G's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. See planning/26's own "the glut case" for why protecting that balance matters.</param>
+    /// <param name="startingEarmarkCeiling">The most a proposed starting (front-load) earmark may set aside, from AffordabilityCeiling.ForStartingEarmark; null leaves it uncapped (the full first-occurrence amount), the default for callers not doing an affordability-sized proposal.</param>
     public static ProposedAllocationPlan Propose(
         FinancialPattern outflow,
         IReadOnlyList<FinancialPattern> allPatterns,
         DateOnly asOfDate,
         bool spreadEvenlyWithNoIncome = true,
-        decimal carriedOverJarBalance = 0m)
+        decimal carriedOverJarBalance = 0m,
+        decimal? startingEarmarkCeiling = null)
     {
         if (outflow.Amount >= 0m)
         {
@@ -145,7 +147,7 @@ public static class AllocationPlanProposer
             if (paydayCount > 0 && billOccurrenceCount > 0)
             {
                 return WithStartingAllocation(
-                    ProposePaced(preparedOutflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate),
+                    ProposePaced(preparedOutflow, income, billAmount, planUntil, paydayCount, billOccurrenceCount, asOfDate, startingEarmarkCeiling),
                     carriedOverJarBalance);
             }
         }
@@ -434,6 +436,7 @@ public static class AllocationPlanProposer
     /// <param name="paydayCount">How many paydays fall in the window.</param>
     /// <param name="billOccurrenceCount">How many bill occurrences fall in the window.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
+    /// <param name="startingEarmarkCeiling">Cap for the front-load earmark, passed through to MaybeStartingEarmark; null leaves it uncapped.</param>
     private static ProposedAllocationPlan ProposePaced(
         FinancialPattern outflow,
         FinancialPattern income,
@@ -441,7 +444,8 @@ public static class AllocationPlanProposer
         DateOnly planUntil,
         int paydayCount,
         int billOccurrenceCount,
-        DateOnly asOfDate)
+        DateOnly asOfDate,
+        decimal? startingEarmarkCeiling)
     {
         var perPayday = Math.Round(billAmount * billOccurrenceCount / paydayCount, 2);
 
@@ -472,7 +476,7 @@ public static class AllocationPlanProposer
             },
             outflow);
 
-        return new ProposedAllocationPlan(outflow, plan, MaybeStartingEarmark(outflow, plan, billAmount, asOfDate));
+        return new ProposedAllocationPlan(outflow, plan, MaybeStartingEarmark(outflow, plan, billAmount, asOfDate, startingEarmarkCeiling));
     }
 
     /// <summary>[CALC] Shape C: reserves the full amount every bill cycle, starting at the as-of date so the first contribution reserves the whole amount up front. A single-occurrence outflow instead spreads or reserves immediately, per <paramref name="spreadEvenlyWithNoIncome"/>.</summary>
@@ -595,16 +599,18 @@ public static class AllocationPlanProposer
         return new ProposedAllocationPlan(outflow, plan, null);
     }
 
-    /// <summary>[CALC] Returns a starting earmark to front-load the first bill occurrence, if it falls before the plan's own first contribution (shape A, when the bill is due before the next paycheck) — otherwise null.</summary>
+    /// <summary>[CALC] Returns a starting earmark to front-load the first bill occurrence, if it falls before the plan's own first contribution (shape A, when the bill is due before the next paycheck) — capped at the affordability ceiling when one is given, and null when even a partial front-load can't be afforded (or none is needed).</summary>
     /// <param name="outflow">The outflow being funded.</param>
     /// <param name="plan">The proposed plan.</param>
     /// <param name="billAmount">The outflow's own amount, to front-load.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the starting earmark is dated.</param>
+    /// <param name="ceiling">The most that can be front-loaded on asOfDate; null leaves the full amount uncapped.</param>
     private static ManualEarmark? MaybeStartingEarmark(
         FinancialPattern outflow,
         EarMarkPattern plan,
         decimal billAmount,
-        DateOnly asOfDate)
+        DateOnly asOfDate,
+        decimal? ceiling)
     {
         var firstBill = FirstOccurrenceOnOrAfter(outflow.DatePattern, asOfDate);
         if (firstBill is null)
@@ -619,12 +625,20 @@ public static class AllocationPlanProposer
             return null;
         }
 
+        // Front-load the full first occurrence, but never more than the day can spare; at or below zero
+        // (an already-over-committed day) even a partial front-load can't be placed.
+        var amount = ceiling is decimal cap ? Math.Min(billAmount, cap) : billAmount;
+        if (amount <= 0m)
+        {
+            return null;
+        }
+
         return ManualEarmark.Create(
             new ManualEarmarkOptions
             {
                 FinanceId = outflow.FinanceId,
                 Date = asOfDate,
-                Amount = billAmount,
+                Amount = amount,
             },
             plan);
     }
