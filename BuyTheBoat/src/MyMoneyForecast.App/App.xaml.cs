@@ -5,30 +5,42 @@ namespace MyMoneyForecast.App;
 
 public partial class App : Application
 {
-    // TEMPORARY DIAGNOSTIC (2026-08-12) — remove once the empty-grids-on-
-    // launch report is resolved. No handler existed here before, so any
-    // exception during MainWindow's own construction/startup would normally
-    // crash the process outright — this catches it instead and shows exactly
-    // what it was and where, in case something IS throwing but somehow not
-    // presenting as a visible crash. e.Handled = true lets the app keep
-    // running afterward so the resulting UI state (e.g., are the grids
-    // empty specifically BECAUSE of this) is also visible.
+    // Catches errors that would otherwise close the app without a trace: writes
+    // them to a findable log (ErrorLog, alongside the database) and tells the
+    // user where it is, so a demo tester can send it in — the app's bug-report
+    // path. A UI-thread error keeps the app running afterward (e.Handled = true)
+    // so a single broken action doesn't lose everything; a background-thread
+    // error can't be resumed, but is still logged before the app closes.
     public App()
     {
         DispatcherUnhandledException += (_, e) =>
         {
+            ErrorLog.Record("Unexpected error (the app kept running)", e.Exception);
+
             try
             {
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mmf-diagnostic.log"),
-                    $"{DateTime.Now:HH:mm:ss.fff} UNHANDLED EXCEPTION: {e.Exception.GetType().FullName}: {e.Exception.Message}\n{e.Exception.StackTrace}\n");
+                MessageBox.Show(
+                    "Something went wrong, but the app is still running.\n\n" +
+                    $"The details were saved to:\n{ErrorLog.FilePath}\n\n" +
+                    "Please include that file when reporting the problem.",
+                    "Something went wrong",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
             }
             catch
             {
-                // Diagnostic logging itself must never be why the app fails.
+                // If even showing the notice fails, the log above still has it.
             }
 
             e.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception error)
+            {
+                ErrorLog.Record("Fatal background error (the app could not continue)", error);
+            }
         };
     }
 }

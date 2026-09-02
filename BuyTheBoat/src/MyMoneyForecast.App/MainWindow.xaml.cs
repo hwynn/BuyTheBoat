@@ -996,6 +996,7 @@ public partial class MainWindow : Window
         }
         catch (IOException ex)
         {
+            ErrorLog.Record("exporting the forecast spreadsheet", ex);
             MessageBox.Show(this, $"Couldn't export: {ex.Message}", "Export failed", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
@@ -1073,6 +1074,7 @@ public partial class MainWindow : Window
         }
         catch (IOException ex)
         {
+            ErrorLog.Record("exporting the database", ex);
             MessageBox.Show(this, $"Couldn't export: {ex.Message}", "Export failed", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
@@ -1136,6 +1138,7 @@ public partial class MainWindow : Window
         }
         catch (IOException ex)
         {
+            ErrorLog.Record("importing the database", ex);
             MessageBox.Show(this, $"Couldn't import: {ex.Message}", "Import failed", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
