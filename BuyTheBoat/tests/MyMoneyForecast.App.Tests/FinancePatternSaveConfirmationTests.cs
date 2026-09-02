@@ -1133,17 +1133,11 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plan.DatePattern.Until.ShouldBe(new DateOnly(2025, 4, 1)); // untouched — it never tracked the goal's end
     }
 
-    // Affordability on the cross-boundary cascade: the re-rate below (EarmarkScaling.Scale) and the fold two
-    // cases down (EarmarkConsolidation.Consolidate) both now pass an affordability ceiling — the successor's
-    // re-rated/folded plan can't reserve more free money than there is. Under these tests' generous 10,000
-    // balance the cap is inert, so the numbers are unchanged; its bind-when-tight math is proven at the domain
-    // level (EarmarkScalingTests / EarmarkConsolidationTests) and the AffordabilityCeilingFor helper it flows
-    // through is bound under a tight balance in The_goal_health_suggestion_is_held_to_what_the_free_funds_can_afford.
-    // A dedicated tight-balance test HERE is deliberately skipped: the "room for these plans" re-forecast omits
-    // the chain's PLANS but keeps its bills, so a recurring bill's releases drain the room-basis free funds at
-    // every occurrence (the same interaction ForecastOptionsTests had to design its fixture around). Landing the
-    // ceiling in the narrow "positive but below the re-rate target" band a binding assertion needs would take a
-    // balance finely tuned to the exact release schedule — brittle, for a mechanism already proven three ways.
+    // Affordability on the cross-boundary cascade: the re-rate below (EarmarkScaling.Scale) and the
+    // shape-change fold further down (EarmarkConsolidation.Consolidate) both pass an affordability ceiling, so
+    // the successor's re-rated or folded plan never reserves more free money than there is. Under these tests'
+    // generous 10,000 balance the cap is inert, so the numbers here are unchanged; the binding case is
+    // A_carried_forward_re_rate_is_held_to_what_the_free_funds_can_afford (below), which injects a tight balance.
 
     // Cross-boundary Q6, slice 1 — the single-plan re-rate. A two-segment Rent
     // chain whose later segment is funded by one plan: raising the current
@@ -1163,6 +1157,37 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // the later bill cascaded
         _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // and its plan was re-rated to match
+    }
+
+    // The same carry-forward re-rate, but the household can't afford the raised figure. Raising Rent and
+    // carrying it forward wants the later segment's plan re-rated up to -1200 to match — but if there's only so
+    // much free money, the affordability ceiling holds that plan below what the raise wants, so it reserves
+    // only what the funds can cover (knowingly underfunding) instead of blindly matching -1200. A steady income
+    // covers the rent, so free funds hold near the starting balance; a low balance injected into the "room for
+    // these plans" re-forecast is what makes the ceiling actually bind.
+    [Fact]
+    public void A_carried_forward_re_rate_is_held_to_what_the_free_funds_can_afford()
+    {
+        var income = Bill(100, "Job", 3000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 1));
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(income, accountId: 1);
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+
+        // Only ~800 free in the "room for these plans" re-forecast (income covers the rent, so free funds hold
+        // near this balance) — the raised -1200 rate can't fit under it.
+        Func<IReadOnlySet<int>, ForecastResult> tightRoom = omitIds =>
+            TransactionLogBookFactory.CreateForecast((ForecastOptionsForTest() with { StartingBalance = 800m }).WithoutPlansFor(omitIds));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        Confirmation(1, raisedCurrent, accountId: 1, Forecast(), tightRoom).Run().ShouldBeTrue();
+
+        _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Amount.ShouldBe(-1200m); // the later BILL still cascaded in full
+        var replanned = Math.Abs(_earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).Amount);
+        replanned.ShouldBeLessThan(1000m); // ...but its PLAN was held below even the old -1000 rate — the ceiling bound it
+        replanned.ShouldBeGreaterThan(0m);  // still a real, positive contribution, not zeroed out
     }
 
     // Cross-boundary Q6, slice 2 — the shape-change forced consolidation. The
