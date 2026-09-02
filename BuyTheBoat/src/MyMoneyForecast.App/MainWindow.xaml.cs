@@ -129,6 +129,7 @@ public partial class MainWindow : Window
         ExpenseForm.PickChainSegment = PickChainSegmentToEdit;
 
         EarmarkForm.RequestForecast = EnsureForecast;
+        EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
 
         // Tab-header styling stays live, not just at save/load: each panel
         // raises StateChanged on every field edit (via MarkDirty/ClearDirty),
@@ -550,6 +551,16 @@ public partial class MainWindow : Window
         var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
         return TransactionLogBookFactory.CreateForecast(
             BuildForecastOptions(asOfDate, horizonEnd).WithoutPlansFor(omitFinanceIds));
+    }
+
+    /// <summary>[CALC] Re-runs the forecast with one not-yet-saved one-off earmark folded in — the live "what if I saved this one-off" preview the Earmark form's summary reads its jar off. Same inputs and window as the shown forecast, just with the proposed earmark added; a throwaway calculation, never stored on _lastForecast.</summary>
+    /// <param name="oneOff">The proposed one-off earmark to include.</param>
+    private ForecastResult ForecastWithOneOff(ManualEarmark oneOff)
+    {
+        var asOfDate = _lastForecast?.AsOfDate ?? CurrentAsOfDate();
+        var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
+        return TransactionLogBookFactory.CreateForecast(
+            BuildForecastOptions(asOfDate, horizonEnd).WithManualEarmark(oneOff));
     }
 
     /// <summary>[UI] "All accounts" plus one entry per account. Kept in step with the forecast so a renamed or deleted account can't linger in the filter.</summary>

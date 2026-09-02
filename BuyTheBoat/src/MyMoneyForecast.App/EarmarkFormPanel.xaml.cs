@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
@@ -35,6 +36,11 @@ public partial class EarmarkFormPanel : UserControl
     private FinancialPattern? _selectedGoal;
     private bool _suppressEvents;
     private bool _isDirty;
+
+    // Debounce for the one-off live preview: its forecast-backed jar reading is too heavy to run on every
+    // keystroke, so a one-off field change restarts this timer and the preview only recomputes once the user
+    // pauses (~1.2s). Cheap feedback (BalanceInfoText, dirty state) still updates on every change.
+    private readonly DispatcherTimer _oneOffPreviewTimer = new() { Interval = TimeSpan.FromSeconds(1.2) };
 
     // Light blue for "something already exists here, click to load it" —
     // deliberately different from RecurrenceRuleEditor's own orange, which
@@ -94,6 +100,10 @@ public partial class EarmarkFormPanel : UserControl
         AmountTextBox.TextChanged += (_, _) => { if (!_suppressEvents) { UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
         RuleEditor.ResultChanged += (_, _) => { if (!_suppressEvents) { UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
 
+        // Once typing pauses, run the (now forecast-backed) one-off preview. One-shot: Stop first, so a
+        // fresh keystroke that restarted the timer isn't pre-empted by this tick.
+        _oneOffPreviewTimer.Tick += (_, _) => { _oneOffPreviewTimer.Stop(); UpdateSummary(); };
+
         _initialized = true;
     }
 
@@ -111,6 +121,11 @@ public partial class EarmarkFormPanel : UserControl
     // Computes (or returns the cached) live forecast on demand, so this form
     // never has to send the user to press a different button first.
     public Func<ForecastResult>? RequestForecast { get; set; }
+
+    // Runs a throwaway forecast with one not-yet-saved one-off earmark folded in — the live one-off preview
+    // reads the goal's REAL jar off it (full day-by-day cascade), instead of approximating. Null in headless
+    // contexts, where the preview falls back to the plain saved reading.
+    public Func<ManualEarmark, ForecastResult>? RequestForecastWithOneOff { get; set; }
 
     // Fires whenever IsDirty or IsPopulated could have changed, so MainWindow
     // can restyle this form's tab header live.
@@ -550,11 +565,18 @@ public partial class EarmarkFormPanel : UserControl
 
         TargetRow.Visibility = IsMove ? Visibility.Visible : Visibility.Collapsed;
         UpdateOneOffInfo();
-        // Same gap as LoadOneOff/OnModeChanged — action/date/amount edits
-        // need to reach Summary too, not just BalanceInfoText, now that it's
-        // visible in One-off mode.
-        UpdateSummary();
+        // Same gap as LoadOneOff/OnModeChanged — action/date/amount edits need to reach Summary too, not
+        // just BalanceInfoText, now that it's visible in One-off mode. Debounced: the Summary recompute now
+        // runs a real forecast (the one-off preview), too heavy to do on every keystroke.
+        ScheduleOneOffPreview();
         MarkDirtyIfNotSuppressed();
+    }
+
+    /// <summary>[UI] Restarts the one-off preview debounce — the forecast-backed Summary recompute runs once ~1.2s pass without another keystroke, not on every one. Cheap per-change feedback (BalanceInfoText, dirty state) is left to run immediately by the caller; only the heavy recompute waits.</summary>
+    private void ScheduleOneOffPreview()
+    {
+        _oneOffPreviewTimer.Stop();
+        _oneOffPreviewTimer.Start();
     }
 
     /// <summary>[CALC] Future only (>= today) — matches the Savings-plan-mode overview's own "haven't happened yet" restriction, so "selectable" isn't defined two different ways in the same form.</summary>
@@ -1009,35 +1031,37 @@ public partial class EarmarkFormPanel : UserControl
         return withoutOldStartingEntry;
     }
 
-    /// <summary>[CALC] How much the currently-typed One-off adjustment would add to today's ExpectedAmount reading, if saved right now — lets the Summary aside react before Save is clicked. Known gap (planning/24): a date backdated to before this goal's most recent release doesn't replay the real day-by-day cascade, so it shows no live change even though saving it for real would shift today's balance — a real forecast run always gets the right number regardless.</summary>
+    /// <summary>[CALC] The single ManualEarmark the currently-typed one-off would save — signed for the chosen action (add is positive; withdraw and move are negative on the source fund) — or null when there's nothing valid typed to build one from, or the date momentarily falls outside the plan's span (the user is very possibly mid-edit). Feeds the live one-off preview's what-if forecast.</summary>
     /// <param name="goal">The goal the one-off adjustment is against.</param>
-    /// <param name="activeStart">The savings plan's own ActiveStart.</param>
-    /// <param name="asOfDate">Today's date — the live preview only applies on or before this.</param>
-    private decimal GetOneOffLiveDelta(FinancialPattern goal, DateOnly activeStart, DateOnly asOfDate)
+    /// <param name="plan">The goal's savings plan.</param>
+    private ManualEarmark? TryBuildProposedOneOff(FinancialPattern goal, EarMarkPattern plan)
     {
         if (!decimal.TryParse(OneOffAmountTextBox.Text, out var typedAmount) || typedAmount <= 0m
             || EarmarkDatePicker.SelectedDate is not { } picked)
         {
-            return 0m;
+            return null;
         }
 
-        var date = DateOnly.FromDateTime(picked);
-        if (date > asOfDate)
+        var signedAmount = IsWithdraw || IsMove ? -typedAmount : typedAmount;
+        try
         {
-            return 0m;
+            return ManualEarmark.Create(
+                new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = DateOnly.FromDateTime(picked), Amount = signedAmount },
+                plan);
         }
-
-        var releases = goal.DatePattern.GetOccurrences(activeStart, asOfDate);
-        var mostRecentReleaseDate = releases.Count > 0 ? releases[^1] : activeStart;
-        if (date <= mostRecentReleaseDate)
+        catch (ArgumentException)
         {
-            return 0m;
+            return null;
         }
-
-        var newAmount = IsWithdraw || IsMove ? -typedAmount : typedAmount;
-        var oldAmount = _oneOffEditTarget?.Amount ?? 0m; // Merge's own "editing replaces, not stacks" rule (SaveOneOff, above)
-        return newAmount - oldAmount;
     }
+
+    /// <summary>[CALC] The goal's FundJar as of the forecast's own as-of date (today) — the first day its day-by-day walk produces — or null when the goal has no jar in that forecast yet.</summary>
+    /// <param name="forecast">The forecast to read from.</param>
+    /// <param name="financeId">Which goal's jar to read.</param>
+    private static FundJar? JarAsOf(ForecastResult forecast, int financeId) =>
+        forecast.GetTimeline(financeId)
+            .Select(entry => entry.Snapshot.FundJars.FirstOrDefault(jar => jar.FinanceId == financeId))
+            .FirstOrDefault(jar => jar is not null);
 
     /// <summary>[CALC] One-off mode's counterpart to GetProposedManualEarmarks above — substitutes the currently-typed amount/date/action in place of whatever's already saved at that same (FinanceId, Date).</summary>
     /// <param name="goal">The goal the one-off adjustment is against.</param>
@@ -1170,28 +1194,33 @@ public partial class EarmarkFormPanel : UserControl
 
             var todayDate = DateOnly.FromDateTime(DateTime.Today);
 
-            // Today's actual-state line folds in whatever's currently
-            // typed. MilestoneAmount itself never moves here — it only ever
-            // accumulates scheduled contributions, never a manual one.
-            // delta == 0m (nothing valid typed) keeps the original,
-            // saved-health-gated wording; the simpler always-show-a-delta
-            // wording only takes over once there's a live adjustment to
-            // reflect.
+            // Today's actual-state line folds in whatever's currently typed by folding the proposed one-off
+            // into a throwaway what-if forecast and reading the goal's REAL jar off it — a full day-by-day
+            // walk, so a backdated one-off whose excess survives a release shows up correctly (the old
+            // pattern-math shortcut couldn't see that). Falls back to the plain saved reading when nothing
+            // valid is typed, no what-if source is wired (headless), or the goal has no jar in the forecast
+            // yet. MilestoneAmount never moves either way — it only accumulates scheduled contributions.
             try
             {
-                var delta = GetOneOffLiveDelta(goal, plan.DatePattern.ActiveStart, todayDate);
-                additionAmount = delta == 0m ? null : delta; // null, not 0 — a $0 line would just retrace Actual for no reason
-                if (jar is not null && health is not null)
+                var savedExpected = jar?.ExpectedAmount
+                    ?? GetLiveJarAmounts(GetPatternsForLiveCheck(goal, plan), plan, goal, GetStartingPointTotal(plan), todayDate).ExpectedAmount;
+
+                if (TryBuildProposedOneOff(goal, plan) is { } proposedOneOff
+                    && RequestForecastWithOneOff is { } requestWithOneOff
+                    && JarAsOf(requestWithOneOff(proposedOneOff), goal.FinanceId) is { } proposedJar)
                 {
-                    asideLine = delta == 0m
-                        ? PlanHealthMessages.CurrentJarStateLine(jar, health)
-                        : PlanHealthMessages.LiveJarStateLine(jar.ExpectedAmount + delta, jar.MilestoneAmount ?? 0m);
+                    var addition = proposedJar.ExpectedAmount - savedExpected;
+                    additionAmount = addition == 0m ? null : addition; // null, not 0 — a $0 line would just retrace Actual
+                    asideLine = PlanHealthMessages.LiveJarStateLine(proposedJar.ExpectedAmount, proposedJar.MilestoneAmount ?? 0m);
+                }
+                else if (jar is not null && health is not null)
+                {
+                    asideLine = PlanHealthMessages.CurrentJarStateLine(jar, health);
                 }
                 else
                 {
-                    var live = GetLiveJarAmounts(
-                        GetPatternsForLiveCheck(goal, plan), plan, goal, GetStartingPointTotal(plan), todayDate);
-                    asideLine = PlanHealthMessages.LiveJarStateLine(live.ExpectedAmount + delta, live.MilestoneAmount);
+                    var live = GetLiveJarAmounts(GetPatternsForLiveCheck(goal, plan), plan, goal, GetStartingPointTotal(plan), todayDate);
+                    asideLine = PlanHealthMessages.LiveJarStateLine(live.ExpectedAmount, live.MilestoneAmount);
                 }
             }
             catch (ArgumentException)

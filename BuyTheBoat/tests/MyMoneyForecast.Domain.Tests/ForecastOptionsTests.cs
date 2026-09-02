@@ -80,4 +80,39 @@ public class ForecastOptionsTests
         withoutPlan.PrimaryAccountPage.AvailableFunds(midYear)!.Value
             .ShouldBeGreaterThan(withPlan.PrimaryAccountPage.AvailableFunds(midYear)!.Value);
     }
+
+    // WithManualEarmark — the "what if this one-off were saved" fold behind the live one-off preview.
+    [Fact]
+    public void WithManualEarmark_folds_a_one_off_into_the_forecast_jar()
+    {
+        var options = Options([Goal(1)], [Plan(1)]);
+        var midYear = new DateOnly(2026, 6, 1); // before the Dec release, so the one-off is still in the jar
+        var oneOff = ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = 1, Date = new DateOnly(2026, 3, 15), Amount = 200m }, Plan(1));
+
+        var without = TransactionLogBookFactory.CreateForecast(options);
+        var with = TransactionLogBookFactory.CreateForecast(options.WithManualEarmark(oneOff));
+
+        // The proposed $200 shows up in the goal's real jar, exactly as the saved forecast would compute it.
+        JarExpectedOn(with, financeId: 1, midYear).ShouldBe(JarExpectedOn(without, financeId: 1, midYear) + 200m);
+    }
+
+    [Fact]
+    public void WithManualEarmark_replaces_rather_than_stacks_at_the_same_finance_id_and_date()
+    {
+        var date = new DateOnly(2026, 3, 15);
+        var first = ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = 1, Date = date, Amount = 100m }, Plan(1));
+        var second = ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = 1, Date = date, Amount = 250m }, Plan(1));
+
+        // Editing a one-off (same finance id + date) replaces it, never doubles it up.
+        var options = Options([Goal(1)], [Plan(1)]).WithManualEarmark(first).WithManualEarmark(second);
+
+        options.ManualEarmarks.Where(m => m.FinanceId == 1 && m.Date == date).ShouldHaveSingleItem().Amount.ShouldBe(250m);
+    }
+
+    private static decimal JarExpectedOn(ForecastResult forecast, int financeId, DateOnly date) =>
+        forecast.GetTimeline(financeId)
+            .Where(entry => entry.Date <= date)
+            .Select(entry => entry.Snapshot.FundJars.FirstOrDefault(jar => jar.FinanceId == financeId))
+            .Last(jar => jar is not null)!.ExpectedAmount;
 }

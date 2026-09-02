@@ -54,6 +54,22 @@ public sealed record ForecastOptions
             EarMarkPatterns = account.EarMarkPatterns.Where(pattern => !financeIds.Contains(pattern.FinanceId)).ToList(),
         }).ToList(),
     };
+
+    /// <summary>[CALC] Returns a copy of these options with one manual (one-off) earmark folded in — added, or replaced if one already sits at the same finance id and date — in whichever account holds that finance id's pattern (or the flat single-account set when Accounts isn't used). Forecasting the result previews "what if this one-off were saved," so a live preview can read the real jar off the same day-by-day walk the saved forecast would do, rather than approximating it.</summary>
+    /// <param name="earmark">The proposed one-off earmark to fold in.</param>
+    public ForecastOptions WithManualEarmark(ManualEarmark earmark)
+    {
+        bool SameSlot(ManualEarmark existing) => existing.FinanceId == earmark.FinanceId && existing.Date == earmark.Date;
+
+        return this with
+        {
+            ManualEarmarks = [.. ManualEarmarks.Where(existing => !SameSlot(existing)), earmark],
+            Accounts = Accounts?.Select(account =>
+                account.FinancialPatterns.Any(pattern => pattern.FinanceId == earmark.FinanceId)
+                    ? account with { ManualEarmarks = [.. account.ManualEarmarks.Where(existing => !SameSlot(existing)), earmark] }
+                    : account).ToList(),
+        };
+    }
 }
 
 // One account's slice of a forecast: its own seed balance and cushion, and the
