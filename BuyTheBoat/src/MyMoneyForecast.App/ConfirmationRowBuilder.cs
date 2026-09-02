@@ -26,6 +26,11 @@ internal sealed record RowInputs
     // single plan's form with the correction as an unsaved edit.
     public string GoalHealthSuggestionQuestion { get; init; } = "";
 
+    // The consequence footer shown under the goal-health suggestion's "leave it
+    // as is" option — names what rejecting costs (the goal falling short, or
+    // money tied up). "" when there's no suggestion. See ChoiceOption.Consequence.
+    public string GoalHealthRejectWarning { get; init; } = "";
+
     // The plan's own health heads-up (the former post-save "Worth a look"
     // MessageBox), or "" when there's nothing worth surfacing. A plain
     // announcement — no choice attached.
@@ -142,9 +147,9 @@ internal static class ConfirmationRowBuilder
 
         // The goal-health suggestion (planning/25): a single plan that no longer
         // meets its edited goal, offered a correction to pre-fill its own form
-        // with. Accept is pre-selected (the healthy option); reject carries no
-        // consequence yet — reserved for cases where leaving it would actually
-        // break something (a paycheck/bill desync and the like).
+        // with. Accept is pre-selected (the healthy option); reject now carries a
+        // consequence footer naming what leaving it as is costs (the goal falling
+        // short, or money tied up), shown only while reject is the picked option.
         // TODO: once more than one correction can be proposed, dedupe identical
         // ones before this renders — never show two options suggesting the same
         // thing (the author called this out as a must-check before rendering).
@@ -154,7 +159,7 @@ internal static class ConfirmationRowBuilder
                 r.GoalHealthSuggestionQuestion,
                 [
                     new ChoiceOption("Load the suggested amount", "", ""),
-                    new ChoiceOption("Leave it as is", "", ""),
+                    new ChoiceOption("Leave it as is", "", r.GoalHealthRejectWarning),
                 ],
                 DefaultIndex: 0,
                 Layout: OptionLayout.Stacked));

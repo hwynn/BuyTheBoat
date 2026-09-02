@@ -721,6 +721,27 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     }
 
     [Fact]
+    public void The_goal_health_suggestions_reject_option_warns_what_leaving_it_would_cost()
+    {
+        var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1)));
+
+        var editedBill = Bill(1, bill.Source, -100m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // now needs more → underfunds
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, Forecast(), userSkippedPlanning: false);
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run().ShouldBeTrue();
+
+        var suggestion = captured!.Rows.OfType<ChoiceRow>().Single(row => row.Id == ConfirmationRowIds.GoalHealthSuggestion);
+        suggestion.Options[1].Label.ShouldBe("Leave it as is");
+        suggestion.Options[1].Consequence.ShouldContain("fall short"); // the reject option now names the cost
+        suggestion.Options[0].Consequence.ShouldBeNullOrEmpty();       // ...while accepting stays consequence-free
+    }
+
+    [Fact]
     public void Accepting_the_goal_health_suggestion_pre_fills_the_plan_form_with_the_corrected_amount()
     {
         var bill = Bill(1, "Gym Membership", -40m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1));

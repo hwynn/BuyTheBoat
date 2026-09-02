@@ -371,6 +371,12 @@ public sealed class FinancePatternSaveConfirmation
     // DetermineGoalHealthSuggestionIfApplicable.
     private EarMarkPattern? _goalHealthSuggestedPlan;
 
+    // Whether that correction is needed because the plan currently saves too
+    // LITTLE (true — the goal would fall short) or too much (false — it ties up
+    // money the goal won't use). Drives the reject warning's wording; only
+    // meaningful when _goalHealthSuggestedPlan is set.
+    private bool _goalHealthUnderfunds;
+
     // The plan's own health heads-up, when it's worth warning about — the plain
     // "Worth a look" sentence that used to be a separate post-save MessageBox,
     // now shown as an announcement row so ALL of this save's messaging lives in
@@ -1350,6 +1356,7 @@ public sealed class FinancePatternSaveConfirmation
         if (Math.Abs(scaling.CurrentTotal - scaling.NeededTotal) >= 0.01m)
         {
             _goalHealthSuggestedPlan = scaling.ScaledPlans.Single();
+            _goalHealthUnderfunds = scaling.NeededTotal > scaling.CurrentTotal;
         }
     }
 
@@ -1362,6 +1369,19 @@ public sealed class FinancePatternSaveConfirmation
         }
 
         return $"This change leaves the savings plan out of step with the goal. Load a suggested contribution of {Math.Abs(suggested.Amount):C} into the plan?";
+    }
+
+    /// <summary>[CALC] The consequence shown under the goal-health suggestion's "leave it as is" option — names what rejecting costs (the goal falling short, or money tied up). "" when there's no suggestion, so the reject option carries no footer.</summary>
+    private string DescribeGoalHealthRejectWarning()
+    {
+        if (_goalHealthSuggestedPlan is null)
+        {
+            return "";
+        }
+
+        return _goalHealthUnderfunds
+            ? "Left as is, the plan keeps saving less than the goal needs, so it will fall short."
+            : "Left as is, the plan keeps saving more than the goal needs, tying up money it won't use.";
     }
 
     /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. Was a single hardcoded XAML string until 2026-08-17, when ConsolidationNeeded was widened to also force consolidation for a start_date change, not just a recurrence-shape one — the old text ("because the schedule itself is changing") would have been actively wrong for a start-only edit.</summary>
@@ -1405,6 +1425,7 @@ public sealed class FinancePatternSaveConfirmation
             TrivialFieldsCanCascade = TrivialFieldsCanCascade,
             SourceChangeWarning = SourceChangeWarning,
             GoalHealthSuggestionQuestion = DescribeGoalHealthSuggestion(),
+            GoalHealthRejectWarning = DescribeGoalHealthRejectWarning(),
             ConcerningPlanNotice = _concerningPlanNotice,
             BoundaryExtensionAnnouncement = DescribeBoundaryExtensionAnnouncement(),
             StayLinkedWarning = TouchesChainBoundary ? DescribeChainStayLinkedConsequence() : "",

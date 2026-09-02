@@ -398,9 +398,17 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = 0m;
             StartingEarmarkAmountTextBox.Text = string.Empty;
             _loadedActiveStart = null;
-            // TODO: picking a goal with no existing plan leaves whatever
-            // schedule was already on screen — RecurrenceRuleEditor has no
-            // public reset beyond its own constructor.
+            // No existing plan: reset the schedule to a sensible default (monthly,
+            // through the goal's own due date) rather than leaving whatever plan
+            // was last on screen — LoadFrom does the full field reset for us.
+            var defaultStart = DateOnly.FromDateTime(DateTime.Today);
+            var defaultUntil = goal.DatePattern.Until > defaultStart ? goal.DatePattern.Until : defaultStart.AddYears(1);
+            RuleEditor.LoadFrom(RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                DtStart = defaultStart,
+                Until = defaultUntil,
+            }));
         }
     }
 
