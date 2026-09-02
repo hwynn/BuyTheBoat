@@ -10,7 +10,15 @@ you need the full story behind one of these gaps.
 
 ## Entries
 
-### EarmarkFormPanel.GetOneOffLiveDelta — a backdated One-off entry shows a stale live preview
+### EarmarkFormPanel.GetOneOffLiveDelta — a backdated One-off entry shows a stale live preview — FIXED 2026-09-02
+
+**Fix:** the one-off live preview no longer uses a UI-layer shortcut. It folds the currently-typed one-off
+into a throwaway forecast (`ForecastOptions.WithManualEarmark`, run via `MainWindow.ForecastWithOneOff`) and
+reads the goal's real jar off that full day-by-day walk — so a backdated one-off whose excess survives a
+release (a release only subtracts the goal's fixed amount, leaving anything above it) is now reflected
+correctly. `GetOneOffLiveDelta` is removed. The forecast is debounced (~1.2s) so it runs once typing pauses,
+rather than on every keystroke. The domain fold is covered by `ForecastOptionsTests.WithManualEarmark_*`; the
+preview rewire and debounce are WPF (build + app-launch verified).
 
 **Where:** `src/MyMoneyForecast.App/EarmarkFormPanel.xaml.cs`, `GetOneOffLiveDelta`.
 

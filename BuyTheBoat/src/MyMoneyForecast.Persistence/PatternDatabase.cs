@@ -64,6 +64,50 @@ public sealed class PatternDatabase
     /// <summary>[CALC] Releases every pooled native SQLite connection handle. Called before Import overwrites the live database file — Microsoft.Data.Sqlite keeps pooled handles open even after every SqliteConnection using them has been disposed, which would otherwise block the overwrite.</summary>
     public static void ReleasePooledConnections() => SqliteConnection.ClearAllPools();
 
+    /// <summary>[READS FILE] Whether the app could actually LOAD this database file — a deeper check than LooksLikeValidDatabaseFile's table-presence one. Opens a throwaway copy, runs the same schema migrations startup would, then reads every repository (each re-validates its rows on the way out, the way the live app does). Catches an old-version or subtly-inconsistent export that passes the lighter check but would then crash the app on its first forecast after import — an orphaned earmark, a row outside its plan's span, and the like. Returns a short reason when it can't load, or null when it loads cleanly. Never throws: a failure to check is itself reported as "can't load."</summary>
+    /// <param name="path">The database file to check.</param>
+    public static string? DescribeLoadFailure(string path)
+    {
+        var checkCopyPath = Path.Combine(Path.GetTempPath(), $"mymoneyforecast-import-check-{Guid.NewGuid():N}.db");
+        try
+        {
+            File.Copy(path, checkCopyPath, overwrite: true);
+
+            var database = new PatternDatabase(checkCopyPath); // runs migrations, exactly as startup does
+            var financialPatterns = new FinancialPatternRepository(database);
+            var earMarkPatterns = new EarMarkPatternRepository(database, financialPatterns);
+
+            // Reading each is what exercises the corruption guards — a plan with no pattern, an earmark
+            // with no plan, a row outside its plan's span — the exact throws that would otherwise crash
+            // the app on load. Discarded; this is only about whether they read without throwing.
+            _ = financialPatterns.GetAll();
+            _ = earMarkPatterns.GetAll();
+            _ = new ManualEarmarkRepository(database, earMarkPatterns).GetAll();
+            _ = new AccountRepository(database).GetAll();
+            _ = new TransferRepository(database, financialPatterns).GetAll();
+            return null;
+        }
+        catch (Exception error)
+        {
+            return error.Message;
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            try
+            {
+                if (File.Exists(checkCopyPath))
+                {
+                    File.Delete(checkCopyPath);
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup of a temp file — never the reason a check "fails".
+            }
+        }
+    }
+
     /// <summary>[WRITES FILE] Creates every table this app needs if they don't exist yet, then runs each schema migration in order. Idempotent — safe to run on every startup, on a fresh database or one already migrated by an earlier run.</summary>
     private void Initialize()
     {

@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using MyMoneyForecast.Domain;
 using MyMoneyForecast.Persistence;
 using Shouldly;
 
@@ -48,6 +49,77 @@ public class PatternDatabaseTests : IDisposable
         Should.NotThrow(() => File.Copy(replacementPath, _databasePath, overwrite: true));
 
         File.Delete(replacementPath);
+    }
+
+    [Fact]
+    public void A_freshly_created_database_reports_no_load_failure()
+    {
+        _ = new PatternDatabase(_databasePath);
+
+        PatternDatabase.DescribeLoadFailure(_databasePath).ShouldBeNull();
+    }
+
+    [Fact]
+    public void An_unrelated_file_reports_a_load_failure()
+    {
+        File.WriteAllText(_databasePath, "this is not a sqlite file");
+
+        PatternDatabase.DescribeLoadFailure(_databasePath).ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void A_database_whose_plan_no_longer_covers_a_manual_earmark_reports_a_load_failure()
+    {
+        // A valid goal + plan + one-off, then the plan's span is shrunk out from under the one-off — the
+        // exact "a row whose pattern has since shrunk its span" case the repositories re-validate against on
+        // read, the kind of inconsistency a hand-edited or cross-version import could carry in.
+        var database = new PatternDatabase(_databasePath);
+        var financialPatterns = new FinancialPatternRepository(database);
+        var earMarkPatterns = new EarMarkPatternRepository(database, financialPatterns);
+        var manualEarmarks = new ManualEarmarkRepository(database, earMarkPatterns);
+
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Japan trip",
+            Amount = -3000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Yearly,
+                DtStart = new DateOnly(2026, 6, 1),
+                Count = 1,
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    DtStart = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            goal);
+        financialPatterns.Save(goal, accountId: 1);
+        earMarkPatterns.Save(plan);
+        manualEarmarks.Save(ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = 1, Date = new DateOnly(2025, 6, 15), Amount = 300m }, plan));
+
+        // Shrink the plan so it ends in March — the June one-off now falls outside its span.
+        using (var connection = new PatternDatabase(_databasePath).OpenConnection())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "UPDATE EarMarkPatterns SET UntilDate = '2025-03-01' WHERE FinanceId = 1;";
+            command.ExecuteNonQuery();
+        }
+        PatternDatabase.ReleasePooledConnections();
+
+        PatternDatabase.DescribeLoadFailure(_databasePath).ShouldNotBeNull();
     }
 
     public void Dispose()

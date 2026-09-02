@@ -1122,6 +1122,22 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Deeper than the table-presence check above: confirm the file actually LOADS (migrations run,
+        // every row re-validates) before touching the live database, so an incompatible or corrupted
+        // export is rejected here rather than crashing the app on the restart below.
+        if (PatternDatabase.DescribeLoadFailure(dialog.FileName) is { } loadFailure)
+        {
+            ErrorLog.Record("validating a database import", new InvalidOperationException(loadFailure));
+            MessageBox.Show(
+                this,
+                "That file couldn't be loaded — it may be from an incompatible version or corrupted. " +
+                "Your current data was left unchanged.\n\nDetails: " + loadFailure,
+                "Import failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
         var confirmed = MessageBox.Show(
             this,
             "Importing replaces everything currently in this app with the contents of the selected file. " +
