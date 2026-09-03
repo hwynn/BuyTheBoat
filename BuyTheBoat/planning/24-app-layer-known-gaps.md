@@ -10,6 +10,20 @@ you need the full story behind one of these gaps.
 
 ## Entries
 
+### Transfers can't be edited — only created and deleted
+
+**The gap:** planning/10 item 3 designed transfer editing ("done on the Transfer, which rewrites both"), but
+the UI (`MainWindow`) wires only create (`OnAddTransferClick` → `CreateTransferWindow`) and delete
+(`OnDeleteTransferClick`) — to change a transfer's amount/schedule/accounts you delete and recreate. Acceptable
+for the demo (author, 2026-09-02); logged as the one real functional gap in the otherwise-complete
+multi-account/transfer feature. The other gaps found the same day are already tracked: the "thin"-account
+warning and the cover-from-another-account button's screen-reader invisibility in planning/10 (Deferred / Known
+limitation); the two account-form helper panels in `AccountFormPanel`'s own TODO; cross-account funding nuances
+in planning/10 (Parked).
+
+**What a fix needs:** load an existing `Transfer` into `CreateTransferWindow`, and on save rewrite its
+withdrawal/deposit pattern pair via `TransferFactory` under the same `TransferId`.
+
 ### EarmarkFormPanel.GetOneOffLiveDelta — a backdated One-off entry shows a stale live preview — FIXED 2026-09-02
 
 **Fix:** the one-off live preview no longer uses a UI-layer shortcut. It folds the currently-typed one-off

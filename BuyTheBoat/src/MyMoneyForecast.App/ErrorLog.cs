@@ -5,15 +5,13 @@ namespace MyMoneyForecast.App;
 
 // Where uncaught errors (and a few deliberately-caught ones, like a failed
 // import/export) get written, so a friend trying the demo can find ONE file
-// and send it back when something breaks. Lives next to the database, so it
-// follows the same location the portable build will eventually move that to —
-// no second place to hunt for it.
+// and send it back when something breaks. AppPaths owns the location: in the
+// portable demo it's the labeled logs\ folder next to the .exe; otherwise it's
+// the hidden LocalAppData folder alongside the database — either way, one place.
 public static class ErrorLog
 {
-    /// <summary>[CALC] The error-log file's full path — alongside the database, so it travels with it (including into the portable build's own folder later).</summary>
-    public static string FilePath => Path.Combine(
-        Path.GetDirectoryName(PatternDatabase.DefaultDatabasePath()) ?? Path.GetTempPath(),
-        "errors.log");
+    /// <summary>[CALC] The error-log file's full path, wherever AppPaths puts it (the demo's logs\ folder, or the LocalAppData folder off-demo).</summary>
+    public static string FilePath => AppPaths.LogFilePath;
 
     /// <summary>[WRITES FILE] Appends one timestamped entry — what was happening, plus the full exception — to the error log. Never throws: logging must not itself be why the app fails.</summary>
     /// <param name="whatWasHappening">A short note on the operation in progress when it broke (e.g. "importing data").</param>

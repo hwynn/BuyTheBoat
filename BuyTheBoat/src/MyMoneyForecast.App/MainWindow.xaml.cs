@@ -60,6 +60,11 @@ public partial class MainWindow : Window
         var diagnosticPath = PatternDatabase.DefaultDatabasePath();
         Log($"Resolved path: {diagnosticPath}, Exists: {File.Exists(diagnosticPath)}, Size: {(File.Exists(diagnosticPath) ? new FileInfo(diagnosticPath).Length : -1)}");
 
+        // In the portable demo, make the labeled data\/logs\/backups\/exports\
+        // folders exist from first launch so the tester can see where things
+        // live; a no-op on a normal LocalAppData run.
+        AppPaths.EnsurePortableFoldersExist();
+
         var database = new PatternDatabase();
         _financialPatterns = new FinancialPatternRepository(database);
         _earMarkPatterns = new EarMarkPatternRepository(database, _financialPatterns);
@@ -996,6 +1001,12 @@ public partial class MainWindow : Window
             Filter = "Excel Workbook (*.xlsx)|*.xlsx|All files (*.*)|*.*",
         };
 
+        if (AppPaths.DefaultExportFolder is { } exportFolder)
+        {
+            Directory.CreateDirectory(exportFolder);
+            dialog.InitialDirectory = exportFolder;
+        }
+
         if (dialog.ShowDialog(this) != true)
         {
             return;
@@ -1073,6 +1084,12 @@ public partial class MainWindow : Window
             FileName = $"mymoneyforecast-backup-{DateTime.Today:yyyy-MM-dd}.db",
             Filter = "MyMoneyForecast database (*.db)|*.db|All files (*.*)|*.*",
         };
+
+        if (AppPaths.DefaultExportFolder is { } exportFolder)
+        {
+            Directory.CreateDirectory(exportFolder);
+            dialog.InitialDirectory = exportFolder;
+        }
 
         if (dialog.ShowDialog(this) != true)
         {
@@ -1158,10 +1175,16 @@ public partial class MainWindow : Window
 
             if (File.Exists(liveDatabasePath))
             {
-                File.Copy(liveDatabasePath, liveDatabasePath + ".bak", overwrite: true);
+                // A safety net taken before the overwrite. In the demo this is a
+                // timestamped copy in backups\ (older ones are kept); off-demo it's
+                // the single "<db>.bak" beside the database, exactly as before.
+                File.Copy(liveDatabasePath, AppPaths.NextImportBackupPath(), overwrite: true);
             }
 
-            File.Copy(dialog.FileName, liveDatabasePath, overwrite: true);
+            // Overwrites the live file AND removes its leftover -wal/-shm/-journal
+            // scratch files, so no stale journal can be rolled back into the
+            // imported data the next time it opens.
+            PatternDatabase.ReplaceDatabaseFile(dialog.FileName, liveDatabasePath);
         }
         catch (IOException ex)
         {

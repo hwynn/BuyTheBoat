@@ -25,11 +25,8 @@ public sealed class PatternDatabase
         Initialize();
     }
 
-    /// <summary>[CALC] Returns the app's standard database file path, under LocalAppData.</summary>
-    public static string DefaultDatabasePath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "MyMoneyForecast",
-        "mymoneyforecast.db");
+    /// <summary>[CALC] Returns the live database file's path — under LocalAppData normally, or inside the portable demo's own folder when this is that demo. Delegates to AppPaths, which owns the whole where-do-files-go decision.</summary>
+    public static string DefaultDatabasePath() => AppPaths.DatabasePath;
 
     /// <summary>[READS FILE] Opens a new connection to this database. One connection per operation — callers dispose it when done.</summary>
     public SqliteConnection OpenConnection()
@@ -63,6 +60,30 @@ public sealed class PatternDatabase
 
     /// <summary>[CALC] Releases every pooled native SQLite connection handle. Called before Import overwrites the live database file — Microsoft.Data.Sqlite keeps pooled handles open even after every SqliteConnection using them has been disposed, which would otherwise block the overwrite.</summary>
     public static void ReleasePooledConnections() => SqliteConnection.ClearAllPools();
+
+    /// <summary>[WRITES FILE] Overwrites one database file with another, first releasing pooled handles and deleting the destination's leftover -wal/-shm/-journal scratch files. Without that cleanup, a stale journal from the old data (left by an earlier crash) could be rolled back into the freshly copied file the next time it opens, corrupting it — the reason the SeedData tool clears the same scratch files when it resets the database. Used by Import to swap in the selected file.</summary>
+    /// <param name="sourcePath">The database file to copy in.</param>
+    /// <param name="destinationPath">The live database file to overwrite.</param>
+    public static void ReplaceDatabaseFile(string sourcePath, string destinationPath)
+    {
+        ReleasePooledConnections();
+
+        foreach (var sidecar in new[] { destinationPath + "-wal", destinationPath + "-shm", destinationPath + "-journal" })
+        {
+            if (File.Exists(sidecar))
+            {
+                File.Delete(sidecar);
+            }
+        }
+
+        var destinationDirectory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrEmpty(destinationDirectory))
+        {
+            Directory.CreateDirectory(destinationDirectory);
+        }
+
+        File.Copy(sourcePath, destinationPath, overwrite: true);
+    }
 
     /// <summary>[READS FILE] Whether the app could actually LOAD this database file — a deeper check than LooksLikeValidDatabaseFile's table-presence one. Opens a throwaway copy, runs the same schema migrations startup would, then reads every repository (each re-validates its rows on the way out, the way the live app does). Catches an old-version or subtly-inconsistent export that passes the lighter check but would then crash the app on its first forecast after import — an orphaned earmark, a row outside its plan's span, and the like. Returns a short reason when it can't load, or null when it loads cleanly. Never throws: a failure to check is itself reported as "can't load."</summary>
     /// <param name="path">The database file to check.</param>

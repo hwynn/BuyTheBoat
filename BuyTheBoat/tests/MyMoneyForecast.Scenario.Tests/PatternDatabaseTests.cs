@@ -52,6 +52,28 @@ public class PatternDatabaseTests : IDisposable
     }
 
     [Fact]
+    public void Replacing_the_database_file_deletes_the_destinations_leftover_journal_sidecar()
+    {
+        // A hot -journal left beside the live database by an earlier crash must not
+        // survive an Import: SQLite would otherwise try to roll it back into the
+        // freshly copied data on the next open. ReplaceDatabaseFile clears it.
+        _ = new PatternDatabase(_databasePath);
+
+        var replacementPath = Path.Combine(Path.GetTempPath(), $"mymoneyforecast-test-{Guid.NewGuid()}.db");
+        _ = new PatternDatabase(replacementPath);
+
+        var staleJournal = _databasePath + "-journal";
+        File.WriteAllText(staleJournal, "leftover journal contents");
+
+        PatternDatabase.ReplaceDatabaseFile(replacementPath, _databasePath);
+
+        File.Exists(staleJournal).ShouldBeFalse();
+        PatternDatabase.LooksLikeValidDatabaseFile(_databasePath).ShouldBeTrue();
+
+        File.Delete(replacementPath);
+    }
+
+    [Fact]
     public void A_freshly_created_database_reports_no_load_failure()
     {
         _ = new PatternDatabase(_databasePath);
