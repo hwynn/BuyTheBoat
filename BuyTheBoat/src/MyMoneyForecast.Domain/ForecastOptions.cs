@@ -70,6 +70,28 @@ public sealed record ForecastOptions
                     : account).ToList(),
         };
     }
+
+    /// <summary>[CALC] Returns a copy of these options with one savings plan swapped for a not-yet-saved version — the plan for the proposed plan's finance id whose active span starts on <paramref name="replacedActiveStart"/> is dropped and the proposed one added, in the account holding that goal's pattern (or the flat set when Accounts isn't used); every other plan, this goal's own other segments included, stays. Forecasting the result previews "what if I saved this plan," so a live edit's warning can read real free funds off the same day-by-day walk the saved forecast would do, rather than a no-forecast shortcut. A null <paramref name="replacedActiveStart"/> drops nothing — a brand-new plan replacing no saved segment.</summary>
+    /// <param name="proposed">The not-yet-saved plan to fold in.</param>
+    /// <param name="replacedActiveStart">The active start of the saved segment being replaced, or null when the proposed plan is brand new.</param>
+    public ForecastOptions WithProposedPlan(EarMarkPattern proposed, DateOnly? replacedActiveStart)
+    {
+        bool IsReplaced(EarMarkPattern existing) =>
+            existing.FinanceId == proposed.FinanceId
+            && replacedActiveStart is { } start
+            && existing.DatePattern.ActiveStart == start;
+
+        return this with
+        {
+            EarMarkPatterns = EarMarkPatterns.Where(existing => !IsReplaced(existing)).Append(proposed).ToList(),
+            Accounts = Accounts?.Select(account =>
+            {
+                var kept = account.EarMarkPatterns.Where(existing => !IsReplaced(existing));
+                var holdsGoal = account.FinancialPatterns.Any(pattern => pattern.FinanceId == proposed.FinanceId);
+                return account with { EarMarkPatterns = holdsGoal ? kept.Append(proposed).ToList() : kept.ToList() };
+            }).ToList(),
+        };
+    }
 }
 
 // One account's slice of a forecast: its own seed balance and cushion, and the

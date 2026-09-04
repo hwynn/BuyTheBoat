@@ -127,6 +127,12 @@ public partial class EarmarkFormPanel : UserControl
     // contexts, where the preview falls back to the plain saved reading.
     public Func<ManualEarmark, ForecastResult>? RequestForecastWithOneOff { get; set; }
 
+    // Runs a throwaway forecast with a not-yet-saved savings PLAN substituted in (args: proposed plan, the
+    // active-start of the saved segment it replaces or null if brand new, and any proposed manual earmarks
+    // to fold in). Lets the live first-payment warning read real free funds for the plan as typed, instead
+    // of the no-forecast set-aside gap. Null in headless contexts, where the warning falls back to that gap.
+    public Func<EarMarkPattern, DateOnly?, IReadOnlyList<ManualEarmark>, ForecastResult>? RequestForecastWithProposedPlan { get; set; }
+
     // Fires whenever IsDirty or IsPopulated could have changed, so MainWindow
     // can restyle this form's tab header live.
     public event EventHandler? StateChanged;
@@ -985,17 +991,36 @@ public partial class EarmarkFormPanel : UserControl
         try
         {
             var asOfDate = DateOnly.FromDateTime(DateTime.Today);
-            var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, asOfDate);
-            var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
-                GetPatternsForLiveCheck(goal, proposed), goal, GetProposedManualEarmarks(goal, proposed), asOfDate);
             var isOneTime = goal.DatePattern.GetOccurrences().Count == 1;
-            line = PlanHealthMessages.FirstOccurrenceShortfallLine(isPending, shortfall, isOneTime);
+            var proposedManuals = GetProposedManualEarmarks(goal, proposed);
+            var payment = Math.Abs(goal.Amount);
+
+            // Prefer a real forecast with this plan substituted in — it carries the free-funds figure the
+            // funds-aware message needs. Falls back to the plain set-aside gap (no free funds) when headless,
+            // or the goal has no health row in the result.
+            var editedStart = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId)?.DatePattern.ActiveStart;
+            var health = RequestForecastWithProposedPlan is { } request
+                ? request(proposed, editedStart, proposedManuals).PlanHealthStates.FirstOrDefault(state => state.FinanceId == goal.FinanceId)
+                : null;
+
+            if (health is not null)
+            {
+                line = PlanHealthMessages.FirstPaymentCoverageLine(
+                    health.IsFirstOccurrencePending, payment, health.FirstOccurrenceShortfall,
+                    health.FirstOccurrenceFreeFunds, health.FirstOccurrenceBalance, isOneTime);
+            }
+            else
+            {
+                var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, asOfDate);
+                var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
+                    GetPatternsForLiveCheck(goal, proposed), goal, proposedManuals, asOfDate);
+                line = PlanHealthMessages.FirstPaymentCoverageLine(isPending, payment, shortfall, freeFunds: null, balance: null, isOneTime);
+            }
         }
         catch (ArgumentException)
         {
-            // GetProposedManualEarmarks' own ManualEarmark.Create call can
-            // still throw even though proposed itself built fine — same
-            // Start-vs-ActiveStart latent inconsistency SaveSavingsPlan's
+            // GetProposedManualEarmarks' own ManualEarmark.Create call can still throw even though
+            // proposed itself built fine — same Start-vs-ActiveStart latent inconsistency SaveSavingsPlan's
             // own comment already flags, not a new risk introduced here.
             line = null;
         }
@@ -1229,14 +1254,31 @@ public partial class EarmarkFormPanel : UserControl
                 asideLine = "(fund jar state needs a live forecast — not available yet)";
             }
 
-            // Same live substitution for the first-payment warning.
+            // Same live substitution for the first-payment warning — funds-aware, read off the same
+            // proposed-one-off forecast the jar reading above uses (or the saved health when nothing's
+            // typed), falling back to the plain set-aside gap only when neither is available.
             try
             {
-                var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, todayDate);
-                var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
-                    GetPatternsForLiveCheck(goal, plan), goal, GetProposedOneOffManualEarmarks(goal, plan), todayDate);
-                asideSecondaryLine = PlanHealthMessages.FirstOccurrenceShortfallLine(isPending, shortfall, isOneTime);
-                highlightDate = isPending && shortfall > 0m ? firstOccurrenceDate : null;
+                var payment = Math.Abs(goal.Amount);
+                var warningHealth = TryBuildProposedOneOff(goal, plan) is { } proposedOneOff && RequestForecastWithOneOff is { } requestOneOff
+                    ? requestOneOff(proposedOneOff).PlanHealthStates.FirstOrDefault(state => state.FinanceId == goal.FinanceId)
+                    : health;
+
+                if (warningHealth is { } wh)
+                {
+                    asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(
+                        wh.IsFirstOccurrencePending, payment, wh.FirstOccurrenceShortfall,
+                        wh.FirstOccurrenceFreeFunds, wh.FirstOccurrenceBalance, isOneTime);
+                    highlightDate = wh.IsFirstOccurrencePending && wh.FirstOccurrenceShortfall > 0m ? firstOccurrenceDate : null;
+                }
+                else
+                {
+                    var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, todayDate);
+                    var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
+                        GetPatternsForLiveCheck(goal, plan), goal, GetProposedOneOffManualEarmarks(goal, plan), todayDate);
+                    asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(isPending, payment, shortfall, freeFunds: null, balance: null, isOneTime);
+                    highlightDate = isPending && shortfall > 0m ? firstOccurrenceDate : null;
+                }
             }
             catch (ArgumentException)
             {

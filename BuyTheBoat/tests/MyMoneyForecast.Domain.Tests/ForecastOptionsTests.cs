@@ -110,6 +110,48 @@ public class ForecastOptionsTests
         options.ManualEarmarks.Where(m => m.FinanceId == 1 && m.Date == date).ShouldHaveSingleItem().Amount.ShouldBe(250m);
     }
 
+    // WithProposedPlan — the "what if I saved this plan" substitution behind the Earmark form's live
+    // first-payment warning.
+    [Fact]
+    public void WithProposedPlan_swaps_the_named_segment_for_the_proposed_one()
+    {
+        var options = Options([Goal(1)], [Plan(1)]); // saved plan contributes $50/month
+        var proposed = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    DtStart = new DateOnly(2026, 1, 1),
+                    Until = new DateOnly(2026, 11, 1),
+                }),
+                Amount = -120m, // a bigger contribution typed in
+            },
+            Goal(1));
+        var midYear = new DateOnly(2026, 6, 1);
+
+        var swapped = options.WithProposedPlan(proposed, replacedActiveStart: new DateOnly(2026, 1, 1));
+
+        // The saved $50/month is replaced, not stacked alongside — one plan, the proposed one.
+        swapped.EarMarkPatterns.ShouldHaveSingleItem().Amount.ShouldBe(-120m);
+        // And forecasting it reflects the bigger contributions in the goal's real jar.
+        JarExpectedOn(TransactionLogBookFactory.CreateForecast(swapped), financeId: 1, midYear)
+            .ShouldBeGreaterThan(JarExpectedOn(TransactionLogBookFactory.CreateForecast(options), financeId: 1, midYear));
+    }
+
+    [Fact]
+    public void WithProposedPlan_adds_a_brand_new_plan_without_dropping_others()
+    {
+        // A null replacedActiveStart is a brand-new plan (goal 1 had none) — it's added, and an unrelated
+        // goal's saved plan stays put.
+        var options = Options([Goal(1), Goal(2)], [Plan(2)]);
+
+        var result = options.WithProposedPlan(Plan(1), replacedActiveStart: null);
+
+        result.EarMarkPatterns.Select(plan => plan.FinanceId).OrderBy(id => id).ShouldBe([1, 2]);
+    }
+
     private static decimal JarExpectedOn(ForecastResult forecast, int financeId, DateOnly date) =>
         forecast.GetTimeline(financeId)
             .Where(entry => entry.Date <= date)

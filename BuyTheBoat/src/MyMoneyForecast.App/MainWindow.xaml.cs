@@ -135,6 +135,7 @@ public partial class MainWindow : Window
 
         EarmarkForm.RequestForecast = EnsureForecast;
         EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
+        EarmarkForm.RequestForecastWithProposedPlan = ForecastWithProposedPlan;
 
         // Tab-header styling stays live, not just at save/load: each panel
         // raises StateChanged on every field edit (via MarkDirty/ClearDirty),
@@ -566,6 +567,24 @@ public partial class MainWindow : Window
         var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
         return TransactionLogBookFactory.CreateForecast(
             BuildForecastOptions(asOfDate, horizonEnd).WithManualEarmark(oneOff));
+    }
+
+    /// <summary>[CALC] Re-runs the forecast with a not-yet-saved savings plan substituted in (plus any proposed manual earmarks that go with it, e.g. a starting earmark) — the live "what if I saved this plan" preview the Earmark form's first-payment warning reads its free-funds figure off. Same inputs and window as the shown forecast; a throwaway calculation, never stored on _lastForecast.</summary>
+    /// <param name="proposed">The proposed plan to substitute in.</param>
+    /// <param name="replacedActiveStart">The saved segment it replaces, or null for a brand-new plan.</param>
+    /// <param name="proposedManualEarmarks">Any proposed manual earmarks to fold in alongside it.</param>
+    private ForecastResult ForecastWithProposedPlan(
+        EarMarkPattern proposed, DateOnly? replacedActiveStart, IReadOnlyList<ManualEarmark> proposedManualEarmarks)
+    {
+        var asOfDate = _lastForecast?.AsOfDate ?? CurrentAsOfDate();
+        var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
+        var options = BuildForecastOptions(asOfDate, horizonEnd).WithProposedPlan(proposed, replacedActiveStart);
+        foreach (var earmark in proposedManualEarmarks)
+        {
+            options = options.WithManualEarmark(earmark);
+        }
+
+        return TransactionLogBookFactory.CreateForecast(options);
     }
 
     /// <summary>[UI] "All accounts" plus one entry per account. Kept in step with the forecast so a renamed or deleted account can't linger in the filter.</summary>
