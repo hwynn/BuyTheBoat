@@ -1007,14 +1007,14 @@ public partial class EarmarkFormPanel : UserControl
             {
                 line = PlanHealthMessages.FirstPaymentCoverageLine(
                     health.IsFirstOccurrencePending, payment, health.FirstOccurrenceShortfall,
-                    health.FirstOccurrenceFreeFunds, health.FirstOccurrenceBalance, isOneTime);
+                    health.FirstOccurrenceFreeFunds, health.FirstOccurrenceDate, isOneTime);
             }
             else
             {
                 var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, asOfDate);
                 var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
                     GetPatternsForLiveCheck(goal, proposed), goal, proposedManuals, asOfDate);
-                line = PlanHealthMessages.FirstPaymentCoverageLine(isPending, payment, shortfall, freeFunds: null, balance: null, isOneTime);
+                line = PlanHealthMessages.FirstPaymentCoverageLine(isPending, payment, shortfall, freeFunds: null, paymentDate: null, isOneTime);
             }
         }
         catch (ArgumentException)
@@ -1134,7 +1134,7 @@ public partial class EarmarkFormPanel : UserControl
         return pattern.StartingAllocation + (manualAtStart?.Amount ?? 0m);
     }
 
-    /// <summary>[UI] Rebuilds the Summary region (narrative sentence, chart, and the two aside lines) from PlanHealthState/FundJar data, in both Savings-plan and One-off mode. In One-off mode the aside folds in whatever's currently typed on top of the saved reading, live. Known gap: asideLine/asideSecondaryLine (the text figures, not the chart) read the saved PlanHealthState once one exists, rather than a live recompute of an in-progress edit — full parity would mean re-running the whole forecast on every keystroke. When no saved PlanHealthState exists yet, the live fallback further below already covers the text too.</summary>
+    /// <summary>[UI] Rebuilds the Summary region (narrative sentence, chart, and the two aside lines) from PlanHealthState/FundJar data, in both Savings-plan and One-off mode. In One-off mode the aside folds in whatever's currently typed on top of the saved reading, live. Known gap: jarStateLine/firstPaymentLine (the text figures, not the chart) read the saved PlanHealthState once one exists, rather than a live recompute of an in-progress edit — full parity would mean re-running the whole forecast on every keystroke. When no saved PlanHealthState exists yet, the live fallback further below already covers the text too.</summary>
     private void UpdateSummary()
     {
         // Suspect (1) FIXED 2026-08-27 (reported 2026-08-20): landing on this form
@@ -1199,8 +1199,9 @@ public partial class EarmarkFormPanel : UserControl
             patternsForMilestone, goal, plan.DatePattern.ActiveStart, dueDate);
 
         string narrative;
-        string asideLine;
-        string? asideSecondaryLine = null;
+        string jarStateLine;
+        string? trajectoryLine = null;
+        string? firstPaymentLine = null;
         DateOnly? highlightDate = null;
         decimal? additionAmount = null;
         IReadOnlyList<(DateOnly Date, decimal Amount)> proposedTrajectory = [];
@@ -1236,22 +1237,22 @@ public partial class EarmarkFormPanel : UserControl
                 {
                     var addition = proposedJar.ExpectedAmount - savedExpected;
                     additionAmount = addition == 0m ? null : addition; // null, not 0 — a $0 line would just retrace Actual
-                    asideLine = PlanHealthMessages.LiveJarStateLine(proposedJar.ExpectedAmount, proposedJar.MilestoneAmount ?? 0m);
+                    jarStateLine = PlanHealthMessages.JarStateLine(proposedJar.ExpectedAmount, proposedJar.MilestoneAmount ?? 0m);
                 }
                 else if (jar is not null && health is not null)
                 {
-                    asideLine = PlanHealthMessages.CurrentJarStateLine(jar, health);
+                    jarStateLine = PlanHealthMessages.JarStateLine(jar.ExpectedAmount, jar.MilestoneAmount ?? 0m);
                 }
                 else
                 {
                     var live = GetLiveJarAmounts(GetPatternsForLiveCheck(goal, plan), plan, goal, GetStartingPointTotal(plan), todayDate);
-                    asideLine = PlanHealthMessages.LiveJarStateLine(live.ExpectedAmount, live.MilestoneAmount);
+                    jarStateLine = PlanHealthMessages.JarStateLine(live.ExpectedAmount, live.MilestoneAmount);
                 }
             }
             catch (ArgumentException)
             {
                 // A date the picker's bounds should already exclude, mid-edit.
-                asideLine = "(fund jar state needs a live forecast — not available yet)";
+                jarStateLine = "(fund jar state needs a live forecast — not available yet)";
             }
 
             // Same live substitution for the first-payment warning — funds-aware, read off the same
@@ -1266,9 +1267,9 @@ public partial class EarmarkFormPanel : UserControl
 
                 if (warningHealth is { } wh)
                 {
-                    asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(
+                    firstPaymentLine = PlanHealthMessages.FirstPaymentCoverageLine(
                         wh.IsFirstOccurrencePending, payment, wh.FirstOccurrenceShortfall,
-                        wh.FirstOccurrenceFreeFunds, wh.FirstOccurrenceBalance, isOneTime);
+                        wh.FirstOccurrenceFreeFunds, wh.FirstOccurrenceDate, isOneTime);
                     highlightDate = wh.IsFirstOccurrencePending && wh.FirstOccurrenceShortfall > 0m ? firstOccurrenceDate : null;
                 }
                 else
@@ -1276,13 +1277,13 @@ public partial class EarmarkFormPanel : UserControl
                     var isPending = TransactionLogBookFactory.IsFirstOccurrencePending(goal, todayDate);
                     var shortfall = TransactionLogBookFactory.FirstOccurrenceShortfall(
                         GetPatternsForLiveCheck(goal, plan), goal, GetProposedOneOffManualEarmarks(goal, plan), todayDate);
-                    asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(isPending, payment, shortfall, freeFunds: null, balance: null, isOneTime);
+                    firstPaymentLine = PlanHealthMessages.FirstPaymentCoverageLine(isPending, payment, shortfall, freeFunds: null, paymentDate: null, isOneTime);
                     highlightDate = isPending && shortfall > 0m ? firstOccurrenceDate : null;
                 }
             }
             catch (ArgumentException)
             {
-                asideSecondaryLine = null;
+                firstPaymentLine = null;
             }
         }
         else
@@ -1323,17 +1324,15 @@ public partial class EarmarkFormPanel : UserControl
 
             if (jar is not null && health is not null)
             {
-                asideLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
-                    ?? PlanHealthMessages.CurrentJarStateLine(jar, health);
-
-                // The first-payment warning takes priority over the
-                // recurring-chronic-shortfall phrase when both apply — this
-                // region's aside is capped at two facts, and a payment about
-                // to fail is more time-sensitive than an ongoing rate problem.
-                asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(
-                        health.IsFirstOccurrencePending, Math.Abs(goal.Amount), health.FirstOccurrenceShortfall,
-                        health.FirstOccurrenceFreeFunds, health.FirstOccurrenceBalance, isOneTime)
+                // Two labeled regions now: Fund jar, today (where it stands) and
+                // Toward the goal (the long-run picture, or the chronic-shortfall
+                // phrase). The first-payment warning is its own third line below.
+                jarStateLine = PlanHealthMessages.JarStateLine(jar.ExpectedAmount, jar.MilestoneAmount ?? 0m);
+                trajectoryLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
                     ?? PlanHealthMessages.SummaryRecurringPhrase(health);
+                firstPaymentLine = PlanHealthMessages.FirstPaymentCoverageLine(
+                    health.IsFirstOccurrencePending, Math.Abs(goal.Amount), health.FirstOccurrenceShortfall,
+                    health.FirstOccurrenceFreeFunds, health.FirstOccurrenceDate, isOneTime);
                 highlightDate = health.IsFirstOccurrencePending && health.FirstOccurrenceShortfall > 0m ? firstOccurrenceDate : null;
 
                 // Highlights this goal's release dates where the jar came
@@ -1354,20 +1353,20 @@ public partial class EarmarkFormPanel : UserControl
                 // fields, no forecast needed.
                 var startingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
                 var live = GetLiveJarAmounts(GetPatternsForLiveCheck(goal, liveProposed), liveProposed, goal, startingTotal, DateOnly.FromDateTime(DateTime.Today));
-                asideLine = PlanHealthMessages.LiveJarStateLine(live.ExpectedAmount, live.MilestoneAmount);
+                jarStateLine = PlanHealthMessages.JarStateLine(live.ExpectedAmount, live.MilestoneAmount);
                 RuleEditor.SetHighlight([], null);
             }
             else
             {
-                asideLine = "(fund jar state needs a live forecast — not available yet)";
+                jarStateLine = "(fund jar state needs a live forecast — not available yet)";
                 RuleEditor.SetHighlight([], null);
             }
         }
 
         // TODO(2026-08-13): the narrative above, and the chart's own
         // "actual"/"proposed" lines, only ever describe THIS ONE
-        // EarMarkPattern (plan) — but the aside (asideLine/
-        // asideSecondaryLine) and the health figures behind it
+        // EarMarkPattern (plan) — but the aside (jarStateLine/
+        // firstPaymentLine) and the health figures behind it
         // (IsChronicShortfall/IsChronicOverfund, GoalShortfall) are summed
         // across every plan sharing this finance_id, concurrent earmark patterns
         // included (patternsForMilestone, right above). Found via Storage
@@ -1413,8 +1412,9 @@ public partial class EarmarkFormPanel : UserControl
             goalAmount: goalAmount,
             actualTrajectory: trajectory.Select(p => (p.Date, p.Jar.ExpectedAmount)).ToList(),
             milestoneTrajectory: milestoneTrajectory,
-            asideLine: asideLine,
-            asideSecondaryLine: asideSecondaryLine,
+            jarStateLine: jarStateLine,
+            trajectoryLine: trajectoryLine,
+            firstPaymentLine: firstPaymentLine,
             peakDates: peakDates,
             highlightDate: highlightDate,
             proposedTrajectory: proposedTrajectory,

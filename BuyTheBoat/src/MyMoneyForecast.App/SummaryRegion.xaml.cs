@@ -53,8 +53,7 @@ public partial class SummaryRegion : UserControl
     public void Clear(string message)
     {
         NarrativeText.Text = message;
-        AsideText.Text = string.Empty;
-        AsideSecondaryText.Visibility = Visibility.Collapsed;
+        AsideStack.Visibility = Visibility.Collapsed;
         _chart = null;
         DrawChart();
     }
@@ -68,8 +67,9 @@ public partial class SummaryRegion : UserControl
     /// <param name="goalAmount">The full amount needed.</param>
     /// <param name="actualTrajectory">Real (Date, ExpectedAmount) samples from today through the due date or forecast horizon, whichever comes first — ordered. Empty when there's no forecast yet. Today-onward only; see this class's own header comment for why the segment before Today stays an approximation.</param>
     /// <param name="milestoneTrajectory">Real (Date, MilestoneAmount) samples across the WHOLE plan, Start through the due date — no Today split, since this one doesn't need real transaction history. Empty when there's no plan. Drawn for every goal with a plan, one-time or repeating.</param>
-    /// <param name="asideLine">The aside's first line.</param>
-    /// <param name="asideSecondaryLine">The aside's optional second line, hidden when null or empty.</param>
+    /// <param name="jarStateLine">The "Fund jar, today" region's line — where the jar stands right now.</param>
+    /// <param name="trajectoryLine">The "Toward the goal" region's line — the long-run picture. Null/empty hides that whole labeled region (label + separator + text).</param>
+    /// <param name="firstPaymentLine">The first-payment warning, shown UNDER the aside (no label of its own), separated by space. Null/empty hides it — e.g. the Expense form routes this to its own status indicator instead, so it passes null here.</param>
     /// <param name="peakDates">Which of the goal's own occurrence dates to label on the chart with their own gridline, most-recent-first from Start — empty for a one-time goal, which already has its single real due date labeled separately. Caller decides how many; this control just draws whatever list it's given.</param>
     /// <param name="highlightDate">One of peakDates (or Start-of-window's own first upcoming occurrence) to mark in the same color as the first-payment warning text, when that warning is showing — so the reader can tell which gridline it's about instead of guessing. Null when no such warning is showing.</param>
     /// <param name="proposedTrajectory">Savings-plan mode's own "proposed — rough, live estimate" line: whatever's currently typed in Amount/Recurrence, computed via TransactionLogBookFactory.ComputeMilestoneTrajectory, no forecast needed. Pass empty in One-off mode (nothing there is proposing a new rate) — DrawChart falls back to drawing the real, saved ActualTrajectory instead; the two are never drawn together.</param>
@@ -80,21 +80,23 @@ public partial class SummaryRegion : UserControl
         decimal startAmount, decimal goalAmount,
         IReadOnlyList<(DateOnly Date, decimal ActualAmount)> actualTrajectory,
         IReadOnlyList<(DateOnly Date, decimal MilestoneAmount)> milestoneTrajectory,
-        string asideLine, string? asideSecondaryLine = null,
+        string jarStateLine, string? trajectoryLine = null, string? firstPaymentLine = null,
         IReadOnlyList<DateOnly>? peakDates = null, DateOnly? highlightDate = null,
         IReadOnlyList<(DateOnly Date, decimal Amount)>? proposedTrajectory = null, decimal? additionAmount = null)
     {
+        AsideStack.Visibility = Visibility.Visible;
         NarrativeText.Text = narrative;
-        AsideText.Text = asideLine;
-        if (string.IsNullOrEmpty(asideSecondaryLine))
-        {
-            AsideSecondaryText.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            AsideSecondaryText.Text = asideSecondaryLine;
-            AsideSecondaryText.Visibility = Visibility.Visible;
-        }
+        AsideText.Text = jarStateLine;
+
+        var hasTrajectory = !string.IsNullOrEmpty(trajectoryLine);
+        TrajectorySeparator.Visibility = hasTrajectory ? Visibility.Visible : Visibility.Collapsed;
+        TrajectoryLabel.Visibility = hasTrajectory ? Visibility.Visible : Visibility.Collapsed;
+        TrajectoryText.Visibility = hasTrajectory ? Visibility.Visible : Visibility.Collapsed;
+        TrajectoryText.Text = trajectoryLine ?? string.Empty;
+
+        var hasFirstPayment = !string.IsNullOrEmpty(firstPaymentLine);
+        FirstPaymentText.Visibility = hasFirstPayment ? Visibility.Visible : Visibility.Collapsed;
+        FirstPaymentText.Text = firstPaymentLine ?? string.Empty;
 
         _chart = new ChartData(
             start, asOfDate, dueDate, startAmount, goalAmount, actualTrajectory, milestoneTrajectory, peakDates ?? [], highlightDate,

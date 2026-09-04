@@ -83,11 +83,10 @@ public sealed record PlanHealthState
     // `required` for that same reason.
     public decimal? FirstOccurrenceFreeFunds { get; init; }
 
-    // Total money expected in the account entering the first payment's day —
-    // the companion to FirstOccurrenceFreeFunds, so a "genuinely short" warning
-    // can show "$900 free of $1,355", making plain that money exists but is
-    // locked in other goals. Same day-before measure, same null conditions.
-    public decimal? FirstOccurrenceBalance { get; init; }
+    // The date the first pending payment lands, for the urgent warning's
+    // "the Mar 8 payment falls short" wording. Null when the first occurrence
+    // isn't pending — nothing urgent to date-stamp.
+    public DateOnly? FirstOccurrenceDate { get; init; }
 }
 
 public enum PlanHealthCategory

@@ -382,7 +382,7 @@ public partial class ExpenseFormPanel : UserControl
                 goalAmount: goalAmount,
                 actualTrajectory: [],
                 milestoneTrajectory: [],
-                asideLine: "Savings plan may need to be consolidated. We don't have a certain preview.");
+                jarStateLine: "Savings plan may need to be consolidated. We don't have a certain preview.");
             return;
         }
 
@@ -398,32 +398,27 @@ public partial class ExpenseFormPanel : UserControl
             .LastOrDefault(entry => entry.Date <= todayDate)?.Snapshot.FundJars
             .FirstOrDefault(candidate => candidate.FinanceId == existing.FinanceId);
 
-        string asideLine;
-        string? asideSecondaryLine = null;
+        string jarStateLine;
+        string? trajectoryLine = null;
+        string? firstPaymentLine = null;
         if (jar is not null && health is not null)
         {
-            asideLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
-                ?? PlanHealthMessages.CurrentJarStateLine(jar, health);
-
-            // Same fallback chain EarmarkFormPanel's own Savings-plan-mode
-            // branch uses for the aside's second fact slot — the
-            // first-payment warning takes priority when both apply, since a
-            // payment about to fail is more time-sensitive than an ongoing
-            // rate problem. Only reachable once a real health reading
-            // exists — the live (no-forecast-yet) branch below has neither
-            // a saved PlanHealthState to read a first-occurrence projection
-            // from, nor a due-date-anchored Shortfall to test IsChronicShortfall/
-            // IsChronicOverfund against.
+            // Two labeled regions: Fund jar, today (where it stands now) and Toward
+            // the goal (the long-run picture, or the chronic-shortfall phrase). The
+            // first-payment warning is the aside's own third line, under Toward the
+            // goal — the compact status label by the save buttons is separate.
             var isOneTime = existing.DatePattern.GetOccurrences().Count == 1;
-            asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(
-                    health.IsFirstOccurrencePending, Math.Abs(existing.Amount), health.FirstOccurrenceShortfall,
-                    health.FirstOccurrenceFreeFunds, health.FirstOccurrenceBalance, isOneTime)
+            jarStateLine = PlanHealthMessages.JarStateLine(jar.ExpectedAmount, jar.MilestoneAmount ?? 0m);
+            trajectoryLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
                 ?? PlanHealthMessages.SummaryRecurringPhrase(health);
+            firstPaymentLine = PlanHealthMessages.FirstPaymentCoverageLine(
+                health.IsFirstOccurrencePending, Math.Abs(existing.Amount), health.FirstOccurrenceShortfall,
+                health.FirstOccurrenceFreeFunds, health.FirstOccurrenceDate, isOneTime);
         }
         else
         {
             var (expected, milestone) = ComputeLiveJarAmounts([plan], existing, plan.StartingAllocation, todayDate);
-            asideLine = PlanHealthMessages.LiveJarStateLine(expected, milestone);
+            jarStateLine = PlanHealthMessages.JarStateLine(expected, milestone);
         }
 
         Summary.Load(
@@ -435,8 +430,9 @@ public partial class ExpenseFormPanel : UserControl
             goalAmount: goalAmount,
             actualTrajectory: GetJarTrajectory(forecast, existing.FinanceId, dueDate),
             milestoneTrajectory: milestoneTrajectory,
-            asideLine: asideLine,
-            asideSecondaryLine: asideSecondaryLine);
+            jarStateLine: jarStateLine,
+            trajectoryLine: trajectoryLine,
+            firstPaymentLine: firstPaymentLine);
     }
 
     /// <summary>[UI] Shows whether this Expense continues an earlier segment, or has since been continued by a later one — break-offs/restructures (planning/25's Item C) create a genuinely new FinanceId, so it's easy to forget, looking at just this one row, that it's part of a longer chain. BreakOffFactory.FindPredecessor/FindSuccessor do the actual lookup (the same Source-reuse mechanism FindCurrentSegment already relies on); this just surfaces what they find. Hidden entirely for a brand-new, unsaved pattern (nothing to look up yet) and whenever neither applies — a pattern with no history reads exactly as it does today, no added noise.</summary>
@@ -519,8 +515,7 @@ public partial class ExpenseFormPanel : UserControl
             goalAmount: goalAmount,
             actualTrajectory: [], // nothing saved yet — no real walked history to show
             milestoneTrajectory: milestoneTrajectory,
-            asideLine: PlanHealthMessages.LiveJarStateLine(expected, milestone),
-            asideSecondaryLine: "Proposed — not saved yet");
+            jarStateLine: PlanHealthMessages.JarStateLine(expected, milestone));
     }
 
     /// <summary>[CALC] Proposes a hypothetical Allocation Plan for an outflow that doesn't have one yet — the same AllocationPlanProposer.Propose call MainWindow.AutoCreateAllocationPlan makes at real save time, scoped to the same account and excluding transfer legs the same way. Null whenever RequestForecast isn't wired yet, or the proposer itself rejects the pattern (defensive only — an outflow this method's own caller already confirmed has Amount &lt; 0 shouldn't actually reach that throw).</summary>

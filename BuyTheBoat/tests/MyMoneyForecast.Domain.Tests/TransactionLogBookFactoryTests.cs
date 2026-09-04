@@ -916,8 +916,8 @@ public class TransactionLogBookFactoryTests
         // $1,000 balance, less the $100 moved into the jar on Jan 10 = $900 free
         // entering Jan 15 — well over the $300 gap, so the money's there.
         health.FirstOccurrenceFreeFunds.ShouldBe(900m);
-        // Total balance is untouched by an earmark (it only moves money into a jar).
-        health.FirstOccurrenceBalance.ShouldBe(1000m);
+        // The payment's own date, for the urgent warning's date stamp.
+        health.FirstOccurrenceDate.ShouldBe(new DateOnly(2026, 1, 15));
     }
 
     [Fact]

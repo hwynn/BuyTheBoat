@@ -17,33 +17,20 @@ public static class PlanHealthMessages
         _ => null,
     };
 
-    /// <summary>[CALC] "$X saved of $Y milestone[ — $Z short/over]" — the base fact always shows; the delta only appends for the two "today" states.</summary>
+    /// <summary>[CALC] The "Fund jar, today" region's line — "$X saved of $Y milestone", the two amounts and nothing else. That region is only about where the jar stands right now, and the gap is self-evident from the two numbers, so it carries no delta. Takes raw Expected/Milestone amounts so both the saved reading and a proposed, not-yet-saved pattern's live one share it.</summary>
+    /// <param name="expectedAmount">What the jar currently holds.</param>
+    /// <param name="milestoneAmount">The milestone it's measured against.</param>
+    public static string JarStateLine(decimal expectedAmount, decimal milestoneAmount) =>
+        $"{expectedAmount:C0} saved of {milestoneAmount:C0} milestone";
+
+    /// <summary>[CALC] "$X saved of $Y milestone[ — $Z short/over]" — the two-amounts line plus the today-delta. Used by the Concerning save-confirmation popup, which wants the shortfall spelled out; the Summary aside uses the plain JarStateLine instead.</summary>
     /// <param name="jar">This savings plan's own FundJar (today's reading) — PlanHealthState alone doesn't carry the raw saved/milestone amounts.</param>
     /// <param name="state">The plan's current health state.</param>
     public static string CurrentJarStateLine(FundJar jar, PlanHealthState state)
     {
-        var basic = $"{jar.ExpectedAmount:C0} saved of {jar.MilestoneAmount ?? 0m:C0} milestone";
+        var basic = JarStateLine(jar.ExpectedAmount, jar.MilestoneAmount ?? 0m);
         var delta = CurrentJarStateDelta(state);
         return delta is null ? basic : $"{basic} — {delta}";
-    }
-
-    /// <summary>[CALC] The live counterpart to CurrentJarStateLine — same exact wording, computed straight from raw Expected/Milestone amounts instead of reading them off a saved FundJar/PlanHealthState. Exists because PlanHealthState's other fields (Shortfall, IsChronicShortfall) are whole-span, due-date-anchored figures with no live equivalent for a proposed, not-yet-saved pattern — this sticks to the one pair of numbers that genuinely can be computed live.</summary>
-    /// <param name="expectedAmount">What the jar currently holds, live.</param>
-    /// <param name="milestoneAmount">The milestone it's being measured against, live.</param>
-    public static string LiveJarStateLine(decimal expectedAmount, decimal milestoneAmount)
-    {
-        var basic = $"{expectedAmount:C0} saved of {milestoneAmount:C0} milestone";
-        if (expectedAmount < milestoneAmount)
-        {
-            return $"{basic} — {milestoneAmount - expectedAmount:C0} short";
-        }
-
-        if (expectedAmount > milestoneAmount)
-        {
-            return $"{basic} — {expectedAmount - milestoneAmount:C0} over";
-        }
-
-        return basic;
     }
 
     /// <summary>[CALC] The Summary aside's future-facing pair, for a one-time goal — "on pace for $Y of $Z needed — $W short/over." Healthy uses today's own jar/milestone (same numbers CurrentJarStateLine would show, just phrased as "on track") — there's nothing to project when today's reading is already fine. AlreadyMissing/CurrentlyOverfunded return null; those two live in CurrentJarStateLine instead.</summary>
@@ -56,7 +43,7 @@ public static class PlanHealthMessages
             PlanHealthCategory.Healthy =>
                 $"{jar.ExpectedAmount:C0} saved, matching the {jar.MilestoneAmount ?? 0m:C0} milestone — on track.",
             PlanHealthCategory.WillMiss =>
-                $"{jar.ExpectedAmount:C0} saved, on pace for {shortfall.AmountAllocatedByDueDate:C0} of {shortfall.AmountNeeded:C0} needed — {shortfall.ShortfallAmount:C0} short",
+                $"{jar.ExpectedAmount:C0} saved, on pace for {shortfall.AmountAllocatedByDueDate:C0} of {shortfall.AmountNeeded:C0} needed — {shortfall.ShortfallAmount:C0} short in the long run",
             PlanHealthCategory.WillBeOverfunded =>
                 $"{jar.ExpectedAmount:C0} saved, on pace for {shortfall.AmountAllocatedByDueDate:C0} of {shortfall.AmountNeeded:C0} needed — {shortfall.OverfundedAmount:C0} over",
             _ => null,
@@ -115,16 +102,16 @@ public static class PlanHealthMessages
                 : $"{firstOccurrenceShortfall:C0} short for the first payment"
             : null;
 
-    /// <summary>[CALC] The funds-aware first-payment warning, as a two-line block: a plain-language verdict, then a compact "$X due · $Y set aside · $Z free" facts strip that carries more detail the more serious the case is. Deliberately TENTATIVE when reassuring ("you'll probably have the free cash") and FIRM when warning — the free-funds figure is naive, unable to see another unallocated expense landing the same day and eyeing the same cash, so it can overstate the reassuring case (hence "probably," itself a small nudge that setting funds aside is what removes the doubt) while any shortfall it does find only understates (competing expenses make it worse, never better). Takes raw numbers so both the live form preview and the saved Summary aside can call it; a null freeFunds (the no-forecast preview path) falls back to the plain set-aside gap with no strip. Returns null when nothing is short, or the first occurrence has already happened.</summary>
+    /// <summary>[CALC] The funds-aware first-payment warning, as a two-line block: a plain-language verdict, then a compact facts strip. Scoped to the ONE most-immediate problem — the first pending payment — not the whole plan's long-run health (that's the trajectory/RRule warnings elsewhere). Two shapes: REASSURING when free cash probably covers the not-yet-set-aside gap, deliberately tentative ("probably" — the free figure can't see another same-day claim on that cash) and nudging toward setting funds aside ("up to $X could be allocated"); URGENT when even free cash can't cover it, naming the payment DATE and how far short you'll still be. Takes raw numbers so both the live form preview and the saved reading can call it; a null freeFunds (the no-forecast preview path) falls back to the plain set-aside gap. Returns null when nothing is short, or the first occurrence has already happened.</summary>
     /// <param name="isFirstOccurrencePending">Whether the first scheduled payment hasn't happened yet.</param>
     /// <param name="firstPaymentAmount">What that first payment (or, for a one-time goal, the goal) costs.</param>
     /// <param name="setAsideShortfall">How much of that first payment isn't set aside yet — 0 when the plan already covers it.</param>
     /// <param name="freeFunds">Free-to-spend cash on hand entering the payment day, or null when it isn't known.</param>
-    /// <param name="balance">Total money expected in the account that day — frames free as "$900 free of $1,355"; may be null.</param>
+    /// <param name="paymentDate">The day that payment lands, for the urgent line's date stamp; may be null (the urgent line then omits the date).</param>
     /// <param name="isOneTime">Whether this is a one-time goal (no "first" of several — it IS the goal).</param>
     public static string? FirstPaymentCoverageLine(
         bool isFirstOccurrencePending, decimal firstPaymentAmount, decimal setAsideShortfall,
-        decimal? freeFunds, decimal? balance, bool isOneTime)
+        decimal? freeFunds, DateOnly? paymentDate, bool isOneTime)
     {
         if (!isFirstOccurrencePending || setAsideShortfall <= 0m)
         {
@@ -132,7 +119,6 @@ public static class PlanHealthMessages
         }
 
         var setAside = firstPaymentAmount - setAsideShortfall;
-        var amountLabel = isOneTime ? "needed" : "due";
 
         // Free amount unknown (the no-forecast preview path): no forecast to
         // read a strip from, so fall back to the plain set-aside gap.
@@ -143,23 +129,24 @@ public static class PlanHealthMessages
                 : $"{setAsideShortfall:C0} short for the first payment";
         }
 
-        // The money's PROBABLY there, just not earmarked: free cash covers the
-        // gap. Tentative on purpose — see this method's own summary.
+        // The money's PROBABLY there, just not set aside: free cash covers the
+        // gap. Tentative on purpose, and "up to $X could be allocated" invites
+        // setting it aside — see this method's own summary.
         if (free >= setAsideShortfall)
         {
-            var verdict = "You'll probably have the free cash — it just isn't set aside.";
-            var facts = $"{firstPaymentAmount:C0} {amountLabel} · {setAside:C0} set aside · {free:C0} free";
-            return $"{verdict}\n{facts}";
+            return "You'll probably have the free cash — it just isn't set aside." +
+                $"\n{setAside:C0} of {firstPaymentAmount:C0} set aside · up to {free:C0} could be allocated";
         }
 
-        // Genuinely short: even free cash can't cover the gap. Firm — the safe
-        // direction. "free of total" makes plain that money exists but is
-        // locked in other goals.
+        // Genuinely short: even free cash can't cover the gap. Firm, and dated —
+        // this is the urgent, most-immediate problem.
         var stillShort = setAsideShortfall - free;
-        var freeOfBalance = balance is decimal have ? $"{free:C0} free of {have:C0}" : $"{free:C0} free";
-        var shortVerdict = isOneTime ? "You'll be short even after free cash." : "Short even after free cash.";
-        var shortFacts = $"{firstPaymentAmount:C0} {amountLabel} · {setAside:C0} set aside · {freeOfBalance} · {stillShort:C0} short";
-        return $"{shortVerdict}\n{shortFacts}";
+        var when = paymentDate is { } date ? $"{date:MMM d} " : string.Empty;
+        var verdict = isOneTime
+            ? (paymentDate is { } d ? $"By {d:MMM d} you'll be {stillShort:C0} short of your goal, even after free cash."
+                                    : $"You'll be {stillShort:C0} short of your goal, even after free cash.")
+            : $"The {when}payment falls {stillShort:C0} short, even after free cash.";
+        return $"{verdict}\n{setAside:C0} of {firstPaymentAmount:C0} set aside · only {free:C0} free";
     }
 
     /// <summary>[CALC] Whether a savings plan is a deliberate holding pattern (redesign/planning/26-editing-an-earmark-pattern.md, "the pause case") rather than an active contribution — nothing will actually land in the jar, either because the plan's own rule produces zero occurrences, or because every occurrence shares the pattern's one Amount at $0. True for either condition alone.</summary>
