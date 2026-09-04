@@ -1288,7 +1288,9 @@ public partial class EarmarkFormPanel : UserControl
                 // recurring-chronic-shortfall phrase when both apply — this
                 // region's aside is capped at two facts, and a payment about
                 // to fail is more time-sensitive than an ongoing rate problem.
-                asideSecondaryLine = PlanHealthMessages.FirstOccurrenceShortfallLine(health.IsFirstOccurrencePending, health.FirstOccurrenceShortfall, isOneTime)
+                asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(
+                        health.IsFirstOccurrencePending, Math.Abs(goal.Amount), health.FirstOccurrenceShortfall,
+                        health.FirstOccurrenceFreeFunds, health.FirstOccurrenceBalance, isOneTime)
                     ?? PlanHealthMessages.SummaryRecurringPhrase(health);
                 highlightDate = health.IsFirstOccurrencePending && health.FirstOccurrenceShortfall > 0m ? firstOccurrenceDate : null;
 

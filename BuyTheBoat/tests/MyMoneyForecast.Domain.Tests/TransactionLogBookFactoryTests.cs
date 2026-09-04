@@ -869,6 +869,58 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void FirstOccurrenceFreeFunds_reports_the_free_cash_entering_the_first_payment_day()
+    {
+        // A $400 bill due Jan 15 with only one $100 contribution set aside by
+        // then ($300 not yet earmarked), against a $1,000 starting balance — so
+        // the money to cover that gap plainly EXISTS as free cash. This is the
+        // number that tells "it's there, just not earmarked" from a real shortfall.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Water bill",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [15],
+                DtStart = new DateOnly(2026, 1, 1),
+                Until = new DateOnly(2026, 12, 31),
+            }),
+            Amount = -400m,
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = bill.FinanceId,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [10],
+                    DtStart = new DateOnly(2026, 1, 1),
+                    Until = new DateOnly(2026, 12, 31),
+                }),
+            },
+            bill);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 1000m,
+            asOfDate: new DateOnly(2026, 1, 1),
+            horizonEndDate: new DateOnly(2026, 3, 1),
+            financialPatterns: [bill],
+            earMarkPatterns: [plan]));
+
+        var health = result.PlanHealthStates.Single(state => state.FinanceId == bill.FinanceId);
+
+        health.FirstOccurrenceShortfall.ShouldBe(300m); // $400 needed − $100 set aside by Jan 15
+        // $1,000 balance, less the $100 moved into the jar on Jan 10 = $900 free
+        // entering Jan 15 — well over the $300 gap, so the money's there.
+        health.FirstOccurrenceFreeFunds.ShouldBe(900m);
+        // Total balance is untouched by an earmark (it only moves money into a jar).
+        health.FirstOccurrenceBalance.ShouldBe(1000m);
+    }
+
+    [Fact]
     public void An_underfunded_streams_milestone_floors_at_zero_instead_of_going_negative()
     {
         // planning/14 (2026-08-03): a stream that has fallen behind must never

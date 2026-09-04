@@ -1041,6 +1041,21 @@ public static class TransactionLogBookFactory
             var firstOccurrenceShortfall = FirstOccurrenceShortfall(
                 earMarkPatterns.Where(earmark => earmark.FinanceId == financeId).ToList(), goal, manualEarmarks, asOfDate);
 
+            // Free cash and total balance entering the first payment's day —
+            // measured the day before, so free is what's on hand to absorb any
+            // part of that payment still not set aside, and balance frames it
+            // ("$900 free of $1,355"). Lets the warning tell "the money's
+            // probably there, just not earmarked" apart from "genuinely short."
+            // Only computed while the first occurrence is still pending.
+            decimal? firstOccurrenceFreeFunds = null;
+            decimal? firstOccurrenceBalance = null;
+            if (isFirstOccurrencePending && FirstOccurrence(goal.DatePattern) is { } firstPaymentDate)
+            {
+                var enteringPaymentDay = pageByFinanceId[financeId].SnapshotAsOf(firstPaymentDate.AddDays(-1));
+                firstOccurrenceFreeFunds = enteringPaymentDay.ExpectedFreeAmount;
+                firstOccurrenceBalance = enteringPaymentDay.ExpectedAmount;
+            }
+
             states.Add(new PlanHealthState
             {
                 FinanceId = financeId,
@@ -1056,6 +1071,8 @@ public static class TransactionLogBookFactory
                 UnderfundedReleaseDates = releaseDatesByFinanceId[financeId].ToList(),
                 IsFirstOccurrencePending = isFirstOccurrencePending,
                 FirstOccurrenceShortfall = firstOccurrenceShortfall,
+                FirstOccurrenceFreeFunds = firstOccurrenceFreeFunds,
+                FirstOccurrenceBalance = firstOccurrenceBalance,
             });
         }
 

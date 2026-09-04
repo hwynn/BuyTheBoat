@@ -115,6 +115,53 @@ public static class PlanHealthMessages
                 : $"{firstOccurrenceShortfall:C0} short for the first payment"
             : null;
 
+    /// <summary>[CALC] The funds-aware first-payment warning, as a two-line block: a plain-language verdict, then a compact "$X due · $Y set aside · $Z free" facts strip that carries more detail the more serious the case is. Deliberately TENTATIVE when reassuring ("you'll probably have the free cash") and FIRM when warning — the free-funds figure is naive, unable to see another unallocated expense landing the same day and eyeing the same cash, so it can overstate the reassuring case (hence "probably," itself a small nudge that setting funds aside is what removes the doubt) while any shortfall it does find only understates (competing expenses make it worse, never better). Takes raw numbers so both the live form preview and the saved Summary aside can call it; a null freeFunds (the no-forecast preview path) falls back to the plain set-aside gap with no strip. Returns null when nothing is short, or the first occurrence has already happened.</summary>
+    /// <param name="isFirstOccurrencePending">Whether the first scheduled payment hasn't happened yet.</param>
+    /// <param name="firstPaymentAmount">What that first payment (or, for a one-time goal, the goal) costs.</param>
+    /// <param name="setAsideShortfall">How much of that first payment isn't set aside yet — 0 when the plan already covers it.</param>
+    /// <param name="freeFunds">Free-to-spend cash on hand entering the payment day, or null when it isn't known.</param>
+    /// <param name="balance">Total money expected in the account that day — frames free as "$900 free of $1,355"; may be null.</param>
+    /// <param name="isOneTime">Whether this is a one-time goal (no "first" of several — it IS the goal).</param>
+    public static string? FirstPaymentCoverageLine(
+        bool isFirstOccurrencePending, decimal firstPaymentAmount, decimal setAsideShortfall,
+        decimal? freeFunds, decimal? balance, bool isOneTime)
+    {
+        if (!isFirstOccurrencePending || setAsideShortfall <= 0m)
+        {
+            return null;
+        }
+
+        var setAside = firstPaymentAmount - setAsideShortfall;
+        var amountLabel = isOneTime ? "needed" : "due";
+
+        // Free amount unknown (the no-forecast preview path): no forecast to
+        // read a strip from, so fall back to the plain set-aside gap.
+        if (freeFunds is not decimal free)
+        {
+            return isOneTime
+                ? $"{setAsideShortfall:C0} short for reaching your goal"
+                : $"{setAsideShortfall:C0} short for the first payment";
+        }
+
+        // The money's PROBABLY there, just not earmarked: free cash covers the
+        // gap. Tentative on purpose — see this method's own summary.
+        if (free >= setAsideShortfall)
+        {
+            var verdict = "You'll probably have the free cash — it just isn't set aside.";
+            var facts = $"{firstPaymentAmount:C0} {amountLabel} · {setAside:C0} set aside · {free:C0} free";
+            return $"{verdict}\n{facts}";
+        }
+
+        // Genuinely short: even free cash can't cover the gap. Firm — the safe
+        // direction. "free of total" makes plain that money exists but is
+        // locked in other goals.
+        var stillShort = setAsideShortfall - free;
+        var freeOfBalance = balance is decimal have ? $"{free:C0} free of {have:C0}" : $"{free:C0} free";
+        var shortVerdict = isOneTime ? "You'll be short even after free cash." : "Short even after free cash.";
+        var shortFacts = $"{firstPaymentAmount:C0} {amountLabel} · {setAside:C0} set aside · {freeOfBalance} · {stillShort:C0} short";
+        return $"{shortVerdict}\n{shortFacts}";
+    }
+
     /// <summary>[CALC] Whether a savings plan is a deliberate holding pattern (redesign/planning/26-editing-an-earmark-pattern.md, "the pause case") rather than an active contribution — nothing will actually land in the jar, either because the plan's own rule produces zero occurrences, or because every occurrence shares the pattern's one Amount at $0. True for either condition alone.</summary>
     /// <param name="amount">The plan's own contribution amount — 0 means every occurrence contributes nothing.</param>
     /// <param name="occurrenceCount">How many occurrences the plan's own rule actually produces.</param>

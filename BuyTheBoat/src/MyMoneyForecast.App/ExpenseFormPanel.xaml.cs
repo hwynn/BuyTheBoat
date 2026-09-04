@@ -415,8 +415,9 @@ public partial class ExpenseFormPanel : UserControl
             // from, nor a due-date-anchored Shortfall to test IsChronicShortfall/
             // IsChronicOverfund against.
             var isOneTime = existing.DatePattern.GetOccurrences().Count == 1;
-            asideSecondaryLine = PlanHealthMessages.FirstOccurrenceShortfallLine(
-                    health.IsFirstOccurrencePending, health.FirstOccurrenceShortfall, isOneTime)
+            asideSecondaryLine = PlanHealthMessages.FirstPaymentCoverageLine(
+                    health.IsFirstOccurrencePending, Math.Abs(existing.Amount), health.FirstOccurrenceShortfall,
+                    health.FirstOccurrenceFreeFunds, health.FirstOccurrenceBalance, isOneTime)
                 ?? PlanHealthMessages.SummaryRecurringPhrase(health);
         }
         else

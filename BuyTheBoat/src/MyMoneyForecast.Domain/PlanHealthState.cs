@@ -71,6 +71,23 @@ public sealed record PlanHealthState
     // — a plan reads perfectly on-pace at $0-vs-$0 right up until its
     // first payment actually fails.
     public required decimal FirstOccurrenceShortfall { get; init; }
+
+    // Free-to-spend money in the account entering the first payment's day —
+    // the cash on hand to cover whatever part of that payment isn't set aside
+    // yet. This is what tells "the money's there, it just isn't earmarked"
+    // (free covers the gap) apart from "you genuinely won't have enough"
+    // (it doesn't). Null when the first occurrence isn't pending, or that
+    // day's free amount isn't computed — including the lightweight preview
+    // path (a proposed, unsaved plan with no forecast to read a page from),
+    // which leaves it null and falls back to the plain set-aside gap. Not
+    // `required` for that same reason.
+    public decimal? FirstOccurrenceFreeFunds { get; init; }
+
+    // Total money expected in the account entering the first payment's day —
+    // the companion to FirstOccurrenceFreeFunds, so a "genuinely short" warning
+    // can show "$900 free of $1,355", making plain that money exists but is
+    // locked in other goals. Same day-before measure, same null conditions.
+    public decimal? FirstOccurrenceBalance { get; init; }
 }
 
 public enum PlanHealthCategory
