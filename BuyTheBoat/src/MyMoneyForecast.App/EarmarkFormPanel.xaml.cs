@@ -1134,7 +1134,7 @@ public partial class EarmarkFormPanel : UserControl
         return pattern.StartingAllocation + (manualAtStart?.Amount ?? 0m);
     }
 
-    /// <summary>[UI] Rebuilds the Summary region (narrative sentence, chart, and the two aside lines) from PlanHealthState/FundJar data, in both Savings-plan and One-off mode. In One-off mode the aside folds in whatever's currently typed on top of the saved reading, live. Known gap: jarStateLine/firstPaymentLine (the text figures, not the chart) read the saved PlanHealthState once one exists, rather than a live recompute of an in-progress edit — full parity would mean re-running the whole forecast on every keystroke. When no saved PlanHealthState exists yet, the live fallback further below already covers the text too.</summary>
+    /// <summary>[UI] Rebuilds the Summary region (narrative sentence, chart, and the two aside lines) from PlanHealthState/FundJar data, in both Savings-plan and One-off mode. Both modes fold whatever's currently typed into a throwaway what-if forecast and read the goal's real health + jar off THAT, so the aside text updates live — not just the chart (fixed 2026-09-05: it used to read the saved PlanHealthState once one existed, so a mandatory bill's auto-earmark reading sat frozen while its plan was being designed). Falls back to the saved reading, then pure pattern math, when no what-if forecast source is wired.</summary>
     private void UpdateSummary()
     {
         // Suspect (1) FIXED 2026-08-27 (reported 2026-08-20): landing on this form
@@ -1174,6 +1174,17 @@ public partial class EarmarkFormPanel : UserControl
         var isOneOff = OneOffRadio.IsChecked == true;
         var isOneTime = goal.DatePattern.GetOccurrences().Count == 1;
 
+        // How far out the CHART reaches. A far-off repeating goal (a 13-year
+        // mortgage, say) compresses its early, meaningful activity into a sliver
+        // when drawn all the way to its own Until — so past ~5 years we preview it
+        // like an ongoing bill: a fixed 5-year window, the plan's lines just running
+        // on to the edge rather than shrunk to show a distant finish. Only the CHART
+        // is capped — the narrative below still names the real due date. A one-time
+        // goal keeps its full span (its single due date IS the point).
+        var chartEnd = !isOneTime && dueDate > DateOnly.FromDateTime(DateTime.Today).AddYears(5)
+            ? DateOnly.FromDateTime(DateTime.Today).AddYears(5)
+            : dueDate;
+
         // This goal's own very first occurrence, ever. Only used below when
         // IsFirstOccurrencePending is also true.
         var firstOccurrenceDate = goal.DatePattern.GetOccurrences(goal.DatePattern.ActiveStart, goal.DatePattern.Until).FirstOrDefault();
@@ -1183,20 +1194,21 @@ public partial class EarmarkFormPanel : UserControl
         // The chart's actual-amount line: a real walked trajectory rather
         // than a single point extrapolated backward (which degenerates to
         // an invisible flat line whenever today's balance is genuinely $0).
-        var trajectory = GetJarTrajectory(goal.FinanceId, dueDate);
+        var trajectory = GetJarTrajectory(goal.FinanceId, chartEnd);
         var jar = trajectory.Count > 0 ? trajectory[0].Jar : null;
 
-        // The chart's milestone line spans the whole plan (Start through
-        // the due date), not just today onward — MilestoneAmount is pure
-        // pattern math and needs no real transaction history. Gathers every
-        // EarMarkPattern sharing this FinanceId (a goal can have more than
-        // one — concurrent earmark patterns, or a break-off chain).
+        // The chart's milestone line spans the plan from Start through the chart's
+        // own end (the due date, or the 5-year cap for a far-off repeating goal) —
+        // not just today onward, since MilestoneAmount is pure pattern math and
+        // needs no real transaction history. Gathers every EarMarkPattern sharing
+        // this FinanceId (a goal can have more than one — concurrent earmark
+        // patterns, or a break-off chain).
         var patternsForMilestone = _forecast?.Accounts
             .SelectMany(account => account.Page.EarmarkPatterns)
             .Where(p => p.FinanceId == goal.FinanceId)
             .ToList() ?? [];
         var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-            patternsForMilestone, goal, plan.DatePattern.ActiveStart, dueDate);
+            patternsForMilestone, goal, plan.DatePattern.ActiveStart, chartEnd);
 
         string narrative;
         string jarStateLine;
@@ -1317,40 +1329,69 @@ public partial class EarmarkFormPanel : UserControl
             {
                 var proposedStartingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
                 proposedTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-                        GetPatternsForLiveCheck(goal, proposedForChart), goal, plan.DatePattern.ActiveStart, dueDate, proposedStartingTotal)
+                        GetPatternsForLiveCheck(goal, proposedForChart), goal, plan.DatePattern.ActiveStart, chartEnd, proposedStartingTotal)
                     .Select(p => (p.Date, p.MilestoneAmount))
                     .ToList();
             }
 
-            if (jar is not null && health is not null)
+            // Fold the typed-but-unsaved plan into a throwaway what-if forecast and
+            // read the goal's REAL health + jar off it, so the aside's TEXT updates
+            // live as you type — not just the chart. This matters most for a
+            // MANDATORY bill (a mortgage, say): it already carries an auto-earmark
+            // health, so without this the aside sat frozen on that reading while you
+            // designed the plan (the bug reported 2026-09-05). Falls back to the
+            // saved health, then to pure pattern math, when no what-if source is
+            // wired. (The starting-point warning runs its own copy of this same
+            // forecast; sharing one pass between them is a possible later tidy-up.)
+            var liveHealth = health;
+            var liveJar = jar;
+            try
+            {
+                if (TryBuildProposedPattern(goal) is { } proposedForAside && RequestForecastWithProposedPlan is { } requestAside)
+                {
+                    var liveForecast = requestAside(proposedForAside, plan.DatePattern.ActiveStart, GetProposedManualEarmarks(goal, proposedForAside));
+                    liveHealth = liveForecast.PlanHealthStates.FirstOrDefault(state => state.FinanceId == goal.FinanceId) ?? health;
+                    liveJar = JarAsOf(liveForecast, goal.FinanceId) ?? jar;
+                }
+            }
+            catch (ArgumentException)
+            {
+                // A latent Start-vs-ActiveStart inconsistency mid-edit (the same one
+                // UpdateStartingShortfallWarning guards) — fall back to the saved reading.
+                liveHealth = health;
+                liveJar = jar;
+            }
+
+            if (liveJar is not null && liveHealth is not null)
             {
                 // Two labeled regions now: Fund jar, today (where it stands) and
                 // Toward the goal (the long-run picture, or the chronic-shortfall
                 // phrase). The first-payment warning is its own third line below.
-                jarStateLine = PlanHealthMessages.JarStateLine(jar.ExpectedAmount, jar.MilestoneAmount ?? 0m);
-                trajectoryLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
-                    ?? PlanHealthMessages.SummaryRecurringPhrase(health);
-                firstPaymentLine = PlanHealthMessages.FirstPaymentCoverageLine(
-                    health.IsFirstOccurrencePending, Math.Abs(goal.Amount), health.FirstOccurrenceShortfall,
-                    health.FirstOccurrenceFreeFunds, health.FirstOccurrenceDate, isOneTime);
-                highlightDate = health.IsFirstOccurrencePending && health.FirstOccurrenceShortfall > 0m ? firstOccurrenceDate : null;
+                jarStateLine = PlanHealthMessages.JarStateLine(liveJar.ExpectedAmount, liveJar.MilestoneAmount ?? 0m);
+                trajectoryLine = PlanHealthMessages.SummaryFutureLine(liveJar, liveHealth.Shortfall, liveHealth.MostImportantHealthState)
+                    ?? PlanHealthMessages.SummaryRecurringPhrase(liveHealth);
+                // The first-payment warning is NOT shown in the aside in Savings-plan
+                // mode: the STARTING POINT column's own live warning
+                // (StartingShortfallWarningText) is its sole home here (author,
+                // 2026-09-05), so leaving firstPaymentLine null avoids saying the same
+                // sentence twice. One-off mode, where that column is hidden, still
+                // routes it into the aside below. The chart highlight stays — it ties
+                // to the column warning by its shared amber color.
+                highlightDate = liveHealth.IsFirstOccurrencePending && liveHealth.FirstOccurrenceShortfall > 0m ? firstOccurrenceDate : null;
 
-                // Highlights this goal's release dates where the jar came
-                // up short, from the real forecast's forward walk. No
-                // live-pattern-math equivalent exists for the no-saved-
-                // health branches below, so they clear the highlight
-                // instead of guessing at one.
+                // Highlights this goal's release dates where the jar came up short,
+                // from the forecast's forward walk (the live one when we have it). No
+                // live-pattern-math equivalent exists for the fallback branches
+                // below, so they clear the highlight instead of guessing at one.
                 RuleEditor.SetHighlight(
-                    health.UnderfundedReleaseDates,
-                    PlanHealthMessages.RRulePreviewCaption(health),
-                    health.UnderfundedReleaseDates.Count > 0 ? PlanHealthMessages.UnderfundedReleaseHighlightLegend : null);
+                    liveHealth.UnderfundedReleaseDates,
+                    PlanHealthMessages.RRulePreviewCaption(liveHealth),
+                    liveHealth.UnderfundedReleaseDates.Count > 0 ? PlanHealthMessages.UnderfundedReleaseHighlightLegend : null);
             }
             else if (TryBuildProposedPattern(goal) is { } liveProposed)
             {
-                // No saved forecast reading yet (a brand-new plan, or one
-                // whose Start just moved past what's been computed) — a
-                // live reading computed straight from the form's own
-                // fields, no forecast needed.
+                // No forecast reading available at all (headless) — a live reading
+                // computed straight from the form's own fields, no forecast needed.
                 var startingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
                 var live = GetLiveJarAmounts(GetPatternsForLiveCheck(goal, liveProposed), liveProposed, goal, startingTotal, DateOnly.FromDateTime(DateTime.Today));
                 jarStateLine = PlanHealthMessages.JarStateLine(live.ExpectedAmount, live.MilestoneAmount);
@@ -1402,12 +1443,12 @@ public partial class EarmarkFormPanel : UserControl
         // "Due {dueDate}" label there.
         var peakDates = isOneTime
             ? []
-            : goal.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, dueDate).Take(3).ToList();
+            : goal.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, chartEnd).Take(3).ToList();
         Summary.Load(
             narrative,
             start: plan.DatePattern.ActiveStart,
             asOfDate: DateOnly.FromDateTime(DateTime.Today),
-            dueDate: dueDate,
+            dueDate: chartEnd,
             startAmount: GetStartingPointTotal(plan),
             goalAmount: goalAmount,
             actualTrajectory: trajectory.Select(p => (p.Date, p.Jar.ExpectedAmount)).ToList(),

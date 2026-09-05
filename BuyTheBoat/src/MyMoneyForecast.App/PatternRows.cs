@@ -511,15 +511,48 @@ internal static class DueDateText
 // and earmark event the day holds (§3.I), ordered so a paycheck sits directly
 // above the allocations it funds (§3.III.d), with deallocation pulls last.
 // ChipKind drives chip colors in XAML: "In" / "Out" / "Aside" / "Release" / "Pull".
-// The grouping key for the selected-day panes: the account, plus how short it
-// is on the day being shown. Grouping by this record (records give value
-// equality, so grouping still works) rather than a bare name lets the group
-// header carry the "Cover from another account" lever for a short account —
-// philosophy 1: a problem the app surfaces comes with a lever to fix it.
-public sealed record AccountGroupKey(int AccountId, string Name, decimal Shortfall)
+// The grouping key for the selected-day panes: the account and its balance on the
+// day being shown, plus how short it is and — when short — whether the gap is
+// coverable from another account (the three-rung shortfall ladder, planning/22).
+// Grouping by this record (records give value equality, so grouping still works)
+// rather than a bare name lets the group header carry the account's own balance,
+// the shortfall narrative, and the "move money in" lever — philosophy 1: a
+// problem the app surfaces comes with a fix.
+//
+//   rung 2 — CanCoverElsewhere true:  the money exists, just in another account
+//            (DonorName names it when one account alone covers the whole gap).
+//            The lever is shown; a transfer can genuinely fix it.
+//   rung 3 — CanCoverElsewhere false: no other account can cover it. No lever —
+//            offering "move money in" when none can be would be a lie.
+public sealed record AccountGroupKey(
+    int AccountId, string Name, decimal Balance, decimal Shortfall, bool CanCoverElsewhere = false, string? DonorName = null)
 {
     public bool IsShort => Shortfall > 0m;
-    public string CoverText => $"Cover {Shortfall:C0} from another account →";
+
+    // How much money the account actually holds on the day, shown right after the
+    // name — the header's own total, above the jar breakdown below it.
+    public string BalanceText => Balance.ToString("C0");
+    public bool BalanceNegative => Balance < 0m;
+
+    // Rung 2 only: a transfer can actually close the gap, so the lever appears.
+    public bool ShowCoverButton => IsShort && CanCoverElsewhere;
+
+    // "Short $2,000" — the how-bad, shown in red to the right of the balance.
+    public string ShortText => $"Short {Shortfall:C0}";
+
+    // The lever's label, direction-explicit ("in" = into this account): the app
+    // pre-fills only the destination and amount, so the user picks the source.
+    public string MoveInText => $"Move {Shortfall:C0} in →";
+
+    // Line two of the header: which rung, and where the money is (rung 2) or that
+    // there is none to be had (rung 3). Empty when the account isn't short.
+    public string RungText => !IsShort
+        ? string.Empty
+        : CanCoverElsewhere
+            ? DonorName is { } donor
+                ? $"In another account — the money's in {donor}."
+                : "In another account — the money's in your other accounts."
+            : "No other account can cover it.";
 }
 
 public sealed class DayEventRow

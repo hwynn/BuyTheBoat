@@ -30,6 +30,135 @@ depends on), `PlanHealthState.cs` + the `PlanHealthState`-tagged tests in
 [earmark-form-layout-mockups.html](mockups/earmark-form-layout-mockups.html) (the Summary A/B/C
 variants — read the actual file, don't rely on this document's paraphrase of it).
 
+## First-payment coverage warning (added 2026-09-04)
+
+The first-payment warning (`FirstOccurrenceShortfall`, above) used to say only "$X short for the
+first payment," which reads as "you can't afford this" when it usually means the opposite. It's now
+**scoped to one thing — the single most-immediate problem, the first pending payment** — and says
+which of two genuinely different situations it is (the app's own "can I afford this?" vs "am I on
+track for my goals?"). It deliberately does NOT speak to long-run health or whether the plan is
+structurally sound (`IsChronicShortfall`); those have their own homes (the trajectory line and the
+RRule preview, §6b). Author's own call, 2026-09-04: this message is *only* the short-term problem.
+
+- **Not set aside yet, but the money's (probably) there** — the plan hasn't earmarked the whole
+  payment by its due date, *but free cash on that day covers the gap*. Not a real problem — a nudge to
+  set the funds aside.
+- **Genuinely short** — even free cash can't cover the not-yet-earmarked part. The urgent case.
+
+**Two shapes** (`PlanHealthMessages.FirstPaymentCoverageLine`), each a plain-language verdict plus a
+compact facts line (two normal-line-break lines, no special styling):
+
+| Case | Condition entering the payment day | Message |
+| --- | --- | --- |
+| On track | set-aside ≥ payment | *(nothing)* |
+| Money's (probably) there | free ≥ the gap | "You'll probably have the free cash — it just isn't set aside." · `$185 of $368 set aside · up to $900 could be allocated` |
+| Genuinely short | free < the gap | "The Mar 8 payment falls $133 short, even after free cash." · `$185 of $368 set aside · only $50 free` |
+
+The reassuring case reframes free cash as the actionable nudge (**"up to $X could be allocated"**), not
+a bare "$X free"; the urgent case names the **date** (its urgency) and drops the total-in-account
+figure entirely (the author found `$900 free of $1,355` too much — the point is just that funds exist).
+
+**Standing principle — tentative when reassuring, firm when warning.** The free-funds figure is
+deliberately *naive*: it can't see another unallocated expense landing the same day and eyeing the
+same cash. So the reassuring case hedges ("probably") — which doubles as a small nudge that *setting
+funds aside* is what actually buys certainty (the whole point of the program) — while a shortfall it
+does find stays firm, because competing expenses only make a shortfall worse, never better. We chose
+NOT to compute same-day contention (author, 2026-09-04): honest hedging beats a false precision that
+still couldn't promise the cash. (Note the milestone is the *plan's own* schedule sum, not the bill —
+FundJar.cs:30 — so it can sit below the bill; but this warning, the trajectory line, and the chronic
+check all compare against the real `goal.Amount`, so a faulty plan can't feed them bad numbers.)
+
+**Data behind it** (`PlanHealthState`, computed in `TransactionLogBookFactory.CalculatePlanHealthStates`
+off the snapshot entering the payment day): `FirstOccurrenceShortfall` (the set-aside gap),
+`FirstOccurrenceFreeFunds` (`ExpectedFreeAmount`), `FirstOccurrenceDate` (the payment's day, for the
+urgent date stamp). Tests: `FirstOccurrenceFreeFunds_reports_the_free_cash_entering_the_first_payment_day`
+(`TransactionLogBookFactoryTests`) and the `FirstPaymentCoverageLine_*` cases (`PlanHealthMessagesTests`).
+
+**Where it shows.** On the Expense form — and in the Earmark form's **One-off** mode — it's the Summary
+aside's own **third line**, under the `Toward the goal:` region, separated by an empty gap, with no
+label of its own (author, 2026-09-04: the remade message belongs under "Toward the goal," not by the
+save buttons). In the Earmark form's **Savings-plan** mode, though, it's the **STARTING POINT column's**
+own live amber warning (`StartingShortfallWarningText`) instead — that column sits right beside the
+amount being typed, and showing the same sentence in the aside too would only duplicate it (author,
+2026-09-05, when the aside went live and the two collided). The aside there keeps its other two live
+lines (Fund jar, today / Toward the goal); the chart's release highlight stays either way, tying to
+whichever warning shows by its shared amber color. The Expense form's **status indicator** next to the
+save buttons keeps its own compact `ExpenseStatusLabel` ("Currently overfunded" etc.) — a coarser
+register for the same states. All of these read live now (2026-09-05): the aside folds the typed-but-
+unsaved plan into a what-if forecast (`ForecastOptions.WithProposedPlan`, or `WithManualEarmark` for a
+one-off) and reads real free funds off it — it used to sit on the saved reading, which froze a mandatory
+bill's auto-earmark health while its plan was being designed. Only a headless/no-forecast path falls
+back to the plain "$X short" gap.
+
+### The Summary aside split (2026-09-04)
+
+The aside was one overloaded slot (jar-state OR trajectory, plus a second fact); it's now **two
+labeled, separated regions** so the two rulers can't be confused (author noticed the first-payment
+message read as if it were part of "Fund jar, today"):
+
+- **`Fund jar, today:`** — `PlanHealthMessages.JarStateLine`, just "$X saved of $Y milestone", no
+  delta (the gap is self-evident from the two numbers; the Concerning popup keeps the delta-carrying
+  `CurrentJarStateLine`). Only about right now. **This trims §6a's own settled "— $Z short" append
+  for the aside.**
+- **`Toward the goal:`** — `SummaryFutureLine` (its shortfall now reads "$Z short **in the long
+  run**", to set it apart from the immediate one) or the chronic phrase.
+
+And the whole informational column was **lifted** to the top-right, aligned with the narrative, so it
+isn't pushed down below a full-width summary band (the narrative + chart now share the left column).
+**This supersedes §6c's "168px, two facts already reads as full" budget** — the regions are labeled
+and separated now, and the heavy first-payment message left for the status indicator / its own line.
+
+### The shortfall ladder — shared with the forecast (2026-09-04)
+
+The "set aside vs. genuinely short" split above is really the bottom and top of a **three-rung ladder**
+of *how bad a shortfall is / whether it can be fully fixed*. The forecast's selected-day view
+(planning/08 §3, planning/11 §B) surfaces the same kind of problem, so the two pages **share one
+vocabulary** — `short`, `free`, `set aside`, `transfer` — even though the forms *narrate* (full
+sentences) and the forecast *states* (blunt fragments). Author, 2026-09-04: keeping the words
+consistent matters; the sentence shape can differ per page.
+
+| Rung | Meaning | Which page | Fix |
+| --- | --- | --- | --- |
+| 1 — here, not set aside | Money's free in *this* account, just not allocated | Forms (the reassuring case above); the forecast **nudges** toward it | Set it aside |
+| 2 — in another account | Money exists in the household, wrong account | **Forecast only** (the forms are single-account) | Transfer, then set aside |
+| 3 — genuinely short | Not enough anywhere | Both | Earn / cut / reschedule |
+
+On the forecast a day is flagged when an **account's free funds go negative** (`ExpectedFreeAmount < 0`).
+Which rung that is falls out of the *other* accounts' free cash on the same day, so the app already has
+what it needs to classify and to name a donor:
+
+- **Rung 2** (`AccountGroupKey.CanCoverElsewhere`): another account holds enough free to cover the gap.
+  Header line two reads *"In another account — the money's in {donor}."* — the donor is named only when
+  **one** account alone covers the whole gap; spread across several, it stays generic (*"…in your other
+  accounts."*). The lever shows.
+- **Rung 3**: no account can cover it. Line two reads *"No other account can cover it."* and the lever
+  **disappears** — offering "move money in" when none can be would be a lie.
+
+The account's group header (right pane, where the lever already lived) now co-locates the whole story
+rather than burying the amount in the button: **line one** = `{account}  {balance}  Short $X` — the
+account's own balance ("how much money is in the account", always shown, red when overdrawn) sits right
+after the name, and the `Short $X` how-bad in red to *its* right when short; **line two** = the rung
+line; **the lever** = the fix. The lever's own label changed from the vague
+`Cover $X from another account →` to **`Move $X in →`** — "cover" hid the *direction* (the app pre-fills
+only the destination + amount; the user picks the source in the transfer dialog). "Cover" survives as a
+plain verb in the rung-3 *sentence* ("no other account can **cover** it"), where there's no direction to
+mistake. The top header names the **type** at a glance: *"…· {account} short on cash"* (distinct from a
+savings goal being *behind*, which the jars already show).
+
+**The rung-1 nudge on the forecast.** Not allocating never makes a day *short* — it makes free funds go
+*up*, so "free" **overstates** what's truly spare. When the selected day has spare cash
+(`householdFree > 0`) but the user has funded **no savings plan of their own** (no jar tied to an
+`EarMarkPattern` holds money — auto-reserved mandatory bills don't count), a reminder sits under FREE TO
+SPEND: *"Set money aside for your goals so this reflects what's really spare."* A general nudge, not
+per-expense math (author's pick, 2026-09-04). Also this pass: the **safety-cushion row is omitted**
+entirely when the account has no cushion set, buying back the space the rung lines cost.
+
+**Code + tests.** `AccountGroupKey` (PatternRows.cs) carries `Shortfall`, `CanCoverElsewhere`,
+`DonorName` and derives `ShortText` / `MoveInText` / `RungText` / `ShowCoverButton`; the donor-detection
+that feeds it is `MainWindow.ShowDayDetail` (a per-day `freeByAccount` pre-pass). The wording is pinned
+by `AccountGroupKeyTests`; the donor logic and nudge trigger are WPF-side (no UI test project, verified
+by build + run).
+
 ---
 
 ## 1. What `PlanHealthState` is

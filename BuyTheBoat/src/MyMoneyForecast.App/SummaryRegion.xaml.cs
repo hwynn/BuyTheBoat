@@ -16,10 +16,6 @@ namespace MyMoneyForecast.App;
 //  - TextAt (below) approximates right-alignment from string length instead
 //    of measuring the rendered text — fine at the font size/amounts used so
 //    far.
-//  - Savings-plan mode shows the SAVED plan's real health, not a live
-//    hypothetical of whatever amount/schedule is currently typed but
-//    unsaved — that would need re-running the whole forecast with the
-//    in-progress values substituted in.
 //  - ActualTrajectory stays split at Today and always will under this
 //    architecture: TransactionLogBookFactory only ever cascades day-by-day
 //    balances forward from AsOfDate — no historical BalanceRecord exists
@@ -62,7 +58,7 @@ public partial class SummaryRegion : UserControl
     /// <param name="narrative">The composed narrative sentence for the top of the region.</param>
     /// <param name="start">When the plan's savings window begins.</param>
     /// <param name="asOfDate">Today's date, for the chart's Today marker.</param>
-    /// <param name="dueDate">The goal's due date.</param>
+    /// <param name="dueDate">Where the chart's x-axis ends — normally the goal's due date, but the caller (EarmarkFormPanel) caps it at a ~5-year window for a far-off repeating goal so the early activity stays legible; the narrative still names the real due date.</param>
     /// <param name="startAmount">What was already saved when the plan started.</param>
     /// <param name="goalAmount">The full amount needed.</param>
     /// <param name="actualTrajectory">Real (Date, ExpectedAmount) samples from today through the due date or forecast horizon, whichever comes first — ordered. Empty when there's no forecast yet. Today-onward only; see this class's own header comment for why the segment before Today stays an approximation.</param>
@@ -120,12 +116,13 @@ public partial class SummaryRegion : UserControl
         var plotWidth = width - leftMargin - rightMargin;
         var plotHeight = height - topMargin - bottomMargin;
 
-        // Due-date-for-X-axis-purposes is whatever the caller passed
-        // (typically the goal's own Until) — for an indefinitely-repeating
-        // bill that can sit well beyond the forecast's own HorizonEndDate, in
-        // which case the trajectory below simply stops partway across the
-        // plot and the rest reads as genuinely-unknown-yet, not squeezed to
-        // fit. Honest gap, not a bug.
+        // Due-date-for-X-axis-purposes is whatever the caller passed — the goal's
+        // own Until, OR a nearer cap the caller chose (EarmarkFormPanel caps a
+        // far-off repeating goal at a ~5-year window so its early activity is
+        // legible; the plan's lines then simply run on to the right edge). For an
+        // indefinitely-repeating bill that sits well beyond the forecast's own
+        // HorizonEndDate, the trajectory below instead stops partway across the plot
+        // and the rest reads as genuinely-unknown-yet. Both are honest, not bugs.
         var totalDays = Math.Max(1, (chart.DueDate.ToDateTime(TimeOnly.MinValue) - chart.Start.ToDateTime(TimeOnly.MinValue)).TotalDays);
         double X(DateOnly date) => leftMargin + plotWidth *
             (date.ToDateTime(TimeOnly.MinValue) - chart.Start.ToDateTime(TimeOnly.MinValue)).TotalDays / totalDays;

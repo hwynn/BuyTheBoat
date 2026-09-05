@@ -515,6 +515,61 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         patterns[0].Amount.ShouldBe(-60m);
     }
 
+    // The sharp edge PerformSingleSuccessorBreakOff used to defer, resolved
+    // 2026-09-05 (a real mortgage edited on its own start date hit it in the
+    // portable demo): a Critical field change on a pattern whose only occurrence
+    // is the as-of day has no settled history to preserve — a break-off there
+    // would leave a zero-day predecessor and BreakOffFactory would reject the cut.
+    // So it's a plain in-place replace, not a break-off, and nothing throws.
+    [Fact]
+    public void A_critical_edit_on_a_pattern_that_started_today_replaces_in_place_instead_of_breaking_off()
+    {
+        var bill = Bill(1, "House Payment", -887m, AsOf, new DateOnly(2035, 6, 15)); // starts exactly on the as-of day
+        _financialPatterns.Save(bill, accountId: 1);
+        var forecast = Forecast();
+
+        var editedBill = Bill(1, bill.Source, -900m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+
+        Confirmation(1, editedBill, accountId: 1, forecast).Run();
+
+        var patterns = _financialPatterns.GetAll();
+        patterns.ShouldHaveSingleItem();     // no break-off — the negligible old segment was simply overwritten
+        patterns[0].FinanceId.ShouldBe(1);   // same identity, not a fresh successor id
+        patterns[0].Amount.ShouldBe(-900m);
+    }
+
+    // The boundary: one day of history is still "no more than one day," so it also
+    // replaces in place rather than breaking off.
+    [Fact]
+    public void A_critical_edit_with_only_one_day_of_history_replaces_in_place()
+    {
+        var bill = Bill(1, "House Payment", -887m, AsOf.AddDays(-1), new DateOnly(2035, 6, 14));
+        _financialPatterns.Save(bill, accountId: 1);
+        var forecast = Forecast();
+
+        var editedBill = Bill(1, bill.Source, -900m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+
+        Confirmation(1, editedBill, accountId: 1, forecast).Run();
+
+        _financialPatterns.GetAll().ShouldHaveSingleItem();
+    }
+
+    // Just past the boundary: two days of history IS worth preserving, so the edit
+    // breaks off exactly as before — the replace shortcut is deliberately narrow.
+    [Fact]
+    public void A_critical_edit_with_two_days_of_history_still_breaks_off()
+    {
+        var bill = Bill(1, "House Payment", -887m, AsOf.AddDays(-2), new DateOnly(2035, 6, 13));
+        _financialPatterns.Save(bill, accountId: 1);
+        var forecast = Forecast();
+
+        var editedBill = Bill(1, bill.Source, -900m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+
+        Confirmation(1, editedBill, accountId: 1, forecast).Run();
+
+        _financialPatterns.GetAll().Count.ShouldBe(2); // truncated predecessor + successor
+    }
+
     // BreakOffFactory.BreakOff always fresh-proposes the successor's plan for
     // an outflow, regardless of whether the predecessor had one — existing
     // factory behavior, not new here. Worth locking in explicitly: editing a

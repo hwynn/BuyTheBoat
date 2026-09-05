@@ -821,7 +821,7 @@ public partial class MainWindow : Window
 
         DeallocationDayChip.Visibility = anyDeallocation ? Visibility.Visible : Visibility.Collapsed;
         DayDetailHeader.Text = shortAccounts.Count > 0
-            ? $"Selected day — {date:D}  ·  {string.Join(", ", shortAccounts)} short"
+            ? $"Selected day — {date:D}  ·  {string.Join(", ", shortAccounts)} short on cash"
             : $"Selected day — {date:D}";
 
         FreeToSpendText.Text = householdFree.ToString("C");
@@ -829,9 +829,17 @@ public partial class MainWindow : Window
             ? (Brush)FindResource("RedTextBrush")
             : Brushes.Black;
 
+        // Each account's free on this day, computed up front so a short account's
+        // gap can be classified as coverable-by-transfer (rung 2, name the donor)
+        // vs. genuinely short household-wide (rung 3) — the ladder, planning/22.
+        var freeByAccount = forecast.Accounts.ToDictionary(
+            account => account.AccountId,
+            account => (account.Page.BalanceRecord.GetValueOrDefault(date) ?? SnapshotAsOf(account.Page, date)).ExpectedFreeAmount ?? 0m);
+
         var eventRows = new List<DayEventRow>();
         var jarRows = new List<JarDetailRow>();
         var anyEarmarks = false;
+        var anyUserSetAside = false;
 
         foreach (var account in forecast.Accounts)
         {
@@ -839,18 +847,49 @@ public partial class MainWindow : Window
             var snapshot = page.BalanceRecord.GetValueOrDefault(date) ?? SnapshotAsOf(page, date);
             anyEarmarks |= page.EarmarkPatterns.Count > 0;
 
-            // How short this account is on this day — drives the group header's
-            // "Cover from another account" lever.
-            var accountFree = snapshot.ExpectedFreeAmount ?? 0m;
-            var groupKey = new AccountGroupKey(account.AccountId, account.Name, accountFree < 0m ? -accountFree : 0m);
+            var earmarkedIds = page.EarmarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
+
+            // The user has funded a savings plan of their own when a jar tied to one
+            // of their earmark patterns holds money — auto-reserved mandatory bills
+            // don't count. Its absence (with cash to spare) is the rung-1 nudge's cue.
+            anyUserSetAside |= snapshot.FundJars.Any(jar =>
+                jar.FinanceId is { } fundedId && jar.ExpectedAmount > 0m && earmarkedIds.Contains(fundedId));
+
+            // How short this account is on this day, and — when short — whether other
+            // accounts hold enough free cash to cover it (rung 2, naming a single-
+            // account donor) or not (rung 3). Drives the header narrative + lever.
+            var accountBalance = snapshot.ExpectedAmount ?? 0m;
+            var accountFree = freeByAccount[account.AccountId];
+            var shortfall = accountFree < 0m ? -accountFree : 0m;
+            var canCoverElsewhere = false;
+            string? donorName = null;
+            if (shortfall > 0m)
+            {
+                var donors = forecast.Accounts
+                    .Where(other => other.AccountId != account.AccountId && freeByAccount[other.AccountId] > 0m)
+                    .Select(other => (other.Name, Free: freeByAccount[other.AccountId]))
+                    .ToList();
+                canCoverElsewhere = donors.Sum(donor => donor.Free) >= shortfall;
+                if (canCoverElsewhere)
+                {
+                    // Name the donor only when one account alone covers the whole gap;
+                    // otherwise the cash is spread and the line stays generic.
+                    donorName = donors
+                        .Where(donor => donor.Free >= shortfall)
+                        .OrderByDescending(donor => donor.Free)
+                        .Select(donor => donor.Name)
+                        .FirstOrDefault();
+                }
+            }
+            var groupKey = new AccountGroupKey(account.AccountId, account.Name, accountBalance, shortfall, canCoverElsewhere, donorName);
 
             var context = new DayDetailContext
             {
                 Date = date,
                 JarLabels = forecast.JarLabels,
-                ShortfallsByFinanceId = forecast.GoalShortfalls.ToDictionary(shortfall => shortfall.FinanceId),
+                ShortfallsByFinanceId = forecast.GoalShortfalls.ToDictionary(goal => goal.FinanceId),
                 PatternsById = page.FinancePatterns.ToDictionary(pattern => pattern.FinanceId),
-                EarmarkedIds = page.EarmarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet(),
+                EarmarkedIds = earmarkedIds,
                 CushionTarget = page.IdealSafetyCushion,
                 FlooredFinanceIds = forecast.FlooredManualEarmarks
                     .Where(floored => floored.Date == date)
@@ -871,11 +910,25 @@ public partial class MainWindow : Window
 
             foreach (var jar in snapshot.FundJars)
             {
+                // Omit the safety-cushion row when the account has no cushion set —
+                // don't spend the pane's height on a jar the user never opted into.
+                if (jar.FinanceId is null && page.IdealSafetyCushion <= 0m)
+                {
+                    continue;
+                }
                 var jarRow = JarDetailRow.From(jar, snapshot, context);
                 jarRow.Account = groupKey;
                 jarRows.Add(jarRow);
             }
         }
+
+        // Rung-1 nudge: spare cash on hand, but the user hasn't funded any goal of
+        // their own, so the free figure is really just the balance (planning/22).
+        var showFreeNudge = householdFree > 0m && !anyUserSetAside;
+        FreeNudgeText.Text = showFreeNudge
+            ? "Set money aside for your goals so this reflects what's really spare."
+            : string.Empty;
+        FreeNudgeText.Visibility = showFreeNudge ? Visibility.Visible : Visibility.Collapsed;
 
         AdjustFundsButton.IsEnabled = anyEarmarks;
         DayEventsList.ItemsSource = GroupByAccount(eventRows);

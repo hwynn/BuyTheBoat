@@ -885,7 +885,20 @@ public sealed class FinancePatternSaveConfirmation
         // regardless of what's being typed now.
         var hasPastOccurrence = saved.DatePattern.GetOccurrences(to: forecast.AsOfDate).Count > 0;
 
-        IsChangeCritical = restrictedFieldChanged && hasPastOccurrence;
+        // A Critical edit normally breaks off at today, preserving the pre-cut
+        // occurrences as a truncated predecessor. But if that cut would leave no
+        // more than one day of the saved pattern before it — a pattern that only
+        // started today or yesterday — there is nothing worth preserving: the whole
+        // "history" is forecast, not settled. Such an edit is a plain in-place
+        // replace (the negligible old segment is simply overwritten), NOT a break-off
+        // — so no "you're changing history" confirmation, and, crucially, no
+        // BreakOffFactory rejection ("the cut date must be after the pattern's own
+        // start"). Author, 2026-09-05: this resolves the sharp edge
+        // PerformSingleSuccessorBreakOff's own comment used to defer — a real bill
+        // (a mortgage) edited on its own start date hit it in the portable demo.
+        var negligibleHistoryToPreserve = forecast.AsOfDate <= saved.DatePattern.ActiveStart.AddDays(1);
+
+        IsChangeCritical = restrictedFieldChanged && hasPastOccurrence && !negligibleHistoryToPreserve;
 
         var savingsPlan = forecast.Book.EarMarkPatternsFor(_financeId);
         HasMultipleEarmarkPatterns = savingsPlan.Count > 1;
@@ -2353,12 +2366,14 @@ public sealed class FinancePatternSaveConfirmation
 
         // SETTLED 2026-08-11 (author): today, literally — not "the day after
         // the latest already-occurred expected transaction," which
-        // planning/25's own text had floated as an alternate reading. One
-        // known, deliberately deferred sharp edge: if the saved pattern's own
-        // Start IS today (its only past occurrence), CutDate == Start here,
-        // and BreakOffFactory.BreakOff throws (it requires CutDate to be
-        // strictly after Start). Left unhandled until it actually comes up
-        // (author), not solved here.
+        // planning/25's own text had floated as an alternate reading. The sharp
+        // edge this comment used to defer — the saved pattern's own Start IS
+        // today, so CutDate == Start and BreakOffFactory.BreakOff throws — is now
+        // handled upstream (2026-09-05): DetermineConditions treats an edit with
+        // no more than one day of history to preserve as non-Critical, a plain
+        // in-place replace, so this break-off path is never reached for it. The
+        // CutDate > ActiveStart invariant therefore always holds by the time we
+        // get here; BreakOffFactory still enforces it as a genuine domain guard.
         var cutDate = forecast.AsOfDate;
 
         var predecessorPlan = forecast.Book.EarMarkPatternsFor(_financeId).SingleOrDefault();

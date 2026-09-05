@@ -96,8 +96,18 @@
                                 <Button x:Name="AdjustFundsButton" Content="Adjust funds..." Padding="10,2" Margin="0,0,16,0"
                                         IsEnabled="False" Click="OnAdjustFundsClick"
                                         AutomationProperties.AutomationId="AdjustFundsButton"/>
-                                <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
+                                    </StackPanel>
+                                    <!-- Rung-1 nudge (planning/22): spare cash on hand, but nothing the user set
+                                         aside is reserved, so "free" is really just the balance. A reminder, not
+                                         per-expense math. Set from code-behind; hidden when it doesn't apply. -->
+                                    <TextBlock x:Name="FreeNudgeText" HorizontalAlignment="Right" TextAlignment="Right" MaxWidth="300"
+                                               TextWrapping="Wrap" FontSize="10" FontStyle="Italic" Foreground="Gray" Margin="0,2,0,0"
+                                               Visibility="Collapsed" AutomationProperties.AutomationId="FreeNudgeText"/>
+                                </StackPanel>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock x:Name="DayDetailHeader" Text="Selected day" FontWeight="Bold" VerticalAlignment="Center"/>
@@ -188,18 +198,39 @@
                                             <GroupStyle>
                                                 <GroupStyle.HeaderTemplate>
                                                     <DataTemplate>
-                                                        <!-- A short account's group carries the fix right here: a
-                                                             pre-filled transfer into it (planning/11 §B). Every
-                                                             account always appears in this pane, so the lever can
-                                                             never go missing. -->
-                                                        <DockPanel Margin="0,8,0,3">
-                                                            <Button DockPanel.Dock="Right" Content="{Binding Name.CoverText}"
-                                                                    Padding="8,1" FontSize="10" Click="OnCoverShortfallClick"
-                                                                    AutomationProperties.AutomationId="CoverShortfallButton"
-                                                                    Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
-                                                            <TextBlock Text="{Binding Name.Name}" FontWeight="Bold" FontSize="11"
-                                                                       VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
-                                                        </DockPanel>
+                                                        <!-- A group header tells the whole story here: line one is the
+                                                             account, its balance ("how much money is in the account"), and —
+                                                             when short — the "Short $X" warning to the right of it; line two is
+                                                             which rung it's on (money in another account, or none can cover it),
+                                                             and the lever pre-fills a transfer into it (planning/11 §B,
+                                                             planning/22's ladder). Every account always appears in this
+                                                             pane, so the balance, narrative, and lever can never go missing. -->
+                                                        <StackPanel Margin="0,8,0,3">
+                                                            <DockPanel>
+                                                                <Button DockPanel.Dock="Right" Content="{Binding Name.MoveInText}"
+                                                                        Padding="8,1" FontSize="10" Click="OnCoverShortfallClick"
+                                                                        AutomationProperties.AutomationId="CoverShortfallButton"
+                                                                        Visibility="{Binding Name.ShowCoverButton, Converter={StaticResource BoolToVis}}"/>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding Name.Name}" FontWeight="Bold" FontSize="11"
+                                                                               VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
+                                                                    <TextBlock x:Name="HeaderBalance" Text="{Binding Name.BalanceText}" FontWeight="SemiBold"
+                                                                               FontSize="11" FontFamily="Consolas" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                                               AutomationProperties.AutomationId="AccountBalanceText"/>
+                                                                    <TextBlock Text="{Binding Name.ShortText}" FontWeight="SemiBold" FontSize="11"
+                                                                               VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource RedTextBrush}"
+                                                                               Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
+                                                                </StackPanel>
+                                                            </DockPanel>
+                                                            <TextBlock Text="{Binding Name.RungText}" FontSize="10" Foreground="Gray" TextWrapping="Wrap"
+                                                                       Margin="0,1,0,0" Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
+                                                        </StackPanel>
+                                                        <DataTemplate.Triggers>
+                                                            <!-- An overdrawn account: the balance itself reads red. -->
+                                                            <DataTrigger Binding="{Binding Name.BalanceNegative}" Value="True">
+                                                                <Setter TargetName="HeaderBalance" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                            </DataTrigger>
+                                                        </DataTemplate.Triggers>
                                                     </DataTemplate>
                                                 </GroupStyle.HeaderTemplate>
                                             </GroupStyle>
