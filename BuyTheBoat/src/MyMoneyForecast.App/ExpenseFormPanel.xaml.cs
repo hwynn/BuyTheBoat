@@ -832,7 +832,7 @@ public partial class ExpenseFormPanel : UserControl
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ex.Message;
+            ErrorText.Text = ErrorLog.RecordAndDescribe("saving this expense", ex);
         }
     }
 

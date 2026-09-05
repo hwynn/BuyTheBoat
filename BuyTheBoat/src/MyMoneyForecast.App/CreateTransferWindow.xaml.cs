@@ -87,7 +87,7 @@ public partial class CreateTransferWindow : Window
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ex.Message;
+            ErrorText.Text = ErrorLog.RecordAndDescribe("creating this transfer", ex);
         }
     }
 

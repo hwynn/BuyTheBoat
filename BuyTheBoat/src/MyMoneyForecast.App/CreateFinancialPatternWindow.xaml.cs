@@ -175,7 +175,7 @@ public partial class CreateFinancialPatternWindow : Window
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ex.Message;
+            ErrorText.Text = ErrorLog.RecordAndDescribe("creating this pattern", ex);
         }
     }
 

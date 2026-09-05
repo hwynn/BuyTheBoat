@@ -180,7 +180,7 @@ public partial class ManualEarmarkWindow : Window
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ex.Message;
+            ErrorText.Text = ErrorLog.RecordAndDescribe("saving this adjustment", ex);
         }
     }
 

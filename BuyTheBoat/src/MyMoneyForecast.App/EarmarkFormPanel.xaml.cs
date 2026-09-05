@@ -678,7 +678,7 @@ public partial class EarmarkFormPanel : UserControl
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ex.Message;
+            ErrorText.Text = ErrorLog.RecordAndDescribe("saving this savings plan", ex);
         }
     }
 

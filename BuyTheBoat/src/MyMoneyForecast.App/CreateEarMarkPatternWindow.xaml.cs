@@ -150,7 +150,7 @@ public partial class CreateEarMarkPatternWindow : Window
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ex.Message;
+            ErrorText.Text = ErrorLog.RecordAndDescribe("creating this savings plan", ex);
         }
     }
 

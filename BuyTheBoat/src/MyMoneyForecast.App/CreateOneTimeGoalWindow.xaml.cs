@@ -83,7 +83,7 @@ public partial class CreateOneTimeGoalWindow : Window
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ex.Message;
+            ErrorText.Text = ErrorLog.RecordAndDescribe("creating this goal", ex);
         }
     }
 
