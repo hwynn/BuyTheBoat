@@ -3,7 +3,7 @@ using Shouldly;
 
 namespace MyMoneyForecast.Domain.Tests;
 
-// The engine partition (planning/10 item 4): one page per account, plus the
+// The engine partition (the multi-account design): one page per account, plus the
 // household roll-up that surfaces a locally-short account even when the
 // combined total stays positive ("enough in the right account").
 public class MultiAccountForecastTests

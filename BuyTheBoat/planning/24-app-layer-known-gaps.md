@@ -12,14 +12,13 @@ you need the full story behind one of these gaps.
 
 ### Transfers can't be edited — only created and deleted
 
-**The gap:** planning/10 item 3 designed transfer editing ("done on the Transfer, which rewrites both"), but
+**The gap:** the multi-account design specified transfer editing ("done on the Transfer, which rewrites both"), but
 the UI (`MainWindow`) wires only create (`OnAddTransferClick` → `CreateTransferWindow`) and delete
 (`OnDeleteTransferClick`) — to change a transfer's amount/schedule/accounts you delete and recreate. Acceptable
 for the demo (author, 2026-09-02); logged as the one real functional gap in the otherwise-complete
 multi-account/transfer feature. The other gaps found the same day are already tracked: the "thin"-account
-warning and the cover-from-another-account button's screen-reader invisibility in planning/10 (Deferred / Known
-limitation); the two account-form helper panels in `AccountFormPanel`'s own TODO; cross-account funding nuances
-in planning/10 (Parked).
+warning and the cover-from-another-account button's screen-reader invisibility (own entries below); the two
+account-form helper panels in `AccountFormPanel`'s own TODO; cross-account funding nuances (own entry below).
 
 **What a fix needs:** load an existing `Transfer` into `CreateTransferWindow`, and on save rewrite its
 withdrawal/deposit pattern pair via `TransferFactory` under the same `TransferId`.
@@ -388,3 +387,34 @@ scenario + 85 app, up from 489), 0 warnings on a clean rebuild. Verified the app
 **Where:** `src/MyMoneyForecast.App/FinancePatternSaveConfirmation.cs`,
 `.../EditingHistoryConfirmationWindow.xaml(.cs)`, `.../MainWindow.xaml.cs`, and two new files,
 `.../EarmarkPatternPickerWindow.xaml(.cs)`. Found 2026-08-17 via the same direct audit as the entry above.
+
+### The "thin"-account warning has no defined threshold — deferred design choice
+
+**The gap:** the household / selected-day short-account warning words only the definite **"short"** case
+(free below zero). The multi-account mockup also showed a **"thin"** state — free positive but low — but no
+threshold for "thin" was ever defined. What "thin" means is a cascade/allocation question (the per-account
+"cushion not whole" state, [14](14-stage1-allocation-model.md)), not a rendering one, so
+the warning stays binary until that is settled.
+
+### "Cover from another account →" is invisible to screen readers — known limitation
+
+**The gap:** the "Cover from another account →" lever sits inside a WPF `GroupItem` header, whose automation
+peer drops header content — so it is invisible to UIAutomation and screen readers. It renders and clicks
+correctly for sighted mouse users. Worth revisiting for accessibility.
+
+### Cross-account funding interactions — parked design question
+
+**The gap:** two nuances about *which* account funds a bill or goal, parked when multiple accounts landed and
+applying regardless of account count. (1) A manual earmark that pre-allocated funds from a *specific*
+account's anticipated income (e.g. a Christmas bonus) — what becomes of it when that bill later moves
+accounts? (2) The standing implicit assumption that a bill/goal's regular funding paychecks land in the
+*same* account it lives in. Stage 4 fixed one concrete case (F33 — the income scan is now scoped to the
+outflow's own account); the broader question is still open.
+
+### Wanted later — multi-account roadmap
+
+Future-feature intents with no current work attached, kept so they are not lost:
+- **Single-account forecast filter** — the forecast shows all accounts together; a filter to view one
+  account at a time is a possible future addition.
+- **Credit-card accounts** — mechanically doable with the existing classes and a wanted feature. Interim:
+  model a card as an ordinary bill and/or goal inside another account.

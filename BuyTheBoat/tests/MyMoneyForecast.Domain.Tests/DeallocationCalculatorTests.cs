@@ -4,7 +4,7 @@ using Shouldly;
 namespace MyMoneyForecast.Domain.Tests;
 
 // Proof-faithful tests for the pure deallocation math (Step 1 of
-// redesign/MyMoneyForecast/planning/07-deallocation-implementation-plan.md).
+// redesign/MyMoneyForecast/planning/06-deallocation-math.md).
 //
 // Three layers of evidence, strongest last:
 //   1. The two worked examples from 06-deallocation-math.md, asserted to the

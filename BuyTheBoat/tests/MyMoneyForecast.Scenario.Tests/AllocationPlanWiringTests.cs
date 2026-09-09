@@ -166,7 +166,7 @@ public class AllocationPlanWiringTests : IDisposable
         // The wiring gives the withdrawal a front-loaded plan and persists the
         // prepared withdrawal (with ActiveFrom) via the transfer, so its plan fits.
         // spreadEvenlyWithNoIncome: false matches what MainWindow's transfer
-        // creation actually passes (planning/18, C1) — a transfer stays plain.
+        // creation actually passes (planning/13, C1) — a transfer stays plain.
         var plan = AllocationPlanProposer.Propose(
             transfer.Withdrawal, [], new DateOnly(2025, 1, 1), spreadEvenlyWithNoIncome: false);
         _transfers.Save(transfer with { Withdrawal = plan.Outflow });

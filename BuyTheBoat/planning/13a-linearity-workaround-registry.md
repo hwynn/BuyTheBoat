@@ -23,7 +23,7 @@ thing. `OneTimeGoalFactory` (goal + savings plan), `TransferFactory` (a withdraw
 `Transfer` record that owns them).
 
 **Costs:** the pieces must be kept consistent — transfers needed a validation sweep before each
-forecast ([10 item 3-C](10-multiple-accounts.md#item-3--transfers--settled-2026-07-21)) precisely
+forecast (a `Transfer`'s own validation sweep) precisely
 because nothing else guarantees the two still agree. Editing and deleting must be routed through
 the composite, and the pieces have to be hidden from lists that would otherwise show them raw
 (`WHERE TransferId IS NULL`). Every composite adds a place where data can drift.
@@ -67,8 +67,7 @@ only persisted truth.
 **Costs:** nothing can be frozen. There is no history, no "this is what we thought last month," and
 `Expired` is permanently false because nothing survives a run. Every edit is retroactive by default.
 
-**Buys:** a great deal — it is why moving a pattern between accounts is structurally clean ([10 item
-2-D](10-multiple-accounts.md#item-2--filing-patterns-under-accounts--settled-2026-07-21-a-corrected-2026-07-23)),
+**Buys:** a great deal — it is why moving a pattern between accounts is structurally clean (nothing is stuck in the old silo),
 why recompute-fresh cannot go stale, and why Import/Export is a byte-for-byte file copy.
 
 **Can't do:** anything needing a *record* of the past — which is why items 5 and 17 (actuals) can't
@@ -97,7 +96,7 @@ exposes it.
 
 ## W6 · A computed non-linear curve behind a linear pattern  ·  RETIRED (stage 1 revision, 2026-07-24)
 
-> **RETIRED 2026-07-24 — see [planning/14 Revision](14-stage1-allocation-model.md#revision-2026-07-24--allocation-plans-replace-the-ramp).**
+> **RETIRED 2026-07-24 — see [planning/14](14-stage1-allocation-model.md).**
 > The computed A/B ramp is replaced by a real, editable **Allocation Plan** (`EarMarkPattern`)
 > proposed and pre-filled at creation. The hidden curve — the whole point of this workaround — no
 > longer exists; a jar's fill is now a visible, previewable schedule (which is *not* a linearity
@@ -125,8 +124,8 @@ opts the bill out of this mechanism entirely — see `GetAutomaticallyEarmarkedB
 ## W7 · User-authored one-offs layered on a pattern  ·  IN USE
 
 **How:** manual earmarks — Add / Withdraw / Move — let the user deviate from the pattern's schedule
-on any single day without touching the pattern. Fully designed in
-[09-manual-earmarks.md](09-manual-earmarks.md).
+on any single day without touching the pattern. Built in the code (`ManualEarmark`,
+`EarmarkFormPanel`'s one-off adjustment mode).
 
 **Costs:** bounded to the pattern's span (ruling 1: the earmark pattern's span *is* the jar's
 lifetime), jars can't go below zero (ruling 2), and over-adds are allowed but can be clawed back by
@@ -181,5 +180,5 @@ optimization, it is the only workable form.
    rule is a real hazard once several mechanisms are in play — stage 1's implicit-earmark registry
    is where that gets checked.
 3. **Every new entry needs a `DIVERGENCE(<topic>)` tag** at its code site and a row in
-   [05's registry](05-original-structure-restructure.md#divergence-registry), if it departs from the
+   the code's `DIVERGENCE(...)` tags (grep them), if it departs from the
    original design.

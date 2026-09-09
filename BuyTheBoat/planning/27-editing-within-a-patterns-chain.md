@@ -1,43 +1,19 @@
 # 27 — Editing within a pattern's own chain (name pending)
 
-**Status: Phase 1 is now BUILT too, 2026-08-17 — every phase this document set out to cover (1, 2, the
-fourth relationship) is built and tested end to end, real WPF UI included. Only Phase 3 (declined by the
-author, not built) remains.** Split off after a direct question surfaced a real, previously-unflagged gap
-while working 25's own "avoid forcing consolidation" thread — see the entry logged in
+**Status: Phases 1, 2, and the fourth relationship are built (UI included); only Phase 3 (declined by
+the author) remains.** Split off after a gap surfaced while working 25's "avoid forcing consolidation"
+thread — see
 [24](24-app-layer-known-gaps.md#editing-an-early-already-superseded-segment-of-a-break-offrenewal-chain-has-no-guard-at-all)
-for the concrete failure that prompted this.
+for the concrete failure that prompted it.
 
-**A real correction happened along the way here, worth keeping on record even though it's now fully
-resolved:** an earlier pass through this document, done from context/recollection rather than checked
-against the actual code, marked Phase 1 "BUILT" alongside Phase 2 and the fourth relationship. It wasn't,
-at the time. Caught the same day while responding to the author's own doubt ("I think there was a lot of
-unresolved stuff from the big design we did today"), and verified two ways rather than re-checked by
-feel: `grep` across `FinancePatternSaveConfirmation.cs` for `hasPredecessor`/`hasSuccessor`/
-`PlanTouchesChainBoundary` found every match inside `RunForPlan` (the `EarMarkPattern`-editing path)
-only — the `FinancialPattern`-editing path hardcoded `PlanTouchesChainBoundary = false` and never computed
-a predecessor/successor at all; and `git show --stat` on the commit that landed this document plus Item
-G's own fix showed `RestructureFactory.cs` gained exactly one method that day (`FindCurrentPlan`, ~28
-lines) — not the `ExtendStart`/`ExtendUntil`/`CascadeForward` trio, which existed only for `EarMarkPattern`
-chains at that point. Corrected here and in memory, and THEN actually built for real the same session —
-see "What's built" below for the real account. Worth naming the pattern this slip fits, not just the
-one-off: a design being fully decided (as Phase 1's own rules genuinely were, all three rounds below) is
-not evidence it was implemented — "settled" and "built" are different claims, and conflating them is an
-easy mistake once a structurally similar phase (Phase 2) really has been built.
-
-**Sequencing decision (author, 2026-08-16):** this needs answering before returning to 25's own
-still-open "avoid forcing consolidation" thread — three phases, in order:
-1. **This document, `FinancialPattern` first** — rules for a change to one segment of a break-off/renewal
-   chain cascading to (or needing reconciliation against) the segments that continue it. **BUILT
-   2026-08-17**, UI included — see the correction above for why this took two passes, and "What's built"
-   below for what actually landed.
+**Sequencing (author):** three phases, in order —
+1. **This document, `FinancialPattern` first** — how a change to one segment of a break-off/renewal
+   chain cascades to (or is reconciled against) the segments that continue it. Built.
 2. **The same question for `EarMarkPattern` chains** (`RestructureFactory`'s own same-`finance_id`
-   sequential segments), combined with the fourth relationship (the cross-boundary cascade) — its own
-   section below. **BUILT 2026-08-17**, UI included.
-3. **Then, and only then, back to [25](25-editing-patterns-with-history.md)'s own Item F** — cascading a
-   change to a `FinancialPattern` onto the `EarMarkPattern`s that fund it (the "avoid forcing
-   consolidation for a recurrence-shape change" thread, and the paycheck-association thread, both
-   parked mid-conversation). **Asked 2026-08-17, once 1/2 were done — declined for now ("keep forcing
-   consolidation"), not approved. Nothing built; the proposal stays on record for later.**
+   sequential segments), combined with the fourth relationship (the cross-boundary cascade). Built.
+3. **Then back to [25](25-editing-patterns-with-history.md)'s own Item F** — cascading a
+   `FinancialPattern` change onto the `EarMarkPattern`s that fund it. Declined for now ("keep forcing
+   consolidation"); nothing built, the proposal stays on record.
 
 Author's own framing for what each phase needs to answer: **what kinds of changes do what, and
 how/when a warning or a question to the user should be part of the process** — the same two-axis shape

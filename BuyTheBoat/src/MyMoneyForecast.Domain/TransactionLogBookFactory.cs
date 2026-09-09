@@ -23,8 +23,9 @@ namespace MyMoneyForecast.Domain;
 // ActualTransactions, FullAmount/CurrentAmount stay null for every future
 // date exactly as documented, and all forecasting flows through
 // ExpectedAmount — this is faithful, not a divergence. The divergences that
-// DO exist are tagged ASSUMED-PAIRING / DIVERGENCE inline and cataloged in
-// redesign/MyMoneyForecast/planning/05-original-structure-restructure.md.
+// DO exist are tagged ASSUMED-PAIRING / DIVERGENCE inline (grep them); the
+// actuals-relevant ones are summarized in
+// redesign/MyMoneyForecast/planning/12-actual-transactions-deferred-design.md.
 public static class TransactionLogBookFactory
 {
     public const string PrimaryAccountName = "Primary";
@@ -378,7 +379,7 @@ public static class TransactionLogBookFactory
             }
         }
 
-        // Manual (user-created) isolated earmarks in the window (planning/09):
+        // Manual (user-created) isolated earmarks in the window:
         // ExplicitAmount = the user's number (8.4.a2 / 3.13.8.5.a1) — kept
         // distinct so a deallocation-day give-back can merge in without losing
         // the user's intent (3.13c.8.4.a2). One dated exactly on the as-of day

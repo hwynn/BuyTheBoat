@@ -50,7 +50,7 @@ more) of the `EarMarkPattern`s making up a goal's Savings Plan.
 ## The core philosophy: EarmarkPatterns aren't "real" the way FinancialPatterns are
 
 Author's own framing (2026-08-14): a `FinancialPattern` creates real bill/paycheck events that actually
-happen — eventually enforced by a pairing system (the "assumed-pairing" philosophy, planning/05; see
+happen — eventually enforced by a pairing system (the "assumed-pairing" philosophy, planning/12; see
 also `project_actual_transactions_register.md`). An `EarMarkPattern` creates `EarMarkEvent`s, which are
 **purely an organizational construct for the user** — earmarks and fund jars aren't "real" the same way
 expected transactions are. Because of this asymmetry, the author wants the user to have **much more

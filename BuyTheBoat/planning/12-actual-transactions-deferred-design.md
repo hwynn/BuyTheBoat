@@ -2,7 +2,7 @@
 
 `ActualTransaction` — real, observed money movement, as opposed to the
 `ExpectedTransaction`s the patterns generate — is **deliberately not built.**
-It has been shelved since [03](03-data-entry-uis.md), and every phase since has
+It has been shelved since the data-entry-UIs decision, and every phase since has
 been designed *around* its absence.
 
 That absence keeps producing design decisions anyway. Nearly every feature built
@@ -50,7 +50,7 @@ design pass — not the design itself.
 
 ## Why it's shelved
 
-Two reasons, from [03](03-data-entry-uis.md#the-four-data-types): too much data
+Two reasons: too much data
 to hand-enter, and no clean source of real transaction data (spreadsheet paste,
 file upload, and bank API are all future work, none started).
 
@@ -58,7 +58,7 @@ A consequence worth remembering: **this also makes `ExpectedTransaction`-driven
 pairing behavior untestable** — expected-vs-actual pairing needs both sides, so
 none of it can have tests until import exists.
 
-The counterweight, from [03](03-data-entry-uis.md): MiniFundJars is a validated
+The counterweight: MiniFundJars is a validated
 proof that the four core questions *can* be answered with only patterns + rrules
 + a balance + a date. Actuals raise the ceiling; they aren't load-bearing for
 Q1–Q3.
@@ -68,7 +68,7 @@ Q1–Q3.
 ## The assumed-pairing debt — the concrete revisit list
 
 The governing philosophy while actuals don't exist, quoted in
-[05](05-original-structure-restructure.md): *expected events are assumed to pair
+the engine-restructure design: *expected events are assumed to pair
 with matching actual events, and decisions that would normally wait for pairing
 are made assuming that pairing will happen.*
 
@@ -85,7 +85,7 @@ grep -rn "ASSUMED-PAIRING\|DIVERGENCE" redesign/MyMoneyForecast/src/
 ```
 
 Tags as of this writing, all of which are revisit sites for import
-(registry and full descriptions in [05](05-original-structure-restructure.md)):
+(the live list regenerates from the code tags — grep `ASSUMED-PAIRING` / `DIVERGENCE`):
 
 | Tag | What has to be reconsidered when actuals land |
 |---|---|
@@ -104,7 +104,7 @@ Tags as of this writing, all of which are revisit sites for import
 ### Deallocation
 
 - **Expected transactions currently play the actuals' role in draining jars**
-  ([07](07-deallocation-implementation-plan.md), Step 3 note 3). In the original
+  (the deallocation implementation, Step 3). In the original
   design an actual transaction — even a surprise Xbox — could drain funds saved
   for other things. Without actuals, *expected future* transactions do that
   instead. When actuals arrive, the trigger has to move back, and the test that
@@ -112,8 +112,7 @@ Tags as of this writing, all of which are revisit sites for import
   vacation jar) is describing the stand-in, not the target.
 - The deallocation proof in [06](06-deallocation-math.md) is **written in terms
   of actual transactions** ("the amount we cannot deallocate should be the
-  current funds plus all actual transactions"). The mapping table in
-  [07](07-deallocation-implementation-plan.md#assumed-pairing-mapping-proof-term--our-engine)
+  current funds plus all actual transactions"). The mapping table (now in `DeallocationCalculator`'s own comments)
   translates each proof term to its expected-transaction stand-in — that table
   is a ready-made checklist of what reverts to its literal meaning.
 - **[DEFERRED, from 07]** the meaning of `HasNegativeFreeBalance` after
@@ -132,11 +131,11 @@ Tags as of this writing, all of which are revisit sites for import
 ### Forecast tab UI
 
 - **Paired transactions get a slightly different style**
-  ([08](08-forecast-tab-design-philosophy.md), goal *f*) — so the user can see
+  (forecast overview design, goal *f*) — so the user can see
   at a glance that an expected bill or paycheck *actually came in*. Expected
   transactions are already shown; "fulfilled" is a styling variant, not a new
   element.
-- **A new warning class becomes possible** ([08](08-forecast-tab-design-philosophy.md),
+- **A new warning class becomes possible** (forecast overview design,
   warning *b*): a bill in the near past that still hasn't been paid, or that came
   in at an unexpectedly different cost. **This is now load-bearing for a Stage 6 decision
   ([19](19-stage6-warnings-levers-shortcuts.md), states 3/4, author's ruling 2026-07-30):**
@@ -147,11 +146,11 @@ Tags as of this writing, all of which are revisit sites for import
   Real detection belongs here instead, once actuals exist to notice the mismatch against —
   this is that detection's first concrete use case, not just a hypothetical one.
 - **Explicit non-goal: do not show every actual transaction**
-  ([08](08-forecast-tab-design-philosophy.md)). Once they exist they'll be
+  (forecast overview design). Once they exist they'll be
   numerous; the **total spent that day** is the right granularity for the
   per-day view.
 - **Should the timeline be labeled as a pure forecast today?**
-  ([04](04-forecast-timeline-tab.md), open question.) With actuals shelved the
+  (an open question about the forecast/timeline tab.) With actuals shelved the
   timeline is entirely `ExpectedTransaction`-driven and nothing is reconciled
   against real bank activity — worth deciding whether the UI says so, so it
   doesn't read as more certain than it is. *This is a decision for now, not for
@@ -159,25 +158,24 @@ Tags as of this writing, all of which are revisit sites for import
 
 ### Accounts
 
-- **Account identity was shaped by import** ([10](10-multiple-accounts.md), item
+- **Account identity was shaped by import** (the multi-account design, item
   A). The original design used the account *name* as its id only because it had
   to match bank-export filenames. Import being deferred is precisely what freed
   the new design to add a hidden surrogate integer id. When import lands, the
   export-file → account mapping needs to be solved explicitly, because the name
   no longer carries it.
 - **Per-account as-of dates were deliberately left out of v1**
-  ([10](10-multiple-accounts.md), item B) — the rejected use case was *"I
+  (the multi-account design, item B) — the rejected use case was *"I
   reconciled savings last Tuesday."* Reconciliation is an actuals concept, so
   this decision is worth revisiting then; the v1 reasoning (one sitting, read
   all balances off the bank, no projection gap) assumes hand entry.
 
 ### Import & data entry
 
-- Three candidate sources named, none chosen or started
-  ([03](03-data-entry-uis.md)): **spreadsheet paste, file upload, bank API.**
+- Three candidate sources named, none chosen or started: **spreadsheet paste, file upload, bank API.**
 - **Duplicate detection is a known requirement** — `psuedo_functions.txt` states
   it as "given an actual transaction, check if it has a duplicate."
-  [01](01-tech-stack-and-testing-strategy.md) notes C# `record` types give the
+  C# `record` types give the
   structural equality this needs for free, and `ActualTransaction` is already
   declared a `record` for that reason.
 - `MadeInBulk` exists on the type to distinguish batch import from hand entry —
@@ -242,7 +240,7 @@ Tags as of this writing, all of which are revisit sites for import
   while leaving the transactions themselves untouched — only meaningful once
   pairings and multi-page books both exist.
 - **`ExpectedTransaction.Cancelled` is respected by the cascade but nothing sets
-  it** ([05](05-original-structure-restructure.md)). Per-occurrence editing is
+  it**. Per-occurrence editing is
   future work, and it overlaps this area: "this bill didn't actually happen" is
   adjacent to "this bill was paired to nothing."
 - Pairing is **symmetric** in the documented model
@@ -275,8 +273,8 @@ Tags as of this writing, all of which are revisit sites for import
 
 ### Build sequencing
 
-[02](02-csharp-sqlite-build-plan.md) puts "expected/actual pairing and
-fulfillment" in **phase 5**, alongside cross-page flow and deallocation days,
+The original build plan slated "expected/actual pairing and
+fulfillment" late, alongside cross-page flow and deallocation days,
 and explicitly notes it is *not* needed for a program that already answers
 Q1/Q3/Q2 for the common case.
 
@@ -305,13 +303,12 @@ None of these have been answered anywhere:
 
 ## Related documents
 
-- [05-original-structure-restructure.md](05-original-structure-restructure.md) —
-  the assumed-pairing philosophy and the full tag registry.
-- [06-deallocation-math.md](06-deallocation-math.md) /
-  [07-deallocation-implementation-plan.md](07-deallocation-implementation-plan.md)
-  — the proof written in actuals terms, and its stand-in mapping.
-- [08-forecast-tab-design-philosophy.md](08-forecast-tab-design-philosophy.md) —
-  the "once actuals exist" UI goals.
+- The **assumed-pairing philosophy and the divergence tags** now live in the code (grep
+  `ASSUMED-PAIRING` / `DIVERGENCE`); this document summarizes the actuals-relevant ones above.
+- [06-deallocation-math.md](06-deallocation-math.md) — the deallocation proof, written in actuals
+  terms; its proof-term → engine stand-in mapping is in `DeallocationCalculator`'s own comments.
+- [11-ui-design-and-decisions.md](11-ui-design-and-decisions.md) — the forecast-tab UI, including
+  the "once actuals exist" goals.
 - [01-glossary-of-terms.md](../../01-glossary-of-terms.md#actualtransaction) —
   the original documented shape of `ActualTransaction` and the pairing
   vocabulary.

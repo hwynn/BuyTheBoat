@@ -95,7 +95,7 @@ public class BreakOffFactoryTests
     [Fact]
     public void The_successor_carries_the_predecessors_auto_renew_marker()
     {
-        // planning/18 (B12): a break-off changes amount/schedule, not whether
+        // planning/13 (B12): a break-off changes amount/schedule, not whether
         // the pattern "keeps going" — that marker travels with the successor
         // like every other identity field.
         var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), autoRenew: true);

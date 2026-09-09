@@ -1,6 +1,6 @@
 # 17 — Stage 4: Changing an allocation without changing the bill
 
-**Status: OPEN — started 2026-07-29.** Items **8, 9, 22, 23, 24** + planning/10's parked
+**Status: OPEN — started 2026-07-29.** Items **8, 9, 22, 23, 24** + the multi-account phase's parked
 **cross-account funding interactions**. Stage 4 of the
 ["Adjusting the Plan" phase](13-adjusting-the-plan-charter.md). **F27 SETTLED 2026-07-30** —
 author's ruling: item 8 is a lasting rate change (not a one-time catch-up), and `3.11.1.a1` is
@@ -33,18 +33,18 @@ surfaced that **8, 9, and 22 are that same decision record**, not three separate
 2. [13a — workaround registry](13a-linearity-workaround-registry.md), **W5** (the implicit isolated
    earmark) and **W7** (manual earmarks) — the two existing levers this stage tests itself against
    before reaching for a new one.
-3. [09 — manual earmarks](09-manual-earmarks.md) — ruling 1 (a jar's lifetime = its earmark
-   pattern's span), and its own opening line naming this stage's territory as unfinished business:
-   *"the second [prerequisite for Q4], restructuring an earmark pattern's rrule/amount, is its own
-   future design."*
+3. **Manual earmarks** (in code: `ManualEarmark` / `EarmarkFormPanel`'s one-off mode) — ruling 1
+   (a jar's lifetime = its earmark pattern's span). This stage's territory — *restructuring an
+   earmark pattern's rrule/amount* — was named as future business back when manual earmarks were
+   designed.
 4. [14 — stage 1](14-stage1-allocation-model.md) — `EarMarkPattern.StartingAllocation` and
    `AllocationPlanProposer.ProposeEmpty` (the "empty, jar-alive, no contributions" shape, built for
    the declined-plan case in Stage 2 — see F27's item-22 preview below).
 5. [16 — stage 3](16-stage3-break-off.md), items 4-A (identity across a cut) and 4-B (the jar
    hand-off via `StartingAllocation`) — the direct precedent this stage's mechanism either reuses or
    explains why it can't.
-6. [10 — multiple accounts § Parked](10-multiple-accounts.md#parked-for-the-cascade-tweaking-phase)
-   — the cross-account funding interactions item.
+6. **Cross-account funding interactions** — the parked multi-account question, now tracked in
+   [24](24-app-layer-known-gaps.md).
 
 ---
 
@@ -150,7 +150,7 @@ me if the intent was for the system to suggest something here instead.
 ### 8-D · Naming — SETTLED 2026-07-30
 
 **Internal/developer term: "Restructure" (`RestructureFactory`, mirroring `BreakOffFactory`'s
-naming).** Matches [09](09-manual-earmarks.md)'s own existing informal phrase, "restructuring an
+naming).** Matches the manual-earmarks design's own informal phrase, "restructuring an
 earmark pattern's rrule/amount."
 
 **User-facing name: "Change my savings plan starting on a date."** Deliberately parallel to
@@ -347,11 +347,11 @@ changes nothing there — confirmed by the existing 7 `RestructureFactoryTests` 
 
 **F32 — item 24 is item 22's mechanism (F31), triggered by the system instead of the user**, plus a
 concrete definition of "over-funded." Defining that meaning is this stage's job, not Stage 6's —
-the exact precedent [Item C](14-stage1-allocation-model.md#item-c--what-thin-means--settled-2026-07-23)
+the exact precedent [Item C](14-stage1-allocation-model.md)
 set for "thin" ("deciding what this means is a cascade/allocation question, not a rendering one").
 
 **For a one-time goal, "over-funded" already falls out of F21 for free.**
-[F21's shortfall formula](14-stage1-allocation-model.md#f21--one-shortfall-formula-for-goals-and-bills)
+[F21's shortfall formula](14-stage1-allocation-model.md)
 — `ShortfallAmount = Max(0, AmountNeeded − AmountAllocatedByDueDate)` — floors a negative result to
 zero. The **unfloored** value *is* the over-funded signal: a goal is over-funded exactly when
 `AmountAllocatedByDueDate > AmountNeeded`, by that surplus. No new computation — only reporting a
@@ -412,8 +412,8 @@ and declined in favor of reusing this phase's own already-built tools.
 
 ## Cross-account funding interactions · F33 CORRECTED 2026-07-30 after checking code — real gap found
 
-*(Read [10 §Foundation/Items 1–3/Parked](10-multiple-accounts.md) in full for the reasoning below;
-the 2026-07-30 draft of F33 below was wrong on both open points and has been replaced.)*
+*(The cross-account funding question is tracked in [24](24-app-layer-known-gaps.md); the 2026-07-30
+draft of F33 below was wrong on both open points and has been replaced.)*
 
 **F33, corrected — the income scan is household-wide, not account-scoped, and that's a live
 correctness gap; a Transfer deposit is (correctly) never treated as income.** Checked directly against
@@ -433,7 +433,7 @@ correctness gap; a Transfer deposit is (correctly) never treated as income.** Ch
 paced against **that** income — even when the outflow is filed under a *different* account than the
 income. A bill in Checking can silently get its Allocation Plan paced against a paycheck filed under
 Savings. That's not a theoretical gap; it directly contradicts
-[item 1](10-multiple-accounts.md#item-1--the-account-entity--settled-2026-07-21)'s founding premise —
+the multi-account founding premise —
 "having enough money means having enough in the *right* account" — for exactly the reason the parked
 note worried about, just arriving from the ordinary (non-transfer, non-reassignment) case rather than
 the one the note named.
@@ -451,7 +451,7 @@ from the income scan so a deposit isn't mistaken for a paycheck."* This means my
 up a Transfer and the proposer will pace against it" — **does not hold**: a Transfer's deposit leg is
 never eligible income, by design. That exclusion is a defensible v1 simplification (the proposer's own
 file header already lists several, self-labeled as such) — the honest way to fund a bill from another
-account's money today is a manual earmark ([09](09-manual-earmarks.md)) or hand-editing the
+account's money today is a manual earmark or hand-editing the
 auto-proposed plan, not something the default-proposer should try to infer automatically.
 
 **Net:** the parked note's two worries resolve differently than I first thought — (a) reassignment
@@ -493,7 +493,7 @@ Flagged here so nothing is lost:
   whatever a placeholder/stub goal would cost.
 - **Item 24** — generalizing 22 into something the system *notices* (an over-funded jar) and offers
   to defer, rather than something the user triggers by hand.
-- **Cross-account funding interactions** ([10 § Parked](10-multiple-accounts.md#parked-for-the-cascade-tweaking-phase))
+- **Cross-account funding interactions** (tracked in [24](24-app-layer-known-gaps.md))
   — what happens to a manual earmark that pre-allocated a specific account's anticipated income when
   the bill it was funding moves accounts, and the standing implicit assumption that a goal's funding
   paychecks land in the same account it lives in.

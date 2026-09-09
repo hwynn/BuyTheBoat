@@ -46,7 +46,7 @@
 
         <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
             <TabItem Header="Forecast">
-                <!-- Design philosophy: planning/08-forecast-tab-design-philosophy.md.
+                <!-- Design philosophy: planning/11-ui-design-and-decisions.md.
                      Three regions with distinct jobs — TOP CONTROLS (forecast range +
                      a Forecast button that should only look active when the shown
                      forecast's range differs from the fields), the OVERVIEW timeline
@@ -290,7 +290,7 @@
                                                         <Setter TargetName="JarRow" Property="Background" Value="{StaticResource RedBgBrush}"/>
                                                         <Setter TargetName="JarName" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
                                                     </DataTrigger>
-                                                    <!-- A manual withdrawal that exceeded the jar (planning/09): amber warning. -->
+                                                    <!-- A manual withdrawal that exceeded the jar: amber warning. -->
                                                     <DataTrigger Binding="{Binding Floored}" Value="True">
                                                         <Setter TargetName="JarSubText" Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
                                                         <Setter TargetName="JarSubText" Property="FontWeight" Value="SemiBold"/>
@@ -486,7 +486,7 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- ACCOUNTS (planning/10 item 1): each account is its own silo with
+            <!-- ACCOUNTS: each account is its own silo with
                  its own balance and its own optional cushion. Editing happens in a
                  popup, matching every other entity in this app. -->
             <TabItem Header="Accounts">
@@ -512,7 +512,7 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- TRANSFERS (planning/10 item 3): moving money between accounts,
+            <!-- TRANSFERS: moving money between accounts,
                  shown as one thing but stored as a paired withdrawal and deposit. -->
             <TabItem Header="Transfers">
                 <DockPanel Margin="8">
@@ -579,7 +579,7 @@
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills, one-time goals, and eventually the safety cushion. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Rows marked &quot;(Automatic)&quot; aren't something you created — every mandatory bill without its own earmark reserves money toward itself automatically; there's nothing to edit or delete there."/>
 
-                    <!-- Manual adjustments (planning/09): one-off, user-made jar
+                    <!-- Manual adjustments: one-off, user-made jar
                          changes on top of the automatic plans above. Also
                          creatable from the Forecast tab's selected-day pane. -->
                     <DockPanel DockPanel.Dock="Bottom" Height="170" Margin="0,10,0,0">

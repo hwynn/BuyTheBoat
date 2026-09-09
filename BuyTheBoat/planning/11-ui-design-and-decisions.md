@@ -6,13 +6,13 @@ The durable "why" behind the forecast tab's user interface. Three things live he
 2. the **multi-account UI decisions** and the chosen layouts, and
 3. a **log of the small refinement choices** the author made — what they liked and why — so a future rework does not lose the reasoning.
 
-Companion docs: [08-forecast-tab-design-philosophy.md](08-forecast-tab-design-philosophy.md) is the original (single-account) philosophy this consolidates and extends; [10-multiple-accounts.md](10-multiple-accounts.md) is the multi-account feature design (its item 4-C defines the data these views render); [design-philosophies.md](../../design-philosophies.md) holds the project-wide principles (especially **#1** inform-don't-automate and **#2** speak-the-user's-language) that these UI choices serve.
+This doc absorbed the original single-account forecast philosophy; the multi-account feature itself now lives in the code. Companion doc: [design-philosophies.md](../../design-philosophies.md) holds the project-wide principles (especially **#1** inform-don't-automate and **#2** speak-the-user's-language) that these UI choices serve.
 
 ---
 
 ## A. The three regions and their jobs (goals **and** non-goals)
 
-The forecast tab answers the four core questions ([04](../../04-project-goals-and-user-questions.md)) *together*, split across three on-screen regions plus an export. Each has a distinct job — and, just as importantly, things it deliberately does **not** try to do. (Fuller prose in [08](08-forecast-tab-design-philosophy.md) §1–§4; this is the consolidated statement, kept here so it stops being hard to find.)
+The forecast tab answers the four core questions ([04](../../04-project-goals-and-user-questions.md)) *together*, split across three on-screen regions plus an export. Each has a distinct job — and, just as importantly, things it deliberately does **not** try to do. (This is the consolidated statement, kept here so it stops being hard to find; the per-region specifics live in the code that owns each region.)
 
 ### Top controls
 - **Does:** the forecast range (start / end) plus the "Forecast" button, whose enabled state reflects *pending* changes (it reads enabled only when the fields differ from what is currently on screen); export-to-spreadsheet; the balance and cushion inputs (per-account, once multiple accounts land).
@@ -21,6 +21,7 @@ The forecast tab answers the four core questions ([04](../../04-project-goals-an
 ### Overview (the calendar)
 - **Does** — things best understood across many days at once: upcoming expenses (especially bills) and paychecks; allocations over time; **every** balance snapshot in the window; general trends via the **free** amount + a **total** per day and money in/out — *not* a line graph; **today** made visually distinct; and a **flag** on days worth a closer look (funds short, or not enough for a goal).
 - **Does NOT:** show where all money is allocated each day (too many jars for a per-day view); draw elaborate/decorative graphs; list every actual transaction (the day's total is enough). It is **not** expected to answer every question on its own — you select a day and drop into the selected-day region.
+- **Never lose see-all:** however the overview is later simplified, seeing **every** snapshot in the window stays available — filters may hide some, but the ability to see them all is never removed.
 
 ### Selected day
 - **Does** — the full snapshot: **every** transaction; **where all money is allocated** (every jar and how much); the **health of funds** answering Q3 per expense type (goal → milestone + relative due + "adjust the plan" nudge; bill → on-track vs. fully-covered styling + amount due; paycheck → amount/date, sitting above the allocations it funds); the **free amount**.
@@ -33,7 +34,7 @@ The forecast tab answers the four core questions ([04](../../04-project-goals-an
 
 ## B. Multi-account UI decisions (2026-07-22)
 
-**The rule that shapes everything:** "having enough money" means **having enough in the *right* account** — the household total can look fine while one account is short (a bank will not move money to cover it, or charges a fee for doing so). So per-account solvency must be visible. Item 4-C in [10](10-multiple-accounts.md) settled the split: the **overview** shows a household summary and flags a day when *any* account is short (without naming it in the cell); the **selected day** carries the per-account truth.
+**The rule that shapes everything:** "having enough money" means **having enough in the *right* account** — the household total can look fine while one account is short (a bank will not move money to cover it, or charges a fee for doing so). So per-account solvency must be visible. Item 4-C of the multi-account design settled the split: the **overview** shows a household summary and flags a day when *any* account is short (without naming it in the cell); the **selected day** carries the per-account truth.
 
 ### Overview — CHOSEN: "Rich month calendar" (option E)
 File: [mockups/forecast-overview-multiaccount-mockups-2.html](mockups/forecast-overview-multiaccount-mockups-2.html). The month-grid calendar (the form chosen for the single-account version too), with each day cell carrying:

@@ -109,7 +109,7 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
             : "Safety cushion";
 }
 
-// ===== The calendar overview (planning/08-forecast-tab-design-philosophy.md §2) =====
+// ===== The calendar overview (planning/11-ui-design-and-decisions.md §A) =====
 //
 // The OVERVIEW region's job is showing many days at a glance — every balance
 // snapshot in the window, per-day free + TOTAL allocated (never a per-jar
@@ -255,7 +255,7 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
     }
 }
 
-// ===== The selected-day region (planning/08-forecast-tab-design-philosophy.md §3) =====
+// ===== The selected-day region (planning/11-ui-design-and-decisions.md §A) =====
 //
 // Leverages the full BalanceSnapshot: every transaction listed (left pane),
 // every fund jar with per-type Q3 health (right pane), and the day's free
@@ -274,7 +274,7 @@ public sealed class DayDetailContext
     public required decimal CushionTarget { get; init; }
 
     // Finance ids whose manual withdrawal got floored on THIS day (only what
-    // the jar held actually moved) — flagged in place per planning/09.
+    // the jar held actually moved) — flagged in place.
     public IReadOnlySet<int> FlooredFinanceIds { get; init; } = new HashSet<int>();
 }
 
@@ -301,7 +301,7 @@ public sealed class JarDetailRow
     public bool Drained { get; init; }
 
     // True when a manual withdrawal on this day exceeded what the jar held and
-    // got floored (planning/09) — drives the amber warning on the sub line.
+    // got floored — drives the amber warning on the sub line.
     public bool Floored { get; init; }
 
     // The Q4 on-ramp (§3.III.a): a behind goal invites restructuring its plan.
@@ -608,7 +608,7 @@ public sealed class DayEventRow
             var label = TimelineRow.JarLabel(earmark.FinanceId, context.JarLabels);
             if (!earmark.RepeatedEarmark && earmark.ExplicitAmount is { } explicitAmount && explicitAmount != 0m)
             {
-                // The user's own adjustment (planning/09) — a nonzero
+                // The user's own adjustment — a nonzero
                 // ExplicitAmount is what distinguishes it from system events.
                 // On a deallocation day the merged give-back rides along in
                 // ExpectedAmount; the jar rows + day chip tell that story.

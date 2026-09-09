@@ -1,43 +1,26 @@
 # 23 — Form behavior: defaults, inheritance, and the saved/working-state split
 
-**Status: OPENED 2026-08-06, all five items (A–E) SETTLED the same day.** Three things deliberately
-left open, none blocking: D's exact "changed from saved" styling (parked until helper regions are
-actually laid out); the warnings/confirmation mechanism for Forced downward changes (parked from the
-start, now has a first concrete case — Start moving forward past existing history); and the
-`MaybeStartingEarmark` auto-save inconsistency (flagged, not fixed, per the author's own call).
+**Status: all five items (A–E) SETTLED.** Three things deliberately left open, none blocking: D's
+exact "changed from saved" styling (parked until helper regions are laid out); the
+warnings/confirmation mechanism for Forced downward changes (parked; first concrete case is Start
+moving forward past existing history); and the `MaybeStartingEarmark` auto-save inconsistency (flagged,
+not fixed, per the author's call).
 
-**Built, not just designed, as of 2026-08-07:** the Starting-point region (A2, amount + date only —
-reason text still deliberately deferred) and item B's date-picker-as-selector, including the
-2026-08-07 correction that the date field must never lock (verified working, marking + bounds
-together). `EarmarkFormPanel`/`ExpenseFormPanel`, `MainWindow` tab-refresh, and two real F27-related
-crash bugs found and fixed along the way — see those files' own change comments, not repeated here.
+The Starting-point region is both informational AND a shortcut to make/edit the isolated earmark at an
+`EarmarkPattern`'s own start (that second half isn't built yet). Two booleans govern it (one-line doc
+comment on each in `EarmarkFormPanel`): `ShowFundStartPointRegion` — whether the region appears at all
+(for now true in Savings-plan mode, false in One-off, expected to get more restrictive over time) — and
+`UsersCanEditFundStartPoint` — whether the starting isolated earmark's own amount can be edited
+(requires `ShowFundStartPointRegion`, locks once the pattern's `ActiveStart` is in the past; defined,
+not yet wired). `ShowFundStartPointRegion` is the *only* visibility gate: whenever it's true the region
+always renders, in one of three content states — a real nonzero total ("as of [date]"); a saved plan
+with nothing at day one ("savings plan started from 0"); or no saved plan yet ("no savings plan saved
+yet").
 
-**Added 2026-08-07 (author):** the Starting-point region is both informational AND meant as a shortcut
-to make/edit the isolated earmark sitting at an `EarmarkPattern`'s own start — that second half isn't
-built yet. Two booleans now govern it (`EarmarkFormPanel`, one-line doc comment on each in code, not
-repeated here): `ShowFundStartPointRegion` (whether the region appears at all — for now, true in
-Savings-plan mode, false in One-off, deliberately simple and expected to get more restrictive over
-time — **wired**) and `UsersCanEditFundStartPoint` (whether the starting isolated earmark's own amount
-could be edited — requires `ShowFundStartPointRegion`, locks once the pattern's own `ActiveStart` is
-in the past — **defined, not yet wired to anything**; the editable field itself still isn't built or
-designed).
-
-**Corrected same day (author):** `ShowFundStartPointRegion` is the *only* visibility gate — first cut
-still collapsed the region whenever the total came out to $0, which silently hid it for almost every
-ordinary plan (only Car Lease Payment and DMV Registration, of the whole seed set, ever showed it).
-Now, whenever `ShowFundStartPointRegion` is true, the region always renders, in one of three content
-states: a real nonzero total ("as of [date]"); a saved plan with nothing at day one ("savings plan
-started from 0"); or no saved plan at all yet — no goal picked, or a goal with none — same $0 treatment,
-captioned "no savings plan saved yet" since there's no real `ActiveStart` to reference.
-
-Author's own framing: the assumption set governs *saved*
-information, but a form spends most of its life holding *unsaved* edits — a case the assumptions have
-essentially nothing to say about, and planning/21's own content-inventory pass never separately named.
-Five problems raised in one sitting (numbered A–E below, in the order they'll actually be worked, not
-the order raised — see "Working order" below), plus one standing rule the author is already certain
-of and one item explicitly deferred. **Worked one at a time**, same convention as every other stage
-doc in this project: items get their own heading, `SETTLED`/`PROPOSED`/`OPEN` markers are literal, and
-nothing below `PROPOSED` should be treated as adopted until the author rules on it.
+Author's framing: the assumption set governs *saved* information, but a form spends most of its life
+holding *unsaved* edits — a case the assumptions say essentially nothing about, and 21's content
+inventory never separately named. Five problems (A–E), worked one at a time; `SETTLED`/`PROPOSED`/`OPEN`
+markers are literal.
 
 **Reading list:** [21](21-form-architecture.md) (the form architecture these forms live inside — the
 three-region layout, the helper-region concept, Philosophy 6's shortcut-transparency mechanics),

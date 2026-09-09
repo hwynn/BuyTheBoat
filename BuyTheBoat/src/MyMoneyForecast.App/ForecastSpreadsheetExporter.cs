@@ -8,7 +8,7 @@ namespace MyMoneyForecast.App;
 // Data/Import Data (which copy the raw SQLite file byte-for-byte for
 // backup/transfer) — this never round-trips back in.
 //
-// Design philosophy: planning/08-forecast-tab-design-philosophy.md §4. Because
+// Design philosophy: planning/11-ui-design-and-decisions.md §A. Because
 // the export can't offer dynamic day-selection, it has to lay ALL the detail
 // out statically: per day, the current/free amounts, a breakdown of every fund
 // jar, and every transaction — with the full amount due + due date shown for

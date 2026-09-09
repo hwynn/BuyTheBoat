@@ -216,7 +216,7 @@ public class AllocationPlanProposerTests
     [Fact]
     public void A_one_off_outflow_with_no_income_spreads_evenly_by_default()
     {
-        // planning/18 (C1): a single-occurrence outflow with no clean income
+        // planning/13 (C1): a single-occurrence outflow with no clean income
         // must not generate one full contribution per frequency cycle
         // between the as-of date and its due date (that would over-reserve
         // many times over) — and, since Stage 1's revision, it must not
@@ -276,7 +276,7 @@ public class AllocationPlanProposerTests
     {
         // spreadEvenlyWithNoIncome: false — what MainWindow's transfer
         // creation and TransferBreakOffFactory both actually pass. A
-        // transfer's withdrawal stays plain and immediate (planning/18, C1) —
+        // transfer's withdrawal stays plain and immediate (planning/13, C1) —
         // the same scenario as the pre-C1 behavior, opted back into
         // explicitly rather than left as the silent default.
         var oneOffTransferWithdrawal = FinancialPattern.Create(new FinancialPatternOptions

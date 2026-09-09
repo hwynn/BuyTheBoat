@@ -10,8 +10,10 @@ namespace MyMoneyForecast.Domain;
 // DIVERGENCE(page-length): the original design's fixed PageLength (number
 // of months per TransactionLogPage) and cross-page runoff are deferred —
 // each forecast run currently produces exactly one page spanning the
-// requested window, so PageLength is null and LogPages has one entry. Fixed
-// page lengths matter once persisted history and expired pages exist.
+// requested window, so PageLength is null and LogPages has one entry. What's
+// missing is the page *mechanism* itself, not merely old pages: it's needed
+// even without actuals or persisted history — moving the horizon forward is
+// meant to move *through* pages, not stretch one page indefinitely.
 public sealed record TransactionLogBook
 {
     public int? PageLength { get; init; }

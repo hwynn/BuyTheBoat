@@ -273,8 +273,10 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void Single_pattern_projection_matches_the_known_1240_oracle()
     {
-        // Same numbers as the walking-skeleton oracle in
-        // 02-csharp-sqlite-build-plan.md ($1000 - $60 + $300 = $1240).
+        // A known-correct worked example: starting balance $1000, minus a $60
+        // expense, plus a $300 paycheck = $1240 free on payday. The figures are
+        // taken from the worked example in `class documentation.ods` (Sheet1),
+        // so the expected answer is verified against the original design, not invented.
         var soap = OneOffPattern("Soap", -60m, new DateOnly(2019, 5, 2));
         var paycheck = OneOffPattern("Paycheck", 300m, new DateOnly(2019, 5, 9));
 
@@ -2865,7 +2867,7 @@ public class TransactionLogBookFactoryTests
         SnapshotOn(result, new DateOnly(2025, 6, 1)).IsDeallocationDay.ShouldBeTrue();
     }
 
-    // ===== Manual (explicit) earmarks — planning/09 =====
+    // ===== Manual (explicit) earmarks =====
 
     // A goal whose savings plan is LIVE in the 2025 test window: $100 on the
     // 1st of each month (Jan–Dec 2025), $100 already saved, purchase far out.

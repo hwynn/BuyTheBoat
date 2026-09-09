@@ -762,7 +762,7 @@ public class PatternRepositoryTests : IDisposable
 
     // The account a pattern is filed under is storage-only — these cover that
     // the filing round-trips and regroups into per-account lists, which is what
-    // rebuilds each page's finance_patterns (planning/10 item 2-A).
+    // rebuilds each page's finance_patterns (the multi-account pattern-filing design).
     [Fact]
     public void Patterns_regroup_into_the_account_they_were_filed_under()
     {

@@ -1,23 +1,15 @@
 # 25 — Editing a finance pattern with existing history
 
-**Status: MOSTLY BUILT — started 2026-08-11, last updated 2026-08-17.** A new problem surfaced outside the
-"Adjusting the Plan" phase's original 0–6 stage sequence (all design-complete, see
-[13](13-adjusting-the-plan-charter.md)) — during the same UI-implementation stretch that produced
-[21](21-form-architecture.md)/[22](22-plan-health-state.md)/[23](23-form-behavior.md), the same way those
-three did. Items A–F below are all SETTLED, including F's own feasibility test, and the
-Trivial/Critical/Concerning field categorization is SETTLED — see "Final field categorization" below.
-**Item F's own in-place consolidation (2026-08-13) and amount-only scaling (2026-08-14) mechanisms are
-BUILT.** The other two keep-separate/consolidate combinations (break-off side; a `start_date`-only
-retroactive correction) are **NOT built as real "keep separate" mechanisms — instead, both were found
-2026-08-17 to have been silently doing nothing at all (one didn't even save the edit itself), and were
-fixed to always consolidate as a safety fallback, not the intended final answer.** The real feature —
-letting the user genuinely keep those plans separate too — is still open; see
-`redesign/memory/project_next_phase.md`'s own "OPEN QUESTIONS FOR THE AUTHOR" section (added 2026-08-17)
-for the specific, still-unresolved shape of it. **Item G is BUILT** (2026-08-14, single-plan break-off
-case; 2026-08-16, multi-plan). **The Concerning popup (`AskForSuggestions`) and Item E's own "show the
-specific consequence" — both listed under "Still open" below for years — are now BUILT too, 2026-08-17**,
-though the Concerning popup is deliberately minimal, not the full strategy-picker described in "Still
-open" — see that section for exactly what's still missing there.
+**Status: MOSTLY BUILT.** A problem that surfaced outside the phase's 0–6 stage sequence, during the
+same UI-implementation stretch as [21](21-form-architecture.md)/[22](22-plan-health-state.md)/[23](23-form-behavior.md).
+Items A–G are SETTLED and the Trivial/Critical/Concerning field categorization is settled; most
+mechanisms are built (in-place consolidation, amount-only scaling, Item G, the minimal Concerning
+popup, Item E's specific-consequence text). **Still genuinely open:** letting the user *keep multiple
+plans separate* rather than force-consolidating — the two keep-separate combinations were found to be
+silently doing nothing and were fixed to always consolidate as a safety fallback, not the intended
+answer (the still-unresolved shape is in `redesign/memory/project_next_phase.md`'s "OPEN QUESTIONS FOR
+THE AUTHOR"); the Concerning popup is deliberately minimal, not the full strategy-picker "Still open"
+describes.
 
 **The problem in one paragraph:** editing a `FinancialPattern` through the ordinary Expense form can,
 today, retroactively rewrite already-occurred history — nothing before the as-of date is a locked
@@ -33,32 +25,15 @@ completely separate save path, with none of Items B–G's machinery anywhere in 
 protecting a `FinancialPattern`'s own already-occurred history, and nothing built for a `EarMarkPattern`
 edit asks that same question, under either save path described below.
 
-**Updated 2026-08-16 — the save path itself changed, but not in a way that touches this gap.**
-`EarmarkFormPanel.SaveSavingsPlan` → `MainWindow`'s `EarmarkForm.PatternSaved` handler is no longer a
-bare `_earMarkPatterns.Save(pattern)` — it now goes through `FinancePatternSaveConfirmation`'s own
-second, EarMarkPattern-editing constructor (see [27](27-editing-within-a-patterns-chain.md), BUILT). But
-that mechanism's two questions ("stay linked or break," "cascade forward or not") are scoped to a plan's
-relationship with its own chain *siblings* (other `EarMarkPattern`s sharing the same `finance_id`) — they
-only fire when `hasPredecessor`/`hasSuccessor` is true. They are not a B–G-style "you're about to
-retroactively rewrite already-occurred history" guard, and were never designed as one. So for exactly the
-scenario this note originally called out — a single, unchained plan (no predecessor, no successor) —
-**the gap described below is completely unchanged**: an `Amount` edit still re-rates the plan's *entire*
-history the next time the forecast rebuilds, silently, the instant Save is clicked, with no question asked
-at all (`PlanChangeCanCascade` stays false with no successor to cascade to). Only a plan that's *part of a
-chain* now gets asked anything, and even then the question is about its neighbors going forward, not about
-its own past.
-
-Changing a plan's own `Amount` retroactively re-rates its *entire* history the
-next time the forecast rebuilds, silently, the instant Save is clicked, no matter how much real history
-sits behind it. Confirmed with real numbers in
-`EarmarkFormLivePreviewTests.Editing_a_savings_plans_own_amount_retroactively_rerates_its_whole_history_with_no_protection`:
-a plan funding a $100/month bill, edited to $120/month with 6 months of history behind it, silently
-accumulates a $120 surplus with no warning and no live-preview indication either (that same test file's
-own header comment covers why the live preview structurally can't show it). **Answered by the author,
-same day: a real gap, not an intentional boundary — but deliberately parked for a future iterative
-development cycle, after this document's own work is fully handled. See
-[26](26-editing-an-earmark-pattern.md) for the author's own stated direction, recorded so it isn't lost
-before that cycle starts — nothing there is designed yet.**
+**The EarMarkPattern save path** now goes through `FinancePatternSaveConfirmation`'s second constructor
+(see [27](27-editing-within-a-patterns-chain.md)), but that only asks about a plan's chain *siblings*
+("stay linked or break," "cascade forward or not") when `hasPredecessor`/`hasSuccessor` — it is **not** a
+"you're about to rewrite already-occurred history" guard. So for a single, unchained plan the gap is
+unchanged: an `Amount` edit re-rates the plan's *entire* history the instant Save is clicked, silently,
+with no question and no live-preview indication (confirmed in `EarmarkFormLivePreviewTests`). **The
+author's ruling: a real gap, not an intentional boundary — but deliberately parked for a future
+iterative cycle after this document's own work is handled; see [26](26-editing-an-earmark-pattern.md)
+for the stated direction (nothing there is designed yet).**
 
 ### Reading list
 1. [03-assumptions-glossary.md, Chapter 20](../../03-assumptions-glossary.md#chapter-20-editing-a-finance-pattern-with-existing-history) — the new assumption itself, `1.2.3.10.a5`.
@@ -90,8 +65,7 @@ once a `FinancialPattern` has an expected transaction dated on or before the as-
 `end_date` may change without triggering item C below.
 
 New assumptions get a clearly-separated section in `03` (not mixed into the verbatim a01/a02/a03
-reconstruction) and, for now, **no row in [05](05-original-structure-restructure.md)'s divergence
-registry** — that registry is regenerated from real `DIVERGENCE(...)` code tags, so it earns a row
+reconstruction) and, for now, **no `DIVERGENCE(...)` code tag yet** — the divergence registry is regenerated from those tags, so it earns one
 once code actually lands, the same way `ActiveFrom`/`AutoRenew` got theirs. Also **not yet a node in
 [06](../../06-assumption-dependency-graph.md)** — that graph is mechanically regenerated from the
 original `.uxf` chart, and this assumption has no chart box to regenerate from; a hand-added node
@@ -112,7 +86,7 @@ each of these as a plain, uniform, no-retroactive-effect edit, and nothing ties 
 anything this assumption exists to protect. (`Mandatory` specifically: the premise that it gates
 whether an outflow gets earmarked at all was true of the old, retired `BillAccrualAt` ramp — post
 Stage-1-revision, every outflow gets a plan regardless of mandatory status;
-[`(positive-implicit)` in 05](05-original-structure-restructure.md#divergence-sites) confirms this
+the `DIVERGENCE(positive-implicit)` code tag confirms this
 directly. Toggling it only changes deallocation drain order going forward.)
 
 ## Item B — The new UI design rule · SETTLED 2026-08-11
@@ -152,7 +126,7 @@ What's new relative to item 4's existing, already-built *deliberate* flow:
   occurrence), the cut date equals `Start`, and `BreakOffFactory.BreakOff` throws — it requires the
   cut strictly after `Start`. Left unhandled until it actually comes up (author).
 - **The confirmation offers a real choice**, once a past expected transaction is actually touched —
-  this is [16, F24](16-stage3-break-off.md#item-6--the-taxonomy--settled-2026-07-29)'s own
+  this is [16, F24](16-stage3-break-off.md)'s own
   correction-vs-change distinction, just exposed at edit time instead of requiring the user to already
   know to reach for item 4's own button ahead of time:
   - **Correct it everywhere** — an ordinary plain edit, same `finance_id`, applies retroactively.
@@ -161,7 +135,7 @@ What's new relative to item 4's existing, already-built *deliberate* flow:
     as described above.
 
 **TODO — keep this compatible with renewal.** `BreakOffFactory.Renew`
-([15](15-stage2-pattern-lifetime.md#ongoing--renewal-resolved-and-built-author-2026-07-29)) already
+([15](15-stage2-pattern-lifetime.md)) already
 wraps plain `BreakOff` for the periodic-renewal case. Whatever thin wrapper implements this trigger's
 pinned-cut-date call into `BreakOff` should sit alongside `Renew`, not fork away from it — both are
 callers of the same underlying factory, and `Renew` should keep working unmodified once this lands.
@@ -461,7 +435,7 @@ Concerning axis, `PlanHealthState`/`GoalShortfall`'s territory)?
 | Field | Touches `1.2.3.10.a5`? | Concerning (pacing) axis? | Note |
 |---|---|---|---|
 | `start_date` | Yes | — | The orphaning-risk field; Item E's "always offer both, warn on consequence" applies directly |
-| `end_date` | No — exempted by the assumption itself | Yes | Both directions: closer means the rate may not reach the milestone in time; farther, on a *recurring* bill, means the earmark pattern's own `Until` doesn't auto-follow, so later occurrences go unfunded — the same gap [F18](15-stage2-pattern-lifetime.md#f18--an-ongoing-patterns-savings-plan-must-be-ongoing-too) found for the "ongoing" flag, here triggered by a manual edit instead |
+| `end_date` | No — exempted by the assumption itself | Yes | Both directions: closer means the rate may not reach the milestone in time; farther, on a *recurring* bill, means the earmark pattern's own `Until` doesn't auto-follow, so later occurrences go unfunded — the same gap [F18](15-stage2-pattern-lifetime.md) found for the "ongoing" flag, here triggered by a manual edit instead |
 | recurrence shape (frequency/interval/by-day) | Yes — `3.13.7.a1`/`3.13.7.a2` tie valid dates to the rrule shape directly | Yes — sawtooth misalignment | Re-proposing via `AllocationPlanProposer.Propose()` (the same function already used for the Concerning-category's default suggestion) naturally realigns to the new dates — no separate mechanism needed |
 | `amount` | Yes — `ExpectedTransaction.expected_amount` is drawn straight from it | Yes | |
 | `mandatory`/skippable | **No** (corrected from "concerning in some situations") | **No** | Matches [B8](13b-user-action-catalog.md) exactly — every outflow already gets a plan regardless of mandatory status since the Stage-1 revision; toggling only changes deallocation drain order |

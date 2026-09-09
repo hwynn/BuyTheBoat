@@ -1,7 +1,7 @@
 namespace MyMoneyForecast.Domain;
 
 // The shape Q3 ("am I on track?") takes differs per kind of expense
-// (planning/08-forecast-tab-design-philosophy.md §3.III): a one-time optional
+// (planning/11-ui-design-and-decisions.md §A, selected day): a one-time optional
 // goal cares about the milestone and a relative due date; a regular bill cares
 // about "can I pay it in full right now"; a paycheck just gives money. This is
 // the domain vocabulary display layers branch on.

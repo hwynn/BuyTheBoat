@@ -879,8 +879,8 @@ public sealed class FinancePatternSaveConfirmation
 
         // 1.2.3.10.a5's own trigger — an occurrence on or before the as-of
         // date is exactly "an expected transaction on an expired page in the
-        // past" under today's single-page model (planning/03, Ch.20's own
-        // formal-vs-practical note). Checked against the SAVED pattern's own
+        // past" under today's single-page model (the assumptions glossary
+        // Ch.20's own formal-vs-practical note). Checked against the SAVED pattern's own
         // occurrences, not the proposed one — what already happened is fixed
         // regardless of what's being typed now.
         var hasPastOccurrence = saved.DatePattern.GetOccurrences(to: forecast.AsOfDate).Count > 0;

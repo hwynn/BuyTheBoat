@@ -1,27 +1,13 @@
 # 22 — `PlanHealthState`: the Earmark form's plan-health content
 
-**Status: IN PROGRESS, 2026-08-05.** This is the detailed working record for a body of design work
-that grew too large to keep as a paragraph inside [21](21-form-architecture.md) — everything since
-21's "four plan-health use cases" section was marked "content design queued as the next step"
-(2026-08-02). If you are picking this up cold: read this whole document before touching anything in
-`PlanHealthState.cs`, the Earmark form's helper regions, or
-[earmark-form-layout-mockups.html](mockups/earmark-form-layout-mockups.html)'s Summary variants.
-Nothing here is a settled spec ready to implement wholesale — treat each numbered section's own
-SETTLED/OPEN markers as the truth, not the existence of this document.
-
-**Note added 2026-08-08:** substantial work has landed since 2026-08-05 that isn't written up as its
-own numbered section here yet — `IsFirstOccurrencePending`/`FirstOccurrenceShortfall`
-(`PlanHealthState.cs`, `TransactionLogBookFactory`), the RRule preview's health highlighting wired to
-real data for the first time (`RecurrenceRuleEditor.SetHighlight`,
-`PlanHealthMessages.RRulePreviewCaption`/`UnderfundedReleaseHighlightLegend`), and the Summary
-chart's own third and fourth lines (the "proposed — live estimate" line and the One-off mode
-"addition" line). The reasoning for all of it lives in the code's own comments at each site (this
-codebase's established convention — search for "2026-08-07"/"2026-08-08" author-dated comments in
-`EarmarkFormPanel.xaml.cs`, `SummaryRegion.xaml.cs`, and `PlanHealthMessages.cs`) and in
-[`planning/mockups/settled-designs.html`](mockups/settled-designs.html)'s Earmark · 6/7 for the
-visual record. Not folded into this document's own section structure — left as a pointer rather than
-guessed at, since this document's own numbered-section format deserves the same care the rest of it
-got, not a rushed retrofit.
+**Status: IN PROGRESS.** The detailed working record for the Earmark form's plan-health content —
+too large to keep inside [21](21-form-architecture.md). Nothing here is a settled spec ready to
+implement wholesale — treat each numbered section's own SETTLED/OPEN markers as the truth. Substantial
+work has since landed that isn't written up as its own section here (`IsFirstOccurrencePending`/
+`FirstOccurrenceShortfall`, the RRule preview's health highlighting, the Summary chart's third/fourth
+lines); the reasoning for each lives in the code's own comments at its site (`EarmarkFormPanel.xaml.cs`,
+`SummaryRegion.xaml.cs`, `PlanHealthMessages.cs`) and in the settled-designs mockup, not folded back
+into this document's section structure.
 
 **Reading list:** [21](21-form-architecture.md) (the form architecture this feeds into, especially its
 Earmark section), [14](14-stage1-allocation-model.md) (the milestone reset-at-release fix this all
@@ -112,7 +98,7 @@ and separated now, and the heavy first-payment message left for the status indic
 
 The "set aside vs. genuinely short" split above is really the bottom and top of a **three-rung ladder**
 of *how bad a shortfall is / whether it can be fully fixed*. The forecast's selected-day view
-(planning/08 §3, planning/11 §B) surfaces the same kind of problem, so the two pages **share one
+(planning/11 §A/§B) surfaces the same kind of problem, so the two pages **share one
 vocabulary** — `short`, `free`, `set aside`, `transfer` — even though the forms *narrate* (full
 sentences) and the forecast *states* (blunt fragments). Author, 2026-09-04: keeping the words
 consistent matters; the sentence shape can differ per page.

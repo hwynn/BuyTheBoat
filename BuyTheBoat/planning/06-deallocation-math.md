@@ -1,10 +1,8 @@
 # 06 — Deallocation math (from `DeallocationProof.ods`)
 
 Reconstructed 2026-07-10 from `DeallocationProof.ods` (sheets `explanation`,
-`DeallocationPieces`; test vectors in `DeallTest`). **Status, 2026-08-08: the
-engine this documents is fully built** — see
-[07-deallocation-implementation-plan.md](07-deallocation-implementation-plan.md)
-for the staged implementation (Steps 1-3, all done). This doc remains the
+`DeallocationPieces`; test vectors in `DeallTest`). **The engine this documents
+is fully built** — `DeallocationCalculator` and its cascade integration. This doc remains the
 authoritative math reference: the formulas, symbols, and goal invariants below
 are the test oracles the implementation was built and verified against, not a
 to-do list. Verbatim formulas are quoted from `DeallocationPieces`; prose
@@ -331,7 +329,7 @@ uniformly — so its behavior comes from the author directly:
   work, out of scope for this deallocation doc.
 
 Implementation note: today's code already puts a `finance_id = null` cushion
-jar on every snapshot as a $0 placeholder (see planning/05). This phase gives
+jar on every snapshot as a $0 placeholder (see planning/12). This phase gives
 it a real amount and makes it the priority-0 participant in deallocation.
 
 ## Mined but set aside

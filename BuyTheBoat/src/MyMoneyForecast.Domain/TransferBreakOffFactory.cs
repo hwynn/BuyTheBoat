@@ -90,7 +90,7 @@ public static class TransferBreakOffFactory
         if (request.PredecessorWithdrawal.AutoRenew != request.PredecessorDeposit.AutoRenew)
         {
             throw new ArgumentException(
-                "Both legs of a transfer must agree on AutoRenew (planning/18, B12) — they have already drifted apart.",
+                "Both legs of a transfer must agree on AutoRenew (planning/13, B12) — they have already drifted apart.",
                 nameof(request));
         }
 
@@ -174,7 +174,7 @@ public static class TransferBreakOffFactory
         if (request.PredecessorWithdrawal.AutoRenew != request.PredecessorDeposit.AutoRenew)
         {
             throw new ArgumentException(
-                "Both legs of a transfer must agree on AutoRenew (planning/18, B12) — they have already drifted apart.",
+                "Both legs of a transfer must agree on AutoRenew (planning/13, B12) — they have already drifted apart.",
                 nameof(request));
         }
 

@@ -326,7 +326,7 @@ public partial class MainWindow : Window
         // isn't a recurring bill), so the no-income shape reserves the full
         // amount from the as-of date. spreadEvenlyWithNoIncome: false — a
         // transfer stays plain and immediate, not spread like a one-time
-        // goal (planning/18, C1); a deliberate ruling against adaptive
+        // goal (planning/13, C1); a deliberate ruling against adaptive
         // behavior for transfers. Propose first: the proposer may stretch
         // the withdrawal's active span back to the as-of date (planning/15,
         // ActiveFrom) so its plan fits, and that prepared withdrawal is what
