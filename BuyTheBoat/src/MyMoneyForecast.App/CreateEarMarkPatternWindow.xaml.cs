@@ -102,7 +102,6 @@ public partial class CreateEarMarkPatternWindow : Window
             startAmount: startingAllocation,
             goalAmount: goalAmount,
             actualTrajectory: [], // no live forecast here (see this method's own header comment) — chart shows just the goal line until that plumbing exists
-            milestoneTrajectory: [], // could be computed (TransactionLogBookFactory.ComputeMilestoneTrajectory needs no forecast), just not wired to this window yet
             jarStateLine: "(fund jar state needs a live forecast — not wired in yet)");
     }
 

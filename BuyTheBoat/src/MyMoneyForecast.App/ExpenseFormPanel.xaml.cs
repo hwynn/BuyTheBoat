@@ -381,16 +381,12 @@ public partial class ExpenseFormPanel : UserControl
                 startAmount: 0m,
                 goalAmount: goalAmount,
                 actualTrajectory: [],
-                milestoneTrajectory: [],
                 jarStateLine: "Savings plan may need to be consolidated. We don't have a certain preview.");
             return;
         }
 
         var narrative =
             $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {Math.Abs(plan.Amount):C0} per occurrence, starting {plan.DatePattern.ActiveStart:MMM d, yyyy}.";
-
-        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-            [plan], existing, plan.DatePattern.ActiveStart, dueDate, plan.StartingAllocation);
 
         var forecast = RequestForecast?.Invoke();
         var health = forecast?.PlanHealthStates.FirstOrDefault(p => p.FinanceId == existing.FinanceId);
@@ -408,7 +404,9 @@ public partial class ExpenseFormPanel : UserControl
             // first-payment warning is the aside's own third line, under Toward the
             // goal — the compact status label by the save buttons is separate.
             var isOneTime = existing.DatePattern.GetOccurrences().Count == 1;
-            jarStateLine = PlanHealthMessages.JarStateLine(jar.ExpectedAmount, jar.MilestoneAmount ?? 0m);
+            // Milestone-free here — see JarSavedLine: this form edits the bill, not
+            // the plan, so the "of $Y milestone" comparison isn't helpful.
+            jarStateLine = PlanHealthMessages.JarSavedLine(jar.ExpectedAmount);
             trajectoryLine = PlanHealthMessages.SummaryFutureLine(jar, health.Shortfall, health.MostImportantHealthState)
                 ?? PlanHealthMessages.SummaryRecurringPhrase(health);
             firstPaymentLine = PlanHealthMessages.FirstPaymentCoverageLine(
@@ -417,8 +415,8 @@ public partial class ExpenseFormPanel : UserControl
         }
         else
         {
-            var (expected, milestone) = ComputeLiveJarAmounts([plan], existing, plan.StartingAllocation, todayDate);
-            jarStateLine = PlanHealthMessages.JarStateLine(expected, milestone);
+            var (expected, _) = ComputeLiveJarAmounts([plan], existing, plan.StartingAllocation, todayDate);
+            jarStateLine = PlanHealthMessages.JarSavedLine(expected);
         }
 
         Summary.Load(
@@ -429,7 +427,6 @@ public partial class ExpenseFormPanel : UserControl
             startAmount: plan.StartingAllocation,
             goalAmount: goalAmount,
             actualTrajectory: GetJarTrajectory(forecast, existing.FinanceId, dueDate),
-            milestoneTrajectory: milestoneTrajectory,
             jarStateLine: jarStateLine,
             trajectoryLine: trajectoryLine,
             firstPaymentLine: firstPaymentLine);
@@ -502,9 +499,7 @@ public partial class ExpenseFormPanel : UserControl
         var narrative =
             $"We'd need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. This is a rough preview of the savings plan Save and Plan would set up — {Math.Abs(proposal.Plan.Amount):C0} per occurrence, starting {proposal.Plan.DatePattern.ActiveStart:MMM d, yyyy}.";
 
-        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-            [proposal.Plan], pattern, proposal.Plan.DatePattern.ActiveStart, dueDate, proposal.Plan.StartingAllocation);
-        var (expected, milestone) = ComputeLiveJarAmounts([proposal.Plan], pattern, proposal.Plan.StartingAllocation, todayDate);
+        var (expected, _) = ComputeLiveJarAmounts([proposal.Plan], pattern, proposal.Plan.StartingAllocation, todayDate);
 
         Summary.Load(
             narrative,
@@ -514,8 +509,7 @@ public partial class ExpenseFormPanel : UserControl
             startAmount: proposal.Plan.StartingAllocation,
             goalAmount: goalAmount,
             actualTrajectory: [], // nothing saved yet — no real walked history to show
-            milestoneTrajectory: milestoneTrajectory,
-            jarStateLine: PlanHealthMessages.JarStateLine(expected, milestone));
+            jarStateLine: PlanHealthMessages.JarSavedLine(expected));
     }
 
     /// <summary>[CALC] Proposes a hypothetical Allocation Plan for an outflow that doesn't have one yet — the same AllocationPlanProposer.Propose call MainWindow.AutoCreateAllocationPlan makes at real save time, scoped to the same account and excluding transfer legs the same way. Null whenever RequestForecast isn't wired yet, or the proposer itself rejects the pattern (defensive only — an outflow this method's own caller already confirmed has Amount &lt; 0 shouldn't actually reach that throw).</summary>

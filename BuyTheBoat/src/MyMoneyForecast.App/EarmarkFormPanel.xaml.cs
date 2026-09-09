@@ -1144,10 +1144,12 @@ public partial class EarmarkFormPanel : UserControl
         // the save that navigated here. MainWindow's own NavigateToEarmarkForm now
         // recomputes the forecast (RefreshForecast) before handing it in via
         // SetContext, so this reads the post-save world.
-        // Still open, suspect (2): the live-preview gap already noted on this method
-        // and in SummaryRegion — typed-but-unsaved values aren't folded into the
-        // chart, so a suggestion's pre-filled (but not-yet-saved) amount doesn't
-        // move the Summary until it's actually saved.
+        // Suspect (2) RESOLVED: the chart's forward line now always reflects the
+        // typed-but-unsaved fields. On this (earmark) form it's the live
+        // proposedTrajectory, and the frozen "committed plan" milestone line that
+        // used to sit stale beside it was removed. The finance-pattern form no
+        // longer draws a milestone line at all, since a finance-pattern edit only
+        // changes the plan implicitly, behind the save-confirmation popup.
         UpdateStartingPointRegion();
 
         if (_selectedGoal is not { } goal)
@@ -1197,18 +1199,17 @@ public partial class EarmarkFormPanel : UserControl
         var trajectory = GetJarTrajectory(goal.FinanceId, chartEnd);
         var jar = trajectory.Count > 0 ? trajectory[0].Jar : null;
 
-        // The chart's milestone line spans the plan from Start through the chart's
-        // own end (the due date, or the 5-year cap for a far-off repeating goal) —
-        // not just today onward, since MilestoneAmount is pure pattern math and
-        // needs no real transaction history. Gathers every EarMarkPattern sharing
-        // this FinanceId (a goal can have more than one — concurrent earmark
-        // patterns, or a break-off chain).
+        // Every EarMarkPattern sharing this FinanceId (a goal can have more than
+        // one — concurrent earmark patterns, or a break-off chain). Only used below
+        // to detect whether a concurrent plan exists; the chart's forward line is
+        // the LIVE proposed line built from the typed fields (proposedTrajectory,
+        // below), so there's no longer a separate frozen "committed plan" milestone
+        // line drawn from these saved patterns — the one milestone line always
+        // reflects what the user has currently typed.
         var patternsForMilestone = _forecast?.Accounts
             .SelectMany(account => account.Page.EarmarkPatterns)
             .Where(p => p.FinanceId == goal.FinanceId)
             .ToList() ?? [];
-        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-            patternsForMilestone, goal, plan.DatePattern.ActiveStart, chartEnd);
 
         string narrative;
         string jarStateLine;
@@ -1434,9 +1435,6 @@ public partial class EarmarkFormPanel : UserControl
             narrative += " Another earmark pattern is allocating funds alongside this one.";
         }
 
-        // A committed-plan milestone line applies to every goal with a
-        // savings plan, one-time or repeating.
-        //
         // peakDates labels up to 3 gridlines with their own dates, rather
         // than every occurrence a frequently-repeating pattern would have.
         // Empty for a one-time goal — DrawChart falls back to a plain
@@ -1452,7 +1450,6 @@ public partial class EarmarkFormPanel : UserControl
             startAmount: GetStartingPointTotal(plan),
             goalAmount: goalAmount,
             actualTrajectory: trajectory.Select(p => (p.Date, p.Jar.ExpectedAmount)).ToList(),
-            milestoneTrajectory: milestoneTrajectory,
             jarStateLine: jarStateLine,
             trajectoryLine: trajectoryLine,
             firstPaymentLine: firstPaymentLine,

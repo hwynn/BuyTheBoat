@@ -23,6 +23,11 @@ public static class PlanHealthMessages
     public static string JarStateLine(decimal expectedAmount, decimal milestoneAmount) =>
         $"{expectedAmount:C0} saved of {milestoneAmount:C0} milestone";
 
+    /// <summary>[CALC] The "Fund jar, today" line WITHOUT the milestone comparison — just "$X saved". The finance-pattern form uses this: how much is set aside for the bill is worth showing, but the "of $Y milestone" gap is plan-state detail that isn't helpful while editing the bill itself.</summary>
+    /// <param name="expectedAmount">What the jar currently holds.</param>
+    public static string JarSavedLine(decimal expectedAmount) =>
+        $"{expectedAmount:C0} saved";
+
     /// <summary>[CALC] "$X saved of $Y milestone[ — $Z short/over]" — the two-amounts line plus the today-delta. Used by the Concerning save-confirmation popup, which wants the shortfall spelled out; the Summary aside uses the plain JarStateLine instead.</summary>
     /// <param name="jar">This savings plan's own FundJar (today's reading) — PlanHealthState alone doesn't carry the raw saved/milestone amounts.</param>
     /// <param name="state">The plan's current health state.</param>

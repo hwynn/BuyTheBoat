@@ -20,10 +20,7 @@ namespace MyMoneyForecast.App;
 //    architecture: TransactionLogBookFactory only ever cascades day-by-day
 //    balances forward from AsOfDate — no historical BalanceRecord exists
 //    before today — so before Today it's a straight-line placeholder (one
-//    real point at each end, nothing real in between). MilestoneTrajectory
-//    has no such limit and spans the whole plan, Start through the due
-//    date, since it's pure pattern math with no dependency on real
-//    transaction history.
+//    real point at each end, nothing real in between).
 public partial class SummaryRegion : UserControl
 {
     private ChartData? _chart;
@@ -38,7 +35,6 @@ public partial class SummaryRegion : UserControl
         DateOnly Start, DateOnly AsOfDate, DateOnly DueDate,
         decimal StartAmount, decimal GoalAmount,
         IReadOnlyList<(DateOnly Date, decimal ActualAmount)> ActualTrajectory,
-        IReadOnlyList<(DateOnly Date, decimal MilestoneAmount)> MilestoneTrajectory,
         IReadOnlyList<DateOnly> PeakDates,
         DateOnly? HighlightDate,
         IReadOnlyList<(DateOnly Date, decimal Amount)> ProposedTrajectory,
@@ -62,7 +58,6 @@ public partial class SummaryRegion : UserControl
     /// <param name="startAmount">What was already saved when the plan started.</param>
     /// <param name="goalAmount">The full amount needed.</param>
     /// <param name="actualTrajectory">Real (Date, ExpectedAmount) samples from today through the due date or forecast horizon, whichever comes first — ordered. Empty when there's no forecast yet. Today-onward only; see this class's own header comment for why the segment before Today stays an approximation.</param>
-    /// <param name="milestoneTrajectory">Real (Date, MilestoneAmount) samples across the WHOLE plan, Start through the due date — no Today split, since this one doesn't need real transaction history. Empty when there's no plan. Drawn for every goal with a plan, one-time or repeating.</param>
     /// <param name="jarStateLine">The "Fund jar, today" region's line — where the jar stands right now.</param>
     /// <param name="trajectoryLine">The "Toward the goal" region's line — the long-run picture. Null/empty hides that whole labeled region (label + separator + text).</param>
     /// <param name="firstPaymentLine">The first-payment warning, shown UNDER the aside (no label of its own), separated by space. Null/empty hides it — e.g. the Expense form routes this to its own status indicator instead, so it passes null here.</param>
@@ -75,7 +70,6 @@ public partial class SummaryRegion : UserControl
         DateOnly start, DateOnly asOfDate, DateOnly dueDate,
         decimal startAmount, decimal goalAmount,
         IReadOnlyList<(DateOnly Date, decimal ActualAmount)> actualTrajectory,
-        IReadOnlyList<(DateOnly Date, decimal MilestoneAmount)> milestoneTrajectory,
         string jarStateLine, string? trajectoryLine = null, string? firstPaymentLine = null,
         IReadOnlyList<DateOnly>? peakDates = null, DateOnly? highlightDate = null,
         IReadOnlyList<(DateOnly Date, decimal Amount)>? proposedTrajectory = null, decimal? additionAmount = null)
@@ -95,7 +89,7 @@ public partial class SummaryRegion : UserControl
         FirstPaymentText.Text = firstPaymentLine ?? string.Empty;
 
         _chart = new ChartData(
-            start, asOfDate, dueDate, startAmount, goalAmount, actualTrajectory, milestoneTrajectory, peakDates ?? [], highlightDate,
+            start, asOfDate, dueDate, startAmount, goalAmount, actualTrajectory, peakDates ?? [], highlightDate,
             proposedTrajectory ?? [], additionAmount);
         DrawChart();
     }
@@ -128,10 +122,9 @@ public partial class SummaryRegion : UserControl
             (date.ToDateTime(TimeOnly.MinValue) - chart.Start.ToDateTime(TimeOnly.MinValue)).TotalDays / totalDays;
 
         var actualMax = chart.ActualTrajectory.Count == 0 ? 0m : chart.ActualTrajectory.Max(p => p.ActualAmount);
-        var milestoneMax = chart.MilestoneTrajectory.Count == 0 ? 0m : chart.MilestoneTrajectory.Max(p => p.MilestoneAmount);
         var proposedMax = chart.ProposedTrajectory.Count == 0 ? 0m : chart.ProposedTrajectory.Max(p => p.Amount);
         var additionMax = chart.AdditionAmount is { } addForMax ? actualMax + addForMax : 0m;
-        var maxAmount = new[] { chart.GoalAmount, chart.StartAmount, actualMax, milestoneMax, proposedMax, additionMax }
+        var maxAmount = new[] { chart.GoalAmount, chart.StartAmount, actualMax, proposedMax, additionMax }
             .Max(amount => (double)amount) * 1.05;
         double Y(decimal amount) => topMargin + plotHeight - plotHeight * ((double)amount / Math.Max(1, maxAmount));
         var legendEntries = new List<(string Label, Brush Color, bool Dashed)>();
@@ -162,6 +155,10 @@ public partial class SummaryRegion : UserControl
         // SteelBlue solid treatment for both, since they occupy the same
         // visual role (this savings plan's own progress) and are never on
         // screen at the same time to be confused with each other.
+        //
+        // This proposed line IS the milestone line, and only the earmark-pattern
+        // form ever passes it — a projected milestone is only useful where the
+        // user sets the plan directly, so the finance-pattern form never shows one.
         if (chart.ProposedTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline
@@ -195,29 +192,6 @@ public partial class SummaryRegion : UserControl
                 StrokeThickness = 2,
             });
             legendEntries.Add(("Fund jar (actual)", Brushes.SteelBlue, false));
-        }
-
-        // "Milestone" — no Today split (see this class's own header comment
-        // for why: pure pattern math, real for the whole window). Reuses
-        // Summary B's own established "second line" violet treatment.
-        // Prepends (Start, 0): MilestoneAmount is the running sum of the
-        // plan's own repeated contributions alone, with no notion of a
-        // starting-allocation bonus riding on top of it, so the line always
-        // begins at 0 regardless of what the real samples' own first date
-        // happens to be. Drawn for every goal with a plan, one-time or
-        // repeating (see Load's own doc comment).
-        if (chart.MilestoneTrajectory.Count > 0)
-        {
-            var milestonePoints = new List<Point> { new(X(chart.Start), Y(0m)) };
-            milestonePoints.AddRange(chart.MilestoneTrajectory.Select(p => new Point(X(p.Date), Y(p.MilestoneAmount))));
-            ChartCanvas.Children.Add(new Polyline
-            {
-                Points = new PointCollection(Stepped(milestonePoints)),
-                Stroke = Brushes.MediumPurple,
-                StrokeThickness = 2,
-                StrokeDashArray = [3, 2],
-            });
-            legendEntries.Add(("Milestone (committed plan)", Brushes.MediumPurple, true));
         }
 
         // One-off mode's own extra line — the ActualTrajectory shape,
