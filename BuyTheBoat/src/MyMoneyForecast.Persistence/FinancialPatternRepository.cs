@@ -81,6 +81,25 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return reader.Read() ? Read(reader) : null;
     }
 
+    /// <summary>[READS FILE] Returns a transfer's two legs (its withdrawal and deposit patterns), by the transfer id they're tagged with — the withdrawal is the one with a negative Amount, the deposit positive. Empty if the transfer has no patterns. Used to extend an ongoing transfer forward, which needs the legs the FinancialPattern objects themselves don't name.</summary>
+    /// <param name="transferId">The transfer whose legs to fetch.</param>
+    public IReadOnlyList<FinancialPattern> GetByTransferId(int transferId)
+    {
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM FinancialPatterns WHERE TransferId = $TransferId ORDER BY FinanceId;";
+        command.Parameters.AddWithValue("$TransferId", transferId);
+
+        using var reader = command.ExecuteReader();
+        var legs = new List<FinancialPattern>();
+        while (reader.Read())
+        {
+            legs.Add(Read(reader));
+        }
+
+        return legs;
+    }
+
     /// <summary>[READS FILE] Returns every financial pattern, grouped by the account it's filed under. Feeds the forecast engine's per-account partitioning.</summary>
     public IReadOnlyDictionary<int, IReadOnlyList<FinancialPattern>> GetAllByAccount()
     {

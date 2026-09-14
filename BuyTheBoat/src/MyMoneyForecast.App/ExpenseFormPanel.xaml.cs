@@ -24,9 +24,11 @@ namespace MyMoneyForecast.App;
 // plan's CURRENTLY-SAVED health outlines the button, but comparing the
 // live-typed fields against what's saved, to catch an edit that would
 // NEWLY cause a problem, is a separate, more involved check, still not
-// built. "Keeps going" stays disabled (see its own note below). The
-// advanced hand-built-single-occurrence escape hatch is not built — a
-// one-time Expense only ever gets the plain Due-date field.
+// built. "Keeps going" is wired now (2026-09-14): it sets AutoRenew and
+// pushes the end date to horizon+cycle (UpdateKeepsGoingEnd); the forecast-
+// time renewal pass keeps it going past that. The advanced hand-built-
+// single-occurrence escape hatch is not built — a one-time Expense only ever
+// gets the plain Due-date field.
 //
 // Summary region (2026-08-13): the aside ("Fund jar, today") and the
 // milestone/actual chart lines are wired for real now — RequestForecast
@@ -286,11 +288,24 @@ public partial class ExpenseFormPanel : UserControl
         else
         {
             RuleEditor.LoadFrom(current.DatePattern);
-            StopOnDateRadio.IsChecked = true;
-            StopPaidOffRadio.IsChecked = false;
-            UpdateStopMode();
-            RuleEditor.SetHostEndDate(current.DatePattern.Until);
-            StopEndDatePicker.SelectedDate = current.DatePattern.Until.ToDateTime(TimeOnly.MinValue);
+            if (current.AutoRenew)
+            {
+                // Ongoing: pick "keeps going" and let UpdateStopMode push the end
+                // date back out to horizon+cycle — the saved Until is invisible and
+                // recomputed on save, so we don't restore it into a picker.
+                StopKeepsGoingRadio.IsChecked = true;
+                StopOnDateRadio.IsChecked = false;
+                StopPaidOffRadio.IsChecked = false;
+                UpdateStopMode();
+            }
+            else
+            {
+                StopOnDateRadio.IsChecked = true;
+                StopPaidOffRadio.IsChecked = false;
+                UpdateStopMode();
+                RuleEditor.SetHostEndDate(current.DatePattern.Until);
+                StopEndDatePicker.SelectedDate = current.DatePattern.Until.ToDateTime(TimeOnly.MinValue);
+            }
         }
 
         UpdateDirectionDependentUi();
@@ -858,6 +873,11 @@ public partial class ExpenseFormPanel : UserControl
             // it, so don't let a stale radio state leak into the saved pattern.
             Mandatory = ExpenseRadioButton.IsChecked == true && UnskippableRadioButton.IsChecked == true,
             Description = string.IsNullOrWhiteSpace(DescriptionTextBox.Text) ? null : DescriptionTextBox.Text,
+            // "It just keeps going" — an invisible marker (planning/15). Only a
+            // repeating pattern can be ongoing; the Stops… question is hidden for
+            // one-time. Its end date rides on the rule (SetHostEndDate → horizon +
+            // a cycle, in UpdateKeepsGoingEnd); the renewal pass extends it later.
+            AutoRenew = RepeatingRadioButton.IsChecked == true && StopKeepsGoingRadio.IsChecked == true,
         });
     }
 
@@ -952,13 +972,17 @@ public partial class ExpenseFormPanel : UserControl
     private void UpdateStopMode()
     {
         var paidOff = StopPaidOffRadio.IsChecked == true;
-        StopOnDatePanel.Visibility = paidOff ? Visibility.Collapsed : Visibility.Visible;
+        var keepsGoing = StopKeepsGoingRadio.IsChecked == true;
+        // "Keeps going" has nothing to configure, so it hides both the date and
+        // payoff panels and shows its own explanatory note instead.
+        StopOnDatePanel.Visibility = paidOff || keepsGoing ? Visibility.Collapsed : Visibility.Visible;
         StopPaidOffPanel.Visibility = paidOff ? Visibility.Visible : Visibility.Collapsed;
+        KeepsGoingNote.Visibility = keepsGoing ? Visibility.Visible : Visibility.Collapsed;
         AmountLabel.Text = paidOff ? "Payment amount" : "Amount owed";
         UpdateStopEnd();
     }
 
-    /// <summary>[UI] Hands the schedule editor the end date the chosen answer implies — the picked date, or the computed loan payoff date.</summary>
+    /// <summary>[UI] Hands the schedule editor the end date the chosen answer implies — the picked date, the computed loan payoff date, or, for "keeps going", the forecast horizon plus a cycle.</summary>
     private void UpdateStopEnd()
     {
         if (StopPaidOffRadio.IsChecked == true)
@@ -967,9 +991,50 @@ public partial class ExpenseFormPanel : UserControl
             return;
         }
 
+        if (StopKeepsGoingRadio.IsChecked == true)
+        {
+            UpdateKeepsGoingEnd();
+            return;
+        }
+
         PayoffReadoutText.Text = string.Empty;
         RuleEditor.SetHostEndDate(
             StopEndDatePicker.SelectedDate is { } date ? DateOnly.FromDateTime(date) : null);
+    }
+
+    /// <summary>[UI] For "it just keeps going": sets the schedule's end date to the forecast horizon plus one cycle (planning/15) — far enough that the ongoing bill covers the whole current window, with the renewal pass (MainWindow.RenewOngoingPatternsToHorizon) pushing it further as the horizon moves out. The exact date is never shown to the user.</summary>
+    private void UpdateKeepsGoingEnd()
+    {
+        PayoffReadoutText.Text = string.Empty;
+        var horizon = RequestForecast?.Invoke().HorizonEndDate ?? DateOnly.FromDateTime(DateTime.Today).AddYears(3);
+        try
+        {
+            var schedule = RuleEditor.ReadScheduleParts();
+            RuleEditor.SetHostEndDate(AddOneCycle(horizon, schedule.Frequency, schedule.Interval));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException)
+        {
+            // Schedule not fully typed yet — a month past the horizon is a safe
+            // over-estimate; UpdateStopEnd re-runs once the schedule is valid.
+            RuleEditor.SetHostEndDate(horizon.AddMonths(1));
+        }
+    }
+
+    /// <summary>[CALC] One repeat-cycle past the given date — the "plus a cycle" buffer an ongoing bill's end date carries past the horizon so its last occurrence isn't clipped right at the edge.</summary>
+    /// <param name="date">The date to step one cycle past (the forecast horizon).</param>
+    /// <param name="frequency">The pattern's repeat frequency.</param>
+    /// <param name="interval">The pattern's repeat interval.</param>
+    private static DateOnly AddOneCycle(DateOnly date, RecurrenceFrequency frequency, int interval)
+    {
+        var step = Math.Max(1, interval);
+        return frequency switch
+        {
+            RecurrenceFrequency.Daily => date.AddDays(step),
+            RecurrenceFrequency.Weekly => date.AddDays(7 * step),
+            RecurrenceFrequency.Monthly => date.AddMonths(step),
+            RecurrenceFrequency.Yearly => date.AddYears(step),
+            _ => date.AddMonths(1),
+        };
     }
 
     /// <summary>[UI] Works out the loan's payoff date from the owed amount, the payment, and the schedule, shows it as a floor, and hands it to the editor. The owed amount is entry-only — only the resulting date is kept (W3).</summary>

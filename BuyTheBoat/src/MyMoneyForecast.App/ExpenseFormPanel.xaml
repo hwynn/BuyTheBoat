@@ -166,16 +166,15 @@
                         <StackPanel Orientation="Horizontal">
                             <RadioButton x:Name="StopOnDateRadio" Content="On a date I know" GroupName="Stop" IsChecked="True" Checked="OnStopModeChanged" Margin="0,0,18,0"/>
                             <RadioButton x:Name="StopPaidOffRadio" Content="When I've paid it off (a loan)" GroupName="Stop" Checked="OnStopModeChanged" Margin="0,0,18,0"/>
-                            <!-- TODO (2026-08-05): "Keeps going" stays disabled — per
-                                 B12's ruling it should just set an invisible AutoRenew
-                                 flag with nothing else to configure, but that flag's
-                                 own domain-level support was, as of the popup this
-                                 replaced, still waiting on the indeterminate-length
-                                 design (planning/15) to finish landing. Not this
-                                 panel's gap to close. -->
-                            <RadioButton Content="It just keeps going" GroupName="Stop" IsEnabled="False"/>
+                            <!-- "Keeps going" (B12 / planning/15): sets an invisible
+                                 AutoRenew flag with nothing to configure. Its end date
+                                 is pushed out to the forecast horizon plus a cycle, and
+                                 renewed as the horizon advances (MainWindow.
+                                 RenewOngoingPatternsToHorizon). -->
+                            <RadioButton x:Name="StopKeepsGoingRadio" Content="It just keeps going" GroupName="Stop" Checked="OnStopModeChanged"/>
                         </StackPanel>
-                        <TextBlock Text="(“It just keeps going” isn't wired up yet — coming in a later update.)"
+                        <TextBlock x:Name="KeepsGoingNote" Visibility="Collapsed"
+                                   Text="No end date to set — it keeps going, renewing on its own as your forecast reaches further out."
                                    FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
 
                         <StackPanel x:Name="StopOnDatePanel" Margin="0,8,0,0">

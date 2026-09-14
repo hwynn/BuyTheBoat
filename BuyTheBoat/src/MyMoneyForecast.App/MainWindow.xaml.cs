@@ -137,6 +137,13 @@ public partial class MainWindow : Window
         EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
         EarmarkForm.RequestForecastWithProposedPlan = ForecastWithProposedPlan;
 
+        // planning/21 Philosophy 5/7: the permanent Transfer tab, replacing the
+        // old CreateTransferWindow popup. Create-only for now (see
+        // TransferFormPanel) — the panel collects from/to/amount/schedule, this
+        // callback does the id assignment, paired-pattern expansion, and save.
+        TransferForm.TransferSaved = OnTransferSaved;
+        TransferForm.RequestForecast = EnsureForecast;
+
         // Tab-header styling stays live, not just at save/load: each panel
         // raises StateChanged on every field edit (via MarkDirty/ClearDirty),
         // not only when its own Load*/Save runs, so the header updates while
@@ -144,6 +151,7 @@ public partial class MainWindow : Window
         AccountForm.StateChanged += (_, _) => UpdateTabHeaderStyle(AccountTabHeaderText, AccountForm.IsPopulated, AccountForm.IsDirty);
         ExpenseForm.StateChanged += (_, _) => UpdateTabHeaderStyle(ExpenseTabHeaderText, ExpenseForm.IsPopulated, ExpenseForm.IsDirty);
         EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
+        TransferForm.StateChanged += (_, _) => UpdateTabHeaderStyle(TransferTabHeaderText, TransferForm.IsPopulated, TransferForm.IsDirty);
 
         RefreshGrids();
         RefreshAccountsGrid();
@@ -172,6 +180,8 @@ public partial class MainWindow : Window
         EarmarkForm.SetContext(_financialPatterns.GetAll(), _earMarkPatterns.GetAll(), _manualEarmarks.GetAll(), _financialPatterns.GetTransferFinanceIds(), _lastForecast);
 
     private void RefreshAccountFormContext() => AccountForm.SetContext(_accounts.GetAll());
+
+    private void RefreshTransferFormContext() => TransferForm.SetContext(_accounts.GetAll());
 
     private void RefreshExpenseFormContext()
     {
@@ -211,6 +221,9 @@ public partial class MainWindow : Window
         {
             case "Account":
                 RefreshAccountFormContext();
+                break;
+            case "Transfer":
+                RefreshTransferFormContext();
                 break;
             case "Expense":
                 RefreshExpenseFormContext();
@@ -271,37 +284,53 @@ public partial class MainWindow : Window
             .ToList();
     }
 
-    private void OnAddTransferClick(object sender, RoutedEventArgs e) => ShowTransferDialog();
+    /// <summary>[STEP] The Transfers list tab's "Schedule Transfer..." button — now opens the permanent Transfer form tab on a blank new transfer instead of a popup.</summary>
+    private void OnAddTransferClick(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureTwoAccountsForTransfer())
+        {
+            return;
+        }
 
-    /// <summary>[STEP] The selected day's lever for a short account (planning/11 §B): opens the transfer form already pointed at that account for what it is short. The user still confirms — we surface the problem and make the fix easy, we don't move their money for them (philosophy 1).</summary>
+        RefreshTransferFormContext();
+        TransferForm.LoadForNew();
+        SwitchToTab("Transfer");
+    }
+
+    /// <summary>[STEP] The selected day's lever for a short account (planning/11 §B): opens the Transfer form tab already pointed at that account for what it is short. The user still confirms — we surface the problem and make the fix easy, we don't move their money for them (philosophy 1).</summary>
     private void OnCoverShortfallClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: System.Windows.Data.CollectionViewGroup group }
             && group.Name is AccountGroupKey key)
         {
-            ShowTransferDialog(key.AccountId, key.Shortfall, _selectedDayCell?.Date);
+            if (!EnsureTwoAccountsForTransfer())
+            {
+                return;
+            }
+
+            RefreshTransferFormContext();
+            TransferForm.LoadForShortfall(key.AccountId, key.Shortfall, _selectedDayCell?.Date ?? CurrentAsOfDate());
+            SwitchToTab("Transfer");
         }
     }
 
-    private void ShowTransferDialog(
-        int? preselectToAccountId = null,
-        decimal? preselectAmount = null,
-        DateOnly? preselectDate = null)
+    /// <summary>[UI] Guards the two transfer entry points: a transfer needs two different accounts, so both surface the same message and back out when only one account exists.</summary>
+    private bool EnsureTwoAccountsForTransfer()
     {
-        var accounts = _accounts.GetAll();
-        if (accounts.Count < 2)
+        if (_accounts.GetAll().Count >= 2)
         {
-            MessageBox.Show(this, "You need at least two accounts to transfer between. Add another on the Accounts tab first.", "Not enough accounts", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
+            return true;
         }
 
-        var window = new CreateTransferWindow(accounts, preselectToAccountId, preselectAmount, preselectDate) { Owner = this };
-        if (window.ShowDialog() != true || window.DatePattern is not { } schedule)
-        {
-            return;
-        }
+        MessageBox.Show(this, "You need at least two accounts to transfer between. Add another on the Accounts tab first.", "Not enough accounts", MessageBoxButton.OK, MessageBoxImage.Information);
+        return false;
+    }
 
-        var namesById = accounts.ToDictionary(account => account.Id, account => account.Name);
+    /// <summary>[WRITES FILE] Persists a transfer the Transfer form tab handed back: turns from/to/amount/schedule into a Transfer plus its paired patterns, reserves for the withdrawal, saves, and returns the user to the Forecast tab. The panel already validated the inputs and cleared itself.</summary>
+    /// <param name="inputs">The from/to/amount/schedule the Transfer form collected.</param>
+    private void OnTransferSaved(TransferFormInputs inputs)
+    {
+        var namesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
 
         // Two fresh finance ids for the patterns (they are real patterns, so they
         // must not collide with any existing pattern's id — patterns included).
@@ -312,12 +341,13 @@ public partial class MainWindow : Window
             TransferId = _transfers.NextId(),
             WithdrawalFinanceId = maxFinanceId + 1,
             DepositFinanceId = maxFinanceId + 2,
-            FromAccountId = window.FromAccountId,
-            ToAccountId = window.ToAccountId,
-            FromAccountName = namesById[window.FromAccountId],
-            ToAccountName = namesById[window.ToAccountId],
-            Amount = window.Amount,
-            DatePattern = schedule,
+            FromAccountId = inputs.FromAccountId,
+            ToAccountId = inputs.ToAccountId,
+            FromAccountName = namesById[inputs.FromAccountId],
+            ToAccountName = namesById[inputs.ToAccountId],
+            Amount = inputs.Amount,
+            DatePattern = inputs.DatePattern,
+            AutoRenew = inputs.AutoRenew,
         });
 
         // The transfer reserves in the account it leaves, through a
@@ -337,9 +367,11 @@ public partial class MainWindow : Window
 
         RefreshGrids();
 
-        // The transfer's patterns change the cascade, so re-run the forecast — that
-        // is what actually clears the shortfall the lever was offered for.
+        // The transfer's patterns change the cascade, so re-run the forecast, then
+        // land on the Forecast tab (matching the other form saves) — that view is
+        // what actually shows the shortfall the lever was offered for now cleared.
         RefreshShownForecast();
+        SwitchToTab("Forecast");
     }
 
     private void OnDeleteTransferClick(object sender, RoutedEventArgs e)
@@ -516,6 +548,17 @@ public partial class MainWindow : Window
 
     private void RefreshForecast(DateOnly asOfDate, DateOnly horizonEndDate)
     {
+        // "It just keeps going" (planning/15): ongoing bills/paychecks and transfers
+        // are stored with a real, bounded end date, so before showing a forecast we
+        // extend them forward to reach the horizon. Bills renew as fresh chain
+        // segments; transfers just extend their end date in place (they have no
+        // distinctive chain identity — see ExtendOngoingTransfersToHorizon). Only the
+        // shown forecast does this — the what-if forecasts (ForecastOmitting/
+        // WithOneOff/WithProposedPlan) build straight from BuildForecastOptions and
+        // stay read-only.
+        RenewOngoingPatternsToHorizon(horizonEndDate);
+        ExtendOngoingTransfersToHorizon(horizonEndDate);
+
         var forecast = TransactionLogBookFactory.CreateForecast(BuildForecastOptions(asOfDate, horizonEndDate));
 
         _lastForecast = forecast;
@@ -528,6 +571,194 @@ public partial class MainWindow : Window
         ExportForecastSpreadsheetButton.IsEnabled = true;
 
         UpdateForecastButtonState();
+    }
+
+    /// <summary>[WRITES FILE] Extends every ongoing (AutoRenew) bill/paycheck forward with fresh renewal segments until its chain reaches the horizon, so "it just keeps going" actually keeps going however far you forecast (planning/15). A no-op — and no writes — when every ongoing pattern already reaches the horizon, so re-forecasting the same window is idempotent.</summary>
+    /// <param name="horizon">The forecast horizon the ongoing patterns must reach.</param>
+    private void RenewOngoingPatternsToHorizon(DateOnly horizon)
+    {
+        // Each renewal pushes a chain a cycle-plus past the horizon, so one pass
+        // usually settles it; the guarded loop only re-runs if a segment length
+        // somehow lands short, and stops rather than spinning.
+        for (var guard = 0; guard < 200; guard++)
+        {
+            var all = _financialPatterns.GetAll();
+            // Transfer legs can be AutoRenew too, but they renew as a linked pair
+            // through ExtendOngoingTransfersToHorizon — never here, where the
+            // single-pattern chain logic would break the pairing.
+            var transferFinanceIds = _financialPatterns.GetTransferFinanceIds();
+            var dueForRenewal = all
+                .Where(pattern => pattern.AutoRenew && !transferFinanceIds.Contains(pattern.FinanceId))
+                .Select(pattern => BreakOffFactory.FindCurrentSegment(pattern, all))
+                .DistinctBy(segment => segment.FinanceId)
+                .Where(segment => segment.DatePattern.Until < horizon)
+                .ToList();
+
+            if (dueForRenewal.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var segment in dueForRenewal)
+            {
+                RenewOngoingSegment(segment, horizon);
+            }
+        }
+    }
+
+    /// <summary>[WRITES FILE] Appends one renewal segment to an ongoing pattern's chain — a fresh, identical successor (new FinanceId, "(renewed …)" label) reaching a cycle past the horizon, CONTINUING each existing earmark pattern at the same amount and cadence rather than proposing a new one. A self-funding bill (no explicit earmark) gains none — its automatic reservation just carries on. A single bad pattern is logged and skipped rather than breaking the whole forecast.</summary>
+    /// <param name="segment">The ongoing pattern's current segment, due to reach further out.</param>
+    /// <param name="horizon">The forecast horizon the successor must clear.</param>
+    private void RenewOngoingSegment(FinancialPattern segment, DateOnly horizon)
+    {
+        try
+        {
+            // Fetched live (not from the caller's snapshot) so ids stay current
+            // across a multi-pattern batch.
+            var all = _financialPatterns.GetAll();
+            var accountId = _financialPatterns.GetAccountId(segment.FinanceId) ?? DefaultAccountId();
+            var renewalDate = segment.DatePattern.Until.AddDays(1);
+
+            // Whole years reaching a cycle-plus past the horizon, so one renewal
+            // covers the current view and won't re-fire until the horizon moves out.
+            var segmentYears = Math.Max(1, (horizon.DayNumber - renewalDate.DayNumber) / 365 + 2);
+            var successorFinanceId = all.Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max() + 1;
+
+            // A renewal changes nothing, so the successor is built directly and the
+            // pattern simply continues — no break-off-style fresh plan proposal (which
+            // would also invent an earmark for a bill that funds itself automatically).
+            // The predecessor already ends the day before renewalDate, so it needs no
+            // change. Mirrors BreakOffFactory.Renew's successor + "(renewed …)" label,
+            // minus the proposal.
+            var successor = FinancialPattern.Create(new FinancialPatternOptions
+            {
+                FinanceId = successorFinanceId,
+                Source = segment.Source,
+                Description = $"{StripRenewalMarker(segment.Description ?? segment.Source)} (renewed {renewalDate:yyyy-MM-dd})",
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = segment.DatePattern.Frequency,
+                    Interval = segment.DatePattern.Interval,
+                    ByDay = segment.DatePattern.ByDay,
+                    ByMonthDay = segment.DatePattern.ByMonthDay,
+                    DtStart = renewalDate,
+                    Until = renewalDate.AddYears(segmentYears),
+                }),
+                Amount = segment.Amount,
+                Priority = segment.Priority,
+                Mandatory = segment.Mandatory,
+                AutoRenew = segment.AutoRenew,
+            });
+            _financialPatterns.Save(successor, accountId);
+
+            // Continue each explicit earmark pattern unchanged: same amount and cadence,
+            // its span re-anchored onto the new segment (ReanchoredToStartOn keeps the
+            // contribution days; WithUntil reaches the successor's border). No rows here
+            // means a self-funding bill — nothing to carry, the auto-reservation covers it.
+            foreach (var existing in _earMarkPatterns.GetAll().Where(plan => plan.FinanceId == segment.FinanceId))
+            {
+                var continued = EarMarkPattern.Create(
+                    new EarMarkPatternOptions
+                    {
+                        FinanceId = successor.FinanceId,
+                        DatePattern = existing.DatePattern.ReanchoredToStartOn(renewalDate).WithUntil(successor.DatePattern.Until),
+                        Amount = existing.Amount,
+                        StartingAllocation = 0m,
+                    },
+                    successor);
+                _earMarkPatterns.Save(continued);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // A single malformed ongoing pattern must not break the whole forecast.
+            Log($"Skipped renewing ongoing pattern {segment.FinanceId} ({segment.Source}): {ex.Message}");
+        }
+    }
+
+    /// <summary>[CALC] Strips a "(renewed yyyy-MM-dd)" suffix from a label so a fresh one can replace it — mirrors BreakOffFactory's own private marker convention, so a pattern renewed year after year reads "(renewed 2031-…)", not a pile-up.</summary>
+    /// <param name="label">The label to strip a prior renewal marker from.</param>
+    private static string StripRenewalMarker(string label)
+    {
+        var markerIndex = label.IndexOf(" (renewed ", StringComparison.Ordinal);
+        return markerIndex < 0 ? label : label[..markerIndex];
+    }
+
+    /// <summary>[WRITES FILE] Extends every ongoing (AutoRenew) transfer's end date out past the horizon so it keeps going however far you forecast. Transfers use extend-in-place rather than the bill's chain-of-segments: they have no distinctive identity to chain on (every "Transfer to Savings" leg looks alike), so the transfer and both legs are rebuilt at the same ids with a later end date, and the withdrawal's reservation is re-fitted to the longer span. A no-op — no writes — when every ongoing transfer already reaches the horizon.</summary>
+    /// <param name="horizon">The forecast horizon the ongoing transfers must reach.</param>
+    private void ExtendOngoingTransfersToHorizon(DateOnly horizon)
+    {
+        var namesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
+
+        foreach (var transfer in _transfers.GetAll())
+        {
+            try
+            {
+                if (transfer.DatePattern.Until >= horizon)
+                {
+                    continue;
+                }
+
+                var legs = _financialPatterns.GetByTransferId(transfer.Id);
+                var withdrawal = legs.FirstOrDefault(leg => leg.Amount < 0m);
+                var deposit = legs.FirstOrDefault(leg => leg.Amount > 0m);
+
+                // Ongoing only (the withdrawal leg carries the flag), and only a
+                // well-formed pair whose accounts still exist — otherwise leave it be.
+                if (withdrawal is not { AutoRenew: true } || deposit is null
+                    || !namesById.ContainsKey(transfer.FromAccountId) || !namesById.ContainsKey(transfer.ToAccountId))
+                {
+                    continue;
+                }
+
+                var newUntil = AddOneCycle(horizon, transfer.DatePattern.Frequency, transfer.DatePattern.Interval);
+                var result = TransferFactory.Create(new TransferRequest
+                {
+                    TransferId = transfer.Id,
+                    WithdrawalFinanceId = withdrawal.FinanceId,
+                    DepositFinanceId = deposit.FinanceId,
+                    FromAccountId = transfer.FromAccountId,
+                    ToAccountId = transfer.ToAccountId,
+                    FromAccountName = namesById[transfer.FromAccountId],
+                    ToAccountName = namesById[transfer.ToAccountId],
+                    Amount = transfer.Amount,
+                    DatePattern = transfer.DatePattern.WithUntil(newUntil),
+                    AutoRenew = true,
+                });
+
+                // Clear the old withdrawal reservation before re-fitting it to the
+                // longer span, so a re-proposed plan on a different key can't leave a
+                // stale duplicate behind. A transfer's reservation is mechanical (never
+                // a user-designed plan), so re-proposing it — as the create flow does —
+                // is fine here.
+                var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate(), spreadEvenlyWithNoIncome: false);
+                _earMarkPatterns.Delete(withdrawal.FinanceId);
+                _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
+                _earMarkPatterns.Save(withdrawalPlan.Plan);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // A single malformed transfer must not break the whole forecast.
+                Log($"Skipped extending ongoing transfer {transfer.Id}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>[CALC] One repeat-cycle past the given date — the buffer an ongoing pattern's end date carries past the horizon so its last occurrence isn't clipped at the edge.</summary>
+    /// <param name="date">The date to step one cycle past (the forecast horizon).</param>
+    /// <param name="frequency">The pattern's repeat frequency.</param>
+    /// <param name="interval">The pattern's repeat interval.</param>
+    private static DateOnly AddOneCycle(DateOnly date, RecurrenceFrequency frequency, int interval)
+    {
+        var step = Math.Max(1, interval);
+        return frequency switch
+        {
+            RecurrenceFrequency.Daily => date.AddDays(step),
+            RecurrenceFrequency.Weekly => date.AddDays(7 * step),
+            RecurrenceFrequency.Monthly => date.AddMonths(step),
+            RecurrenceFrequency.Yearly => date.AddYears(step),
+            _ => date.AddMonths(1),
+        };
     }
 
     /// <summary>[CALC] Builds the ForecastOptions for the current data over the given window — the shared input both RefreshForecast (the shown forecast) and ForecastOmitting (the affordability re-forecast) run through, so the two can't drift apart.</summary>

@@ -17,10 +17,13 @@ public sealed record FinancialPatternOptions
     public string? Description { get; init; }
 
     // DIVERGENCE(auto-renew): a marker set invisibly when the user answers
-    // "it just keeps going" at creation — gates a still-unbuilt scheduled
-    // check that silently renews the pattern (BreakOffFactory.Renew) instead
-    // of letting it end. Never affects the rrule, the math, or occurrence
-    // generation; purely a flag for that future background check.
+    // "it just keeps going" at creation. It never affects the rrule, the math,
+    // or occurrence generation — the pattern still ends on its stored Until.
+    // Instead the app extends it forward at forecast time
+    // (MainWindow.RenewOngoingPatternsToHorizon adds fresh chain segments that
+    // continue the existing plan; the transfer analogue extends in place) so it
+    // always reaches the horizon; this flag is what tells those passes which
+    // patterns to keep extending.
     public bool AutoRenew { get; init; }
 }
 

@@ -11,6 +11,12 @@ public sealed record TransferRequest
     public required string ToAccountName { get; init; }
     public required decimal Amount { get; init; }
     public required RecurrenceRule DatePattern { get; init; }
+
+    // "It just keeps going" for a transfer — set on BOTH legs (they must always
+    // agree, per TransferBreakOffFactory's own check). Marks an ongoing transfer
+    // the forecast-time pass extends to the horizon; default false = a plain
+    // transfer that ends on its own schedule.
+    public bool AutoRenew { get; init; }
 }
 
 // The Transfer plus the two ordinary FinancialPatterns it expands into.
@@ -53,6 +59,7 @@ public static class TransferFactory
             DatePattern = request.DatePattern,
             Amount = -request.Amount,
             Mandatory = false,
+            AutoRenew = request.AutoRenew,
         });
 
         var deposit = FinancialPattern.Create(new FinancialPatternOptions
@@ -63,6 +70,7 @@ public static class TransferFactory
             DatePattern = request.DatePattern,
             Amount = request.Amount,
             Mandatory = false,
+            AutoRenew = request.AutoRenew,
         });
 
         return new TransferResult { Transfer = transfer, Withdrawal = withdrawal, Deposit = deposit };

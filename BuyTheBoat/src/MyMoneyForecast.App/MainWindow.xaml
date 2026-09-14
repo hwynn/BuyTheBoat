@@ -630,6 +630,13 @@
                 <local:AccountFormPanel x:Name="AccountForm"/>
             </TabItem>
 
+            <TabItem Tag="Transfer">
+                <TabItem.Header>
+                    <TextBlock x:Name="TransferTabHeaderText" Text="Transfer"/>
+                </TabItem.Header>
+                <local:TransferFormPanel x:Name="TransferForm"/>
+            </TabItem>
+
             <TabItem Tag="Expense">
                 <TabItem.Header>
                     <TextBlock x:Name="ExpenseTabHeaderText" Text="Expense"/>
