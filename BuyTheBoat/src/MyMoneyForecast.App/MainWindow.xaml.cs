@@ -1196,6 +1196,25 @@ public partial class MainWindow : Window
     /// <summary>[UI] Philosophy §1: the Forecast button reads as actionable only while an input (range, balance, or cushion) differs from the forecast on screen. Wired to every input's change event; unparseable text counts as "differs" so the button stays live and the click handler can explain what's wrong.</summary>
     private void OnForecastInputChanged(object sender, RoutedEventArgs e) => UpdateForecastButtonState();
 
+    /// <summary>[UI] When the "As of" field is empty, opens its calendar on the current month rather than wherever it was last left — so returning to today isn't a long scroll back after forecasting years out. A WPF DatePicker keeps its DisplayDate on the last month shown once its date is cleared; this resets it each time the picker opens with no date.</summary>
+    private void OnAsOfCalendarOpened(object sender, RoutedEventArgs e)
+    {
+        if (AsOfDatePicker.SelectedDate is null)
+        {
+            AsOfDatePicker.DisplayDate = DateTime.Today;
+        }
+    }
+
+    /// <summary>[UI] When "Show forecast through" is empty, opens its calendar a few months past the "As of" date (or past today, if that's empty too) — the usual place a horizon lands, so it isn't a long scroll from wherever it was last left.</summary>
+    private void OnHorizonCalendarOpened(object sender, RoutedEventArgs e)
+    {
+        if (HorizonEndDatePicker.SelectedDate is null)
+        {
+            var basis = AsOfDatePicker.SelectedDate ?? DateTime.Today;
+            HorizonEndDatePicker.DisplayDate = basis.AddMonths(3);
+        }
+    }
+
     private void UpdateForecastButtonState()
     {
         if (ForecastButton is null)

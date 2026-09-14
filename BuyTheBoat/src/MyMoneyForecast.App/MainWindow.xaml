@@ -59,11 +59,11 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="As of" FontSize="11" Foreground="Gray"/>
-                            <DatePicker x:Name="AsOfDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged"/>
+                            <DatePicker x:Name="AsOfDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged" CalendarOpened="OnAsOfCalendarOpened"/>
                         </StackPanel>
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="Show forecast through" FontSize="11" Foreground="Gray"/>
-                            <DatePicker x:Name="HorizonEndDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged"/>
+                            <DatePicker x:Name="HorizonEndDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged" CalendarOpened="OnHorizonCalendarOpened"/>
                         </StackPanel>
                         <!-- Balances and cushions are per account now and live on the
                              Accounts tab; the forecast reads them from there. This is a
