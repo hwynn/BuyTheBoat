@@ -664,6 +664,10 @@ public partial class MainWindow : Window
                         DatePattern = existing.DatePattern.ReanchoredToStartOn(renewalDate).WithUntil(successor.DatePattern.Until),
                         Amount = existing.Amount,
                         StartingAllocation = 0m,
+                        // An automatic renewal takes no user input, so the continuing
+                        // plan inherits the existing plan's standing — a dummy that
+                        // keeps going stays a dummy (EarMarkPattern.ExplicitlyCreated).
+                        ExplicitlyCreated = existing.ExplicitlyCreated,
                     },
                     successor);
                 _earMarkPatterns.Save(continued);

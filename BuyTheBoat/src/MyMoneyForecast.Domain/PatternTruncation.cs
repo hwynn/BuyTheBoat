@@ -48,6 +48,9 @@ public static class PatternTruncation
                 DatePattern = plan.DatePattern.WithUntil(planUntil),
                 Amount = plan.Amount,
                 StartingAllocation = plan.StartingAllocation,
+                // Trimming a plan to fit its goal's boundary is upkeep, not user
+                // authorship — it keeps whatever standing the plan already had.
+                ExplicitlyCreated = plan.ExplicitlyCreated,
             },
             truncatedPattern);
 
@@ -76,6 +79,8 @@ public static class PatternTruncation
                 DatePattern = plan.DatePattern.ReanchoredToStartOn(newStart),
                 Amount = plan.Amount,
                 StartingAllocation = plan.StartingAllocation + absorbedBalance,
+                // Upkeep, not user authorship — keeps the plan's existing standing.
+                ExplicitlyCreated = plan.ExplicitlyCreated,
             },
             goal);
     }

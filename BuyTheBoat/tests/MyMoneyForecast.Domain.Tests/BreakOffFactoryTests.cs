@@ -738,6 +738,46 @@ public class BreakOffFactoryTests
         result.SuccessorPlan!.StartingAllocation.ShouldBe(42m);
     }
 
+    [Theory]
+    [InlineData(false)] // an auto-created dummy that keeps going stays a dummy
+    [InlineData(true)]  // a plan the user made their own stays theirs
+    public void Renew_makes_the_continuing_plan_inherit_the_predecessor_plans_standing(bool explicitlyCreated)
+    {
+        // A renewal takes no user input, so — unlike a user-driven break-off,
+        // whose fresh successor plan IS the user's own — the continuing plan
+        // keeps the predecessor plan's standing (EarMarkPattern.ExplicitlyCreated).
+        var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
+        var renewalDate = new DateOnly(2026, 1, 5);
+        var predecessorPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = rent.FinanceId,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [5],
+                    DtStart = new DateOnly(2023, 1, 5),
+                    Until = new DateOnly(2026, 1, 5),
+                }),
+                ExplicitlyCreated = explicitlyCreated,
+            },
+            rent);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = rent,
+            PredecessorPlan = predecessorPlan,
+            RenewalDate = renewalDate,
+            SegmentYears = 1,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [rent],
+        });
+
+        result.SuccessorPlan!.ExplicitlyCreated.ShouldBe(explicitlyCreated);
+    }
+
     [Fact]
     public void Renewing_a_paycheck_skips_the_jar_machinery_entirely()
     {

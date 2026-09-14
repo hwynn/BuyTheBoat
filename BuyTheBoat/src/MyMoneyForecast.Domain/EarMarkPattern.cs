@@ -17,6 +17,18 @@ public sealed record EarMarkPatternOptions
     // jar starting from scratch, so 0m is the right default rather than a
     // migration burden.
     public decimal StartingAllocation { get; init; }
+
+    // Whether the user made this savings plan their OWN — opened its form and
+    // saved it, or committed a full-save choice about it in a confirmation
+    // popup — as opposed to it being an auto-generated default the user never
+    // influenced. Drives "don't bother the user about an implicit change if it
+    // doesn't alter anything they explicitly did" (see FinancePatternSaveConfirmation's
+    // popup gate): a change touching only never-explicitly-created plans is
+    // trivial and stays silent. Defaults TRUE on purpose — the safe direction
+    // is to over-confirm, never to wrongly silence a warning; the few genuine
+    // auto-mint sites (AllocationPlanProposer, OneTimeGoalFactory) set it false,
+    // and maintenance rewrites preserve whatever the plan already had.
+    public bool ExplicitlyCreated { get; init; } = true;
 }
 
 public sealed class EarMarkPattern
@@ -25,6 +37,7 @@ public sealed class EarMarkPattern
     public RecurrenceRule DatePattern { get; }
     public decimal Amount { get; }
     public decimal StartingAllocation { get; }
+    public bool ExplicitlyCreated { get; }
 
     /// <summary>[CALC] Builds an EarMarkPattern from already-validated options.</summary>
     /// <param name="options">The plan's finance id, schedule, amount, and starting allocation.</param>
@@ -34,7 +47,22 @@ public sealed class EarMarkPattern
         DatePattern = options.DatePattern;
         Amount = options.Amount;
         StartingAllocation = options.StartingAllocation;
+        ExplicitlyCreated = options.ExplicitlyCreated;
     }
+
+    /// <summary>[CALC] Returns this same plan tagged with whether the user explicitly made it their own — used at save sites to record that a form save or popup full-save "adopted" the plan, or that an implicit re-pace should keep the plan's existing standing. Copies the already-validated fields directly (no goal to re-check against), so it never re-runs Create's span validation.</summary>
+    /// <param name="explicitlyCreated">True to mark the plan the user's own; false to mark it an untouched auto default.</param>
+    public EarMarkPattern WithExplicitlyCreated(bool explicitlyCreated) =>
+        ExplicitlyCreated == explicitlyCreated
+            ? this
+            : new EarMarkPattern(new EarMarkPatternOptions
+            {
+                FinanceId = FinanceId,
+                DatePattern = DatePattern,
+                Amount = Amount,
+                StartingAllocation = StartingAllocation,
+                ExplicitlyCreated = explicitlyCreated,
+            });
 
     /// <summary>[CALC] Creates a savings plan pattern for a goal, validating that its active span stays within the goal's own — it can't allocate before the goal's active span starts, or after the goal's date range ends.</summary>
     /// <param name="options">The plan's finance id, schedule, amount, and starting allocation.</param>
@@ -110,6 +138,9 @@ public sealed class EarMarkPattern
                 DatePattern = DatePattern.ReanchoredToStartOn(mergedStart).WithUntil(mergedUntil),
                 Amount = Amount,
                 StartingAllocation = StartingAllocation + other.StartingAllocation,
+                // Explicit if either side was — merging keeps the user's stake in
+                // whichever plan they had already made their own.
+                ExplicitlyCreated = ExplicitlyCreated || other.ExplicitlyCreated,
             },
             goal);
     }

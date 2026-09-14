@@ -182,6 +182,8 @@ public static class AllocationPlanProposer
                 DatePattern = proposal.Plan.DatePattern,
                 Amount = proposal.Plan.Amount,
                 StartingAllocation = carriedOverJarBalance,
+                // Auto-proposed, not made by the user — see EarMarkPattern.ExplicitlyCreated.
+                ExplicitlyCreated = false,
             },
             proposal.Outflow);
 
@@ -237,6 +239,7 @@ public static class AllocationPlanProposer
                     DatePattern = scheduleRule,
                     Amount = -Math.Round(totalNeeded / occurrenceCount, 2),
                     StartingAllocation = carriedOverJarBalance,
+                    ExplicitlyCreated = false, // auto-proposed, not made by the user
                 },
                 outflow);
 
@@ -320,6 +323,7 @@ public static class AllocationPlanProposer
                     DatePattern = RecurrenceRule.Create(schedule),
                     Amount = -fixedAmount,
                     StartingAllocation = carriedOverJarBalance,
+                    ExplicitlyCreated = false, // auto-proposed, not made by the user
                 },
                 outflow);
 
@@ -380,6 +384,7 @@ public static class AllocationPlanProposer
                 FinanceId = preparedOutflow.FinanceId,
                 DatePattern = planPattern,
                 Amount = 0m,
+                ExplicitlyCreated = false, // auto-proposed (declined/empty), not made by the user
             },
             preparedOutflow);
 
@@ -485,6 +490,7 @@ public static class AllocationPlanProposer
                 // convention is "effect on free balance"; the factory flips it).
                 DatePattern = planPattern,
                 Amount = -perPayday,
+                ExplicitlyCreated = false, // auto-proposed, not made by the user
             },
             outflow);
 
@@ -547,6 +553,7 @@ public static class AllocationPlanProposer
                 // Held under the affordability ceiling — a recurring bill we can't fully reserve for stays
                 // knowingly underfunded rather than drawing money that isn't there.
                 Amount = -RateUnderCeiling(billAmount, ongoingRateCeiling),
+                ExplicitlyCreated = false, // auto-proposed, not made by the user
             },
             outflow);
 
@@ -578,6 +585,7 @@ public static class AllocationPlanProposer
                 FinanceId = outflow.FinanceId,
                 DatePattern = planPattern,
                 Amount = -billAmount,
+                ExplicitlyCreated = false, // auto-proposed, not made by the user
             },
             outflow);
 
@@ -612,6 +620,7 @@ public static class AllocationPlanProposer
                 FinanceId = outflow.FinanceId,
                 DatePattern = installmentPattern,
                 Amount = -installmentAmount,
+                ExplicitlyCreated = false, // auto-proposed, not made by the user
             },
             outflow);
 

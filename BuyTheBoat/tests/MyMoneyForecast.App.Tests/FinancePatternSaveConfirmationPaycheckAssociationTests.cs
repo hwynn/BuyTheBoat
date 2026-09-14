@@ -39,7 +39,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         var income = Income(1, 25, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var bill = Bill(2, "Rent", -300m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(income, accountId: 1);
-        var pacedPlan = SavePacedBill(bill, [bill, income]).Plan;
+        var pacedPlan = SavePacedBill(bill, [bill, income], explicitlyCreated: true).Plan;
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1)); // same payday count, different day
         var confirmation = Confirmation(1, editedIncome);
@@ -67,7 +67,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         var income = Income(1, 25, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var bill = Bill(2, "Rent", -300m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(income, accountId: 1);
-        var oldPlan = SavePacedBill(bill, [bill, income]).Plan;
+        var oldPlan = SavePacedBill(bill, [bill, income], explicitlyCreated: true).Plan;
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var confirmation = Confirmation(1, editedIncome);
@@ -89,7 +89,7 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         var income = Income(1, 25, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var bill = Bill(2, "Rent", -300m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(income, accountId: 1);
-        SavePacedBill(bill, [bill, income], carriedOverJarBalance: 150m);
+        SavePacedBill(bill, [bill, income], carriedOverJarBalance: 150m, explicitlyCreated: true);
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var confirmation = Confirmation(1, editedIncome);
@@ -108,8 +108,8 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         var rent = Bill(2, "Rent", -300m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31));
         var utilities = Bill(3, "Utilities", -100m, new DateOnly(2025, 7, 15), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(income, accountId: 1);
-        var rentPlan = SavePacedBill(rent, [rent, utilities, income]).Plan;
-        var utilitiesPlan = SavePacedBill(utilities, [rent, utilities, income]).Plan;
+        var rentPlan = SavePacedBill(rent, [rent, utilities, income], explicitlyCreated: true).Plan;
+        var utilitiesPlan = SavePacedBill(utilities, [rent, utilities, income], explicitlyCreated: true).Plan;
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var confirmation = Confirmation(1, editedIncome);
@@ -138,8 +138,8 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         var rent = Bill(2, "Rent", -300m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31));
         var utilities = Bill(3, "Utilities", -100m, new DateOnly(2025, 7, 15), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(income, accountId: 1);
-        var rentPlan = SavePacedBill(rent, [rent, utilities, income]).Plan;
-        var utilitiesPlan = SavePacedBill(utilities, [rent, utilities, income]).Plan;
+        var rentPlan = SavePacedBill(rent, [rent, utilities, income], explicitlyCreated: true).Plan;
+        var utilitiesPlan = SavePacedBill(utilities, [rent, utilities, income], explicitlyCreated: true).Plan;
 
         var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
         var confirmation = Confirmation(1, editedIncome);
@@ -209,6 +209,29 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
         _financialPatterns.GetAll().Single(p => p.FinanceId == 2).Description.ShouldBe("Rent — reminder to autopay");
     }
 
+    [Fact]
+    public void A_dummy_bill_plan_paced_against_the_paycheck_is_left_silent()
+    {
+        // A bill whose savings plan the user never opened is an auto-created
+        // default (ExplicitlyCreated = false). Re-pacing it when the paycheck
+        // moves alters nothing the user explicitly did, so it's a trivial
+        // implicit change: the paycheck edit asks nothing and leaves the plan
+        // exactly as it was — the "don't bother the user" rule, point #3.
+        var income = Income(1, 25, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
+        var bill = Bill(2, "Rent", -300m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(income, accountId: 1);
+        var dummyPlan = SavePacedBill(bill, [bill, income]).Plan; // ExplicitlyCreated = false — never touched by the user
+
+        var editedIncome = Income(1, 5, new DateOnly(2025, 7, 1), new DateOnly(2027, 1, 1));
+        var confirmation = Confirmation(1, editedIncome);
+        confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked — the bill's plan is an untouched dummy");
+
+        confirmation.Run().ShouldBeTrue();
+
+        // Left as it was — still paced to the OLD payday, not re-paced.
+        _earMarkPatterns.GetAll().Single(p => p.FinanceId == 2).DatePattern.ByMonthDay.ShouldBe(dummyPlan.DatePattern.ByMonthDay);
+    }
+
     // ---- shared scenario-building helpers ----------------------------------
 
     // Builds AND SAVES a real AllocationPlanProposer.Propose result for a
@@ -221,12 +244,18 @@ public class FinancePatternSaveConfirmationPaycheckAssociationTests : IDisposabl
     // (found while writing this file: the real calling convention every
     // other caller of Propose already follows, e.g. BreakOffFactory.BreakOff
     // always persists result.Successor, never the pre-call value).
-    private ProposedAllocationPlan SavePacedBill(FinancialPattern bill, IReadOnlyList<FinancialPattern> allPatterns, decimal carriedOverJarBalance = 0m)
+    private ProposedAllocationPlan SavePacedBill(FinancialPattern bill, IReadOnlyList<FinancialPattern> allPatterns, decimal carriedOverJarBalance = 0m, bool explicitlyCreated = false)
     {
         var proposal = AllocationPlanProposer.Propose(bill, allPatterns, AsOf, carriedOverJarBalance: carriedOverJarBalance);
         _financialPatterns.Save(proposal.Outflow, accountId: 1);
-        _earMarkPatterns.Save(proposal.Plan);
-        return proposal;
+        // The proposer's plan is a dummy (ExplicitlyCreated = false). The
+        // re-pace cascade only fires for a plan the user made their own, so the
+        // scenarios that exercise it pass explicitlyCreated: true — standing in
+        // for a bill whose savings plan the user opened and saved. Left false,
+        // the plan is an untouched default and re-pacing it is trivial (silent).
+        var plan = explicitlyCreated ? proposal.Plan.WithExplicitlyCreated(true) : proposal.Plan;
+        _earMarkPatterns.Save(plan);
+        return proposal with { Plan = plan };
     }
 
     private static FinancialPattern Income(int financeId, int dayOfMonth, DateOnly start, DateOnly until) =>

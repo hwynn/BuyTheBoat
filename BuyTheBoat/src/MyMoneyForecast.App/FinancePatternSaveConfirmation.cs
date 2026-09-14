@@ -436,6 +436,12 @@ public sealed class FinancePatternSaveConfirmation
     // Computed in DetermineConditions.
     private bool HasMultipleEarmarkPatterns { get; set; }
 
+    // Whether at least one of this goal's savings plans is one the user made
+    // their own (see EarMarkPattern.ExplicitlyCreated) — the gate on whether
+    // the "combine / keep separate" question means anything. Computed in
+    // DetermineConditions.
+    private bool HasExplicitEarmarkPattern { get; set; }
+
     // Item F's feasibility test result: true when the changed field(s) make
     // it impossible to keep multiple EarMarkPatterns separate (the
     // recurrence-shape case, planning/25 Item F's table) — consolidation
@@ -726,16 +732,38 @@ public sealed class FinancePatternSaveConfirmation
         // keeping all of this save's messaging in the one place this class drives.
         DetermineConcerningPlanNoticeIfApplicable();
 
-        // SETTLED 2026-08-11 (author): Item F's own question applies
-        // regardless of which Item E path gets chosen — it is NOT
-        // break-off-only. What "consolidate" means differs by path: for
-        // break-off, it's Item C's existing "always fresh-propose one
-        // successor" shape; for a retroactive correction (same finance_id,
-        // no successor), it means collapsing the existing plans in place
-        // under that same finance_id instead — a genuinely new mechanism,
-        // not yet designed or built (see PerformImplicitEarmarkChanges's own
-        // TODOs). One combined pass either way, per the note above.
-        if (IsChangeCritical || HasMultipleEarmarkPatterns || TouchesChainBoundary || ChangeCanCascade || TrivialFieldsCanCascade || !string.IsNullOrEmpty(SourceChangeWarning) || PacedBillsCanCascade || _goalHealthSuggestedPlan is not null || !string.IsNullOrEmpty(_concerningPlanNotice) || _boundaryExtensions is { AddedGoalOccurrences: > 0 })
+        // DESIGN RULE: don't bother the user about an implicit change if it
+        // doesn't alter anything they explicitly did. An auto-created default
+        // earmark pattern the user never opened is implicit — silently
+        // reshaping or discarding it costs them nothing they'd recognize; a
+        // plan only becomes the user's OWN once they save it in its own form or
+        // commit a full-save popup choice about it. So a trivial change touches
+        // ONLY never-explicitly-created plans, and the three groups below are
+        // exactly what makes a save worth confirming.
+
+        // The edit rewrites already-recorded history, reshapes a neighbouring
+        // chain segment, or renames the pattern — always the user's own
+        // explicit work on the FinancialPattern, so never trivial.
+        var editTouchesRecordedHistoryOrChain =
+            IsChangeCritical || TouchesChainBoundary || ChangeCanCascade
+            || TrivialFieldsCanCascade || !string.IsNullOrEmpty(SourceChangeWarning);
+
+        // The save implicitly changes a savings plan the user made their own —
+        // folding/splitting it (consolidation), re-pacing it, or growing it past
+        // a moved boundary. Each is gated on an explicit plan, so a set of
+        // untouched dummies alters nothing the user did and stays silent.
+        var changesAnExplicitlyOwnedPlan =
+            (HasMultipleEarmarkPatterns && HasExplicitEarmarkPattern)
+            || PacedBillsCanCascade
+            || (_boundaryExtensions is { AddedGoalOccurrences: > 0 } && BoundaryExtensionTouchesExplicitPlan);
+
+        // There's an advisory to surface about a plan's own health — a suggested
+        // fix to pre-fill (still offered: accepting it is the user's next
+        // explicit save) or a "worth a look" heads-up on a plan they own.
+        var hasPlanHealthAdvice =
+            _goalHealthSuggestedPlan is not null || !string.IsNullOrEmpty(_concerningPlanNotice);
+
+        if (editTouchesRecordedHistoryOrChain || changesAnExplicitlyOwnedPlan || hasPlanHealthAdvice)
         {
             var outcome = ConfirmImplicitChanges?.Invoke(BuildConfirmationRequest()) ?? DefaultOutcome();
             if (!outcome.Proceed)
@@ -903,6 +931,14 @@ public sealed class FinancePatternSaveConfirmation
         var savingsPlan = forecast.Book.EarMarkPatternsFor(_financeId);
         HasMultipleEarmarkPatterns = savingsPlan.Count > 1;
 
+        // Whether any of this goal's plans is one the user made their own.
+        // "Combine them / keep them separate" only has meaning when at least one
+        // plan is explicit — folding or splitting a set of auto-created dummies
+        // the user never shaped alters nothing they explicitly did, so it isn't
+        // asked (the user's point #1). See the "don't bother the user" rule at
+        // the popup gate below.
+        HasExplicitEarmarkPattern = savingsPlan.Any(plan => plan.ExplicitlyCreated);
+
         // Widened 2026-08-17 from _recurrenceShapeChanged alone — found
         // while auditing every "keep separate" path for what actually
         // happens when it's chosen: on the retroactive-correction side
@@ -1032,6 +1068,11 @@ public sealed class FinancePatternSaveConfirmation
 
         var invalidatedPlans = AllocationPlanProposer.FindPlansPacedAgainst(saved, currentPlans)
             .Where(plan => !AllocationPlanProposer.IsPacedAgainst(plan, _proposedPattern))
+            // Only a plan the user made their own is worth asking to re-pace.
+            // A dummy paced against the old schedule is a trivial implicit change
+            // (it alters nothing the user explicitly did) — left alone, not asked
+            // about. See the "don't bother the user" rule at the popup gate below.
+            .Where(plan => plan.ExplicitlyCreated)
             .ToList();
 
         if (invalidatedPlans.Count == 0)
@@ -1223,11 +1264,20 @@ public sealed class FinancePatternSaveConfirmation
         _boundaryExtensions = new BoundaryExtensionPlan(sharingOldStart, sharingOldUntil, addedPastOldUntil + addedBeforeOldStart);
     }
 
-    /// <summary>[CALC] The "[bill] occurs N more times" heads-up for a boundary that moved outward and grew a plan to track it — "" when no boundary extended a plan, or the move added no new occurrence. Names the goal's own added occurrences, and that its savings plan grows to keep pace (the money consequence of the otherwise-silent extend).</summary>
+    /// <summary>[CALC] Whether the boundary move grew at least one plan the user had made their own — the test for whether the extension is worth announcing. A move that only grew auto-created dummy plans alters nothing the user explicitly did, so it stays silent.</summary>
+    private bool BoundaryExtensionTouchesExplicitPlan =>
+        _boundaryExtensions is { } ext
+        && ext.PlansSharingOldStart.Concat(ext.PlansSharingOldUntil).Any(plan => plan.ExplicitlyCreated);
+
+    /// <summary>[CALC] The "[bill] occurs N more times" heads-up for a boundary that moved outward and grew a plan to track it — "" when no boundary extended a plan, or the move added no new occurrence, or only auto-created dummy plans grew. Names the goal's own added occurrences, and that its savings plan grows to keep pace (the money consequence of the otherwise-silent extend).</summary>
     private string DescribeBoundaryExtensionAnnouncement()
     {
-        if (_boundaryExtensions is not { AddedGoalOccurrences: > 0 } ext)
+        if (_boundaryExtensions is not { AddedGoalOccurrences: > 0 } ext || !BoundaryExtensionTouchesExplicitPlan)
         {
+            // The extension still APPLIES (ApplyBoundaryExtensionsIfNeeded keeps the
+            // grown plan valid against its goal) — but when only auto-created dummy
+            // plans grew, there's nothing the user explicitly did to announce a
+            // change to. See the "don't bother the user" rule at the popup gate.
             return "";
         }
 
@@ -1430,6 +1480,7 @@ public sealed class FinancePatternSaveConfirmation
         {
             IsChangeCritical = IsChangeCritical && !editingEarlierSegment,
             HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns && !editingEarlierSegment,
+            HasExplicitEarmarkPattern = HasExplicitEarmarkPattern,
             ConsolidationNeeded = ConsolidationNeeded && !editingEarlierSegment,
             ConsolidationForcedReason = editingEarlierSegment ? "" : DescribeConsolidationForcedReason(),
             KeepSeparateFundingQuestion = editingEarlierSegment ? "" : DescribeKeepSeparateFundingQuestion(),
@@ -1667,6 +1718,18 @@ public sealed class FinancePatternSaveConfirmation
         }
 
         var forecast = _requestForecast();
+
+        // Don't flag the health of a plan the user never made their own — an
+        // auto-created default they've never opened is a plan they don't yet
+        // care about, so warning about it here is just noise (the user's point
+        // #5: no chance to touch it yet ⇒ annoying). Once they've saved it in
+        // its own form, or committed a popup choice about it, it's fair game.
+        // See the "don't bother the user" rule at the popup gate above.
+        if (!forecast.Book.EarMarkPatternsFor(_financeId).Any(plan => plan.ExplicitlyCreated))
+        {
+            return;
+        }
+
         if (forecast.PlanHealthStates.FirstOrDefault(health => health.FinanceId == _financeId) is not { } state)
         {
             return;
@@ -1808,6 +1871,10 @@ public sealed class FinancePatternSaveConfirmation
                     DatePattern = grownPattern,
                     Amount = plan.Amount,
                     StartingAllocation = plan.StartingAllocation,
+                    // Growing a plan to keep pace with its goal's moved boundary is
+                    // upkeep, not user authorship — a dummy stays a dummy, so the
+                    // extension announcement can still be treated as trivial for it.
+                    ExplicitlyCreated = plan.ExplicitlyCreated,
                 },
                 _proposedPattern);
 
@@ -2249,7 +2316,11 @@ public sealed class FinancePatternSaveConfirmation
                 _repositories.ManualEarmarks.Delete(oldPlan.FinanceId, date);
             }
 
-            _repositories.EarMarkPatterns.Save(proposal.Plan);
+            // Re-pacing another bill's plan is an implicit side effect of editing
+            // this paycheck, so it keeps that plan's existing standing: a dummy
+            // stays a dummy (the cascade stays trivial for it), an explicit plan
+            // stays the user's own (its re-pace stays a real concern).
+            _repositories.EarMarkPatterns.Save(proposal.Plan.WithExplicitlyCreated(oldPlan.ExplicitlyCreated));
             if (proposal.StartingEarmark is { } startingEarmark)
             {
                 _repositories.ManualEarmarks.Save(startingEarmark);

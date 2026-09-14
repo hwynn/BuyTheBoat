@@ -165,6 +165,7 @@ public sealed class PatternDatabase
                 ActiveFrom TEXT NULL,
                 StartingAllocation TEXT NOT NULL DEFAULT '0',
                 ExcludedDates TEXT NULL,
+                ExplicitlyCreated INTEGER NOT NULL DEFAULT 1,
                 PRIMARY KEY (FinanceId, StartDate)
             );
 
@@ -257,6 +258,11 @@ public sealed class PatternDatabase
         EnsureColumn(connection, "EarMarkPatterns", "ExcludedDates", "TEXT NULL");
         EnsureColumn(connection, "Transfers", "ExcludedDates", "TEXT NULL");
 
+        // EarMarkPattern.ExplicitlyCreated — whether the user made this savings
+        // plan their own. Pre-existing rows predate the distinction, so they
+        // migrate as 1 (explicit);
+        EnsureColumn(connection, "EarMarkPatterns", "ExplicitlyCreated", "INTEGER NOT NULL DEFAULT 1");
+
         // More than one EarMarkPattern may now share a finance_id, so
         // FinanceId alone can no longer be the table's key. Run after the
         // EnsureColumn calls above so a pre-existing table already has every
@@ -346,12 +352,13 @@ public sealed class PatternDatabase
                 ActiveFrom TEXT NULL,
                 StartingAllocation TEXT NOT NULL DEFAULT '0',
                 ExcludedDates TEXT NULL,
+                ExplicitlyCreated INTEGER NOT NULL DEFAULT 1,
                 PRIMARY KEY (FinanceId, StartDate)
             );
 
             INSERT INTO EarMarkPatterns
-                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates)
-            SELECT FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates
+                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates, ExplicitlyCreated)
+            SELECT FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates, ExplicitlyCreated
             FROM EarMarkPatterns_old_singlekey;
 
             DROP TABLE EarMarkPatterns_old_singlekey;

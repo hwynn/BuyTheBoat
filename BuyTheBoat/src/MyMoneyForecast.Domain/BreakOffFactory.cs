@@ -406,7 +406,17 @@ public static class BreakOffFactory
             AutoRenew = result.Successor.AutoRenew,
         });
 
-        return result with { Successor = markedSuccessor };
+        // A renewal is automatic — the user gives no input for the continuing
+        // plan, so it inherits the predecessor plan's standing rather than
+        // counting as freshly authored: a dummy that keeps going stays a dummy
+        // (EarMarkPattern.ExplicitlyCreated). This is the one thing that sets a
+        // renewal's successor plan apart from a user-driven break-off's, whose
+        // fresh successor plan IS the user's own. Null when the pattern has no
+        // plan (income), where SuccessorPlan is already null.
+        var continuingPlan = result.SuccessorPlan?.WithExplicitlyCreated(
+            request.PredecessorPlan?.ExplicitlyCreated ?? false);
+
+        return result with { Successor = markedSuccessor, SuccessorPlan = continuingPlan };
     }
 
     /// <summary>[CALC] The three checks every BreakOff overload shares: a real cut boundary (at least one day of history to preserve), a genuinely new successor identity, and a successor schedule that starts exactly on the cut.</summary>

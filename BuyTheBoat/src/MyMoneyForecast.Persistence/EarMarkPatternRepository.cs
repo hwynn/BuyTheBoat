@@ -19,9 +19,9 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
         // starting on a different date.
         command.CommandText = """
             INSERT INTO EarMarkPatterns
-                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates)
+                (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates, ExplicitlyCreated)
             VALUES
-                ($FinanceId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $StartingAllocation, $ExcludedDates)
+                ($FinanceId, $Amount, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $StartingAllocation, $ExcludedDates, $ExplicitlyCreated)
             ON CONFLICT(FinanceId, StartDate) DO UPDATE SET
                 Amount = excluded.Amount,
                 Frequency = excluded.Frequency,
@@ -31,12 +31,14 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
                 UntilDate = excluded.UntilDate,
                 ActiveFrom = excluded.ActiveFrom,
                 StartingAllocation = excluded.StartingAllocation,
-                ExcludedDates = excluded.ExcludedDates;
+                ExcludedDates = excluded.ExcludedDates,
+                ExplicitlyCreated = excluded.ExplicitlyCreated;
             """;
 
         command.Parameters.AddWithValue("$FinanceId", pattern.FinanceId);
         command.Parameters.AddWithValue("$Amount", pattern.Amount.ToString(CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$StartingAllocation", pattern.StartingAllocation.ToString(CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$ExplicitlyCreated", pattern.ExplicitlyCreated ? 1 : 0);
         RecurrenceRuleColumns.AddParameters(command, pattern.DatePattern);
 
         command.ExecuteNonQuery();
@@ -56,6 +58,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
             var financeId = reader.GetInt32(reader.GetOrdinal("FinanceId"));
             var amount = decimal.Parse(reader.GetString(reader.GetOrdinal("Amount")), CultureInfo.InvariantCulture);
             var startingAllocation = decimal.Parse(reader.GetString(reader.GetOrdinal("StartingAllocation")), CultureInfo.InvariantCulture);
+            var explicitlyCreated = reader.GetInt32(reader.GetOrdinal("ExplicitlyCreated")) != 0;
             var datePattern = RecurrenceRuleColumns.Read(reader);
 
             // Re-validates against the linked goal on the way back out, same
@@ -74,6 +77,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
                     DatePattern = datePattern,
                     Amount = amount,
                     StartingAllocation = startingAllocation,
+                    ExplicitlyCreated = explicitlyCreated,
                 },
                 goal));
         }

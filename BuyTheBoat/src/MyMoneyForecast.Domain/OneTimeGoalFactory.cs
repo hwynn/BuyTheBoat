@@ -86,6 +86,9 @@ public static class OneTimeGoalFactory
                 FinanceId = goal.FinanceId,
                 DatePattern = savingsPattern,
                 Amount = installmentAmount,
+                // The plan auto-created alongside a brand-new goal — implicit
+                // until the user edits the plan itself (see EarMarkPattern.ExplicitlyCreated).
+                ExplicitlyCreated = false,
             },
             goal);
 

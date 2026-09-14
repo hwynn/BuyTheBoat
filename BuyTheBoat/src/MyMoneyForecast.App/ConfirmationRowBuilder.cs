@@ -10,6 +10,10 @@ internal sealed record RowInputs
 {
     public bool IsChangeCritical { get; init; }
     public bool HasMultipleEarmarkPatterns { get; init; }
+    // Whether at least one of the plans is one the user made their own — the
+    // "combine / keep separate" question is only shown when this is true (a set
+    // of untouched dummies has no meaningful combine/keep-separate choice).
+    public bool HasExplicitEarmarkPattern { get; init; }
     public bool ConsolidationNeeded { get; init; }
     public string ConsolidationForcedReason { get; init; } = "";
 
@@ -95,11 +99,13 @@ internal static class ConfirmationRowBuilder
         }
 
         // Item F's consolidation choice — only when there's a real choice to
-        // make (more than one plan, and the schedule/start date isn't forcing
-        // consolidation). Mirrors ConsolidationAskSection. Both answers are now
-        // honored on a break-off (keep-separate gives the successor one plan per
-        // surviving plan), so this no longer carries a "not supported yet" caveat.
-        if (r.HasMultipleEarmarkPatterns && !r.ConsolidationNeeded)
+        // make (more than one plan, the schedule/start date isn't forcing
+        // consolidation, and at least one plan is the user's own — folding or
+        // splitting a set of untouched dummies alters nothing they explicitly
+        // did). Mirrors ConsolidationAskSection. Both answers are now honored on
+        // a break-off (keep-separate gives the successor one plan per surviving
+        // plan), so this no longer carries a "not supported yet" caveat.
+        if (r.HasMultipleEarmarkPatterns && !r.ConsolidationNeeded && r.HasExplicitEarmarkPattern)
         {
             // When keeping them separate would over/underfund the new amount, a
             // nested question offers to re-rate them to meet it — revealed only
