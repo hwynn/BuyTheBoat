@@ -158,6 +158,46 @@ public static class TransactionLogBookFactory
         return points;
     }
 
+    /// <summary>[CALC] Walks a finance id's projected jar ExpectedAmount day by day across a date range — the Earmark form's Summary chart's "proposed" line. Unlike ComputeMilestoneTrajectory, a release does NOT reset to 0: it subtracts the goal's own per-occurrence payout and floors at 0, so a starting balance and any structural glut carry forward past the first occurrence, exactly as a real forecast's fund jar does (see A_structural_glut_accumulates_across_releases_instead_of_being_reset). A deliberately rough single-jar estimate: it pays out each release in full rather than modelling cross-jar deallocation, the same simplification ComputeMilestoneTrajectory makes. Always emits a point at `from` seeded with startingAllocation, so a starting balance is visible at the chart's left edge even before the first contribution lands.</summary>
+    /// <param name="patterns">The savings plan(s) funding the goal.</param>
+    /// <param name="goal">The goal being funded.</param>
+    /// <param name="from">Start of the range to walk — the point seeded with startingAllocation.</param>
+    /// <param name="to">End of the range to walk.</param>
+    /// <param name="startingAllocation">What the jar already holds at `from`, before this plan's own contributions begin.</param>
+    public static IReadOnlyList<(DateOnly Date, decimal ExpectedAmount)> ComputeExpectedTrajectory(
+        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, DateOnly from, DateOnly to, decimal startingAllocation = 0m)
+    {
+        var contributionsByDate = patterns
+            .SelectMany(pattern => pattern.DatePattern.GetOccurrences(from, to).Select(date => (Date: date, Amount: -pattern.Amount)))
+            .ToLookup(entry => entry.Date, entry => entry.Amount);
+        var releaseAmount = Math.Abs(goal.Amount);
+        var releaseDates = goal.DatePattern.GetOccurrences(from, to).ToHashSet();
+
+        var eventDates = contributionsByDate.Select(group => group.Key).Concat(releaseDates).Distinct().OrderBy(date => date);
+
+        // The opening point anchors the line at `from` at whatever the jar
+        // already holds — so a starting balance shows at the chart's left
+        // edge, not only from the first contribution onward.
+        var points = new List<(DateOnly Date, decimal ExpectedAmount)> { (from, startingAllocation) };
+        var running = startingAllocation;
+        foreach (var date in eventDates)
+        {
+            // Accumulate today's contributions first, THEN pay out a release —
+            // same order BuildAccountPage's own loop uses, so a contribution
+            // landing the same day as its own release nets against it (matches
+            // the structural-glut cascade test's same-day $150-in/$100-out).
+            running += contributionsByDate[date].Sum();
+            if (releaseDates.Contains(date))
+            {
+                running = Math.Max(0m, running - releaseAmount);
+            }
+
+            points.Add((date, running));
+        }
+
+        return points;
+    }
+
     /// <summary>[CALC] Reports whether a goal's very first occurrence hasn't happened yet — today counts as not-yet. A pure date fact, usable both for a saved PlanHealthState and a proposed, not-yet-saved pattern straight from the Earmark form. TODO: once actual-transaction pairing exists, an occurrence paired to a real transaction should count as already-happened even if its own date is still today-or-later.</summary>
     /// <param name="goal">The goal to check.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>

@@ -127,6 +127,13 @@ public partial class EarmarkFormPanel : UserControl
     // contexts, where the preview falls back to the plain saved reading.
     public Func<ManualEarmark, ForecastResult>? RequestForecastWithOneOff { get; set; }
 
+    // Builds an affordability-capped default plan for a goal that has none yet,
+    // WITHOUT saving it — the same proposal "Save and Plan" would create. Picking
+    // a plan-less goal loads its values as unsaved draft edits, so the user lands
+    // on a real proposal to tweak instead of a bare monthly skeleton. Null in
+    // headless contexts, where PopulateSavingsPlanFields falls back to that skeleton.
+    public Func<FinancialPattern, ProposedAllocationPlan?>? RequestProposedPlan { get; set; }
+
     // Runs a throwaway forecast with a not-yet-saved savings PLAN substituted in (args: proposed plan, the
     // active-start of the saved segment it replaces or null if brand new, and any proposed manual earmarks
     // to fold in). Lets the live first-payment warning read real free funds for the plan as typed, instead
@@ -412,6 +419,20 @@ public partial class EarmarkFormPanel : UserControl
             _loadedActiveStart = existing.DatePattern.ActiveStart;
             RuleEditor.LoadFrom(existing.DatePattern);
         }
+        else if (RequestProposedPlan?.Invoke(goal) is { } proposal)
+        {
+            // No saved plan, but we can propose a real one: the same
+            // affordability-capped plan "Save and Plan" would create, loaded as
+            // unsaved draft values the user can edit before saving. _loadedActiveStart
+            // stays null — nothing is saved yet, so there's no existing starting
+            // earmark to reconcile against on Save (the draft's own is written fresh).
+            AmountTextBox.Text = Math.Abs(proposal.Plan.Amount).ToString(CultureInfo.InvariantCulture);
+            _startingAllocation = proposal.Plan.StartingAllocation;
+            _startingEarmarkAmount = proposal.StartingEarmark?.Amount ?? 0m;
+            StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
+            _loadedActiveStart = null;
+            RuleEditor.LoadFrom(proposal.Plan.DatePattern);
+        }
         else
         {
             AmountTextBox.Text = string.Empty;
@@ -419,9 +440,10 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = 0m;
             StartingEarmarkAmountTextBox.Text = string.Empty;
             _loadedActiveStart = null;
-            // No existing plan: reset the schedule to a sensible default (monthly,
-            // through the goal's own due date) rather than leaving whatever plan
-            // was last on screen — LoadFrom does the full field reset for us.
+            // No existing plan and no proposer wired (headless): reset the schedule
+            // to a sensible default (monthly, through the goal's own due date) rather
+            // than leaving whatever plan was last on screen — LoadFrom does the full
+            // field reset for us.
             var defaultStart = DateOnly.FromDateTime(DateTime.Today);
             var defaultUntil = goal.DatePattern.Until > defaultStart ? goal.DatePattern.Until : defaultStart.AddYears(1);
             RuleEditor.LoadFrom(RecurrenceRule.Create(new RecurrenceRuleOptions
@@ -1192,9 +1214,24 @@ public partial class EarmarkFormPanel : UserControl
             return;
         }
 
-        if (!_patternsByFinanceId.TryGetValue(goal.FinanceId, out var plan))
+        var isOneOff = OneOffRadio.IsChecked == true;
+
+        // A goal with no saved EarMarkPattern still previews in Savings-plan mode:
+        // anchor the Summary on the live proposed pattern built from the typed
+        // (or draft-proposed) fields, so a brand-new plan shows its chart and
+        // narrative exactly like an edit to an existing one — the whole point of
+        // "see what the plan will look like before saving." One-off mode has
+        // nothing to adjust without a saved plan, so it keeps the placeholder.
+        // savedPlan (may be null) is kept separately from plan for the few places
+        // that must distinguish "the segment being replaced on Save" from "the
+        // pattern the chart is drawn from."
+        var savedPlan = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId);
+        var plan = savedPlan ?? (isOneOff ? null : TryBuildProposedPattern(goal));
+        if (plan is null)
         {
-            Summary.Clear("No savings plan yet for this goal — fill in the fields below to create one.");
+            Summary.Clear(isOneOff
+                ? "No savings plan yet for this goal — create one in Savings-plan mode first."
+                : "No savings plan yet for this goal — fill in the fields below to create one.");
             PredecessorNoteText.Visibility = Visibility.Collapsed;
             SuccessorNoteText.Visibility = Visibility.Collapsed;
             return;
@@ -1205,7 +1242,6 @@ public partial class EarmarkFormPanel : UserControl
         var goalAmount = Math.Abs(goal.Amount);
         var dueDate = goal.DatePattern.Until;
         var label = string.IsNullOrWhiteSpace(goal.Description) ? goal.Source : goal.Description;
-        var isOneOff = OneOffRadio.IsChecked == true;
         var isOneTime = goal.DatePattern.GetOccurrences().Count == 1;
 
         // How far out the CHART reaches. A far-off repeating goal (a 13-year
@@ -1357,13 +1393,18 @@ public partial class EarmarkFormPanel : UserControl
                 : enteredAmount > 0m ? $"{opening} {continuation}" : opening;
 
             // The chart's "proposed — rough, live estimate" line, computed
-            // regardless of whether a saved PlanHealthState exists.
+            // regardless of whether a saved PlanHealthState exists. This is the
+            // projected jar ExpectedAmount, NOT the milestone: a release
+            // subtracts the goal's payout and floors at 0 rather than resetting,
+            // so the starting amount (and any structural glut) carries forward
+            // and visibly lifts the line, instead of washing out at the first
+            // release the way a milestone walk does.
             if (TryBuildProposedPattern(goal) is { } proposedForChart)
             {
                 var proposedStartingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
-                proposedTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
+                proposedTrajectory = TransactionLogBookFactory.ComputeExpectedTrajectory(
                         GetPatternsForLiveCheck(goal, proposedForChart), goal, plan.DatePattern.ActiveStart, chartEnd, proposedStartingTotal)
-                    .Select(p => (p.Date, p.MilestoneAmount))
+                    .Select(p => (p.Date, p.ExpectedAmount))
                     .ToList();
             }
 
@@ -1382,7 +1423,10 @@ public partial class EarmarkFormPanel : UserControl
             {
                 if (TryBuildProposedPattern(goal) is { } proposedForAside && RequestForecastWithProposedPlan is { } requestAside)
                 {
-                    var liveForecast = requestAside(proposedForAside, plan.DatePattern.ActiveStart, GetProposedManualEarmarks(goal, proposedForAside));
+                    // The segment being replaced is the SAVED one's start, or null
+                    // when there's no saved plan yet (brand-new) — not plan's own
+                    // start, which for a brand-new plan is the proposed pattern's.
+                    var liveForecast = requestAside(proposedForAside, savedPlan?.DatePattern.ActiveStart, GetProposedManualEarmarks(goal, proposedForAside));
                     liveHealth = liveForecast.PlanHealthStates.FirstOrDefault(state => state.FinanceId == goal.FinanceId) ?? health;
                     liveJar = JarAsOf(liveForecast, goal.FinanceId) ?? jar;
                 }

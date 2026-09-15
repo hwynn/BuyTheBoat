@@ -63,7 +63,7 @@ public partial class SummaryRegion : UserControl
     /// <param name="firstPaymentLine">The first-payment warning, shown UNDER the aside (no label of its own), separated by space. Null/empty hides it — e.g. the Expense form routes this to its own status indicator instead, so it passes null here.</param>
     /// <param name="peakDates">Which of the goal's own occurrence dates to label on the chart with their own gridline, most-recent-first from Start — empty for a one-time goal, which already has its single real due date labeled separately. Caller decides how many; this control just draws whatever list it's given.</param>
     /// <param name="highlightDate">One of peakDates (or Start-of-window's own first upcoming occurrence) to mark in the same color as the first-payment warning text, when that warning is showing — so the reader can tell which gridline it's about instead of guessing. Null when no such warning is showing.</param>
-    /// <param name="proposedTrajectory">Savings-plan mode's own "proposed — rough, live estimate" line: whatever's currently typed in Amount/Recurrence, computed via TransactionLogBookFactory.ComputeMilestoneTrajectory, no forecast needed. Pass empty in One-off mode (nothing there is proposing a new rate) — DrawChart falls back to drawing the real, saved ActualTrajectory instead; the two are never drawn together.</param>
+    /// <param name="proposedTrajectory">Savings-plan mode's own "proposed — rough, live estimate" line: the projected jar ExpectedAmount for whatever's currently typed in Amount/Recurrence/Starting-point, computed via TransactionLogBookFactory.ComputeExpectedTrajectory, no forecast needed. Pass empty in One-off mode (nothing there is proposing a new rate) — DrawChart falls back to drawing the real, saved ActualTrajectory instead; the two are never drawn together.</param>
     /// <param name="additionAmount">One-off mode's own "+ $X today" line: the signed amount the currently-typed one-off would add, drawn as ActualTrajectory shifted by this much from Today onward. Null in Savings-plan mode, or whenever nothing valid is typed yet.</param>
     public void Load(
         string narrative,
@@ -156,9 +156,12 @@ public partial class SummaryRegion : UserControl
         // visual role (this savings plan's own progress) and are never on
         // screen at the same time to be confused with each other.
         //
-        // This proposed line IS the milestone line, and only the earmark-pattern
-        // form ever passes it — a projected milestone is only useful where the
-        // user sets the plan directly, so the finance-pattern form never shows one.
+        // This proposed line is the projected jar ExpectedAmount (a release
+        // subtracts the goal's payout and floors at 0, so a starting balance or
+        // glut carries forward — NOT the reset-at-release milestone), and only
+        // the earmark-pattern form ever passes it — a projected jar is only
+        // useful where the user sets the plan directly, so the finance-pattern
+        // form never shows one.
         if (chart.ProposedTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline

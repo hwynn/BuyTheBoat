@@ -137,6 +137,20 @@ public partial class MainWindow : Window
         EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
         EarmarkForm.RequestForecastWithProposedPlan = ForecastWithProposedPlan;
 
+        // Picking a plan-less goal in the Earmark form proposes a real,
+        // affordability-capped plan (the same one "Save and Plan" would create)
+        // as unsaved draft values to edit — not a bare monthly skeleton. Paced
+        // from the goal's own start when that's still in the future, so the
+        // proposed plan fits the goal's span without the proposer stretching the
+        // goal (which a draft can't persist).
+        EarmarkForm.RequestProposedPlan = goal =>
+        {
+            var accountId = _financialPatterns.GetAccountId(goal.FinanceId) ?? DefaultAccountId();
+            var today = CurrentAsOfDate();
+            var asOf = goal.DatePattern.ActiveStart > today ? goal.DatePattern.ActiveStart : today;
+            return ProposeAllocationPlanFor(goal, accountId, asOf);
+        };
+
         // planning/21 Philosophy 5/7: the permanent Transfer tab, replacing the
         // old CreateTransferWindow popup. Create-only for now (see
         // TransferFormPanel) — the panel collects from/to/amount/schedule, this
@@ -1574,13 +1588,18 @@ public partial class MainWindow : Window
             PickEarmarkPattern = PickEarmarkPatternToOpen,
             NavigateToEarmarkForm = (plan, suggestedOverrides) =>
             {
-                if (isNew)
+                // No plan to open yet, but the user asked to plan — propose one,
+                // the same affordability-capped proposal a brand-new outflow gets.
+                // This covers two cases with one path: a brand-new pattern (the
+                // plan doesn't exist until AutoCreateAllocationPlan makes it right
+                // here), and an EXISTING plan-less outflow the user is now planning
+                // for (previously this dropped the user on a blank, goal-less form).
+                // AutoCreateAllocationPlan no-ops for income (Amount >= 0), so
+                // running it unconditionally when plan is null is safe — plan just
+                // stays null and the income branch below handles it. Re-read rather
+                // than trusting the now-stale (null) plan parameter above.
+                if (plan is null)
                 {
-                    // Run()'s own AskWhichEarmarkPatternToOpen already ran
-                    // (before this callback did) and found nothing, since
-                    // the plan doesn't exist until AutoCreateAllocationPlan
-                    // creates it right here — re-read rather than trusting
-                    // the now-stale (null) plan parameter above.
                     AutoCreateAllocationPlan(pattern, accountId);
                     plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
                 }
@@ -1612,8 +1631,11 @@ public partial class MainWindow : Window
                 }
                 else if (pattern.Amount < 0m)
                 {
-                    // A brand-new outflow with no plan yet opens a blank Earmark
-                    // form so the user can create one.
+                    // Defensive fallback: an outflow should have a plan by now
+                    // (AutoCreateAllocationPlan above always saves one for
+                    // Amount < 0), but if the proposal somehow produced none,
+                    // open a blank Earmark form so the user can still create one
+                    // by hand rather than landing nowhere.
                     EarmarkForm.LoadForNewPattern();
                     SwitchToTab("Earmark");
                 }
@@ -1734,22 +1756,11 @@ public partial class MainWindow : Window
     /// <param name="accountId">Which account the outflow is filed under — scopes the income scan.</param>
     private void AutoCreateAllocationPlan(FinancialPattern pattern, int accountId)
     {
-        if (pattern.Amount >= 0m)
+        if (ProposeAllocationPlanFor(pattern, accountId, CurrentAsOfDate()) is not { } proposal)
         {
             return;
         }
 
-        // Cap the front-load and the ongoing rate at what the funds can spare (the affordability ceiling),
-        // both measured on a re-forecast with this bill's own plans omitted so they aren't counted against
-        // themselves — the single-date ceiling for the front-load, the range ceiling for the per-cycle rate.
-        var room = ForecastOmitting(new HashSet<int> { pattern.FinanceId });
-        var roomPage = room.Accounts.FirstOrDefault(account => account.AccountId == accountId)?.Page ?? room.PrimaryAccountPage;
-        var startingCeiling = AffordabilityCeiling.ForStartingEarmark(roomPage, pattern, CurrentAsOfDate(), ChangeKind.Implicit);
-        var rateCeiling = AffordabilityCeiling.For(roomPage, pattern, CurrentAsOfDate(), ChangeKind.Implicit);
-        var proposal = AllocationPlanProposer.Propose(
-            pattern, _financialPatterns.GetByAccountExcludingTransferPatterns(accountId), CurrentAsOfDate(),
-            startingEarmarkCeiling: startingCeiling,
-            ongoingRateCeiling: rateCeiling);
         // The proposer may stretch the outflow's active span back to the as-of
         // date (planning/15, ActiveFrom) so its plan fits — persist that prepared
         // outflow, not the original, or the plan reads short against a goal whose
@@ -1760,6 +1771,27 @@ public partial class MainWindow : Window
         {
             _manualEarmarks.Save(starting);
         }
+    }
+
+    /// <summary>[CALC] Builds the affordability-capped default plan for an outflow WITHOUT saving anything — shared by AutoCreateAllocationPlan (which persists it) and the Earmark form's own plan-less-goal draft (which loads its values for the user to edit). Null for income (no plan to propose). The front-load and ongoing rate are each capped at what the funds can spare (the affordability ceiling), measured on a re-forecast with this outflow's own plans omitted so they aren't counted against themselves — the single-date ceiling for the front-load, the range ceiling for the per-cycle rate.</summary>
+    /// <param name="pattern">The outflow to propose a plan for.</param>
+    /// <param name="accountId">Which account the outflow is filed under.</param>
+    /// <param name="asOf">The date the proposal is paced from — today for a live outflow, or the goal's own future start so the plan fits its span without the proposer having to stretch it.</param>
+    private ProposedAllocationPlan? ProposeAllocationPlanFor(FinancialPattern pattern, int accountId, DateOnly asOf)
+    {
+        if (pattern.Amount >= 0m)
+        {
+            return null;
+        }
+
+        var room = ForecastOmitting(new HashSet<int> { pattern.FinanceId });
+        var roomPage = room.Accounts.FirstOrDefault(account => account.AccountId == accountId)?.Page ?? room.PrimaryAccountPage;
+        var startingCeiling = AffordabilityCeiling.ForStartingEarmark(roomPage, pattern, asOf, ChangeKind.Implicit);
+        var rateCeiling = AffordabilityCeiling.For(roomPage, pattern, asOf, ChangeKind.Implicit);
+        return AllocationPlanProposer.Propose(
+            pattern, _financialPatterns.GetByAccountExcludingTransferPatterns(accountId), asOf,
+            startingEarmarkCeiling: startingCeiling,
+            ongoingRateCeiling: rateCeiling);
     }
 
     private DateOnly CurrentAsOfDate() =>

@@ -619,6 +619,117 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void ComputeExpectedTrajectory_carries_a_starting_seed_forward_instead_of_resetting_at_release()
+    {
+        // The Summary chart's proposed line is the projected jar
+        // ExpectedAmount, not the milestone: a release subtracts the goal's
+        // payout and floors at 0 rather than resetting, so a starting balance
+        // (the Starting-point region's amount) keeps lifting the line past the
+        // first occurrence instead of vanishing at it — the whole reason a user
+        // setting a starting amount must see the line move. Contrast with
+        // ComputeMilestoneTrajectory_seed_only_survives_until_the_first_release,
+        // asserted directly at the end.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Electric",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                DtStart = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = 1,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [5],
+                    DtStart = new DateOnly(2025, 1, 5),
+                    Until = new DateOnly(2025, 11, 5),
+                }),
+            },
+            bill);
+
+        // from a few days before the first event, so the seeded opening point
+        // lands on its own date rather than colliding with an event date.
+        var from = new DateOnly(2024, 12, 31);
+        var expected = TransactionLogBookFactory.ComputeExpectedTrajectory(
+            [plan], bill, from, new DateOnly(2025, 3, 1), startingAllocation: 200m);
+
+        expected.Single(p => p.Date == from).ExpectedAmount.ShouldBe(200m); // the starting balance, visible at the left edge
+        expected.Single(p => p.Date == new DateOnly(2025, 1, 1)).ExpectedAmount.ShouldBe(100m);  // release pays $100, seed survives
+        expected.Single(p => p.Date == new DateOnly(2025, 1, 5)).ExpectedAmount.ShouldBe(250m);  // + $150 contribution
+        expected.Single(p => p.Date == new DateOnly(2025, 2, 1)).ExpectedAmount.ShouldBe(150m);  // - $100 release
+        expected.Single(p => p.Date == new DateOnly(2025, 2, 5)).ExpectedAmount.ShouldBe(300m);  // + $150 contribution
+        expected.Single(p => p.Date == new DateOnly(2025, 3, 1)).ExpectedAmount.ShouldBe(200m);  // still lifted, three releases in
+
+        // The milestone walk, same inputs, is $0 at that same release — the
+        // exact difference this line was switched away from.
+        TransactionLogBookFactory.ComputeMilestoneTrajectory(
+                [plan], bill, from, new DateOnly(2025, 3, 1), startingAllocation: 200m)
+            .Single(p => p.Date == new DateOnly(2025, 3, 1)).MilestoneAmount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void ComputeExpectedTrajectory_matches_the_real_cascades_jar_balance()
+    {
+        // The no-forecast-needed projection has to agree with the trusted
+        // day-by-day cascade before the chart relies on it — same structural
+        // glut as A_structural_glut_accumulates_across_releases_instead_of_
+        // being_reset ($150 contributed against a $100 release, same day), which
+        // the real forecast walks to 50 / 100 / 150.
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Rent",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                DtStart = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 31),
+            }),
+            Amount = -100m,
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    DtStart = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 31),
+                }),
+            },
+            goal);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 3, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [plan]));
+
+        var trajectory = TransactionLogBookFactory.ComputeExpectedTrajectory(
+            [plan], goal, new DateOnly(2024, 12, 31), new DateOnly(2025, 3, 1));
+
+        foreach (var date in new[] { new DateOnly(2025, 1, 1), new DateOnly(2025, 2, 1), new DateOnly(2025, 3, 1) })
+        {
+            trajectory.Single(p => p.Date == date).ExpectedAmount.ShouldBe(Jar(SnapshotOn(result, date), goal.FinanceId));
+        }
+    }
+
+    [Fact]
     public void IsFirstOccurrencePending_is_true_before_the_first_occurrence_and_on_it_but_false_after()
     {
         var bill = FinancialPattern.Create(new FinancialPatternOptions
