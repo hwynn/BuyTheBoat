@@ -84,14 +84,14 @@ public sealed class EarMarkPattern
         if (options.DatePattern.ActiveStart < goal.DatePattern.ActiveStart)
         {
             throw new ArgumentException(
-                "An earmark pattern can't begin allocating before its goal's active span starts.",
+                $"An earmark pattern can't begin allocating before its goal's active span starts ({goal.DatePattern.ActiveStart:MMM d, yyyy}).",
                 nameof(options));
         }
 
         if (options.DatePattern.Until > goal.DatePattern.Until)
         {
             throw new ArgumentException(
-                "An earmark pattern can't still be allocating funds after the goal's own date range ends.",
+                $"An earmark pattern can't still be allocating funds after the goal's own date range ends ({goal.DatePattern.Until:MMM d, yyyy}).",
                 nameof(options));
         }
 

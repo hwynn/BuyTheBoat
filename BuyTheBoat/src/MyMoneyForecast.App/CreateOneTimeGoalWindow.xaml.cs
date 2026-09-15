@@ -35,6 +35,13 @@ public partial class CreateOneTimeGoalWindow : Window
     // Which account this goal's savings sit in — always a real selection.
     public int SelectedAccountId => (int)AccountComboBox.SelectedValue;
 
+    /// <summary>[UI] Fences the "start saving" and "need it by" pickers off each other so the start always falls strictly before the due date — the combination OneTimeGoalFactory.Create would otherwise reject only once Create is clicked. Each picker's calendar simply won't offer a day on the wrong side of the other's current selection.</summary>
+    private void OnDateRangeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        DueDatePicker.DisplayDateStart = StartDatePicker.SelectedDate?.AddDays(1);
+        StartDatePicker.DisplayDateEnd = DueDatePicker.SelectedDate?.AddDays(-1);
+    }
+
     private void OnStartTodayChanged(object sender, RoutedEventArgs e)
     {
         StartDatePicker.IsEnabled = StartTodayCheckBox.IsChecked != true;

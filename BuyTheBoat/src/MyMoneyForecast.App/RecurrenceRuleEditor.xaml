@@ -229,6 +229,17 @@
                          list can't reintroduce unbounded growth — the list
                          itself gets an internal scrollbar past this height. -->
                     <ListBox x:Name="OccurrencesListBox" Margin="0,4,0,0" MaxHeight="220"/>
+                    <!-- Shown when a rule is valid but lands on nothing — most
+                         often an end date on or before the start, which
+                         RecurrenceRule.Create accepts but which produces an
+                         empty schedule (a bill/plan that silently does
+                         nothing). The date pickers now stop this being
+                         picked in the first place; this note catches the
+                         cases they can't (e.g. a typed-in end date). -->
+                    <TextBlock x:Name="EmptyScheduleNote" Margin="0,4,0,0" TextWrapping="Wrap"
+                               Foreground="#FFB05A00" FontWeight="SemiBold" Visibility="Collapsed"
+                               AutomationProperties.AutomationId="EmptyScheduleNote"
+                               Text="This schedule has no occurrences — check that the end date is after the start date."/>
                     <!-- Collapsed to DefaultVisibleOccurrenceCount dates by
                          default (the author's own call, 2026-08-06); this
                          button's own label carries the total count even

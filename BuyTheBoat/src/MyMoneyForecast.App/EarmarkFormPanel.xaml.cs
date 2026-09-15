@@ -504,6 +504,26 @@ public partial class EarmarkFormPanel : UserControl
         NoPatternNote.Visibility = !isOneOff && _selectedGoal is not null && !selectedGoalHasPlan
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+        UpdateGoalSpanConstraint();
+    }
+
+    /// <summary>[UI] Caps the schedule editor's date pickers to the selected goal's span and captions that span above the fields, so the user can't build (or even pick) a plan reaching outside its goal — the case EarMarkPattern.Create would otherwise reject at Save. Savings-plan mode only, and only with a goal picked; one-off mode manages its own EarmarkDatePicker bounds elsewhere.</summary>
+    private void UpdateGoalSpanConstraint()
+    {
+        if (SavingsPlanRadio.IsChecked == true && _selectedGoal is { } goal)
+        {
+            var activeStart = goal.DatePattern.ActiveStart;
+            var until = goal.DatePattern.Until;
+            RuleEditor.LimitSelectableDates(activeStart, until);
+            GoalSpanText.Text = $"The plan must stay within the goal's dates: {activeStart:MMM d, yyyy} – {until:MMM d, yyyy}.";
+            GoalSpanText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            RuleEditor.LimitSelectableDates(null, null);
+            GoalSpanText.Visibility = Visibility.Collapsed;
+        }
     }
 
     private bool IsMove => ActionComboBox.SelectedIndex == 2;
@@ -703,6 +723,18 @@ public partial class EarmarkFormPanel : UserControl
         // jar — so the field is a plain magnitude and the sign is fixed here
         // rather than typed by the user.
         var amount = -Math.Abs(enteredAmount);
+
+        // Backstop for the goal-span cap: the date pickers already refuse
+        // out-of-range days from the calendar (UpdateGoalSpanConstraint), but a
+        // date typed straight into the box can still slip past those display
+        // bounds — so catch it here with the goal's own dates named, rather than
+        // letting EarMarkPattern.Create's raw ArgumentException surface.
+        if (rule.ActiveStart < selectedGoal.DatePattern.ActiveStart || rule.Until > selectedGoal.DatePattern.Until)
+        {
+            throw new InvalidOperationException(
+                "The plan must stay within the goal's dates: " +
+                $"{selectedGoal.DatePattern.ActiveStart:MMM d, yyyy} – {selectedGoal.DatePattern.Until:MMM d, yyyy}.");
+        }
 
         var pattern = EarMarkPattern.Create(
             new EarMarkPatternOptions

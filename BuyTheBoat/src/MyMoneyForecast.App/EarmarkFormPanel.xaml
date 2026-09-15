@@ -70,6 +70,15 @@
                 <Grid>
                     <!-- Savings-plan mode -->
                     <StackPanel x:Name="SavingsPlanPanel">
+                        <!-- The goal's span, and the reason the plan's own dates
+                             are capped to it (EarMarkPattern.Create rejects a
+                             plan reaching outside its goal). Shown only in
+                             savings-plan mode, and only once a goal is picked —
+                             one-off mode surfaces the same span through its own
+                             BalanceInfoText instead. -->
+                        <TextBlock x:Name="GoalSpanText" Margin="0,0,0,10" FontSize="11" Foreground="Gray"
+                                   TextWrapping="Wrap" Visibility="Collapsed"
+                                   AutomationProperties.AutomationId="GoalSpanText"/>
                         <!-- Amount per occurrence: declared here so it's still a
                              normal, code-behind-wired part of this form, but
                              handed to RuleEditor's own left column in the

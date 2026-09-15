@@ -48,6 +48,13 @@ public partial class RecurrenceRuleEditor : UserControl
     // field — only the section's own Visibility is host-gated.
     private List<DateOnly> _excludedDates = [];
 
+    // The enclosing span a host has capped the pickers to (LimitSelectableDates),
+    // or null for no cap. Kept as fields so the Until picker's own lower bound
+    // can be re-derived as the later of this earliest and the live Start on
+    // every Start change, without the two rules overwriting each other.
+    private DateOnly? _outerEarliest;
+    private DateOnly? _outerLatest;
+
     public RecurrenceRuleEditor()
     {
         InitializeComponent();
@@ -185,6 +192,34 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
+    /// <summary>[UI] Caps the Start and Until date pickers so only days inside the given span can be picked from the calendar — used to keep an earmark plan's own span within its goal's, so the user can't pick a date the save would reject. A null for either end clears that bound. On top of this outer cap, the Until picker never reaches earlier than the live Start (see ApplyDateBounds).</summary>
+    /// <param name="earliest">The earliest pickable day, or null for no lower bound.</param>
+    /// <param name="latest">The latest pickable day, or null for no upper bound.</param>
+    public void LimitSelectableDates(DateOnly? earliest, DateOnly? latest)
+    {
+        _outerEarliest = earliest;
+        _outerLatest = latest;
+        ApplyDateBounds();
+    }
+
+    /// <summary>[UI] Re-derives what the two date pickers will let the user choose: Start ranges over the host's outer cap (LimitSelectableDates), and Until can't reach earlier than the chosen Start — so an end date before the start, which would silently produce an empty schedule, can't be picked. Called both when the cap changes and, via Recalculate, whenever the Start date moves.</summary>
+    private void ApplyDateBounds()
+    {
+        var outerStart = _outerEarliest?.ToDateTime(TimeOnly.MinValue);
+        var outerEnd = _outerLatest?.ToDateTime(TimeOnly.MinValue);
+
+        StartDatePicker.DisplayDateStart = outerStart;
+        StartDatePicker.DisplayDateEnd = outerEnd;
+
+        // Until's floor is the LATER of the outer cap's earliest and the live
+        // Start, so tightening one never loosens the other.
+        var untilFloor = StartDatePicker.SelectedDate is { } start
+            ? (outerStart is { } cap && cap > start ? cap : start)
+            : outerStart;
+        UntilDatePicker.DisplayDateStart = untilFloor;
+        UntilDatePicker.DisplayDateEnd = outerEnd;
+    }
+
     /// <summary>[CALC] The recurrence entered so far, minus its end date — what a loan payoff date is computed from. Throws a friendly error if the schedule fields aren't valid yet.</summary>
     public (RecurrenceFrequency Frequency, DateOnly Start, int Interval, IReadOnlyList<DayOfWeek> ByDay, IReadOnlyList<int> ByMonthDay) ReadScheduleParts()
     {
@@ -207,6 +242,11 @@ public partial class RecurrenceRuleEditor : UserControl
 
         UpdateFormVisibility();
         ErrorText.Text = string.Empty;
+
+        // Keep Until's floor pinned to whatever Start now reads — a Start moved
+        // past the current Until re-tightens the picker so the invalid end date
+        // can't be re-chosen (the note below catches one already sitting there).
+        ApplyDateBounds();
 
         // Independent of whether the rest of the form is currently valid —
         // what's already been skipped doesn't disappear just because the
@@ -236,6 +276,12 @@ public partial class RecurrenceRuleEditor : UserControl
             UpdateOccurrencesDisplay();
             UpdateExcludableOccurrences(rule);
 
+            // A rule that's structurally valid but lands on nothing — the
+            // silent empty-schedule trap. Flagged only here, in the success
+            // branch: the catch below already shows a real error message, and
+            // stacking this note on top of it would just be noise.
+            EmptyScheduleNote.Visibility = occurrences.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
             Result = rule;
         }
         catch (Exception ex)
@@ -244,6 +290,7 @@ public partial class RecurrenceRuleEditor : UserControl
             PreviewCalendar.SelectedDates.Clear();
             _allOccurrences = [];
             UpdateOccurrencesDisplay();
+            EmptyScheduleNote.Visibility = Visibility.Collapsed;
             ExcludableOccurrenceComboBox.ItemsSource = null;
             RruleStringTextBox.Text = string.Empty;
             ResolvedUntilText.Text = string.Empty;

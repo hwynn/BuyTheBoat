@@ -26,10 +26,10 @@
             <TextBox x:Name="AmountNeededTextBox" Margin="0,2,0,10"/>
 
             <TextBlock Text="When do you need it by?"/>
-            <DatePicker x:Name="DueDatePicker" Margin="0,2,0,10"/>
+            <DatePicker x:Name="DueDatePicker" Margin="0,2,0,10" SelectedDateChanged="OnDateRangeChanged"/>
 
             <TextBlock Text="When do you want to start saving?"/>
-            <DatePicker x:Name="StartDatePicker" Margin="0,2,0,4"/>
+            <DatePicker x:Name="StartDatePicker" Margin="0,2,0,4" SelectedDateChanged="OnDateRangeChanged"/>
             <CheckBox x:Name="StartTodayCheckBox" Content="Start today" Checked="OnStartTodayChanged" Unchecked="OnStartTodayChanged" Margin="0,0,0,10"/>
 
             <TextBlock Text="How important is this?" FontWeight="Bold"/>
