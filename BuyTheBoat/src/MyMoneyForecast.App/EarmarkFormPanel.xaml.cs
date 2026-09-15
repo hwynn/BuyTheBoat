@@ -98,7 +98,9 @@ public partial class EarmarkFormPanel : UserControl
         RuleEditor.ShowExcludedDatesEditor();
 
         AmountTextBox.TextChanged += (_, _) => { if (!_suppressEvents) { UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
-        RuleEditor.ResultChanged += (_, _) => { if (!_suppressEvents) { UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
+        // Changing the cadence re-sizes the matched amount before anything reads it,
+        // so a "Match the goal" plan keeps covering the goal as the schedule changes.
+        RuleEditor.ResultChanged += (_, _) => { if (!_suppressEvents) { if (MatchGoalCheckBox.IsChecked == true) { RecomputeMatch(); } UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
 
         // Once typing pauses, run the (now forecast-backed) one-off preview. One-shot: Stop first, so a
         // fresh keystroke that restarted the timer isn't pre-empted by this tick.
@@ -227,6 +229,7 @@ public partial class EarmarkFormPanel : UserControl
         _loadedActiveStart = existing.DatePattern.ActiveStart;
         _loadedPlanStart = existing.DatePattern.DtStart;
         RuleEditor.LoadFrom(existing.DatePattern);
+        InferMatchToggle(goal, Math.Abs(existing.Amount));
 
         _suppressEvents = false;
         UpdateModeVisibility();
@@ -277,6 +280,10 @@ public partial class EarmarkFormPanel : UserControl
         StartingEarmarkAmountTextBox.Text = string.Empty;
         _loadedActiveStart = null;
         _loadedPlanStart = null;
+        // Materializing a jar carries no schedule of its own to size against, so the
+        // user picks the amount; matching starts off.
+        MatchGoalCheckBox.IsChecked = false;
+        ApplyMatchState();
 
         _suppressEvents = false;
         UpdateModeVisibility();
@@ -339,6 +346,19 @@ public partial class EarmarkFormPanel : UserControl
         SelectedGoalText.Text = goal is null
             ? "— No goal selected —"
             : (string.IsNullOrWhiteSpace(goal.Description) ? goal.Source : goal.Description);
+
+        // Nothing to match against without a goal — the Load* paths that DO have
+        // one set the toggle themselves (InferMatchToggle), on after the schedule
+        // is in place.
+        if (goal is null)
+        {
+            MatchGoalCheckBox.IsEnabled = false;
+            MatchGoalCheckBox.IsChecked = false;
+        }
+        else
+        {
+            MatchGoalCheckBox.IsEnabled = true;
+        }
     }
 
     /// <summary>[STEP] Opens FinancialPatternPickerWindow, the same picker ExpenseFormPanel uses everywhere a FinancialPattern gets chosen. Shows every eligible pattern, not just ones with an existing plan — picking one without a plan while in One-off mode surfaces as SaveOneOff's own "Pick a goal with a savings plan to adjust" error rather than being filtered out.</summary>
@@ -453,6 +473,13 @@ public partial class EarmarkFormPanel : UserControl
                 Until = defaultUntil,
             }));
         }
+
+        // Turn matching on only when the amount just loaded already covers the goal
+        // at this cadence — true for a plain default plan (full amount on the bill's
+        // own cycle), false for an income-paced or affordability-capped proposal, or
+        // a hand-set amount like the user's own — so nothing meaningful gets rewritten.
+        decimal.TryParse(AmountTextBox.Text, out var loadedAmount);
+        InferMatchToggle(goal, loadedAmount);
     }
 
     /// <summary>[CALC] Shared by every Load* path above — the isolated earmark (if any) dated exactly on this pattern's own ActiveStart.</summary>
@@ -1647,6 +1674,123 @@ public partial class EarmarkFormPanel : UserControl
         {
             return null;
         }
+    }
+
+    /// <summary>[UI] Reacts to the "Match the goal" checkbox: locks the amount box and fills in the covering figure when on, hands the box back to the user when off. Also called by the Load* paths after they set the toggle.</summary>
+    private void OnMatchGoalToggled(object sender, RoutedEventArgs e)
+    {
+        ApplyMatchState();
+        if (!_suppressEvents)
+        {
+            UpdateSummary();
+            MarkDirtyIfNotSuppressed();
+        }
+    }
+
+    /// <summary>[UI] Puts the amount box into the state the "Match the goal" toggle calls for — read-only and auto-filled when on, plain and editable when off — without itself touching the Summary or dirty flag.</summary>
+    private void ApplyMatchState()
+    {
+        var on = MatchGoalCheckBox.IsChecked == true;
+        AmountTextBox.IsReadOnly = on;
+        if (on)
+        {
+            RecomputeMatch();
+        }
+        else if (_selectedGoal is { } goal)
+        {
+            UpdateMatchCoverageCaption(goal, matched: null);
+        }
+    }
+
+    /// <summary>[UI] Fills the amount box with the per-occurrence figure that covers the goal at the current cadence, and shows what it covers underneath. A no-op unless matching is on with a goal and a valid schedule.</summary>
+    private void RecomputeMatch()
+    {
+        if (MatchGoalCheckBox.IsChecked != true || _selectedGoal is not { } goal)
+        {
+            return;
+        }
+
+        var matched = ComputeMatchedAmount(goal);
+        var wasSuppressed = _suppressEvents;
+        _suppressEvents = true;
+        AmountTextBox.Text = matched is { } value ? value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+        _suppressEvents = wasSuppressed;
+        UpdateMatchCoverageCaption(goal, matched);
+    }
+
+    /// <summary>[CALC] The per-occurrence amount that makes the plan's total contributions equal the goal's total consumption over the plan's own window — the "Match the goal" figure. Deliberately a plain steady-state rate: no catch-up for an occurrence the plan starts too late to fund, and no netting of the starting balance (the user tops those up by hand). Null when the schedule or the goal has no occurrences in the window to divide by.</summary>
+    /// <param name="goal">The goal being funded, whose amount and cadence set what must be covered.</param>
+    private decimal? ComputeMatchedAmount(FinancialPattern goal)
+    {
+        if (RuleEditor.Result is not { } plan)
+        {
+            return null;
+        }
+
+        var deposits = plan.GetOccurrences();
+        if (deposits.Count == 0)
+        {
+            return null;
+        }
+
+        // Consumption over the same window the deposits span, counted from the first
+        // deposit onward — occurrences before it are the ones the user front-loads by
+        // hand, not something the ongoing rate stretches to cover.
+        var releaseCount = goal.DatePattern.GetOccurrences(deposits[0], plan.Until).Count;
+        if (releaseCount == 0)
+        {
+            return null;
+        }
+
+        return Math.Round(Math.Abs(goal.Amount) * releaseCount / deposits.Count, 2);
+    }
+
+    /// <summary>[UI] Shows the little "covers $456.00 / month" line under the amount box while matching is on, hidden otherwise.</summary>
+    /// <param name="goal">The goal whose own amount and cadence the line names.</param>
+    /// <param name="matched">The computed match, or null when there's nothing to cover — hides the line.</param>
+    private void UpdateMatchCoverageCaption(FinancialPattern goal, decimal? matched)
+    {
+        if (MatchGoalCheckBox.IsChecked != true || matched is null)
+        {
+            MatchCoverageText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var cadence = DescribeGoalCadence(goal);
+        MatchCoverageText.Text = cadence is null
+            ? $"covers {Math.Abs(goal.Amount):C} in total"
+            : $"covers {Math.Abs(goal.Amount):C} / {cadence}";
+        MatchCoverageText.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>[CALC] A short name for how often the goal comes due — "month", "2 weeks", etc. — or null for a one-time goal (nothing recurring to name).</summary>
+    /// <param name="goal">The goal whose cadence to describe.</param>
+    private static string? DescribeGoalCadence(FinancialPattern goal)
+    {
+        if (goal.DatePattern.GetOccurrences().Count <= 1)
+        {
+            return null;
+        }
+
+        var unit = goal.DatePattern.Frequency switch
+        {
+            RecurrenceFrequency.Daily => "day",
+            RecurrenceFrequency.Weekly => "week",
+            RecurrenceFrequency.Monthly => "month",
+            RecurrenceFrequency.Yearly => "year",
+            _ => "period",
+        };
+        var interval = goal.DatePattern.Interval;
+        return interval <= 1 ? unit : $"{interval} {unit}s";
+    }
+
+    /// <summary>[UI] Sets the "Match the goal" toggle to match the amount just loaded — on only when that amount already covers the goal at its cadence, so a paced, capped, or hand-set plan opens with matching off and nothing gets silently rewritten.</summary>
+    /// <param name="goal">The goal being funded.</param>
+    /// <param name="loadedAmount">The plan amount just placed in the box, to compare against the computed match.</param>
+    private void InferMatchToggle(FinancialPattern goal, decimal loadedAmount)
+    {
+        MatchGoalCheckBox.IsChecked = ComputeMatchedAmount(goal) is { } matched && matched == loadedAmount;
+        ApplyMatchState();
     }
 
     /// <summary>[CALC] A goal can have more than one EarMarkPattern funding it concurrently (e.g. two household partners each contributing) — this gathers every one actually funding the goal, with whichever ONE is currently loaded/being edited in this form (matched by Start, the same resolution key _patternsByFinanceId uses) replaced by its live, not-yet-saved version; every other concurrent earmark pattern passes through unchanged from the saved data. Live checks need this explicitly — the saved-state path already gathers every pattern by FinanceId.</summary>

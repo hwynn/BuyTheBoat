@@ -90,8 +90,13 @@
                              beside it up there — see RecurrenceRuleEditor.xaml's
                              own comment on that Grid for the full reasoning. -->
                         <StackPanel x:Name="AmountPanel" Margin="0,0,0,10">
+                            <CheckBox x:Name="MatchGoalCheckBox" Content="Match the goal" Margin="0,0,0,6"
+                                      Checked="OnMatchGoalToggled" Unchecked="OnMatchGoalToggled"
+                                      AutomationProperties.AutomationId="MatchGoalCheckBox"/>
                             <TextBlock Text="Amount per occurrence"/>
                             <TextBox x:Name="AmountTextBox" Width="150" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                            <TextBlock x:Name="MatchCoverageText" FontSize="11" Foreground="Gray"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
                         </StackPanel>
 
                         <!-- REGION — "Starting point," REAL VALUES 2026-08-06
