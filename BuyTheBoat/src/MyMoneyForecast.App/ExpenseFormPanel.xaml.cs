@@ -123,7 +123,7 @@ public partial class ExpenseFormPanel : UserControl
         _initialized = true;
     }
 
-    /// <summary>[UI] Supplies the account/transfer/plan context this panel reads from — which account each existing pattern is currently filed under, which finance ids are transfer legs (needed to open FinancialPatternPickerWindow, alongside RequestForecast), every EarMarkPattern (so the Summary region can find this Expense's own linked plan, if it has one), and every FinancialPattern (so LoadPattern can silently redirect a stale, already-superseded segment to its own current one). Call before any Load* method, and again after every save.</summary>
+    /// <summary>[UI] Supplies the account/transfer/plan context this panel reads from — which account each existing pattern is currently filed under, which finance ids are transfer legs (needed to open FinancialPatternPickerWindow, alongside RequestForecast), every EarMarkPattern (so the Summary region can find this Expense's own linked plan, if it has one), and every FinancialPattern (so LoadPattern can silently redirect a stale, already-superseded segment to its own current one). Also keeps the account dropdown's list bound (without changing which account is picked), so opening the Expense tab directly doesn't leave the menu empty. Call before any Load* method, and again after every save.</summary>
     /// <param name="accountIdByFinanceId">Finance id → the account it's currently filed under.</param>
     /// <param name="accounts">Every account, to populate the account picker.</param>
     /// <param name="transferFinanceIds">Finance ids that are transfer legs — excluded from the instance picker.</param>
@@ -157,6 +157,19 @@ public partial class ExpenseFormPanel : UserControl
         _earmarkPatternCountByFinanceId = earMarkPatterns
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => group.Count());
+
+        // Keep the account dropdown's list current even when the Expense tab is
+        // opened directly. SetContext runs on every tab selection (and at
+        // startup), but PopulateAccounts only runs on a New/Edit load — so
+        // without this the menu sits empty until the first Load*. Preserve the
+        // picked account: SetContext must never disturb an in-progress field, and
+        // swapping ItemsSource otherwise clears the selection.
+        var pickedAccountId = AccountComboBox.SelectedValue;
+        var wasSuppressed = _suppressEvents;
+        _suppressEvents = true;
+        AccountComboBox.ItemsSource = _accounts;
+        AccountComboBox.SelectedValue = pickedAccountId;
+        _suppressEvents = wasSuppressed;
     }
 
     public int SelectedAccountId => (int)AccountComboBox.SelectedValue;
@@ -1002,21 +1015,24 @@ public partial class ExpenseFormPanel : UserControl
             StopEndDatePicker.SelectedDate is { } date ? DateOnly.FromDateTime(date) : null);
     }
 
-    /// <summary>[UI] For "it just keeps going": sets the schedule's end date to the forecast horizon plus one cycle (planning/15) — far enough that the ongoing bill covers the whole current window, with the renewal pass (MainWindow.RenewOngoingPatternsToHorizon) pushing it further as the horizon moves out. The exact date is never shown to the user.</summary>
+    /// <summary>[UI] For "it just keeps going": sets the schedule's end date to the forecast horizon plus one cycle (planning/15), but never less than a year from today — so a near-in horizon can't leave the ongoing bill with just a few occurrences. The renewal pass (MainWindow.RenewOngoingPatternsToHorizon) pushes it further as the horizon moves out, and the exact date is never shown to the user.</summary>
     private void UpdateKeepsGoingEnd()
     {
         PayoffReadoutText.Text = string.Empty;
         var horizon = RequestForecast?.Invoke().HorizonEndDate ?? DateOnly.FromDateTime(DateTime.Today).AddYears(3);
+        var oneYearFloor = DateOnly.FromDateTime(DateTime.Today).AddYears(1);
         try
         {
             var schedule = RuleEditor.ReadScheduleParts();
-            RuleEditor.SetHostEndDate(AddOneCycle(horizon, schedule.Frequency, schedule.Interval));
+            var end = AddOneCycle(horizon, schedule.Frequency, schedule.Interval);
+            RuleEditor.SetHostEndDate(end > oneYearFloor ? end : oneYearFloor);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException)
         {
             // Schedule not fully typed yet — a month past the horizon is a safe
             // over-estimate; UpdateStopEnd re-runs once the schedule is valid.
-            RuleEditor.SetHostEndDate(horizon.AddMonths(1));
+            var end = horizon.AddMonths(1);
+            RuleEditor.SetHostEndDate(end > oneYearFloor ? end : oneYearFloor);
         }
     }
 
