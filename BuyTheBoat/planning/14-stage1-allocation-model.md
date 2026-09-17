@@ -6,8 +6,8 @@ Stage 1 of the ["Adjusting the Plan" phase](13-adjusting-the-plan-charter.md); d
 transfer's withdrawal) gets a fund jar that reserves against free funds, backed by a real, editable
 `EarMarkPattern` — user-facing name **Allocation Plan** — proposed and pre-filled at creation by a
 scanner that looks at income. A jar always has a plan behind it or doesn't exist; nothing creates a
-savings plan silently. **Income never gets a jar.** A transfer reserves in the account it leaves, but
-the household view doesn't count it as set aside.
+savings plan silently. **Income never gets a jar.** A transfer reserves in the account it leaves,
+which lowers that account's own free funds like any other outflow's reservation.
 
 - **`Mandatory` became skippability** — it no longer governs *whether* something reserves, only drain
   order: an unskippable jar is emptied only after every skippable one is.

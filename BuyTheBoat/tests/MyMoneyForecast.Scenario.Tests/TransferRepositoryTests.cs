@@ -71,10 +71,9 @@ public class TransferRepositoryTests : IDisposable
         transfer.Amount.ShouldBe(750m);
     }
 
-    // planning/14 item A-1 / finding F10: the engine needs to know which
-    // patterns are a transfer's WITHDRAWAL so the household roll-up can add
-    // that reservation back into free. Only the outgoing half counts — the
-    // deposit never reserves anything.
+    // Only a transfer's WITHDRAWAL leg reserves, so only it is reported — used
+    // to keep a transfer's Allocation Plan out of the earmark-patterns grid (a
+    // transfer shows as one thing on its own tab). The deposit never reserves.
     [Fact]
     public void Only_the_withdrawal_half_of_a_transfer_is_reported_as_reserving()
     {

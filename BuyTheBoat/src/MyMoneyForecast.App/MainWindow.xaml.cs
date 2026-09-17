@@ -792,10 +792,6 @@ public partial class MainWindow : Window
         AsOfDate = asOfDate,
         HorizonEndDate = horizonEndDate,
         Accounts = BuildAccountInputs(),
-        // planning/14 item A-1: lets the household roll-up add a transfer's
-        // reservation back into free, so moving your own money never reads
-        // as household spending.
-        TransferWithdrawalFinanceIds = _financialPatterns.GetTransferWithdrawalFinanceIds(),
     };
 
     /// <summary>[CALC] Re-runs the forecast with the given goals' savings plans omitted — the "room for these plans" view the save-confirmation's affordability ceiling sizes suggestions against. Same inputs and window as the shown forecast, just filtered; deliberately does NOT touch _lastForecast (a throwaway calculation, not the shown forecast).</summary>
@@ -961,7 +957,7 @@ public partial class MainWindow : Window
                     // otherwise carry forward its latest snapshot.
                     var sampled = isAsOf ? account.Page.InitialSnapshot : SnapshotAsOf(account.Page, date);
                     total += sampled.ExpectedAmount ?? 0m;
-                    var accountFree = sampled.ExpectedFreeAmount ?? 0m;
+                    var accountFree = AccountFreeOn(account, date, forecast.AsOfDate);
                     free += accountFree;
                     if (accountFree < 0m)
                     {
@@ -1060,13 +1056,27 @@ public partial class MainWindow : Window
             return;
         }
 
+        // The pane shows whatever the calendar's own account filter is showing:
+        // one account when filtered, every account otherwise. Scoping here keeps
+        // the header, events, and jars about the same accounts as the cell the
+        // user clicked — so the free figures can't disagree.
+        var scopedAccounts = _accountFilter is { } scopeId
+            ? forecast.Accounts.Where(account => account.AccountId == scopeId).ToList()
+            : forecast.Accounts.ToList();
+
         var householdDay = forecast.Household.Days.FirstOrDefault(day => day.Date == date);
-        var householdFree = householdDay?.Free
-            ?? (date == forecast.AsOfDate
-                ? forecast.Household.AsOfFree
-                : forecast.Accounts.Sum(account => SnapshotAsOf(account.Page, date).ExpectedFreeAmount ?? 0m));
+        // Free to spend, summed the same way the calendar cell does and over the
+        // same accounts, so the header and the cell always agree for the same day.
+        var householdFree = scopedAccounts.Sum(account => AccountFreeOn(account, date, forecast.AsOfDate));
         var shortAccounts = householdDay?.ShortAccounts ?? [];
-        var anyDeallocation = forecast.Accounts.Any(account => account.Page.BalanceRecord.GetValueOrDefault(date)?.IsDeallocationDay == true);
+        if (_accountFilter is { } filteredId)
+        {
+            // Filtered to one account: the pane is about it alone, so the header
+            // names it as short only when it is the account that's short.
+            var filteredName = forecast.Accounts.FirstOrDefault(account => account.AccountId == filteredId)?.Name;
+            shortAccounts = shortAccounts.Where(name => name == filteredName).ToList();
+        }
+        var anyDeallocation = scopedAccounts.Any(account => account.Page.BalanceRecord.GetValueOrDefault(date)?.IsDeallocationDay == true);
 
         DeallocationDayChip.Visibility = anyDeallocation ? Visibility.Visible : Visibility.Collapsed;
         DayDetailHeader.Text = shortAccounts.Count > 0
@@ -1081,6 +1091,8 @@ public partial class MainWindow : Window
         // Each account's free on this day, computed up front so a short account's
         // gap can be classified as coverable-by-transfer (rung 2, name the donor)
         // vs. genuinely short household-wide (rung 3) — the ladder, planning/22.
+        // Deliberately over EVERY account, not just the scoped one: a filtered
+        // account that's short can still be told which other account could cover it.
         var freeByAccount = forecast.Accounts.ToDictionary(
             account => account.AccountId,
             account => (account.Page.BalanceRecord.GetValueOrDefault(date) ?? SnapshotAsOf(account.Page, date)).ExpectedFreeAmount ?? 0m);
@@ -1090,7 +1102,7 @@ public partial class MainWindow : Window
         var anyEarmarks = false;
         var anyUserSetAside = false;
 
-        foreach (var account in forecast.Accounts)
+        foreach (var account in scopedAccounts)
         {
             var page = account.Page;
             var snapshot = page.BalanceRecord.GetValueOrDefault(date) ?? SnapshotAsOf(page, date);
@@ -1210,6 +1222,13 @@ public partial class MainWindow : Window
 
         return snapshot;
     }
+
+    /// <summary>[CALC] One account's free-to-spend on a date: its ExpectedFreeAmount — the settled seed on the as-of day, else its carried-forward snapshot. The single definition the calendar cell and the selected-day header both sum, so the two views can never show different free figures for the same day.</summary>
+    /// <param name="account">The account to read free funds from.</param>
+    /// <param name="date">The day to read as of.</param>
+    /// <param name="asOfDate">The forecast's as-of date, which reads its settled seed rather than a carried-forward snapshot.</param>
+    private static decimal AccountFreeOn(AccountForecast account, DateOnly date, DateOnly asOfDate) =>
+        (date == asOfDate ? account.Page.InitialSnapshot : SnapshotAsOf(account.Page, date)).ExpectedFreeAmount ?? 0m;
 
     /// <summary>[UI] Philosophy §1: the Forecast button reads as actionable only while an input (range, balance, or cushion) differs from the forecast on screen. Wired to every input's change event; unparseable text counts as "differs" so the button stays live and the click handler can explain what's wrong.</summary>
     private void OnForecastInputChanged(object sender, RoutedEventArgs e) => UpdateForecastButtonState();

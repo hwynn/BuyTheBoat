@@ -164,7 +164,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         return patterns;
     }
 
-    /// <summary>[READS FILE] Returns the FinanceId of every transfer's withdrawal leg (the negative pattern, in the account the money leaves). Used by the forecast engine to add a transfer's reservation back into the household's free balance — moving your own money between accounts should never read as household spending.</summary>
+    /// <summary>[READS FILE] Returns the FinanceId of every transfer's withdrawal leg (the negative pattern, in the account the money leaves). Used to exclude a transfer withdrawal's Allocation Plan from the earmark-patterns grid — a transfer shows as one thing on its own tab, never as its underlying reservation plan.</summary>
     public IReadOnlySet<int> GetTransferWithdrawalFinanceIds()
     {
         // The domain FinancialPattern carries no TransferId of its own (a
@@ -195,8 +195,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
     public IReadOnlySet<int> GetTransferFinanceIds()
     {
         // The domain FinancialPattern carries no TransferId of its own (a
-        // storage-only concern), so callers are handed this set the same
-        // way GetTransferWithdrawalFinanceIds hands its set to the engine.
+        // storage-only concern), so callers are handed this set rather than
+        // reading it off the pattern directly.
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT FinanceId FROM FinancialPatterns WHERE TransferId IS NOT NULL;";

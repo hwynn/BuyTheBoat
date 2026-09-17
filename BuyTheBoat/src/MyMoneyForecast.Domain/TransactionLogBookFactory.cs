@@ -121,7 +121,7 @@ public static class TransactionLogBookFactory
             FirstNegativeFreeBalanceDate = firstNegative,
             FlooredManualEarmarks = floored,
             Accounts = accountForecasts,
-            Household = BuildHouseholdSummary(accountForecasts, options.TransferWithdrawalFinanceIds),
+            Household = BuildHouseholdSummary(accountForecasts),
         };
     }
 
@@ -260,18 +260,11 @@ public static class TransactionLogBookFactory
         ];
     }
 
-    /// <summary>[CALC] Builds the household roll-up: on each date any account has an event, sums every account's free/set-aside as of that date (its latest snapshot on or before it) — flagging any account whose own free went negative, since a positive household total can hide a locally-short account.</summary>
+    /// <summary>[CALC] Builds the household summary: on each date any account has an event, sums every account's free/set-aside as of that date (its latest snapshot on or before it) — flagging any account whose own free went negative, since a positive combined total can hide a locally-short account.</summary>
     /// <param name="accounts">Every account's own forecast.</param>
-    /// <param name="transferWithdrawalFinanceIds">Finance ids of transfer withdrawals, so their reservations can be added back into household free.</param>
-    private static HouseholdSummary BuildHouseholdSummary(
-        IReadOnlyList<AccountForecast> accounts,
-        IReadOnlySet<int> transferWithdrawalFinanceIds)
+    private static HouseholdSummary BuildHouseholdSummary(IReadOnlyList<AccountForecast> accounts)
     {
-        var asOfFree = accounts.Sum(account =>
-        {
-            var sample = SampleAsOf(account.Page, account.Page.StartDate, transferWithdrawalFinanceIds);
-            return sample.Free + sample.TransferReserved;
-        });
+        var asOfFree = accounts.Sum(account => SampleAsOf(account.Page, account.Page.StartDate).Free);
 
         var dates = new SortedSet<DateOnly>();
         foreach (var account in accounts)
@@ -288,21 +281,12 @@ public static class TransactionLogBookFactory
             var cushionDipped = new List<string>();
             foreach (var account in accounts)
             {
-                var sample = SampleAsOf(account.Page, date, transferWithdrawalFinanceIds);
+                var sample = SampleAsOf(account.Page, date);
 
-                // A transfer's withdrawal reserves in the account it leaves,
-                // so that account's own free reflects money already
-                // committed to going. Household-wide it is not spending —
-                // the money is still in the household — so it is moved back
-                // out of set-aside and into free here. Total is untouched
-                // either way, which is why this is a reclassification and
-                // the free + set-aside = total identity still holds.
-                free += sample.Free + sample.TransferReserved;
-                setAside += sample.SetAside - sample.TransferReserved;
+                free += sample.Free;
+                setAside += sample.SetAside;
 
-                // "Short" stays a per-account test on the account's OWN free —
-                // a transfer it cannot fund is a real problem for it, so the
-                // household add-back deliberately does not soften this.
+                // "Short" is a per-account test on the account's own free.
                 if (sample.Free < 0m)
                 {
                     shortAccounts.Add(account.Name);
@@ -332,33 +316,26 @@ public static class TransactionLogBookFactory
     /// <summary>[CALC] Samples an account's state as of a date: the latest snapshot on or before it, else the initial snapshot.</summary>
     /// <param name="page">The account to sample.</param>
     /// <param name="date">The date to sample as of.</param>
-    /// <param name="transferWithdrawalFinanceIds">Finance ids of transfer withdrawals, to split their reservation out separately.</param>
-    /// <returns>Free (spendable), SetAside (the reserved portion, expected minus free), TransferReserved (the part of SetAside sitting in transfer-withdrawal jars), and Cushion (the null-id jar's amount).</returns>
-    private static (decimal Free, decimal SetAside, decimal TransferReserved, decimal Cushion) SampleAsOf(
+    /// <returns>Free (spendable), SetAside (the reserved portion, expected minus free), and Cushion (the null-id jar's amount).</returns>
+    private static (decimal Free, decimal SetAside, decimal Cushion) SampleAsOf(
         AccountTransactionPage page,
-        DateOnly date,
-        IReadOnlySet<int> transferWithdrawalFinanceIds)
+        DateOnly date)
     {
         var snapshot = SnapshotAsOf(page, date);
 
         var free = snapshot.ExpectedFreeAmount ?? 0m;
         var expected = snapshot.ExpectedAmount ?? 0m;
 
-        var transferReserved = 0m;
         var cushion = 0m;
         foreach (var jar in snapshot.FundJars)
         {
-            if (jar.FinanceId is not { } financeId)
+            if (jar.FinanceId is null)
             {
                 cushion = jar.ExpectedAmount;
             }
-            else if (transferWithdrawalFinanceIds.Contains(financeId))
-            {
-                transferReserved += jar.ExpectedAmount;
-            }
         }
 
-        return (free, expected - free, transferReserved, cushion);
+        return (free, expected - free, cushion);
     }
 
     private sealed record AccountPageBuild(

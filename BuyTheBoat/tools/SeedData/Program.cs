@@ -470,7 +470,6 @@ var forecast = TransactionLogBookFactory.CreateForecast(new ForecastOptions
     AsOfDate = asOfDate,
     HorizonEndDate = horizonEndDate,
     Accounts = accountInputs,
-    TransferWithdrawalFinanceIds = financialPatterns.GetTransferWithdrawalFinanceIds(),
 });
 
 var patternsById = financialPatterns.GetAll().ToDictionary(p => p.FinanceId);

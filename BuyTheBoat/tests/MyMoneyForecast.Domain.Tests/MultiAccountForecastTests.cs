@@ -91,16 +91,17 @@ public class MultiAccountForecastTests
         day.ShortAccounts.ShouldBe(new[] { "Checking" });
     }
 
-    // planning/14 item A-1: a transfer reserves in the account it leaves,
-    // because per-account solvency is the point of accounts — but the household
-    // is not down a cent, so household-wide it is not "set aside".
+    // A transfer reserves in the account it leaves, and that reservation lowers
+    // free the same as any other outflow's — in the account's own free and in
+    // the combined free across accounts. Free means money not set aside for
+    // anything, transfers included.
     [Fact]
-    public void A_transfer_reserves_in_the_account_it_leaves_but_not_household_wide()
+    public void A_transfer_reservation_lowers_free_in_its_account_and_across_accounts()
     {
-        // Stage-1 revision: a transfer withdrawal reserves through its own
-        // Allocation Plan (what TransferFactory creates at transfer time) — here
-        // a single up-front contribution of the full amount, the front-loaded
-        // shape for a one-off with no income.
+        // A transfer withdrawal reserves through its own Allocation Plan (what
+        // TransferFactory creates at transfer time) — here a single up-front
+        // contribution of the full amount, the front-loaded shape for a one-off
+        // with no income.
         var withdrawal = OneOffExpense(20, -300m).WithActiveFrom(AsOf);
         var withdrawalPlan = EarMarkPattern.Create(
             new EarMarkPatternOptions
@@ -123,7 +124,6 @@ public class MultiAccountForecastTests
             StartingBalance = 0m,
             AsOfDate = AsOf,
             HorizonEndDate = new DateOnly(2026, 12, 1),
-            TransferWithdrawalFinanceIds = new HashSet<int> { 20 },
             Accounts =
             [
                 new AccountForecastInput
@@ -145,17 +145,13 @@ public class MultiAccountForecastTests
             ],
         });
 
-        // Checking's OWN free is down by the money already committed to leaving.
+        // Checking's OWN free is down by the money committed to leaving.
         var checking = result.Accounts.Single(account => account.Name == "Checking");
         checking.Page.InitialSnapshot.ExpectedFreeAmount.ShouldBe(700m);
 
-        // Household-wide it is added back: nothing has been spent, so free is
-        // the full 6000 and none of it reads as set aside.
-        result.Household.AsOfFree.ShouldBe(6000m);
-
-        var day = result.Household.Days.Single(entry => entry.Date == ExpenseDay);
-        day.SetAside.ShouldBe(0m);
-        day.ShortAccounts.ShouldBeEmpty();
+        // Combined free reflects that reservation too: 700 (Checking) + 5000
+        // (Savings), not the full 6000 — the reserved 300 is not free.
+        result.Household.AsOfFree.ShouldBe(5700m);
     }
 
     // planning/14 item C: the middle warning state — not over-committed, but
