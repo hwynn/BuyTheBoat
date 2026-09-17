@@ -71,6 +71,31 @@ public class TransferRepositoryTests : IDisposable
         transfer.Amount.ShouldBe(750m);
     }
 
+    [Fact]
+    public void Editing_a_transfer_rewrites_it_in_place_without_orphaning_or_duplicating_a_leg()
+    {
+        // Save a transfer, then re-save it the way editing does: the same transfer
+        // id and the same withdrawal/deposit finance ids, with a changed amount and
+        // swapped accounts.
+        _transfers.Save(Transfer(id: 1, outId: 100, inId: 101, from: 1, to: 2, amount: 500m));
+        _transfers.Save(Transfer(id: 1, outId: 100, inId: 101, from: 2, to: 1, amount: 750m));
+
+        // Exactly one transfer and its two legs remain — nothing duplicated, nothing left behind.
+        _transfers.GetAll().Count.ShouldBe(1);
+        _financialPatterns.GetAll().Count.ShouldBe(2);
+        _financialPatterns.GetByTransferId(1).Count.ShouldBe(2);
+
+        var transfer = _transfers.GetAll().Single();
+        transfer.Amount.ShouldBe(750m);
+        transfer.FromAccountId.ShouldBe(2);
+        transfer.ToAccountId.ShouldBe(1);
+
+        // The legs now carry the new amount and have moved to the swapped accounts.
+        var byAccount = _financialPatterns.GetAllByAccount();
+        byAccount[2].Single().Amount.ShouldBe(-750m); // withdrawal now leaves account 2
+        byAccount[1].Single().Amount.ShouldBe(750m);  // deposit now lands in account 1
+    }
+
     // Only a transfer's WITHDRAWAL leg reserves, so only it is reported — used
     // to keep a transfer's Allocation Plan out of the earmark-patterns grid (a
     // transfer shows as one thing on its own tab). The deposit never reserves.

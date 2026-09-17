@@ -311,6 +311,23 @@ public partial class MainWindow : Window
         SwitchToTab("Transfer");
     }
 
+    /// <summary>[STEP] The Transfers list tab's "Edit Selected..." button: loads the chosen transfer into the permanent Transfer form tab so the same form that creates a transfer also edits it. Saving rewrites that transfer in place.</summary>
+    private void OnEditTransferClick(object sender, RoutedEventArgs e)
+    {
+        if (TransfersGrid.SelectedItem is not TransferRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        // "Keeps going" lives on the legs, not the Transfer record, so read it
+        // off the withdrawal (the negative leg) to set the form's toggle.
+        var withdrawal = _financialPatterns.GetByTransferId(row.Transfer.Id).FirstOrDefault(pattern => pattern.Amount < 0m);
+        RefreshTransferFormContext();
+        TransferForm.LoadForEdit(row.Transfer, withdrawal?.AutoRenew ?? false);
+        SwitchToTab("Transfer");
+    }
+
     /// <summary>[STEP] The selected day's lever for a short account (planning/11 §B): opens the Transfer form tab already pointed at that account for what it is short. The user still confirms — we surface the problem and make the fix easy, we don't move their money for them (philosophy 1).</summary>
     private void OnCoverShortfallClick(object sender, RoutedEventArgs e)
     {
@@ -340,21 +357,39 @@ public partial class MainWindow : Window
         return false;
     }
 
-    /// <summary>[WRITES FILE] Persists a transfer the Transfer form tab handed back: turns from/to/amount/schedule into a Transfer plus its paired patterns, reserves for the withdrawal, saves, and returns the user to the Forecast tab. The panel already validated the inputs and cleared itself.</summary>
-    /// <param name="inputs">The from/to/amount/schedule the Transfer form collected.</param>
+    /// <summary>[WRITES FILE] Persists a transfer the Transfer form tab handed back — new or edited: turns from/to/amount/schedule into a Transfer plus its paired patterns, reserves for the withdrawal, saves, and returns the user to the Forecast tab. An edit rewrites the same transfer's legs in place; a new transfer gets fresh ids. The panel already validated the inputs and cleared itself.</summary>
+    /// <param name="inputs">The from/to/amount/schedule the Transfer form collected, plus the id of the transfer being edited (null for a new one).</param>
     private void OnTransferSaved(TransferFormInputs inputs)
     {
         var namesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
 
-        // Two fresh finance ids for the patterns (they are real patterns, so they
-        // must not collide with any existing pattern's id — patterns included).
-        var maxFinanceId = _financialPatterns.GetAll().Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max();
+        // Editing rewrites the existing transfer in place — same transfer id and
+        // the same withdrawal/deposit finance ids, so the saved patterns and plan
+        // are updated rather than a second set minted (the withdrawal is the
+        // negative leg, the deposit the positive). A new transfer gets a fresh
+        // transfer id and two fresh finance ids, which must not collide with any
+        // existing pattern's, transfer legs included.
+        int transferId, withdrawalFinanceId, depositFinanceId;
+        if (inputs.EditingTransferId is { } editingId)
+        {
+            var legs = _financialPatterns.GetByTransferId(editingId);
+            transferId = editingId;
+            withdrawalFinanceId = legs.First(pattern => pattern.Amount < 0m).FinanceId;
+            depositFinanceId = legs.First(pattern => pattern.Amount > 0m).FinanceId;
+        }
+        else
+        {
+            var maxFinanceId = _financialPatterns.GetAll().Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max();
+            transferId = _transfers.NextId();
+            withdrawalFinanceId = maxFinanceId + 1;
+            depositFinanceId = maxFinanceId + 2;
+        }
 
         var result = TransferFactory.Create(new TransferRequest
         {
-            TransferId = _transfers.NextId(),
-            WithdrawalFinanceId = maxFinanceId + 1,
-            DepositFinanceId = maxFinanceId + 2,
+            TransferId = transferId,
+            WithdrawalFinanceId = withdrawalFinanceId,
+            DepositFinanceId = depositFinanceId,
             FromAccountId = inputs.FromAccountId,
             ToAccountId = inputs.ToAccountId,
             FromAccountName = namesById[inputs.FromAccountId],
@@ -377,6 +412,12 @@ public partial class MainWindow : Window
         // must be persisted (via the transfer) for the plan to resolve.
         var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate(), spreadEvenlyWithNoIncome: false);
         _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
+        // Clear any existing withdrawal plan before saving the freshly-proposed
+        // one. Plans are keyed on (FinanceId, StartDate), so an edit whose new
+        // schedule moves the plan's start would otherwise leave the old plan
+        // behind as a duplicate reservation (a no-op for a brand-new transfer,
+        // whose withdrawal id is fresh; the renewal pass clears it the same way).
+        _earMarkPatterns.Delete(withdrawalFinanceId);
         _earMarkPatterns.Save(withdrawalPlan.Plan);
 
         RefreshGrids();

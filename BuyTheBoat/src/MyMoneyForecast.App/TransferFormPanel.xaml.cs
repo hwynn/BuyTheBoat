@@ -5,29 +5,35 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// The four values a create Transfer needs, handed back to MainWindow to
-// persist. MainWindow owns id assignment, the paired-pattern expansion
-// (TransferFactory), the withdrawal's allocation plan, and saving — the same
-// split every other form tab uses (the panel validates and hands back, the
-// window persists).
-public sealed record TransferFormInputs(int FromAccountId, int ToAccountId, decimal Amount, RecurrenceRule DatePattern, bool AutoRenew);
+// The values a Transfer save needs, handed back to MainWindow to persist.
+// MainWindow owns id assignment, the paired-pattern expansion (TransferFactory),
+// the withdrawal's allocation plan, and saving — the same split every other form
+// tab uses (the panel validates and hands back, the window persists).
+// EditingTransferId is null for a brand-new transfer and the existing transfer's
+// id when editing, which tells MainWindow to rewrite that transfer's legs in
+// place instead of minting new ones.
+public sealed record TransferFormInputs(int? EditingTransferId, int FromAccountId, int ToAccountId, decimal Amount, RecurrenceRule DatePattern, bool AutoRenew);
 
 // The permanent Transfer tab, replacing the old CreateTransferWindow popup.
-// Create-only for now (author's call): editing an existing transfer stays
-// delete-and-recreate on the Transfers list tab. Fields, captions and
-// validation are ported from the popup; the "cover a short day from another
-// account" lever now lands here pre-filled via LoadForShortfall instead of
-// opening a dialog.
+// Does double duty for creating a new transfer and editing an existing one
+// (the "Edit Selected..." button on the Transfers list tab loads one in via
+// LoadForEdit). Fields, captions and validation are ported from the popup; the
+// "cover a short day from another account" lever lands here pre-filled via
+// LoadForShortfall instead of opening a dialog.
 //
-// No instance-picker and no IsPopulated-true state — a create-only form never
-// loads an existing transfer — so the tab header only ever shows the dirty
-// accent, never the bold "editing" weight the other forms use.
+// Editing has no instance-picker — the transfer to edit is chosen on the list
+// tab and handed in — so the tab header shows the bold "editing" weight only
+// while a transfer is loaded (IsPopulated), and the dirty accent as usual.
 public partial class TransferFormPanel : UserControl
 {
     private IReadOnlyList<Account> _accounts = [];
     private bool _suppressEvents;
     private bool _isDirty;
     private bool _initialized;
+
+    // The transfer currently being edited, or null when the form is on a new
+    // transfer. Drives IsPopulated and tells MainWindow which transfer to rewrite.
+    private int? _editingTransferId;
 
     public TransferFormPanel()
     {
@@ -54,8 +60,8 @@ public partial class TransferFormPanel : UserControl
 
     public bool IsDirty => _isDirty;
 
-    /// <summary>[CALC] Always false — a create-only form never loads an existing instance. Kept so MainWindow can style this tab header with the same UpdateTabHeaderStyle call as the others.</summary>
-    public bool IsPopulated => false;
+    /// <summary>[CALC] True while an existing transfer is loaded for editing — lets MainWindow style this tab header with the bold "editing" weight, the same UpdateTabHeaderStyle call the other forms use.</summary>
+    public bool IsPopulated => _editingTransferId is not null;
 
     /// <summary>[UI] Supplies the accounts the From/To pickers list. Called before every Load and again on each tab switch, so it preserves the current selections rather than resetting them — an account list rarely changes, and a tab switch must never discard an in-progress transfer.</summary>
     /// <param name="accounts">Every account currently saved.</param>
@@ -80,6 +86,7 @@ public partial class TransferFormPanel : UserControl
     public void LoadForNew()
     {
         _suppressEvents = true;
+        _editingTransferId = null;
         SelectTwoDifferentAccounts(preselectToAccountId: null);
         AmountTextBox.Text = string.Empty;
         KeepsGoingCheckBox.IsChecked = false;
@@ -101,6 +108,7 @@ public partial class TransferFormPanel : UserControl
     public void LoadForShortfall(int toAccountId, decimal amount, DateOnly date)
     {
         _suppressEvents = true;
+        _editingTransferId = null;
         SelectTwoDifferentAccounts(preselectToAccountId: toAccountId);
         AmountTextBox.Text = amount.ToString(CultureInfo.InvariantCulture);
         // Covering a short day is a one-off move, never an ongoing transfer.
@@ -118,6 +126,29 @@ public partial class TransferFormPanel : UserControl
 
         // Pre-filled and ready to submit, unlike a blank new form — enable Save.
         MarkDirty();
+        UpdateAvailability();
+        UpdateSummary();
+    }
+
+    /// <summary>[STEP] Loads an existing transfer into the form to edit — fills From/To, amount, the "keeps going" toggle, and the schedule from the saved transfer, and remembers its id so saving rewrites it in place rather than creating a second one. Opens clean (not dirty), so Save stays disabled until the user actually changes something.</summary>
+    /// <param name="transfer">The transfer to edit.</param>
+    /// <param name="autoRenew">Whether this transfer "keeps going" — read off its withdrawal leg, since the Transfer record itself doesn't carry it.</param>
+    public void LoadForEdit(Transfer transfer, bool autoRenew)
+    {
+        _suppressEvents = true;
+        _editingTransferId = transfer.Id;
+        FromAccountComboBox.SelectedValue = transfer.FromAccountId;
+        ToAccountComboBox.SelectedValue = transfer.ToAccountId;
+        AmountTextBox.Text = transfer.Amount.ToString(CultureInfo.InvariantCulture);
+        KeepsGoingCheckBox.IsChecked = autoRenew;
+        RuleEditor.LoadFrom(transfer.DatePattern);
+        // Reconciles the "Ends" controls to the toggle: a keeps-going transfer's
+        // end date is host-driven (horizon + a cycle), a plain one owns its own.
+        ApplyKeepsGoingMode();
+        ErrorText.Text = string.Empty;
+        _suppressEvents = false;
+
+        ClearDirty();
         UpdateAvailability();
         UpdateSummary();
     }
@@ -207,16 +238,17 @@ public partial class TransferFormPanel : UserControl
             // When "keeps going" is on, the schedule's end date is already the
             // host-supplied horizon+cycle (ApplyKeepsGoingMode), so RuleEditor.Result
             // carries it; we just flag AutoRenew for both legs.
-            var inputs = new TransferFormInputs(fromId, toId, amount, schedule, KeepsGoingCheckBox.IsChecked == true);
+            var inputs = new TransferFormInputs(_editingTransferId, fromId, toId, amount, schedule, KeepsGoingCheckBox.IsChecked == true);
 
-            // The form clears itself after a successful save, before the
-            // callback navigates away — same order every other form panel uses.
+            // The form clears itself back to a new transfer after a successful
+            // save, before the callback navigates away — same order every other
+            // form panel uses.
             LoadForNew();
             TransferSaved?.Invoke(inputs);
         }
         catch (Exception ex)
         {
-            ErrorText.Text = ErrorLog.RecordAndDescribe("creating this transfer", ex);
+            ErrorText.Text = ErrorLog.RecordAndDescribe("saving this transfer", ex);
         }
     }
 

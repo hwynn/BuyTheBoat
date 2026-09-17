@@ -519,6 +519,8 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="Schedule Transfer..." Padding="12,5" Click="OnAddTransferClick"
                                 AutomationProperties.AutomationId="AddTransferButton"/>
+                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditTransferClick"
+                                AutomationProperties.AutomationId="EditTransferButton"/>
                         <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteTransferClick"
                                 AutomationProperties.AutomationId="DeleteTransferButton"/>
                     </StackPanel>
