@@ -6,121 +6,49 @@ namespace MyMoneyForecast.App;
 // Orchestrates everything that has to happen between a Save button being
 // clicked on the Expense form and the FinancialPattern actually landing in
 // storage — redesign/MyMoneyForecast/planning/25-editing-patterns-with-history.md's
-// Items B through F. Pulled into its own class/file specifically so this
-// project's simplest case (ExpenseFormPanel.Save, MainWindow's own
-// ExpenseForm.PatternSaved callback) doesn't have to carry the
-// confirmation-and-consequence logic this phase adds. (The TODO that used to
-// live at both of those call sites was resolved 2026-08-12 — see the
-// "Wiring" paragraph below — so there's nothing left to find there now.)
+// Items B through F. Pulled into its own class/file so this project's simplest
+// case (ExpenseFormPanel.Save, MainWindow's own ExpenseForm.PatternSaved
+// callback) doesn't have to carry the confirmation-and-consequence logic.
 //
-// STATUS (2026-08-17, supersedes the 2026-08-12 paragraph this replaced): a
-// real, working confirmation exists — EditingHistoryConfirmationWindow,
-// shown through the ConfirmImplicitChanges delegate — deliberately minimal
-// (plain WPF controls, not the styled cards in
-// planning/mockups/editing-history-confirmation-mockups.html) but no longer
-// missing any of the Item B-G questions/warnings themselves: the plan's health
-// heads-up (DetermineConcerningPlanNoticeIfApplicable — now an announcement row,
-// formerly a post-save MessageBox) and the plan-disambiguation picker
-// (AskWhichEarmarkPatternToOpen/PickEarmarkPattern) both went from TODO/no-op to
-// real, tested mechanisms 2026-08-17. See this class's own bottom-of-header "TODO
-// (2026-08-17)" section for what's STILL genuinely open, added the same day
-// on direct author request to make sure nothing found got lost to low
-// context before it could be written down. When ConfirmImplicitChanges
-// isn't wired at all (most tests, and any host that hasn't connected a real
-// popup), DefaultOutcome supplies the same safest,
-// least-destructive answers the old placeholder logic used to hardcode.
+// The confirmation itself is EditingHistoryConfirmationWindow, shown through the
+// ConfirmImplicitChanges delegate — deliberately minimal (plain WPF controls,
+// not the styled cards in
+// planning/mockups/editing-history-confirmation-mockups.html). When
+// ConfirmImplicitChanges isn't wired (most tests, or a host with no popup),
+// DefaultOutcome supplies the safest, least-destructive answers.
 //
-// PerformSave/PerformImplicitEarmarkChanges are real for: a break-off with 0
-// or 1 existing EarMarkPattern (PerformSingleSuccessorBreakOff); and a break-off
-// that consolidates more than one, forced or chosen (PerformMultiPlanBreakOff,
-// planning/25's Item F — needed a new BreakOffFactory.BreakOff overload,
-// MultiPlanBreakOffRequest, since the single-plan one only ever takes one
-// predecessor plan), keeping them separate when the user chooses (each
-// surviving plan continues its own rate onto the successor), or combining them
-// when a shape/start change forces it (PerformMultiPlanKeepSeparateBreakOff vs.
-// PerformMultiPlanBreakOff). The old retroactive-correction mechanisms — plan
-// narrowing, in-place consolidation, amount-only scaling — were removed by the
-// forward-only ruling; see STATUS note 1 below.
+// Forward-only (planning/28): a Critical edit — one reaching an already-occurred
+// occurrence — always breaks off forward from today; there is no retroactive
+// "apply to the past" path. PerformImplicitEarmarkChanges carries out that
+// break-off — a freshly-proposed successor (PerformSingleSuccessorBreakOff), or,
+// when more than one EarMarkPattern already funds the goal, either one combined
+// successor (PerformMultiPlanBreakOff) or the plans kept separate onto the
+// successor (PerformMultiPlanKeepSeparateBreakOff) per the user's pick, with a
+// shape/start change forcing the combine. A non-Critical edit does nothing here.
 //
-// Wiring (2026-08-12): MainWindow's ExpenseForm.PatternSaved callback now
-// actually constructs and runs this class, replacing the plain inline save
-// it used to do — the TODO that named this class as its own eventual
-// migration target is resolved. Two bugs surfaced only once real,
-// post-Run() navigation was exercised for the first time (never caught by
-// the existing tests, which all skip planning): AskWhichEarmarkPatternToOpen
-// used to look under _financeId even after a break-off, when the
-// successor's own EarMarkPattern is the current one (fixed via
-// _navigationFinanceId); and it read through _requestForecast(), which
-// MainWindow's own EnsureForecast caches until something explicitly
-// recomputes it — so it could easily have seen stale, pre-save data — fixed
-// by reading the repository directly instead, matching what the original
-// inline callback already did there.
+// Two boundary invariants run UNCONDITIONALLY after every save — not just the
+// Critical/multi-plan ones the rest of this class asks about — since a plan's
+// own span must keep fitting inside its goal's (3.11.2.a2):
+// DetermineBackTruncationsIfApplicable/ApplyBackTruncationsIfNeeded keep its
+// Until in line, DetermineFrontTruncationsIfApplicable/ApplyFrontTruncationsIfNeeded
+// its Start. See those methods' own docs.
 //
-// Back-boundary invariant (2026-08-13): a bug found via the user's
-// own real, manual use of the app rather than a test — editing only a
-// goal's own end date (Item A's own always-Trivial field) on a FinanceId
-// with more than one EarMarkPattern left the database in a state where
-// EarMarkPatternRepository.GetAll() (and so MainWindow's own startup
-// RefreshGrids) threw every time afterward, since nothing here checked
-// whether an existing EarMarkPattern's own Until still fit inside the
-// FinancialPattern's newly-shortened one (3.11.2.a2) after a plain save.
-// DetermineBackTruncationsIfApplicable/ApplyBackTruncationsIfNeeded fix this
-// the same "read before anything is saved" way as the front-boundary fix
-// above, but run UNCONDITIONALLY — this invariant has to hold after EVERY
-// save, not just the Critical/multi-plan ones the rest of this class asks
-// about. Reuses PatternTruncation.EndOn, the same domain primitive a plain
-// stop/break-off already uses to keep a plan's own Until from exceeding its
-// goal's; a plan left with nothing but a past-the-new-Until Start gets
-// deleted outright instead of truncated, since EndOn can't shorten a plan to
-// end before its own start.
+// Tests: MyMoneyForecast.App.Tests/FinancePatternSaveConfirmationTests.cs drives
+// Run() with real repositories and a real forecast.
 //
-// Tests (2026-08-12): the "no tests yet" restriction is lifted — see
-// MyMoneyForecast.App.Tests/FinancePatternSaveConfirmationTests.cs, plus
-// PatternTruncationTests/BreakOffFactoryTests in MyMoneyForecast.Domain.Tests
-// for StartOn and the multi-plan BreakOff overload directly. Most [Fact]s
-// here drive Run() itself with real repositories and a real forecast, never
-// a private method directly — a scenario's own data decides which branch
-// fires, covering: the single-plan break-off, a forced-consolidation
-// multi-plan break-off, a Trivial-only edit (never breaks off), the
-// no-past-occurrence carve-out (03's own 1.2.3.10.a5 exemption — also never
-// breaks off), an outflow with no existing plan yet (still gets a fresh one
-// from BreakOffFactory), income (no jar at all), and — UPDATED 2026-08-17 —
-// the break-off-side keep-separate fallback (A_break_off_with_multiple_
-// surviving_plans_kept_separate_falls_back_to_consolidating_rather_than_a_
-// silent_no_op, renamed and rewritten from what used to pin the old silent
-// no-op as correct).
-//
-// STATUS notes (planning/28 is the live design for the refactor below):
-//
-// 1. RESOLVED 2026-08-18 by the forward-only ruling: the old narrowing
-//    crash risk (a retroactive correction reaching before the as-of date
-//    leaving the plan stale against the goal) is gone — there is no
-//    retroactive "apply everywhere" path anymore, so nothing ever narrows a
-//    plan before the as-of date. The narrowing machinery and its background
-//    task (task_ad0129c6) both retire with it.
-//
-// 2. DESIGN GOAL, not yet built: the author has confirmed "we eventually
-//    want to let the user keep unconsolidated earmark patterns" — the
-//    fallback that always consolidates on the break-off side is a SAFETY
-//    measure, not the intended final behavior. Still wanted, still not
-//    designed. See planning/28 and redesign/memory/project_next_phase.md.
-//
-// 3. ARCHITECTURE, in progress (planning/28): this class's own
-//    author-acknowledged assessment — "the save confirmation system is
-//    probably a mess." Nine-plus independent trigger/answer/description
-//    fields (IsChangeCritical, ConsolidationNeeded, TouchesChainBoundary,
-//    ChangeCanCascade, TrivialFieldsCanCascade, PacedBillsCanCascade, and
-//    more) each wired through their own Determine*/Build*/Describe* trio and
-//    their own slice of ImplicitChangeConfirmationRequest/Answer. Thread 2
-//    of planning/28 replaces this with the "confirmation row" model; the
-//    foundational ConfirmationRow.cs types exist, the DTO/popup reshape does
-//    not yet.
-//
-// 4. SMALLER gaps: the goal-health suggestion (DetermineGoalHealthSuggestionIfApplicable)
-//    is a v1 — a single amount-only correction offered accept/reject, not yet
-//    the full multi-option strategy-picker planning/25/28 describe (its reject
-//    warning is unbuilt, and identical options aren't deduped yet);
-//    PickEarmarkPatternToOpen falls back to the first plan on cancel rather
+// Open items (TODO):
+//  - Let the user keep unconsolidated earmark patterns: the always-consolidate
+//    fallback on the break-off side is a safety measure, not the final design
+//    (planning/28).
+//  - Collapse the many independent trigger/answer/description fields
+//    (IsChangeCritical, ConsolidationNeeded, TouchesChainBoundary, and the rest,
+//    each with its own Determine*/Build*/Describe* trio) into the "confirmation
+//    row" model — ConfirmationRow.cs exists, the DTO/popup reshape doesn't yet
+//    (planning/28).
+//  - The goal-health suggestion (DetermineGoalHealthSuggestionIfApplicable) is a
+//    single amount-only correction; the full multi-option strategy-picker, its
+//    reject warning, and deduping identical options are unbuilt.
+//  - AskWhichEarmarkPatternToOpen falls back to the first plan on cancel rather
 //    than aborting navigation.
 //
 // One instance is meant to be created per Save click (either button).
@@ -137,7 +65,7 @@ public sealed class FinancePatternSaveConfirmation
     // PlanHealthState. Reads that TransactionLogBook itself can answer
     // (AllFinancialPatterns, EarMarkPatternsFor) go through this; the three
     // repositories below are only for what the book can't do — writing, and
-    // reading a goal's own ManualEarmarks (author, 2026-08-11: TransactionLogBook
+    // reading a goal's own ManualEarmarks (TransactionLogBook
     // can't recover just the user-authored ones — isolated ManualEarmarks get
     // folded into a BalanceSnapshot's day-by-day EarmarkEvents during the
     // cascade, mixed in with system-generated isolated earmarks, so there's
@@ -181,7 +109,7 @@ public sealed class FinancePatternSaveConfirmation
     // a genuinely concurrent set of existing plans — F27's shape, e.g. two
     // household partners — which needs its own not-yet-built mechanism to
     // continue both plans in unison, and shouldn't also offer a shape choice
-    // on top of that complexity, author 2026-08-14). A sequential chain of
+    // on top of that complexity). A sequential chain of
     // existing plans (RestructureFactory) is no longer excluded just for
     // having more than one row — RestructureFactory.FindCurrentPlan tells
     // the two cases apart.
@@ -238,7 +166,7 @@ public sealed class FinancePatternSaveConfirmation
     // chain neighbor stretched by ExtendStart/ExtendUntil — that case overlaps the
     // reverse-break-off and waits on the silent join (M1) to settle the overlap.
     // The "[bill] occurs N more times" announcement now surfaces this (a
-    // BoundaryExtension row, 2026-08-27) — no longer silent; the over/underfund
+    // BoundaryExtension row) — no longer silent; the over/underfund
     // health check on the grown plan is still deferred.
     private BoundaryExtensionPlan? _boundaryExtensions;
 
@@ -332,9 +260,9 @@ public sealed class FinancePatternSaveConfirmation
     // PerformImplicitEarmarkChanges.
     private bool _chainHasSuccessor;
 
-    // The paycheck-association cascade (redesign/memory's own project_next_phase.md,
-    // 2026-08-16/17 blocks — "a paycheck's own finance pattern and a bill's
-    // earmark pattern paced against it") — captured before anything is
+    // The paycheck-association cascade (redesign/memory's own project_next_phase.md
+    // — "a paycheck's own finance pattern and a bill's earmark pattern paced
+    // against it") — captured before anything is
     // saved, same reasoning as every other context field above: OldIncome is
     // what _financeId's own pattern looked like BEFORE this edit, and
     // PerformPaycheckAssociationCascadeIfApplicable (which runs after
@@ -343,7 +271,7 @@ public sealed class FinancePatternSaveConfirmation
     // this edit isn't to an income pattern at all, or no currently-paced
     // plan's own occurrences actually stop lining up with the edited
     // schedule. AllocationPlanProposer.IsPacedAgainst/FindPlansPacedAgainst
-    // (2026-08-17) are this mechanism's own detection primitive — a live
+    // are this mechanism's own detection primitive — a live
     // date-coincidence check, my own grounded-but-unconfirmed heuristic for
     // what "paced against" means precisely, not an author-settled
     // definition (see those methods' own doc comments).
@@ -564,10 +492,9 @@ public sealed class FinancePatternSaveConfirmation
     // form with as unsaved edits, or null for a plain open.
     public Action<EarMarkPattern?, IReadOnlyDictionary<string, object?>?>? NavigateToEarmarkForm { get; set; }
 
-    // AskWhichEarmarkPatternToOpen's own disambiguation callback, same
-    // delegate idiom as the two above — built 2026-08-17 (EarmarkPatternPickerWindow),
-    // replacing "the first match" as a real choice instead of a
-    // placeholder. Null falls back to that same first-match default.
+    // AskWhichEarmarkPatternToOpen's own disambiguation callback, same delegate
+    // idiom as the two above (backed by EarmarkPatternPickerWindow). Null falls
+    // back to a first-match default.
     public Func<IReadOnlyList<EarMarkPattern>, EarMarkPattern?>? PickEarmarkPattern { get; set; }
 
     // The Item B/C/E/F confirmation itself — one combined ask, not two
@@ -616,11 +543,7 @@ public sealed class FinancePatternSaveConfirmation
         // goal's own, possibly-just-shortened Until (3.11.2.a2). Runs
         // regardless of IsChangeCritical/HasMultipleEarmarkPatterns —
         // "exempt from asking" was never the same as "exempt from needing
-        // the linked plan fixed up." Found in the field (2026-08-13): a real
-        // end_date-only edit on a multi-plan goal left the goal and its
-        // plans mismatched, crashing every later EarMarkPatternRepository.GetAll()
-        // — including MainWindow's own startup read — until the database
-        // was reset.
+        // the linked plan fixed up."
         DetermineBackTruncationsIfApplicable();
 
         // The front-boundary twin (M2): the same invariant, and the same
@@ -848,7 +771,7 @@ public sealed class FinancePatternSaveConfirmation
         // replace (the negligible old segment is simply overwritten), NOT a break-off
         // — so no "you're changing history" confirmation, and, crucially, no
         // BreakOffFactory rejection ("the cut date must be after the pattern's own
-        // start"). Author, 2026-09-05: this resolves the sharp edge
+        // start"). This resolves the sharp edge
         // PerformSingleSuccessorBreakOff's own comment used to defer — a real bill
         // (a mortgage) edited on its own start date hit it in the portable demo.
         var negligibleHistoryToPreserve = forecast.AsOfDate <= saved.DatePattern.ActiveStart.AddDays(1);
@@ -866,8 +789,8 @@ public sealed class FinancePatternSaveConfirmation
         // the popup gate below.
         HasExplicitEarmarkPattern = savingsPlan.Any(plan => plan.ExplicitlyCreated);
 
-        // Includes _startChanged as well as _recurrenceShapeChanged (widened
-        // 2026-08-17): on a break-off, surviving plans can only keep their own
+        // Includes _startChanged as well as _recurrenceShapeChanged: on a
+        // break-off, surviving plans can only keep their own
         // occurrence dates when the successor keeps the same shape AND start, so
         // a shape or start change forces the combine (PerformMultiPlanBreakOff)
         // rather than keeping them separate (PerformMultiPlanKeepSeparateBreakOff).
@@ -1046,7 +969,7 @@ public sealed class FinancePatternSaveConfirmation
 
         var candidates = new List<PlanShapeCandidate>
         {
-            // carriedOverJarBalance passed through here too (2026-08-15) —
+            // carriedOverJarBalance passed through here too—
             // without it, this candidate's own preview read StartingAllocation
             // = 0 even when a real balance/glut existed, understating what
             // BreakOffFactory.BreakOff would actually save if the user picked
@@ -1353,7 +1276,7 @@ public sealed class FinancePatternSaveConfirmation
             : "Left as is, the plan keeps saving more than the goal needs, tying up money it won't use.";
     }
 
-    /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. Was a single hardcoded XAML string until 2026-08-17, when ConsolidationNeeded was widened to also force consolidation for a start_date change, not just a recurrence-shape one — the old text ("because the schedule itself is changing") would have been actively wrong for a start-only edit.</summary>
+    /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. The reason differs for a recurrence-shape change vs. a start_date one, so it's built from the actual change rather than a fixed string.</summary>
     private string DescribeConsolidationForcedReason()
     {
         if (!ConsolidationNeeded)
@@ -1603,19 +1526,19 @@ public sealed class FinancePatternSaveConfirmation
             return savingsPlan.Count == 1 ? savingsPlan[0] : null;
         }
 
-        // BUILT 2026-08-17 — more than one EarMarkPattern survives, exactly
-        // the existing FinancialPatternPickerWindow-style disambiguation
-        // popup's own job, incorporated here via the same delegate idiom as
+        // More than one EarMarkPattern survives, exactly the existing
+        // FinancialPatternPickerWindow-style disambiguation popup's own job,
+        // incorporated here via the same delegate idiom as
         // ConfirmImplicitChanges/NavigateToEarmarkForm rather than fired
         // separately, so this class stays WPF-free. Falls back to the
-        // first match — the original placeholder — whenever nothing's
+        // first match whenever nothing's
         // wired up (most tests, and any host that hasn't connected one),
         // same "safest default when nothing's connected" reasoning
         // DefaultOutcome already applies elsewhere in this class.
         return PickEarmarkPattern?.Invoke(savingsPlan) ?? savingsPlan[0];
     }
 
-    /// <summary>[READS FILE] Works out the plan's own health heads-up — the "Worth a look" sentence (PlanHealthMessages.CurrentJarStateLine, the same wording the Earmark form's Summary aside uses) — for the confirmation to show as an announcement row, replacing the old separate post-save MessageBox. Only when the plan is worth warning about and it isn't a current-segment break-off (which replaces the plan with a freshly-proposed one that already meets the goal, so its old concern is moot). Surfaced whether or not the user is heading to the plan form — a plan-health warning is worth seeing either way (author's call, 2026-08-27, when this moved into the confirmation). Reads _financeId — pre-save, before any break-off could move the current segment — so it needs no fresh forecast; "" whenever there's nothing to surface. Same read-before-save timing as its sibling Determine* calls.</summary>
+    /// <summary>[READS FILE] Works out the plan's own health heads-up — the "Worth a look" sentence (PlanHealthMessages.CurrentJarStateLine, the same wording the Earmark form's Summary aside uses) — for the confirmation to show as an announcement row. Only when the plan is worth warning about and it isn't a current-segment break-off (which replaces the plan with a freshly-proposed one that already meets the goal, so its old concern is moot). Surfaced whether or not the user is heading to the plan form — a plan-health warning is worth seeing either way. Reads _financeId pre-save, before any break-off could move the current segment, so it needs no fresh forecast; "" whenever there's nothing to surface.</summary>
     private void DetermineConcerningPlanNoticeIfApplicable()
     {
         if (!ChangeWarrantsSuggestions || (IsChangeCritical && !_chainHasSuccessor))
@@ -2246,14 +2169,14 @@ public sealed class FinancePatternSaveConfirmation
             return;
         }
 
-        // Forward-only (planning/28, 2026-08-18): a Critical edit — one that
+        // Forward-only (planning/28): a Critical edit — one that
         // reaches an already-occurred occurrence — always breaks off from
         // today. The retroactive "correct it everywhere" path was removed,
         // along with its narrowing (NarrowSurvivingPlanIfNeeded), in-place
         // consolidation (ConsolidateSurvivingPlansIfNeeded) and amount-only
         // scaling (ScaleSurvivingPlansIfNeeded).
         //
-        // Item F's own question, honored at last (2026-08-27): with more than
+        // Item F's own question: with more than
         // one existing plan, the user's "keep them separate / combine them into
         // one" pick decides which break-off runs. Combining folds every plan
         // into one freshly-proposed successor; keeping them separate gives the
@@ -2305,15 +2228,12 @@ public sealed class FinancePatternSaveConfirmation
         }
 
         // Weekly — two distinct ways pinning Start at cutDate silently loses
-        // the pattern's own intended cadence, both found 2026-08-17 while
-        // grounding the paycheck-association cascade, then confirmed with a
-        // real failing test before touching anything (not just reasoned
-        // through): RFC 5545 ties an omitted ByDay to DTSTART's own
-        // weekday, so an empty ByDay would retarget every future occurrence
-        // to cutDate's own weekday instead of the reference's — the same
-        // bug class already fixed in AllocationPlanProposer.ProposePaced on
-        // 2026-08-14. Making ByDay explicit alone isn't enough either,
-        // confirmed empirically (RecurrenceRuleTests.Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere):
+        // the pattern's own intended cadence: RFC 5545 ties an omitted ByDay to
+        // DTSTART's own weekday, so an empty ByDay would retarget every future
+        // occurrence to cutDate's own weekday instead of the reference's (the
+        // same bug class as AllocationPlanProposer.ProposePaced). Making ByDay
+        // explicit alone isn't enough either
+        // (RecurrenceRuleTests.Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere):
         // an Interval > 1 rule's own "every Nth week" is ALSO counted from
         // DTSTART's own calendar week even when ByDay IS explicit, so
         // pinning Start at cutDate can land the whole cadence a full
@@ -2340,12 +2260,12 @@ public sealed class FinancePatternSaveConfirmation
         var saved = GetSavedPatternOrThrow();
         var forecast = _requestForecast();
 
-        // SETTLED 2026-08-11 (author): today, literally — not "the day after
+        // Today, literally — not "the day after
         // the latest already-occurred expected transaction," which
         // planning/25's own text had floated as an alternate reading. The sharp
         // edge this comment used to defer — the saved pattern's own Start IS
         // today, so CutDate == Start and BreakOffFactory.BreakOff throws — is now
-        // handled upstream (2026-09-05): DetermineConditions treats an edit with
+        // handled upstream: DetermineConditions treats an edit with
         // no more than one day of history to preserve as non-Critical, a plain
         // in-place replace, so this break-off path is never reached for it. The
         // CutDate > ActiveStart invariant therefore always holds by the time we
@@ -2542,7 +2462,7 @@ public sealed class FinancePatternSaveConfirmation
 // recover just the user-authored ManualEarmarks (they're folded into a
 // BalanceSnapshot's day-by-day EarmarkEvents during the cascade, mixed in
 // with system-generated isolated earmarks). One parameter instead of three
-// separate ones (author, 2026-08-11) — same "bundle of what a thing needs"
+// separate ones — same "bundle of what a thing needs"
 // shape as BreakOffRequest/RestructureRequest, just for repository
 // references instead of domain values.
 public sealed record FinancePatternRepositories
