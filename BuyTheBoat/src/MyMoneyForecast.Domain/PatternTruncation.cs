@@ -57,7 +57,7 @@ public static class PatternTruncation
         return new TruncatedPattern(truncatedPattern, truncatedPlan);
     }
 
-    /// <summary>[CALC] Moves a savings plan's active span forward to begin on a chosen date — the front-boundary counterpart to EndOn — absorbing whatever it held immediately before that date into its StartingAllocation. Moved via ReanchoredToStartOn, which keeps its cadence, so the dates it lands on from the new start onward stay the same; any old lead-in reaching further back is replaced by the new start (with a fresh lead-in to the first occurrence when that lands later). Doesn't touch ManualEarmarks dated before the new start — the caller's job, since this is a pure domain method with no repository access (planning/25's Item E).</summary>
+    /// <summary>[CALC] Moves a savings plan's active span forward to begin on a chosen date — the front-boundary counterpart to EndOn — absorbing whatever it held immediately before that date into its StartingAllocation. Moved via ReanchoredToStartOn, which keeps its cadence, so the dates it lands on from the new start onward stay the same; any old lead-in reaching further back is replaced by the new start (with a fresh lead-in to the first occurrence when that lands later). Doesn't touch ManualEarmarks dated before the new start — the caller's job, since this is a pure domain method with no repository access.</summary>
     /// <param name="plan">The plan to trim.</param>
     /// <param name="goal">The goal it funds — validated against, same as EarMarkPattern.Create.</param>
     /// <param name="newStart">The plan's new active-span start. Must be strictly after its current start.</param>

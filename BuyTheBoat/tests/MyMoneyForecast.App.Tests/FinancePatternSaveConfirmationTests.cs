@@ -1022,7 +1022,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         confirmation.ConfirmImplicitChanges = request =>
         {
-            request.HasRow(ConfirmationRowIds.AlterPast).ShouldBeTrue(); // the request itself is built correctly
+            request.HasRow(ConfirmationRowIds.WarnAboutBreakOff).ShouldBeTrue(); // the request itself is built correctly
             return Confirm.Cancel();
         };
 

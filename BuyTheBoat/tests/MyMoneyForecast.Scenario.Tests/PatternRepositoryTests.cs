@@ -329,8 +329,8 @@ public class PatternRepositoryTests : IDisposable
         all[0].Amount.ShouldBe(-125m);
     }
 
-    // Moving a segment's own Start (PatternTruncation.StartOn, planning/25's
-    // Item E) isn't a plain Save — the composite (FinanceId, StartDate) key
+    // Moving a segment's own Start (PatternTruncation.StartOn) isn't a plain
+    // Save — the composite (FinanceId, StartDate) key
     // means Save at the new Start just inserts a second row rather than
     // replacing the one at the old Start, since the key genuinely changed.
     // This is the other half of that move: removing the stale row left

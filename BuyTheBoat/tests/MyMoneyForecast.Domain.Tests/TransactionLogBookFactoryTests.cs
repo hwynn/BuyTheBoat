@@ -3423,8 +3423,8 @@ public class TransactionLogBookFactoryTests
     // $150 plan shape as the structural-glut test above (reuses its
     // already-verified $150-at-Mar-1 number), fed through consolidation and
     // replayed from scratch as if the old plan's row had really been deleted
-    // and the new one saved in its place — exactly what
-    // FinancePatternSaveConfirmation.ConsolidateSurvivingPlansIfNeeded does.
+    // and the new one saved in its place — exactly what a consolidating save
+    // (EarmarkConsolidation.Consolidate) does.
     [Fact]
     public void An_existing_glut_survives_consolidation_spent_down_evenly_instead_of_erased()
     {

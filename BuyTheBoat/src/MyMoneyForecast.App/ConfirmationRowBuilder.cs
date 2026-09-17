@@ -91,10 +91,10 @@ internal static class ConfirmationRowBuilder
         var rows = new List<ConfirmationRow>();
 
         // A Critical edit always breaks off from today — announced, not asked
-        // (forward-only). Mirrors AlterPastSection.
+        // (forward-only).
         if (r.IsChangeCritical)
         {
-            rows.Add(new AnnouncementRow(ConfirmationRowIds.AlterPast,
+            rows.Add(new AnnouncementRow(ConfirmationRowIds.WarnAboutBreakOff,
                 "This reaches back to history that's already happened, so it will start a new segment from today — your past records stay exactly as they were."));
         }
 

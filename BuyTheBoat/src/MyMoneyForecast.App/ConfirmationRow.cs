@@ -90,7 +90,7 @@ public enum OptionLayout
 // no answer), but are named here for one complete list.
 public static class ConfirmationRowIds
 {
-    public const string AlterPast = "alter-past";
+    public const string WarnAboutBreakOff = "warn-about-break-off";
     public const string Consolidation = "consolidation";
     // Nested under Consolidation's "keep them separate": offers to re-rate the
     // kept-separate plans so they meet the new amount instead of over/underfunding it.

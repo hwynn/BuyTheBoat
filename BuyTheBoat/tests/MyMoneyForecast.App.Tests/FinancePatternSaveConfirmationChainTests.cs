@@ -174,8 +174,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         // never lets a segment with a successor be loaded for editing in the
         // first place, so ChangeCanCascade never actually fires via the UI.
         // Still real, correct, and worth testing directly the way this
-        // project already drives other reachable-only-by-test paths (see
-        // this test project's own NarrowSurvivingPlanIfNeeded precedent).
+        // project already drives other reachable-only-by-test paths.
         var current = Bill(1, "Rent", -1_600m, new DateOnly(2025, 7, 1), new DateOnly(2025, 9, 30));
         var successor = Bill(2, "Rent", -1_600m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(current, accountId: 1);
@@ -369,7 +368,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
 
         captured.ShouldNotBeNull();
         captured.HasRow(ConfirmationRowIds.Cascade).ShouldBeTrue(); // offered to carry the change forward
-        captured.HasRow(ConfirmationRowIds.AlterPast).ShouldBeFalse(); // NOT a break-off announcement
+        captured.HasRow(ConfirmationRowIds.WarnAboutBreakOff).ShouldBeFalse(); // NOT a break-off announcement
         captured.Description.ShouldContain("earlier segment");
     }
 

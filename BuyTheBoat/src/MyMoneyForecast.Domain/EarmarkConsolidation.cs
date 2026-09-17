@@ -1,14 +1,12 @@
 namespace MyMoneyForecast.Domain;
 
 // Folds several EarMarkPatterns sharing one finance_id into ONE, IN PLACE —
-// the retroactive-correction-side counterpart to BreakOffFactory's own
-// multi-plan consolidation (planning/25, Item F's own "in place" case:
-// "a genuinely new mechanism, not yet designed... nothing built so far
-// collapses multiple plans without also creating a new one to collapse them
-// into"). Unlike a break-off, there is no new finance_id and no cut date —
-// Item E's "correct it everywhere" applies to the whole history, not just
-// going forward, so the consolidated plan spans from the earliest surviving
-// plan's own start through the goal's own end.
+// the multi-plan consolidation the "combine them" paths use (a break-off's
+// combine choice, and a cross-boundary schedule change) to collapse several
+// plans without creating a new one to collapse them into (planning/25, Item
+// F's own "in place" case). There is no new finance_id and no cut date; the
+// consolidated plan spans from the earliest surviving plan's own start
+// through the goal's own end.
 //
 // The total the one new plan needs to contribute, author-derived
 // (2026-08-13): call the amount already sitting in the jar before the
@@ -27,9 +25,9 @@ namespace MyMoneyForecast.Domain;
 // "already banked," with no double-count against the scheduled contributions
 // being replaced (those are exactly what this fold tears down and rebuilds
 // as one pattern, so they must NOT also count as "already banked"). Because
-// this needs no forecast read, it carries none of NarrowSurvivingPlanIfNeeded's
-// own "can't safely read a balance from before the as-of date" limitation —
-// this mechanism is meant to reach into the past, and can.
+// this needs no forecast read, so it carries no "can't safely read a balance
+// from before the as-of date" limitation — this mechanism is meant to reach
+// into the past, and can.
 //
 // The StartingAllocation share of A carries forward onto the new plan
 // itself, not just into sizing its (smaller) Amount — otherwise that
