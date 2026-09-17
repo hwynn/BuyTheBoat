@@ -22,7 +22,7 @@ Concretely: **prefer giving the user a button or an explicit choice over doing s
 
 This is already why:
 
-- **Explicit (manual) earmarks exist** — so a user can exert manual control over their funds instead of the program doing everything for them (see [manual-earmarks planning](MyMoneyForecast/planning/09-manual-earmarks.md)).
+- **Explicit (manual) earmarks exist** — so a user can exert manual control over their funds instead of the program doing everything for them (built — see `ManualEarmark` / `EarmarkFormPanel`'s one-off mode).
 - **We surface a shortfall and offer an easy correction** ("you'll be short for X — here's how to fix it") rather than silently auto-correcting it.
 
 **Practical test:** *Does this hand the user a clear lever, or does it quietly decide for them?* Favor the lever. Automatic behavior needs a stronger justification than a manual control does — and where it exists, it should still be visible and overridable.
@@ -51,7 +51,7 @@ When the original design has no direct mechanism for something the user needs, c
 
 Some original assumptions are discardable.
 
-*Worked example:* one old assumption held that a bill's milestone amount is always the negative of the bill's total — i.e. the instant a bill is paid, the user is expected to already have the full *next* occurrence saved, even if paychecks are scheduled in between. That is overly cautious and annoying, and it can go. (The redesign already leans the other way: the bill-accrual A/B ramp reserves toward the next occurrence *between* paychecks rather than demanding it all up front — see the `positive-implicit` divergence in [05-original-structure-restructure.md](MyMoneyForecast/planning/05-original-structure-restructure.md#divergence-registry). That ramp is this philosophy already in effect.)
+*Worked example:* one old assumption held that a bill's milestone amount is always the negative of the bill's total — i.e. the instant a bill is paid, the user is expected to already have the full *next* occurrence saved, even if paychecks are scheduled in between. That is overly cautious and annoying, and it can go. (The redesign already leans the other way: the bill-accrual A/B ramp reserves toward the next occurrence *between* paychecks rather than demanding it all up front — see the `positive-implicit` divergence tag in the code (`grep -rn DIVERGENCE src/`). That ramp is this philosophy already in effect.)
 
 The freedom is real but not free: **creative abstractions and assumption changes both require planning before they are locked in.** "The docs don't forbid it" is not a design; "here is the abstraction, here is what it costs, here is how the user sees it" is.
 

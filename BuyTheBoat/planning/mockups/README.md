@@ -1,7 +1,7 @@
 # Forecast tab redesign — mockups (2026-07-11)
 
 Layout explorations for the Forecast tab redesign, produced per
-[`../08-forecast-tab-design-philosophy.md`](../08-forecast-tab-design-philosophy.md)
+the forecast-tab design (planning/08 retired → see planning/11 + the code)
 (the design philosophy every variant must honor) and the mockups-first plan.
 All data is representative sample data, not a live forecast.
 
@@ -50,7 +50,7 @@ proceeds per the plan's Phase I; these files stay as the design record.
 ## Multiple-accounts round (2026-07-22)
 
 New explorations of the overview and selected day once multiple accounts exist
-(see [`../10-multiple-accounts.md`](../10-multiple-accounts.md), item 5). Same
+(see `Account`/`Transfer` in the code; planning/10 retired). Same
 design system as above; the shared multi-account scenario is Checking / Bills /
 Savings, with a car repair on Jul 16 that leaves **Checking short** while the
 household total stays positive.

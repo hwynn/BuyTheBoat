@@ -697,7 +697,7 @@ of history.
 ```
 > **Formal vs. practical wording.** "Expired page" is the intended long-term framing — it's why this
 > needs `TransactionLogBook`'s own scope rather than a bare `3.10.aX` — but
-> [05](MyMoneyForecast/planning/05-original-structure-restructure.md)'s divergence registry already
+> the code's divergence registry (`grep -rn DIVERGENCE src/`) already
 > documents `Expired` as permanently `false` today (nothing persists across a forecast run to expire —
 > multi-page history is listed there as still-deferred work). Until real multi-page history exists,
 > the practically-equivalent, enforceable condition is: **the expected transaction's date is on or
