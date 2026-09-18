@@ -45,8 +45,6 @@ namespace MyMoneyForecast.App;
 //    events" sub-question (skip the next / a stretch / none). A one-time catch-up
 //    for the underfunded side is a possible future addition (a new correction in
 //    DetermineGoalHealthSuggestionIfApplicable).
-//  - AskWhichEarmarkPatternToOpen falls back to the first plan on cancel rather
-//    than aborting navigation.
 //
 // One instance is meant to be created per Save click (either button).
 public sealed class FinancePatternSaveConfirmation
@@ -683,8 +681,13 @@ public sealed class FinancePatternSaveConfirmation
 
         if (!UserSkippedPlanning)
         {
-            var target = AskWhichEarmarkPatternToOpen();
-            NavigateToEarmarkForm?.Invoke(target, _acceptedSuggestionOverrides);
+            // Cancelling the which-plan-to-open picker aborts navigation and leaves
+            // the user where they are, rather than opening a plan they didn't pick.
+            var navigation = AskWhichEarmarkPatternToOpen();
+            if (navigation.Navigate)
+            {
+                NavigateToEarmarkForm?.Invoke(navigation.Target, _acceptedSuggestionOverrides);
+            }
         }
 
         return true;
@@ -1659,31 +1662,39 @@ public sealed class FinancePatternSaveConfirmation
             : $"You're changing the {whatChanged} for \"{label}\".";
     }
 
-    /// <summary>[READS FILE] When more than one EarMarkPattern survives and the user clicked Save and Plan, asks which one to actually open next. Real for the unambiguous cases (none, or exactly one); the genuinely ambiguous case still needs the actual disambiguation popup. Reads the repository directly, not the live forecast: _requestForecast may be a cached accessor (MainWindow's own EnsureForecast caches until something explicitly recomputes), so it can't be trusted to reflect what PerformSave/PerformImplicitEarmarkChanges just wrote a moment ago. The repository has no such cache — matches what MainWindow's own pre-migration callback already did here (_earMarkPatterns.GetAll()), not a new choice. Looks under _navigationFinanceId, not _financeId directly — after a break-off, _financeId's own EarMarkPattern is the truncated, no-longer-current predecessor.</summary>
-    /// <returns>The EarMarkPattern to open, or null if there isn't one yet.</returns>
-    private EarMarkPattern? AskWhichEarmarkPatternToOpen()
+    // The post-save "which plan to open" decision: whether to navigate at all, and
+    // to which plan. Navigate with a null Target means "no plan yet — go propose
+    // one"; Navigate false means the user cancelled the picker, so stay put.
+    private readonly record struct EarmarkNavigation(bool Navigate, EarMarkPattern? Target);
+
+    /// <summary>[READS FILE] When the user clicked Save and Plan, decides which EarMarkPattern to open next — or, if they cancel the picker, not to navigate at all. No plan yet (navigate with a null target, to propose one) and exactly one plan need no popup; more than one shows the disambiguation picker. A cancelled picker returns Navigate=false so the caller leaves the user where they are rather than opening a plan they didn't pick; a headless caller (no picker wired) still falls back to the first plan. Reads the repository directly, not the live forecast: _requestForecast may be a cached accessor (MainWindow's own EnsureForecast caches until something explicitly recomputes), so it can't be trusted to reflect what PerformSave/PerformImplicitEarmarkChanges just wrote a moment ago. Looks under _navigationFinanceId, not _financeId directly — after a break-off, _financeId's own EarMarkPattern is the truncated, no-longer-current predecessor.</summary>
+    private EarmarkNavigation AskWhichEarmarkPatternToOpen()
     {
         var savingsPlan = _repositories.EarMarkPatterns.GetAll()
             .Where(pattern => pattern.FinanceId == _navigationFinanceId)
             .ToList();
         if (savingsPlan.Count <= 1)
         {
-            // Nothing to disambiguate — matches the existing, already-built
-            // disambiguation popup's own rule (planning/21): it only ever
-            // fires when more than one EarMarkPattern exists for the goal.
-            return savingsPlan.Count == 1 ? savingsPlan[0] : null;
+            // Nothing to disambiguate — navigate straight there (or, with no plan
+            // yet, navigate with a null target so the caller proposes one).
+            return new EarmarkNavigation(Navigate: true, Target: savingsPlan.Count == 1 ? savingsPlan[0] : null);
         }
 
-        // More than one EarMarkPattern survives, exactly the existing
-        // FinancialPatternPickerWindow-style disambiguation popup's own job,
-        // incorporated here via the same delegate idiom as
-        // ConfirmImplicitChanges/NavigateToEarmarkForm rather than fired
-        // separately, so this class stays WPF-free. Falls back to the
-        // first match whenever nothing's
-        // wired up (most tests, and any host that hasn't connected one),
-        // same "safest default when nothing's connected" reasoning
-        // DefaultOutcome already applies elsewhere in this class.
-        return PickEarmarkPattern?.Invoke(savingsPlan) ?? savingsPlan[0];
+        // More than one EarMarkPattern survives — the disambiguation picker's job,
+        // reached via the same delegate idiom as ConfirmImplicitChanges/
+        // NavigateToEarmarkForm so this class stays WPF-free. No picker wired (most
+        // tests, or a host that hasn't connected one) falls back to the first
+        // match, the same "safest default when nothing's connected" reasoning
+        // DefaultOutcome uses. A wired picker that returns null is a cancel — don't
+        // navigate at all.
+        if (PickEarmarkPattern is not { } pick)
+        {
+            return new EarmarkNavigation(Navigate: true, Target: savingsPlan[0]);
+        }
+
+        return pick(savingsPlan) is { } picked
+            ? new EarmarkNavigation(Navigate: true, Target: picked)
+            : new EarmarkNavigation(Navigate: false, Target: null);
     }
 
     /// <summary>[READS FILE] Works out the plan's own health heads-up — the "Worth a look" sentence (PlanHealthMessages.CurrentJarStateLine, the same wording the Earmark form's Summary aside uses) — for the confirmation to show as an announcement row. Only when the plan is worth warning about and it isn't a current-segment break-off (which replaces the plan with a freshly-proposed one that already meets the goal, so its old concern is moot). Surfaced whether or not the user is heading to the plan form — a plan-health warning is worth seeing either way. Reads _financeId pre-save, before any break-off could move the current segment, so it needs no fresh forecast; "" whenever there's nothing to surface.</summary>

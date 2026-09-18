@@ -1795,12 +1795,12 @@ public partial class MainWindow : Window
         return confirmWindow.ToOutcome(proceed);
     }
 
-    /// <summary>[UI] AskWhichEarmarkPatternToOpen's own real disambiguation, built 2026-08-17 — shows EarmarkPatternPickerWindow and returns whichever plan the user picked. Cancelling the picker (SelectedPlan stays null) falls back to the first plan in the list rather than opening nothing at all — Save has already committed by the time this runs, so there's always a real plan to land on somewhere, and refusing to pick one would only strand the user on whatever tab they started from.</summary>
+    /// <summary>[UI] AskWhichEarmarkPatternToOpen's own real disambiguation, built 2026-08-17 — shows EarmarkPatternPickerWindow and returns whichever plan the user picked. Cancelling the picker returns null, which AskWhichEarmarkPatternToOpen reads as "don't navigate" — the save has already committed, so the user simply stays on their current tab rather than being dropped onto a plan they didn't choose.</summary>
     /// <param name="plans">Every EarMarkPattern surviving for the goal — always more than one; AskWhichEarmarkPatternToOpen's own gate never calls this otherwise.</param>
     private EarMarkPattern? PickEarmarkPatternToOpen(IReadOnlyList<EarMarkPattern> plans)
     {
         var picker = new EarmarkPatternPickerWindow(plans) { Owner = this };
-        return picker.ShowDialog() == true ? picker.SelectedPlan : plans[0];
+        return picker.ShowDialog() == true ? picker.SelectedPlan : null;
     }
 
     /// <summary>[UI] What ExpenseForm.PickChainSegment calls (wired in the constructor) — shows ChainSegmentPickerWindow so the user can choose which segment of a break-off chain to open. Returns the chosen segment, or null on Cancel (ExpenseFormPanel then keeps the current segment).</summary>

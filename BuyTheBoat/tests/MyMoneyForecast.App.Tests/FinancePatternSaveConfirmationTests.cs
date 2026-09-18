@@ -1288,6 +1288,33 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         navigatedTo!.DatePattern.ActiveStart.ShouldBe(new DateOnly(2026, 1, 1)); // the picker's own choice, not savingsPlan[0]
     }
 
+    [Fact]
+    public void Cancelling_the_which_plan_picker_aborts_navigation_instead_of_opening_the_first_plan()
+    {
+        var bill = Bill(1, "Storage Unit Rental", -100m, new DateOnly(2025, 7, 1), new DateOnly(2026, 6, 30));
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -60m, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31)));
+        _earMarkPatterns.Save(Plan(bill, -40m, new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 30)));
+
+        var forecast = Forecast();
+        var editedBill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = bill.Source,
+            Amount = bill.Amount,
+            Description = "Storage — checked the gate code",
+            DatePattern = bill.DatePattern,
+        });
+
+        var navigated = false;
+        var confirmation = Confirmation(1, editedBill, accountId: 1, forecast, userSkippedPlanning: false);
+        confirmation.PickEarmarkPattern = _ => null; // the user cancels the picker
+        confirmation.NavigateToEarmarkForm = (_, _) => navigated = true;
+
+        confirmation.Run().ShouldBeTrue(); // the save still commits
+        navigated.ShouldBeFalse();         // ...but no plan form opens
+    }
+
     // ---- shared scenario-building helpers ----------------------------------
 
     // M2's front-truncation — the Start-side twin of the back-truncation
