@@ -14,4 +14,9 @@ public static class EarmarkFieldOverrideKeys
     // decimal — the plan's own signed Amount (negative = into the jar), same
     // convention EarMarkPattern.Amount uses; the form shows it as its magnitude.
     public const string Amount = "amount";
+
+    // IReadOnlyList<DateOnly> — contribution dates to mark skipped (RFC 5545
+    // EXDATE), for a goal-health "skip some events" correction. Pre-fills the
+    // recurrence editor's skip list exactly as if the user picked them by hand.
+    public const string ExcludedDates = "excludedDates";
 }

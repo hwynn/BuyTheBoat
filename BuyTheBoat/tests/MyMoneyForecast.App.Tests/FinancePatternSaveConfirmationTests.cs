@@ -885,6 +885,135 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         (captured?.HasRow(ConfirmationRowIds.GoalHealthSuggestion) ?? false).ShouldBeFalse(); // plan already meets it — nothing to offer
     }
 
+    // The OVERfunded goal-health case (planning/28's "skip some events"): shrinking
+    // a goal so its plan now over-saves offers a NESTED question — lower the rate,
+    // or keep the rate and (a sub-question) skip some upcoming contributions.
+    private (FinancialPattern edited, FinancePatternSaveConfirmation confirmation) OverfundedGoalHealthScenario()
+    {
+        var bill = Bill(1, "Gym Membership", -100m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1)); // future — non-Critical
+        _financialPatterns.Save(bill, accountId: 1);
+        _earMarkPatterns.Save(Plan(bill, -100m, new DateOnly(2025, 8, 1), new DateOnly(2026, 8, 1))); // saving -100/mo
+
+        var editedBill = Bill(1, bill.Source, -40m, bill.DatePattern.ActiveStart, bill.DatePattern.Until); // goal shrinks → plan overfunds
+        return (editedBill, Confirmation(1, editedBill, accountId: 1, Forecast(), userSkippedPlanning: false));
+    }
+
+    [Fact]
+    public void An_overfunded_goal_offers_lower_the_rate_or_keep_it_and_skip_events()
+    {
+        var (_, confirmation) = OverfundedGoalHealthScenario();
+        ImplicitChangeConfirmationRequest? captured = null;
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run().ShouldBeTrue();
+
+        var question = captured!.Rows.OfType<ChoiceRow>().Single(row => row.Id == ConfirmationRowIds.GoalHealthSuggestion);
+        question.Options.Count.ShouldBe(2);
+        question.Options[0].Label.ShouldStartWith("Lower the contribution"); // recommended, pre-selected
+        question.DefaultIndex.ShouldBe(0);
+        question.Options[1].Label.ShouldBe("Keep saving at this rate");
+        question.Options[1].Consequence.ShouldContain("tying up money"); // the cost of keeping the rate
+
+        // The skip sub-question nests under "keep saving at this rate."
+        var skip = question.Options[1].Children.OfType<ChoiceRow>().Single(row => row.Id == ConfirmationRowIds.GoalHealthSkip);
+        skip.Options.Select(option => option.Label).ShouldContain("Skip the next contribution");
+        skip.Options.Select(option => option.Label).ShouldContain("Skip a stretch to clear the surplus");
+        skip.Options[^1].Label.ShouldBe("Don't skip any");
+        skip.DefaultIndex.ShouldBe(skip.Options.Count - 1); // "Don't skip any" is the default
+    }
+
+    [Fact]
+    public void A_single_plan_goal_health_edit_is_not_described_as_having_multiple_plans()
+    {
+        var (_, confirmation) = OverfundedGoalHealthScenario();
+        ImplicitChangeConfirmationRequest? captured = null;
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+
+        confirmation.Run().ShouldBeTrue();
+
+        captured!.Description.ShouldNotContain("more than one savings plan"); // it's a single-plan goal
+        captured.Description.ShouldContain("amount");                          // states plainly what changed
+    }
+
+    [Fact]
+    public void Lowering_an_overfunded_plans_rate_pre_fills_the_form_with_the_reduced_amount()
+    {
+        var (_, confirmation) = OverfundedGoalHealthScenario();
+        IReadOnlyDictionary<string, object?>? overrides = null;
+        confirmation.ConfirmImplicitChanges = request => Confirm.Proceed().AcceptedGoalHealthSuggestion(); // index 0 = lower the rate
+        confirmation.NavigateToEarmarkForm = (_, captured) => overrides = captured;
+
+        confirmation.Run().ShouldBeTrue();
+
+        ((decimal)overrides![EarmarkFieldOverrideKeys.Amount]!).ShouldBe(-40m); // -100 scaled down to meet the -40 goal
+        _earMarkPatterns.GetAll().Single().Amount.ShouldBe(-100m);             // not saved — rides into the form for review
+    }
+
+    [Fact]
+    public void Keeping_the_rate_and_skipping_the_next_contribution_pre_fills_the_excluded_date()
+    {
+        var (_, confirmation) = OverfundedGoalHealthScenario();
+        IReadOnlyDictionary<string, object?>? overrides = null;
+        confirmation.ConfirmImplicitChanges = request => new ConfirmationOutcome
+        {
+            Proceed = true,
+            ChosenOptionIndex = new Dictionary<string, int>
+            {
+                [ConfirmationRowIds.GoalHealthSuggestion] = 1, // keep the rate
+                [ConfirmationRowIds.GoalHealthSkip] = 0,       // skip the next contribution
+            },
+        };
+        confirmation.NavigateToEarmarkForm = (_, captured) => overrides = captured;
+
+        confirmation.Run().ShouldBeTrue();
+
+        var excluded = (IReadOnlyList<DateOnly>)overrides![EarmarkFieldOverrideKeys.ExcludedDates]!;
+        excluded.ShouldBe([new DateOnly(2025, 8, 1)]); // just the soonest upcoming contribution
+    }
+
+    [Fact]
+    public void Keeping_the_rate_and_skipping_a_stretch_pre_fills_several_excluded_dates()
+    {
+        var (_, confirmation) = OverfundedGoalHealthScenario();
+        IReadOnlyDictionary<string, object?>? overrides = null;
+        confirmation.ConfirmImplicitChanges = request => new ConfirmationOutcome
+        {
+            Proceed = true,
+            ChosenOptionIndex = new Dictionary<string, int>
+            {
+                [ConfirmationRowIds.GoalHealthSuggestion] = 1, // keep the rate
+                [ConfirmationRowIds.GoalHealthSkip] = 1,       // skip a stretch
+            },
+        };
+        confirmation.NavigateToEarmarkForm = (_, captured) => overrides = captured;
+
+        confirmation.Run().ShouldBeTrue();
+
+        // Surplus 780 / 100 per contribution = 7 whole contributions safe to skip.
+        var excluded = (IReadOnlyList<DateOnly>)overrides![EarmarkFieldOverrideKeys.ExcludedDates]!;
+        excluded.Count.ShouldBe(7);
+        excluded[0].ShouldBe(new DateOnly(2025, 8, 1)); // soonest first
+    }
+
+    [Fact]
+    public void Keeping_an_overfunded_rate_without_skipping_pre_fills_nothing()
+    {
+        var (_, confirmation) = OverfundedGoalHealthScenario();
+        var navigated = false;
+        IReadOnlyDictionary<string, object?>? overrides = null;
+        confirmation.ConfirmImplicitChanges = request => new ConfirmationOutcome
+        {
+            Proceed = true,
+            ChosenOptionIndex = new Dictionary<string, int> { [ConfirmationRowIds.GoalHealthSuggestion] = 1 }, // keep the rate, skip left at its default
+        };
+        confirmation.NavigateToEarmarkForm = (_, captured) => { navigated = true; overrides = captured; };
+
+        confirmation.Run().ShouldBeTrue();
+
+        navigated.ShouldBeTrue();
+        overrides.ShouldBeNull(); // "don't skip any" is the default → nothing pre-filled
+    }
+
     // planning/25's Item F, the forced-consolidation sub-case: the
     // recurrence shape changing makes ConsolidationNeeded true, which combines
     // regardless of the user's keep-separate/combine pick — the plans can't keep

@@ -168,6 +168,15 @@ public partial class RecurrenceRuleEditor : UserControl
     /// <summary>[UI] Reveals the "Skip specific dates" section — collapsed by default so Expense/Transfer, which don't offer this freedom, are unaffected. One-way: no matching "hide it again" exists yet, since nothing currently needs it.</summary>
     public void ShowExcludedDatesEditor() => ExcludedDatesSection.Visibility = Visibility.Visible;
 
+    /// <summary>[UI] Replaces the skipped-dates list wholesale and reveals the section — for pre-filling a suggested set of skips (a goal-health "skip some events" correction), exactly as if the user had picked those dates by hand. Refreshes the preview so the skips show immediately.</summary>
+    /// <param name="excludedDates">The complete set of dates to mark skipped.</param>
+    public void SetExcludedDates(IReadOnlyList<DateOnly> excludedDates)
+    {
+        _excludedDates = excludedDates.OrderBy(date => date).ToList();
+        ShowExcludedDatesEditor();
+        Recalculate();
+    }
+
     /// <summary>[UI] Lets a host inject its own field(s) at the top of this editor's own left column — e.g. Earmark's "Amount per occurrence," so the right-side preview can use the vertical space that would otherwise sit empty above the recurrence fields. Null clears it back to nothing — every other current caller (Expense, Transfer) is unaffected unless it calls this too.</summary>
     /// <param name="content">The element to inject, or null to clear it.</param>
     public void SetLeadingContent(UIElement? content)

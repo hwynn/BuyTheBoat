@@ -40,9 +40,11 @@ namespace MyMoneyForecast.App;
 //  - Let the user keep unconsolidated earmark patterns: the always-consolidate
 //    fallback on the break-off side is a safety measure, not the final design
 //    (planning/28).
-//  - The goal-health suggestion (DetermineGoalHealthSuggestionIfApplicable) is a
-//    single amount-only correction; the full multi-option strategy-picker, its
-//    reject warning, and deduping identical options are unbuilt.
+//  - Goal-health corrections: underfunded offers a flat "raise the rate" pick;
+//    overfunded offers "lower the rate" or, keeping the rate, a nested "skip some
+//    events" sub-question (skip the next / a stretch / none). A one-time catch-up
+//    for the underfunded side is a possible future addition (a new correction in
+//    DetermineGoalHealthSuggestionIfApplicable).
 //  - AskWhichEarmarkPatternToOpen falls back to the first plan on cancel rather
 //    than aborting navigation.
 //
@@ -98,8 +100,8 @@ public sealed class FinancePatternSaveConfirmation
     // planning/25's Item G: the candidate plan shapes to offer alongside
     // Propose's own default, worked out by DeterminePlanShapeCandidatesIfApplicable
     // before anything is saved — same "read before PerformSave writes
-    // anything" reasoning as NarrowingPlan/ConsolidationPlan's own field
-    // comments. Empty means there's nothing to choose between (most edits, a
+    // anything" reasoning the sibling Determine* fields (like _backTruncations)
+    // use. Empty means there's nothing to choose between (most edits, a
     // break-off with no existing plan to draw an alternative shape from, or
     // a genuinely concurrent set of existing plans — F27's shape, e.g. two
     // household partners — which needs its own not-yet-built mechanism to
@@ -214,19 +216,41 @@ public sealed class FinancePatternSaveConfirmation
     // changes, where there's no single form to pre-fill.
     private IReadOnlyDictionary<string, object?>? _acceptedSuggestionOverrides;
 
-    // The correction the goal-health suggestion offers — the single plan re-sized
-    // (via EarmarkScaling.ScaleToMeetGoal) to meet the EDITED goal, when it no
-    // longer does after this save. Null unless there's a real correction to offer;
-    // only its Amount is used today (the override the form pre-fills), though the
-    // whole proposed plan is kept so richer overrides can be added later. See
+    // The corrections the goal-health suggestion offers, most-recommended first —
+    // each a re-sized plan (via EarmarkScaling.ScaleToMeetGoal) to meet the EDITED
+    // goal, when it no longer does after this save, plus the option label the popup
+    // shows for it. A list so more strategies (e.g. skip some events) can be added
+    // as drop-in entries later; today it holds exactly the one "adjust the rate"
+    // correction. Empty unless there's a real correction to offer. Only each plan's
+    // Amount is used today (the override the form pre-fills), though the whole plan
+    // is kept so richer overrides can be added later. Deduped before it's stored so
+    // two corrections landing in the same place never both show. See
     // DetermineGoalHealthSuggestionIfApplicable.
-    private EarMarkPattern? _goalHealthSuggestedPlan;
+    private IReadOnlyList<GoalHealthCorrection> _goalHealthCorrections = [];
 
-    // Whether that correction is needed because the plan currently saves too
-    // LITTLE (true — the goal would fall short) or too much (false — it ties up
-    // money the goal won't use). Drives the reject warning's wording; only
-    // meaningful when _goalHealthSuggestedPlan is set.
+    // Whether a correction is needed because the plan currently saves too LITTLE
+    // (true — the goal would fall short) or too much (false — it ties up money the
+    // goal won't use). Drives the reject warning's wording; only meaningful when
+    // _goalHealthCorrections is non-empty.
     private bool _goalHealthUnderfunds;
+
+    // One correction the goal-health picker can offer: the option label the popup
+    // shows, and the re-sized plan whose values the form would pre-fill if picked.
+    private sealed record GoalHealthCorrection(string Label, EarMarkPattern Plan);
+
+    // The OVERfunded goal-health case is a two-step nested question instead of the
+    // flat list above: lower the rate to meet the goal, or keep the rate and (a
+    // nested sub-question) skip some upcoming contributions to use up the surplus.
+    // _goalHealthLowerRatePlan is the reduced-rate plan (its Amount the override);
+    // _goalHealthSkips are the offered skip strategies (each a label + the dates it
+    // would mark skipped). Both empty/null unless this save leaves the plan
+    // overfunded. See DetermineGoalHealthSuggestionIfApplicable.
+    private EarMarkPattern? _goalHealthLowerRatePlan;
+    private IReadOnlyList<GoalHealthSkip> _goalHealthSkips = [];
+
+    // One offered skip strategy: the option label, and the contribution dates it
+    // would mark skipped (the ExcludedDates override the form pre-fills).
+    private sealed record GoalHealthSkip(string Label, IReadOnlyList<DateOnly> Dates);
 
     // The plan's own health heads-up, when it's worth warning about — the plain
     // "Worth a look" sentence that used to be a separate post-save MessageBox,
@@ -607,7 +631,7 @@ public sealed class FinancePatternSaveConfirmation
         // fix to pre-fill (still offered: accepting it is the user's next
         // explicit save) or a "worth a look" heads-up on a plan they own.
         var hasPlanHealthAdvice =
-            _goalHealthSuggestedPlan is not null || !string.IsNullOrEmpty(_concerningPlanNotice);
+            _goalHealthCorrections.Count > 0 || _goalHealthLowerRatePlan is not null || !string.IsNullOrEmpty(_concerningPlanNotice);
 
         if (editTouchesRecordedHistoryOrChain || changesAnExplicitlyOwnedPlan || hasPlanHealthAdvice)
         {
@@ -631,16 +655,11 @@ public sealed class FinancePatternSaveConfirmation
             _chosenSizing = ChoseConsolidationSizing(outcome);
             _chosenSpread = ChoseConsolidationSpread(outcome);
 
-            // An accepted goal-health suggestion becomes the overrides the plan's
-            // form opens pre-filled with. Only its amount today; the whole proposed
-            // plan is on hand for richer overrides later.
-            if (_goalHealthSuggestedPlan is { } suggested && ChoseAcceptGoalHealthSuggestion(outcome))
-            {
-                _acceptedSuggestionOverrides = new Dictionary<string, object?>
-                {
-                    [EarmarkFieldOverrideKeys.Amount] = suggested.Amount,
-                };
-            }
+            // The picked goal-health correction becomes the overrides the plan's
+            // form opens pre-filled with. Absent/headless answers (-1) and the
+            // trailing "leave it / keep the rate without skipping" options fall
+            // through as "no correction," so the form opens plain.
+            _acceptedSuggestionOverrides = PickGoalHealthOverrides(outcome);
         }
 
         PerformSave();
@@ -706,11 +725,6 @@ public sealed class FinancePatternSaveConfirmation
     // pre-selection), [1] leave them. Absent (headless) reads as leave — each
     // plan keeps its own rate, nothing re-rates money when no one was asked.
     private static bool ChoseToAdjustKeptSeparatePlans(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.KeepSeparateFunding) == 0;
-
-    // goal-health suggestion: [0] load the suggested contribution (the popup's own
-    // pre-selection), [1] leave it. Absent (headless) reads as leave — the form
-    // opens plain, no correction pre-filled, when no one accepted one.
-    private static bool ChoseAcceptGoalHealthSuggestion(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.GoalHealthSuggestion) == 0;
 
     // consolidation sizing: [0] meet the goal (default, also headless), [1] keep the current rate.
     private static ConsolidationSizing ChoseConsolidationSizing(ConfirmationOutcome outcome) =>
@@ -798,7 +812,7 @@ public sealed class FinancePatternSaveConfirmation
             ?.IsWorthWarningAbout ?? false;
     }
 
-    /// <summary>[READS FILE] Works out planning/27's own Phase 1 conditions — does this edit touch a chain boundary (Start/Until reaching a predecessor/successor), can Amount/shape cascade forward, can the trivial fields (Priority/Mandatory/Description/AutoRenew) cascade forward, and does a Source change disconnect this segment from its own chain. Same "read before anything is saved" timing as DetermineConditions' own sibling Determine* methods below — stores _chainContext (the saved pattern plus every other same-Source pattern) so PerformChainChangesIfApplicable can act on it later without re-reading, the same NarrowingPlan/ConsolidationPlan/BackTruncationPlan reasoning: PerformSave writes _proposedPattern under _financeId, and a read after that would see the NEW pattern, not the one this method needs to diff against. A no-op for a brand-new pattern (DetermineConditions' own early return already left _amountChanged/_recurrenceShapeChanged at their defaults too). internal for the same reason DetermineConditions is.</summary>
+    /// <summary>[READS FILE] Works out planning/27's own Phase 1 conditions — does this edit touch a chain boundary (Start/Until reaching a predecessor/successor), can Amount/shape cascade forward, can the trivial fields (Priority/Mandatory/Description/AutoRenew) cascade forward, and does a Source change disconnect this segment from its own chain. Same "read before anything is saved" timing as DetermineConditions' own sibling Determine* methods below — stores _chainContext (the saved pattern plus every other same-Source pattern) so PerformChainChangesIfApplicable can act on it later without re-reading, the same reasoning as _backTruncations and the other pre-save Determine* fields: PerformSave writes _proposedPattern under _financeId, and a read after that would see the NEW pattern, not the one this method needs to diff against. A no-op for a brand-new pattern (DetermineConditions' own early return already left _amountChanged/_recurrenceShapeChanged at their defaults too). internal for the same reason DetermineConditions is.</summary>
     internal void DetermineChainConditionsIfApplicable()
     {
         var saved = _repositories.FinancialPatterns.GetByFinanceId(_financeId);
@@ -1242,26 +1256,88 @@ public sealed class FinancePatternSaveConfirmation
         var scaling = EarmarkScaling.ScaleToMeetGoal(_proposedPattern, [plan], affordabilityCeiling: ceiling);
         if (Math.Abs(scaling.CurrentTotal - scaling.NeededTotal) >= 0.01m)
         {
-            _goalHealthSuggestedPlan = scaling.ScaledPlans.Single();
             _goalHealthUnderfunds = scaling.NeededTotal > scaling.CurrentTotal;
+
+            if (_goalHealthUnderfunds)
+            {
+                // Underfunded: one flat correction — raise the rate to meet the
+                // goal. More amount-side strategies would append here; the dedupe
+                // then keeps its promise.
+                _goalHealthCorrections = DedupeCorrections(
+                [
+                    new GoalHealthCorrection("Load the suggested amount", scaling.ScaledPlans.Single()),
+                ]);
+            }
+            else
+            {
+                // Overfunded: the nested flow — lower the rate to meet the goal, or
+                // keep the rate and skip some upcoming contributions to use up the
+                // surplus. The lower-rate plan is the same re-sized plan (now
+                // scaled DOWN); the skips are worked out separately.
+                _goalHealthLowerRatePlan = scaling.ScaledPlans.Single();
+                _goalHealthSkips = BuildGoalHealthSkips(plan);
+            }
         }
     }
 
-    /// <summary>[CALC] The goal-health suggestion question's own wording — "" when there's no correction to offer (so the row isn't shown). Names the suggested contribution so the choice isn't a bare yes/no.</summary>
+    /// <summary>[READS FILE] The skip-some-events strategies offered for an overfunded plan — "skip the next contribution," and, when it drops more than that one alone, "skip a stretch to clear the surplus" (planning/28). Empty when there isn't a whole contribution's worth of surplus to skip safely, so the skip sub-question doesn't show. [READS FILE] via the forecast's as-of date.</summary>
+    /// <param name="plan">The overfunded plan whose upcoming contributions might be skipped.</param>
+    private IReadOnlyList<GoalHealthSkip> BuildGoalHealthSkips(EarMarkPattern plan)
+    {
+        var skip = EarmarkScaling.SurplusSkip(_proposedPattern, plan, _requestForecast().AsOfDate);
+        if (skip is null)
+        {
+            return [];
+        }
+
+        var skips = new List<GoalHealthSkip> { new("Skip the next contribution", skip.SkipNext) };
+
+        // Offer the stretch only when it drops more than the next one alone —
+        // otherwise it's the same single date, nothing distinct to choose.
+        if (skip.SkipStretch.Count > skip.SkipNext.Count)
+        {
+            skips.Add(new("Skip a stretch to clear the surplus", skip.SkipStretch));
+        }
+
+        return skips;
+    }
+
+    /// <summary>[CALC] Drops goal-health corrections that would land the plan in the same place as an earlier one — same amount, schedule, and skipped dates — so the picker never shows two options doing the identical thing (planning/28). Keeps the first of each identical group, preserving the recommendation order. A no-op while only one correction is offered.</summary>
+    /// <param name="corrections">The corrections in recommendation order.</param>
+    private static IReadOnlyList<GoalHealthCorrection> DedupeCorrections(IReadOnlyList<GoalHealthCorrection> corrections) =>
+        corrections
+            .GroupBy(correction => (
+                correction.Plan.Amount,
+                correction.Plan.DatePattern.ToRruleString(),
+                string.Join(",", correction.Plan.DatePattern.ExcludedDates)))
+            .Select(group => group.First())
+            .ToList();
+
+    /// <summary>[CALC] The goal-health question's own wording — "" when there's no correction to offer (so the row isn't shown). Underfunded: names the suggested contribution and asks to load it (one flat correction). Overfunded: asks how to handle the surplus, its options (lower the rate / keep the rate → skip) carrying the specifics.</summary>
     private string DescribeGoalHealthSuggestion()
     {
-        if (_goalHealthSuggestedPlan is not { } suggested)
+        if (_goalHealthCorrections.Count > 0)
         {
-            return "";
+            return _goalHealthCorrections.Count == 1
+                ? $"This change leaves the savings plan out of step with the goal. Load a suggested contribution of {Math.Abs(_goalHealthCorrections[0].Plan.Amount):C} into the plan?"
+                : "This change leaves the savings plan out of step with the goal. How do you want to handle it?";
         }
 
-        return $"This change leaves the savings plan out of step with the goal. Load a suggested contribution of {Math.Abs(suggested.Amount):C} into the plan?";
+        return _goalHealthLowerRatePlan is not null
+            ? "This change leaves the savings plan saving more than the goal needs. How do you want to handle it?"
+            : "";
     }
 
-    /// <summary>[CALC] The consequence shown under the goal-health suggestion's "leave it as is" option — names what rejecting costs (the goal falling short, or money tied up). "" when there's no suggestion, so the reject option carries no footer.</summary>
+    /// <summary>[CALC] The overfunded goal-health "lower the rate" option's own label, naming the reduced contribution — "" when this save doesn't leave the plan overfunded.</summary>
+    private string DescribeGoalHealthLowerRateLabel() =>
+        _goalHealthLowerRatePlan is { } lowerRate
+            ? $"Lower the contribution to {Math.Abs(lowerRate.Amount):C} to meet the goal"
+            : "";
+
+    /// <summary>[CALC] The consequence shown under the goal-health question's "leave it / keep the rate" option — names what NOT correcting costs (the goal falling short when underfunded, or money tied up when overfunded). "" when there's no suggestion at all, so the option carries no footer.</summary>
     private string DescribeGoalHealthRejectWarning()
     {
-        if (_goalHealthSuggestedPlan is null)
+        if (_goalHealthCorrections.Count == 0 && _goalHealthLowerRatePlan is null)
         {
             return "";
         }
@@ -1269,6 +1345,46 @@ public sealed class FinancePatternSaveConfirmation
         return _goalHealthUnderfunds
             ? "Left as is, the plan keeps saving less than the goal needs, so it will fall short."
             : "Left as is, the plan keeps saving more than the goal needs, tying up money it won't use.";
+    }
+
+    /// <summary>[CALC] Reads the goal-health answer(s) back into the overrides the plan's form opens pre-filled with, or null for "no correction" (an absent/headless answer, "leave it as is," or "keep the rate" with no skip chosen). Underfunded: the chosen correction's amount. Overfunded: the lowered amount, or — when the rate is kept — the chosen skip strategy's excluded dates.</summary>
+    /// <param name="outcome">The confirmation answers.</param>
+    private IReadOnlyDictionary<string, object?>? PickGoalHealthOverrides(ConfirmationOutcome outcome)
+    {
+        var choice = Chosen(outcome, ConfirmationRowIds.GoalHealthSuggestion);
+
+        if (_goalHealthUnderfunds)
+        {
+            // Underfunded flat picker: one option per correction, then a trailing
+            // "leave it as is" (index == Count) that maps to nothing.
+            return choice >= 0 && choice < _goalHealthCorrections.Count
+                ? new Dictionary<string, object?> { [EarmarkFieldOverrideKeys.Amount] = _goalHealthCorrections[choice].Plan.Amount }
+                : null;
+        }
+
+        if (_goalHealthLowerRatePlan is not { } lowerRate)
+        {
+            return null; // no overfunded advice this save
+        }
+
+        // Overfunded nested flow: [0] lower the rate, [1] keep the rate → skip sub-question.
+        if (choice == 0)
+        {
+            return new Dictionary<string, object?> { [EarmarkFieldOverrideKeys.Amount] = lowerRate.Amount };
+        }
+
+        if (choice == 1)
+        {
+            // The nested skip question: one option per strategy, then a trailing
+            // "don't skip any" (index == Count) that maps to nothing.
+            var skipChoice = Chosen(outcome, ConfirmationRowIds.GoalHealthSkip);
+            if (skipChoice >= 0 && skipChoice < _goalHealthSkips.Count)
+            {
+                return new Dictionary<string, object?> { [EarmarkFieldOverrideKeys.ExcludedDates] = _goalHealthSkips[skipChoice].Dates };
+            }
+        }
+
+        return null;
     }
 
     /// <summary>[CALC] Names why Item F's own consolidation is being ANNOUNCED rather than asked — "" whenever ConsolidationNeeded is false. The reason differs for a recurrence-shape change vs. a start_date one, so it's built from the actual change rather than a fixed string.</summary>
@@ -1316,6 +1432,11 @@ public sealed class FinancePatternSaveConfirmation
             TrivialFieldsCanCascade = TrivialFieldsCanCascade,
             SourceChangeWarning = SourceChangeWarning,
             GoalHealthSuggestionQuestion = DescribeGoalHealthSuggestion(),
+            GoalHealthCorrectionLabels = _goalHealthCorrections.Select(correction => correction.Label).ToList(),
+            GoalHealthLowerRateLabel = DescribeGoalHealthLowerRateLabel(),
+            GoalHealthKeepRateLabel = _goalHealthLowerRatePlan is not null ? "Keep saving at this rate" : "",
+            GoalHealthSkipQuestion = _goalHealthSkips.Count > 0 ? "You'll build up a surplus. Skip some upcoming contributions to use it up?" : "",
+            GoalHealthSkipLabels = _goalHealthSkips.Select(skip => skip.Label).ToList(),
             GoalHealthRejectWarning = DescribeGoalHealthRejectWarning(),
             ConcerningPlanNotice = _concerningPlanNotice,
             BoundaryExtensionAnnouncement = DescribeBoundaryExtensionAnnouncement(),
@@ -1524,9 +1645,18 @@ public sealed class FinancePatternSaveConfirmation
             return $"You're editing an earlier segment of \"{label}\" — its own past occurrences will change to match.";
         }
 
-        return IsChangeCritical
-            ? $"You're changing the {whatChanged} for \"{label}\", and it already has payments recorded."
-            : $"\"{label}\" already has more than one savings plan.";
+        if (IsChangeCritical)
+        {
+            return $"You're changing the {whatChanged} for \"{label}\", and it already has payments recorded.";
+        }
+
+        // A non-Critical edit reaches the confirmation for several reasons now (a
+        // multi-plan consolidation, a goal-health suggestion, a paced-bills
+        // cascade). Only claim "more than one savings plan" when that's actually
+        // the case; otherwise state plainly what changed and let the rows explain.
+        return HasMultipleEarmarkPatterns
+            ? $"\"{label}\" already has more than one savings plan."
+            : $"You're changing the {whatChanged} for \"{label}\".";
     }
 
     /// <summary>[READS FILE] When more than one EarMarkPattern survives and the user clicked Save and Plan, asks which one to actually open next. Real for the unambiguous cases (none, or exactly one); the genuinely ambiguous case still needs the actual disambiguation popup. Reads the repository directly, not the live forecast: _requestForecast may be a cached accessor (MainWindow's own EnsureForecast caches until something explicitly recomputes), so it can't be trusted to reflect what PerformSave/PerformImplicitEarmarkChanges just wrote a moment ago. The repository has no such cache — matches what MainWindow's own pre-migration callback already did here (_earMarkPatterns.GetAll()), not a new choice. Looks under _navigationFinanceId, not _financeId directly — after a break-off, _financeId's own EarMarkPattern is the truncated, no-longer-current predecessor.</summary>
@@ -2189,10 +2319,7 @@ public sealed class FinancePatternSaveConfirmation
 
         // Forward-only (planning/28): a Critical edit — one that
         // reaches an already-occurred occurrence — always breaks off from
-        // today. The retroactive "correct it everywhere" path was removed,
-        // along with its narrowing (NarrowSurvivingPlanIfNeeded), in-place
-        // consolidation (ConsolidateSurvivingPlansIfNeeded) and amount-only
-        // scaling (ScaleSurvivingPlansIfNeeded).
+        // today. There is no retroactive "correct it everywhere" path.
         //
         // Item F's own question: with more than
         // one existing plan, the user's "keep them separate / combine them into

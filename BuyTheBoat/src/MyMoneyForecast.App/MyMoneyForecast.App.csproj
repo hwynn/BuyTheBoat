@@ -6,12 +6,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Lets FinancePatternSaveConfirmationTests reach DetermineConditions/
-         NarrowSurvivingPlanIfNeeded and the UserChoose*/UserChoseScalePatterns
-         setters directly — the only way to test the retroactive-correction
-         path today, since Run() itself can't reach it yet (its own gate,
-         UserChooseAlterPast, is permanently false under AskForGuidanceOnImplicitChanges'
-         current placeholder). -->
+    <!-- Lets the App tests reach FinancePatternSaveConfirmation's internal
+         Determine*/Perform* methods directly, so a scenario's confirmation
+         conditions can be exercised without driving the real WPF popup. -->
     <InternalsVisibleTo Include="MyMoneyForecast.App.Tests" />
   </ItemGroup>
 

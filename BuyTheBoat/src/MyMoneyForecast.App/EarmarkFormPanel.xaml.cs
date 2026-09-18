@@ -257,6 +257,11 @@ public partial class EarmarkFormPanel : UserControl
         {
             AmountTextBox.Text = Math.Abs(amount).ToString(CultureInfo.InvariantCulture);
         }
+
+        if (overrides.TryGetValue(EarmarkFieldOverrideKeys.ExcludedDates, out var skipValue) && skipValue is IReadOnlyList<DateOnly> excludedDates)
+        {
+            RuleEditor.SetExcludedDates(excludedDates);
+        }
     }
 
     /// <summary>[STEP] Turns an automatically-filled jar into a savings plan the user owns. Goal fixed, starting allocation pre-filled from what the jar already holds so pressing Save never moves money — it only changes what governs the jar from here on.</summary>

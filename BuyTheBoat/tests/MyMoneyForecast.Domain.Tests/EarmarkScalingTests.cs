@@ -363,4 +363,44 @@ public class EarmarkScalingTests
         scaled.Single(p => p.DatePattern.ByMonthDay[0] == 1).Amount.ShouldBe(-360m); // -180 x 2
         scaled.Single(p => p.DatePattern.ByMonthDay[0] == 2).Amount.ShouldBe(-240m); // -120 x 2
     }
+
+    // SurplusSkip — the "skip some events" strategies for an overfunded plan.
+    private static readonly DateOnly BeforeStart = new(2024, 12, 1);
+
+    [Fact]
+    public void SurplusSkip_offers_the_next_contribution_and_a_floored_stretch()
+    {
+        // Goal needs 100 x 13 = 1300; plan saves 300 x 13 = 3900 → surplus 2600.
+        // 2600 / 300 = 8.67, floored to 8 whole contributions safe to skip.
+        var goal = Goal(-100m);
+        var plan = Plan(goal, -300m, 1);
+
+        var skip = EarmarkScaling.SurplusSkip(goal, plan, BeforeStart);
+
+        skip.ShouldNotBeNull();
+        skip!.SkipNext.ShouldBe([new DateOnly(2025, 1, 1)]);
+        skip.SkipStretch.Count.ShouldBe(8);                              // floor(2600 / 300)
+        skip.SkipStretch[0].ShouldBe(new DateOnly(2025, 1, 1));         // soonest first
+        skip.SkipStretch[^1].ShouldBe(new DateOnly(2025, 8, 1));        // eight in a row
+        (300m * skip.SkipStretch.Count).ShouldBeLessThanOrEqualTo(2600m); // never skips past the goal
+    }
+
+    [Fact]
+    public void SurplusSkip_is_null_when_the_plan_is_not_overfunded()
+    {
+        var goal = Goal(-300m);
+        EarmarkScaling.SurplusSkip(goal, Plan(goal, -100m, 1), BeforeStart).ShouldBeNull(); // underfunded
+        EarmarkScaling.SurplusSkip(goal, Plan(goal, -300m, 1), BeforeStart).ShouldBeNull(); // exactly meets it
+    }
+
+    [Fact]
+    public void SurplusSkip_is_null_when_the_surplus_is_under_one_whole_contribution()
+    {
+        // Needs 100 x 13 = 1300, minus 50 already banked = 1250; plan saves 1300 →
+        // surplus 50, less than one 100 contribution, so nothing is safe to skip.
+        var goal = Goal(-100m);
+        var plan = Plan(goal, -100m, 1, startingAllocation: 50m);
+
+        EarmarkScaling.SurplusSkip(goal, plan, BeforeStart).ShouldBeNull();
+    }
 }

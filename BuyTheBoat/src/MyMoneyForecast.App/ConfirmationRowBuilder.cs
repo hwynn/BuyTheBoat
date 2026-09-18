@@ -33,10 +33,27 @@ internal sealed record RowInputs
 
     public string SourceChangeWarning { get; init; } = "";
 
-    // The goal-health suggestion's own accept/reject wording, or "" when there's
-    // no correction to offer (so the row isn't shown). Accepting pre-fills the
-    // single plan's form with the correction as an unsaved edit.
+    // The goal-health suggestion's own question wording, or "" when there's no
+    // correction to offer (so the row isn't shown). Picking a correction pre-fills
+    // the single plan's form with it as an unsaved edit.
     public string GoalHealthSuggestionQuestion { get; init; } = "";
+
+    // One option label per goal-health correction offered, in recommendation
+    // order — the picker renders these, then a trailing "leave it as is". Today
+    // exactly one ("Load the suggested amount"); empty when no correction applies.
+    // Set for the UNDERfunded case; the overfunded case uses the fields below.
+    public IReadOnlyList<string> GoalHealthCorrectionLabels { get; init; } = [];
+
+    // The OVERfunded goal-health nested flow. GoalHealthLowerRateLabel is the
+    // "lower the contribution to $X" option (also the presence flag for this
+    // shape); GoalHealthKeepRateLabel is the "keep saving at this rate" option the
+    // skip sub-question nests under; GoalHealthSkipQuestion + GoalHealthSkipLabels
+    // are that sub-question's prompt and its strategy options (a trailing "don't
+    // skip any" is appended by the builder). All empty when not overfunded.
+    public string GoalHealthLowerRateLabel { get; init; } = "";
+    public string GoalHealthKeepRateLabel { get; init; } = "";
+    public string GoalHealthSkipQuestion { get; init; } = "";
+    public IReadOnlyList<string> GoalHealthSkipLabels { get; init; } = [];
 
     // The consequence footer shown under the goal-health suggestion's "leave it
     // as is" option — names what rejecting costs (the goal falling short, or
@@ -177,21 +194,58 @@ internal static class ConfirmationRowBuilder
             rows.Add(new AnnouncementRow(ConfirmationRowIds.SourceChange, r.SourceChangeWarning));
         }
 
-        // The goal-health suggestion (planning/25): a single plan that no longer
-        // meets its edited goal, offered a correction to pre-fill its own form
-        // with. Accept is pre-selected (the healthy option); reject now carries a
-        // consequence footer naming what leaving it as is costs (the goal falling
-        // short, or money tied up), shown only while reject is the picked option.
-        // TODO: once more than one correction can be proposed, dedupe identical
-        // ones before this renders — never show two options suggesting the same
-        // thing (the author called this out as a must-check before rendering).
-        if (!string.IsNullOrEmpty(r.GoalHealthSuggestionQuestion))
+        // The goal-health suggestion (planning/25): a plan that no longer meets
+        // its edited goal, offered one or more corrections to pre-fill its own
+        // form with, then a trailing "leave it as is." The first correction is
+        // pre-selected (the healthy option); "leave it" carries a consequence
+        // footer naming what that costs (the goal falling short, or money tied
+        // up), shown only while it's the picked option. Identical corrections are
+        // already collapsed upstream (DetermineGoalHealthSuggestionIfApplicable's
+        // dedupe), so no two options here ever suggest the same thing.
+        if (!string.IsNullOrEmpty(r.GoalHealthSuggestionQuestion) && r.GoalHealthCorrectionLabels.Count > 0)
         {
+            // Underfunded: one option per offered correction, then a trailing
+            // "leave it as is." The wrapper maps a chosen correction index back to
+            // its overrides and treats the trailing option (index == correction
+            // count) — and an unanswered row — as "no correction."
+            var goalHealthOptions = r.GoalHealthCorrectionLabels
+                .Select(label => new ChoiceOption(label, "", ""))
+                .Append(new ChoiceOption("Leave it as is", "", r.GoalHealthRejectWarning))
+                .ToList();
+
+            rows.Add(new ChoiceRow(ConfirmationRowIds.GoalHealthSuggestion,
+                r.GoalHealthSuggestionQuestion,
+                goalHealthOptions,
+                DefaultIndex: 0,
+                Layout: OptionLayout.Stacked));
+        }
+        else if (!string.IsNullOrEmpty(r.GoalHealthSuggestionQuestion) && !string.IsNullOrEmpty(r.GoalHealthLowerRateLabel))
+        {
+            // Overfunded: a two-step nested question. Lower the rate to meet the
+            // goal (recommended, pre-selected), or keep the rate — which reveals
+            // the skip sub-question, when there's a whole contribution's surplus to
+            // skip. The skip options list the strategies, then a trailing "don't
+            // skip any" (its own default, so keeping the rate changes nothing
+            // unless a skip is actively picked).
+            ChoiceRow? skipRow = r.GoalHealthSkipLabels.Count > 0
+                ? new ChoiceRow(ConfirmationRowIds.GoalHealthSkip,
+                    r.GoalHealthSkipQuestion,
+                    r.GoalHealthSkipLabels
+                        .Select(label => new ChoiceOption(label, "", ""))
+                        .Append(new ChoiceOption("Don't skip any", "", ""))
+                        .ToList(),
+                    DefaultIndex: r.GoalHealthSkipLabels.Count,
+                    Layout: OptionLayout.Stacked)
+                : null;
+
             rows.Add(new ChoiceRow(ConfirmationRowIds.GoalHealthSuggestion,
                 r.GoalHealthSuggestionQuestion,
                 [
-                    new ChoiceOption("Load the suggested amount", "", ""),
-                    new ChoiceOption("Leave it as is", "", r.GoalHealthRejectWarning),
+                    new ChoiceOption(r.GoalHealthLowerRateLabel, "", ""),
+                    new ChoiceOption(r.GoalHealthKeepRateLabel, "", r.GoalHealthRejectWarning)
+                    {
+                        Children = skipRow is null ? [] : [skipRow],
+                    },
                 ],
                 DefaultIndex: 0,
                 Layout: OptionLayout.Stacked));

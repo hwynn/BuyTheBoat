@@ -46,8 +46,63 @@ public sealed record MeetGoalScalingResult
     public bool CappedToAffordability { get; init; }
 }
 
+// The upcoming contribution dates two skip strategies would drop to use up an
+// overfunded plan's surplus (planning/28's "skip some events"). SkipNext is just
+// the soonest one; SkipStretch is a continuous run of the soonest ones that fits
+// within the surplus. Both never drop the plan below the goal.
+public sealed record SurplusSkipPlan
+{
+    public required IReadOnlyList<DateOnly> SkipNext { get; init; }
+    public required IReadOnlyList<DateOnly> SkipStretch { get; init; }
+}
+
 public static class EarmarkScaling
 {
+    /// <summary>[CALC] For a single overfunded plan, the upcoming contribution dates two "skip some events" strategies would drop — the soonest one (SkipNext), and a continuous run of the soonest ones that uses up the surplus (SkipStretch) — each dropping only whole contributions that fit within the surplus, so neither ever pushes the plan below its goal. Null when the plan isn't overfunded by at least one whole contribution (nothing safe to skip), so the caller can leave the skip question out entirely. Dates are the plan's own occurrences strictly after asOfDate.</summary>
+    /// <param name="goal">The goal the plan funds — its Amount and occurrences set what's needed.</param>
+    /// <param name="plan">The overfunded plan whose upcoming contributions might be skipped.</param>
+    /// <param name="asOfDate">Today; only occurrences strictly after it count as upcoming/skippable.</param>
+    public static SurplusSkipPlan? SurplusSkip(FinancialPattern goal, EarMarkPattern plan, DateOnly asOfDate)
+    {
+        var perContribution = Math.Abs(plan.Amount);
+        if (perContribution == 0m)
+        {
+            return null;
+        }
+
+        // Same window ScaleToMeetGoal uses: from the plan's own start (never before
+        // the goal's), through the goal's end.
+        var start = plan.DatePattern.ActiveStart > goal.DatePattern.ActiveStart ? plan.DatePattern.ActiveStart : goal.DatePattern.ActiveStart;
+        var end = goal.DatePattern.Until;
+
+        var neededTotal = Math.Max(0m, Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(start, end).Count - plan.StartingAllocation);
+        var currentTotal = perContribution * plan.DatePattern.WithExcludedDates([]).GetOccurrences(start, end).Count;
+        var surplus = currentTotal - neededTotal;
+
+        // How many whole contributions fit inside the surplus — floor, so skipping
+        // them never drops the plan below the goal (a partial one would).
+        var maxSkippable = (int)Math.Floor(surplus / perContribution);
+        if (maxSkippable < 1)
+        {
+            return null;
+        }
+
+        var upcoming = plan.DatePattern.WithExcludedDates([]).GetOccurrences(asOfDate, end)
+            .Where(date => date > asOfDate)
+            .ToList();
+        if (upcoming.Count == 0)
+        {
+            return null;
+        }
+
+        var stretchCount = Math.Min(maxSkippable, upcoming.Count);
+        return new SurplusSkipPlan
+        {
+            SkipNext = [upcoming[0]],
+            SkipStretch = upcoming.Take(stretchCount).ToList(),
+        };
+    }
+
     /// <summary>[CALC] Scales every surviving EarMarkPattern's own Amount by the same ratio the goal's own Amount just changed by — DatePattern, StartingAllocation, and FinanceId all carried over untouched. When an affordability ceiling is given and the scaled combined contribution would exceed it, the ratio is held down so it doesn't — the plans stay knowingly underfunded rather than reserving money that isn't there. That cap is silent (no flag): this is the amount-only, in-place re-rate a cross-boundary cascade applies as an implicit change, not a suggestion the user weighs.</summary>
     /// <param name="request">The goal's new Amount (via Goal), its previous Amount, and every surviving plan to scale.</param>
     /// <param name="affordabilityCeiling">The most the plans' combined per-cycle contribution may be, from AffordabilityCeiling.For (as room FOR these plans, since the cap compares the full combined contribution, not just the change). When scaling to the new amount would exceed it the plans are held to it instead. Null leaves the result uncapped. A ceiling of 0 or less is treated as no cap — an already-over-committed window is a different operation than re-rating.</param>

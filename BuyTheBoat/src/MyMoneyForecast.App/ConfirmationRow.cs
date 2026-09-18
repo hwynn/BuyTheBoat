@@ -95,6 +95,10 @@ public static class ConfirmationRowIds
     // Accept/reject offer to pre-fill the single plan's form with a correction
     // that meets the edited goal (planning/25's goal-health suggestion picker).
     public const string GoalHealthSuggestion = "goal-health-suggestion";
+    // Nested under the overfunded goal-health "keep saving at this rate" option:
+    // skip the next contribution, skip a stretch, or don't skip — using up the
+    // surplus by pausing contributions rather than lowering the rate.
+    public const string GoalHealthSkip = "goal-health-skip";
     // Plain heads-up that the plan is worth a look (the former post-save MessageBox).
     public const string ConcerningPlan = "concerning-plan";
     // Heads-up that moving a boundary outward grew a plan — "[bill] occurs N more times".
