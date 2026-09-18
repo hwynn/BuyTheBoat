@@ -61,7 +61,12 @@ internal sealed record RowInputs
     public bool TrivialFieldsCanCascade { get; init; }
     public string TrivialFieldsCascadeDescription { get; init; } = "";
     public bool PacedBillsCanCascade { get; init; }
+
+    // The two paced-bills cascade footers, one per option: "update them" states
+    // the plans will be re-paced, "leave them" states they stay on the old
+    // schedule until edited. Both "" when nothing was invalidated.
     public string PacedBillsCascadeDescription { get; init; } = "";
+    public string PacedBillsLeaveDescription { get; init; } = "";
 
     // One entry per later finance pattern the edited finance pattern's amount
     // change is carried forward onto that's funded by more than one earmark
@@ -317,21 +322,15 @@ internal static class ConfirmationRowBuilder
         // matching the bills to the new schedule is one Save away (changed from
         // "leave them" 2026-08-19, on the author's call). The headless fallback
         // (DefaultOutcome) still declines, so nothing re-paces money
-        // when no one was actually asked. Mirrors PacedBillsCascadeSection.
-        //
-        // TODO (content, not mechanism): both options below carry the same
-        // description, so the footer reads the same whichever the user picks.
-        // The popup CAN show a different consequence per option — the
-        // chain-boundary row already does — so give "leave them" its own line
-        // (e.g. what stays stale until it's edited) if a per-option message
-        // here is ever wanted.
+        // when no one was actually asked. Each option carries its own
+        // consequence, shown while selected. Mirrors PacedBillsCascadeSection.
         if (r.PacedBillsCanCascade)
         {
             rows.Add(new ChoiceRow(ConfirmationRowIds.PacedBillsCascade,
                 "Your paycheck's schedule changed. Update its associated savings plan(s) too?",
                 [
                     new ChoiceOption("Update them to match the new schedule", "", r.PacedBillsCascadeDescription),
-                    new ChoiceOption("Leave them as they are", "", r.PacedBillsCascadeDescription),
+                    new ChoiceOption("Leave them as they are", "", r.PacedBillsLeaveDescription),
                 ],
                 DefaultIndex: 0,
                 Layout: OptionLayout.Stacked));

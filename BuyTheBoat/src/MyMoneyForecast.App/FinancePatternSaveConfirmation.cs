@@ -1325,6 +1325,7 @@ public sealed class FinancePatternSaveConfirmation
             TrivialFieldsCascadeDescription = TrivialFieldsCanCascade ? DescribeChainTrivialFieldsCascadeConsequence() : "",
             PacedBillsCanCascade = PacedBillsCanCascade,
             PacedBillsCascadeDescription = PacedBillsCanCascade ? DescribePacedBillsCascadeConsequence() : "",
+            PacedBillsLeaveDescription = PacedBillsCanCascade ? DescribePacedBillsLeaveConsequence() : "",
             // Not gated on editingEarlierSegment: an earlier-segment edit is saved
             // in place and DOES cascade forward, so its later multi-plan segments
             // still get this question, unlike the break-off-only rows above.
@@ -1463,24 +1464,44 @@ public sealed class FinancePatternSaveConfirmation
         };
     }
 
-    /// <summary>[READS FILE] Names which bill(s)/goal(s) the paycheck-association cascade would re-pace — singly by name for one, or a combined count-plus-list for several, matching the settled "singly for one associated bill or as a combined 'update all' option for several" language. [READS FILE] to resolve each invalidated plan's own FinanceId back to its owning FinancialPattern's name.</summary>
-    private string DescribePacedBillsCascadeConsequence()
+    /// <summary>[READS FILE] Names which bill(s)/goal(s) the paycheck-association cascade would re-pace — resolving each invalidated plan's FinanceId back to its owning FinancialPattern's name — shared by both paced-bills consequence footers below. Empty when nothing was invalidated. [READS FILE] to read those names off the forecast book.</summary>
+    private IReadOnlyList<string> InvalidatedPacedPlanNames()
     {
         if (_paycheckAssociationContext is not { } context)
         {
-            return "";
+            return [];
         }
 
         var billsByFinanceId = _requestForecast().Book.AllFinancialPatterns().ToDictionary(pattern => pattern.FinanceId);
-        var names = context.InvalidatedPlans
+        return context.InvalidatedPlans
             .Select(plan => billsByFinanceId.TryGetValue(plan.FinanceId, out var bill)
                 ? (string.IsNullOrWhiteSpace(bill.Description) ? bill.Source : bill.Description)
                 : $"finance id {plan.FinanceId}")
             .ToList();
+    }
 
-        return names.Count == 1
-            ? $"\"{names[0]}\"'s savings plan was paced against this paycheck's old schedule. Update it to match the new schedule too?"
-            : $"{names.Count} savings plans were paced against this paycheck's old schedule: {string.Join(", ", names.Select(name => $"\"{name}\""))}. Update all of them to match the new schedule too?";
+    /// <summary>[READS FILE] The consequence footer under the paced-bills cascade's "update them" option — states the affected plan(s) will be re-paced to the paycheck's new schedule, singly by name or as a count-plus-list for several. "" when nothing was invalidated.</summary>
+    private string DescribePacedBillsCascadeConsequence()
+    {
+        var names = InvalidatedPacedPlanNames();
+        return names.Count switch
+        {
+            0 => "",
+            1 => $"\"{names[0]}\"'s savings plan will be re-paced to the paycheck's new schedule.",
+            _ => $"{names.Count} savings plans will be re-paced to the paycheck's new schedule: {string.Join(", ", names.Select(name => $"\"{name}\""))}.",
+        };
+    }
+
+    /// <summary>[READS FILE] The consequence footer under the paced-bills cascade's "leave them" option — states the affected plan(s) stay paced to the old schedule until the user edits them, singly by name or as a count-plus-list for several. "" when nothing was invalidated.</summary>
+    private string DescribePacedBillsLeaveConsequence()
+    {
+        var names = InvalidatedPacedPlanNames();
+        return names.Count switch
+        {
+            0 => "",
+            1 => $"\"{names[0]}\"'s savings plan stays paced to the old schedule until you edit it yourself.",
+            _ => $"{names.Count} savings plans stay paced to the old schedule until you edit them yourself: {string.Join(", ", names.Select(name => $"\"{name}\""))}.",
+        };
     }
 
     /// <summary>[CALC] A plain-language sentence naming what's changing and why it needs asking — no raw field names, no finance_id.</summary>
