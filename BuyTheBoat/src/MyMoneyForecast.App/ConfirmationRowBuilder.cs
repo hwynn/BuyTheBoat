@@ -3,9 +3,9 @@ namespace MyMoneyForecast.App;
 // Everything BuildRows needs to project the rows — the trigger booleans and
 // the pre-computed warning/description strings, gathered by each entry point
 // from its own state. An internal build-time intermediate, so the public
-// request stays down to what the popup actually reads (Description, Rows,
-// PlanShapeCandidates). Fields default to false / "" so each builder sets
-// only the ones its own path can raise.
+// request stays down to what the popup actually reads (Description, Rows).
+// Fields default to false / "" so each builder sets only the ones its own
+// path can raise.
 internal sealed record RowInputs
 {
     public bool IsChangeCritical { get; init; }

@@ -1303,9 +1303,8 @@ public sealed class FinancePatternSaveConfirmation
         var inputs = new RowInputs
         {
             IsChangeCritical = IsChangeCritical && !editingEarlierSegment,
-            // Same suppression the request's own PlanShapeCandidates field uses —
-            // an earlier-segment edit never breaks off, so it has no successor plan
-            // to shape.
+            // Suppressed for an earlier-segment edit — it never breaks off, so it
+            // has no successor plan to shape (BuildRows then emits no picker row).
             PlanShapeCandidates = editingEarlierSegment ? [] : _planShapeCandidates,
             HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns && !editingEarlierSegment,
             HasExplicitEarmarkPattern = HasExplicitEarmarkPattern,
@@ -1339,7 +1338,6 @@ public sealed class FinancePatternSaveConfirmation
         return new ImplicitChangeConfirmationRequest
         {
             Description = BuildDescription(),
-            PlanShapeCandidates = editingEarlierSegment ? [] : _planShapeCandidates,
             Rows = ConfirmationRowBuilder.BuildRows(inputs),
         };
     }
@@ -2482,9 +2480,8 @@ public sealed record FinancePatternRepositories
 }
 
 // What the confirmation popup needs to render itself — the plain-language
-// description and the list of rows (each a question or announcement) it draws,
-// plus the plan-shape candidates that don't have a row of their own yet. Built
-// fresh per Run() call, right before the delegate fires — see
+// description and the list of rows (each a question or announcement) it draws.
+// Built fresh per Run() call, right before the delegate fires — see
 // FinancePatternSaveConfirmation.BuildConfirmationRequest. The trigger booleans
 // and warning strings that decide which rows exist live on the internal
 // RowInputs now (ConfirmationRowBuilder.cs), not here.
@@ -2493,16 +2490,9 @@ public sealed record ImplicitChangeConfirmationRequest
     // One row per question/announcement the popup shows, in the order it shows
     // them (most-vital first), built by ConfirmationRowBuilder.BuildRows.
     // The popup renders exactly this — it never re-derives which questions apply.
+    // The plan-shape choice (planning/25 Item G) rides here too, as a
+    // CandidatePickerRow, so there's no separate candidates field to keep in step.
     public IReadOnlyList<ConfirmationRow> Rows { get; init; } = [];
-
-    // planning/25's Item G — empty whenever there's nothing to choose
-    // between (most edits, multi-plan goals, or a break-off with no
-    // existing plan to draw an alternative shape from). These are also emitted
-    // into Rows as a CandidatePickerRow, which is what the popup actually renders
-    // and what hands back the picked candidate's own Plan as
-    // ConfirmationOutcome.ChosenPlanShape; this field is kept as the plain,
-    // row-independent view of what was offered (read directly by tests).
-    public required IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates { get; init; }
 
     public required string Description { get; init; }
 }

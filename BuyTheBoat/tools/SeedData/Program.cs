@@ -419,18 +419,19 @@ var storageUnitPlanB = EarMarkPattern.Create(new EarMarkPatternOptions { Finance
 earMarkPatterns.Save(storageUnitPlanB);
 Console.WriteLine("Bill: Storage Unit Rental — TWO concurrent savings plans, real history since Jan 2026. To see Item F's forced consolidation: edit its due date (e.g. 1st -> 15th) and save.");
 
-// Item E (planning/25 — the retroactive-correction path's own narrowing):
-// one plan, plus a manual top-up dated well in the past so there's something
-// concrete to watch disappear. Edit the start date forward to today or
-// later (earlier isn't supported yet — a known, deliberate gap, see
-// FinancePatternSaveConfirmation.DetermineNarrowingPlanIfApplicable's own
-// TODO), save, and choose "Apply it everywhere" in the popup.
+// A single-plan bill with real history, plus a manual top-up dated in the
+// past. Editing a Critical field (amount or start date) breaks off a new
+// segment from today — forward-only; the old retroactive "apply it everywhere"
+// path was removed. Editing its AMOUNT is the plan-shape picker case: the
+// successor plan can be shaped several ways (Recommended / keep the same
+// schedule / keep the same amount), so the confirmation offers that choice, and
+// the past top-up gives the break-off a real carried-over balance to reflect.
 var cloudStorage = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Cloud Storage Plan", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -12m, Priority = 2, Mandatory = false });
 financialPatterns.Save(cloudStorage, checking.Id);
 var cloudStoragePlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = cloudStorage.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -20m }, cloudStorage);
 earMarkPatterns.Save(cloudStoragePlan);
 manualEarmarks.Save(ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = cloudStorage.FinanceId, Date = new DateOnly(2026, 2, 1), Amount = 15m }, cloudStoragePlan));
-Console.WriteLine("Bill: Cloud Storage Plan — ONE savings plan, real history since Jan 2026, plus a manual +$15 top-up on Feb 1. To see Item E's narrowing: edit its start date forward to today or later, save, choose \"Apply it everywhere\" — the plan should narrow to match and the Feb 1 manual earmark should disappear from the Earmark grid.");
+Console.WriteLine("Bill: Cloud Storage Plan — ONE savings plan, real history since Jan 2026, plus a manual +$15 top-up on Feb 1. To see the plan-shape picker: edit its amount and save — the break-off's successor plan can be shaped several ways.");
 
 // ---- Forecast tab pre-fill -------------------------------------------------
 
@@ -516,6 +517,6 @@ Console.WriteLine(cushionDippedDays.Count > 0
     : "Cushion never dips below target in this window.");
 
 Console.WriteLine();
-Console.WriteLine("To test planning/25's new editing-with-history popup: Storage Unit Rental (Item F — edit the due date) and Cloud Storage Plan (Item E — edit the start date) on the Expense tab.");
+Console.WriteLine("To see the editing-with-history popup on the Expense tab: Storage Unit Rental (multiple plans — edit the due date for the forced-consolidation notice) and Cloud Storage Plan (single plan — edit the amount for the plan-shape picker).");
 Console.WriteLine();
 Console.WriteLine("Done. Launch the app to see it populated.");

@@ -120,8 +120,8 @@ public class FinancePatternSaveConfirmationTests : IDisposable
             // The fake "popup" itself — reads the real candidates this Run()
             // actually built, the same way a real one would, rather than a
             // value the test just hands back blind.
-            request.PlanShapeCandidates.Count.ShouldBeGreaterThan(1);
-            var sameSchedule = request.PlanShapeCandidates.Single(c => c.Label == "Keep the same schedule");
+            request.PlanShapeCandidates().Count.ShouldBeGreaterThan(1);
+            var sameSchedule = request.PlanShapeCandidates().Single(c => c.Label == "Keep the same schedule");
             return Confirm.Proceed().WithPlanShape(sameSchedule.Plan.Plan);
         };
 
@@ -274,7 +274,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         EarMarkPattern? recommendedPreview = null;
         confirmation.ConfirmImplicitChanges = request =>
         {
-            var recommended = request.PlanShapeCandidates.Single(c => c.Label == "Recommended").Plan.Plan;
+            var recommended = request.PlanShapeCandidates().Single(c => c.Label == "Recommended").Plan.Plan;
             recommendedPreview = recommended;
             return Confirm.Proceed().WithPlanShape(recommended);
         };
@@ -316,7 +316,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         decimal? shownRecommendedRate = null;
         confirmation.ConfirmImplicitChanges = request =>
         {
-            shownRecommendedRate = Math.Abs(request.PlanShapeCandidates.Single(c => c.Label == "Recommended").Plan.Plan.Amount);
+            shownRecommendedRate = Math.Abs(request.PlanShapeCandidates().Single(c => c.Label == "Recommended").Plan.Plan.Amount);
             return Confirm.Proceed(); // take the default — no explicit pick, the common path
         };
 
@@ -360,7 +360,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         confirmation.Run().ShouldBeTrue();
 
-        captured!.PlanShapeCandidates.ShouldBeEmpty(); // confirms this really is the no-picker fallback path
+        captured!.PlanShapeCandidates().ShouldBeEmpty(); // confirms this really is the no-picker fallback path
         var savedRate = Math.Abs(_earMarkPatterns.GetAll().Single(p => p.FinanceId != 1).Amount); // the consolidated successor
         savedRate.ShouldBeLessThan(1000m); // ~2000/cycle wanted, held under the ~600 ceiling
         savedRate.ShouldBeGreaterThan(0m);
@@ -411,7 +411,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         var confirmation = Confirmation(1, editedBill, accountId: 1, forecast);
         confirmation.ConfirmImplicitChanges = request =>
         {
-            var sameSchedule = request.PlanShapeCandidates.Single(c => c.Label == "Keep the same schedule");
+            var sameSchedule = request.PlanShapeCandidates().Single(c => c.Label == "Keep the same schedule");
             // Amount-only change, so ConsolidationNeeded is naturally
             // false (that row is meant to be feasible to keep separate)
             // — has to be chosen explicitly to reach PerformMultiPlanBreakOff
@@ -461,7 +461,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         confirmation.Run().ShouldBeTrue();
 
         capturedRequest.ShouldNotBeNull();
-        capturedRequest!.PlanShapeCandidates.ShouldBeEmpty();
+        capturedRequest!.PlanShapeCandidates().ShouldBeEmpty();
     }
 
     // 03's 1.2.3.10.a5 only restricts start_date/amount/recurrence shape —

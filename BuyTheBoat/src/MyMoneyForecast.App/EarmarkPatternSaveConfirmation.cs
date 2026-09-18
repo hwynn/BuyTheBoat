@@ -358,7 +358,6 @@ public sealed class EarmarkPatternSaveConfirmation
                 (true, false) => "This plan is part of a chain. Its date range touches a neighboring segment.",
                 _ => "This plan is part of a chain. Later segments could pick up this same amount or schedule change.",
             },
-            PlanShapeCandidates = [],
             Rows = ConfirmationRowBuilder.BuildRows(inputs),
         };
     }

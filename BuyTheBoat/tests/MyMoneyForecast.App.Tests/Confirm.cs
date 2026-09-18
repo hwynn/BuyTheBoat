@@ -46,6 +46,12 @@ internal static class Confirm
 
     public static ConfirmationOutcome WithPlanShape(this ConfirmationOutcome o, EarMarkPattern plan) => o with { ChosenPlanShape = plan };
 
+    // The plan-shape candidates offered on a request, read out of its one
+    // CandidatePickerRow — empty when no picker was shown. The request no longer
+    // carries a separate candidates field; the row is the single source.
+    public static IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates(this ImplicitChangeConfirmationRequest request) =>
+        request.Rows.OfType<CandidatePickerRow>().SingleOrDefault()?.Candidates ?? [];
+
     private static ConfirmationOutcome At(this ConfirmationOutcome o, string rowId, int index) =>
         o with { ChosenOptionIndex = new Dictionary<string, int>(o.ChosenOptionIndex) { [rowId] = index } };
 }
