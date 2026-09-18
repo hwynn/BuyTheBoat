@@ -11,10 +11,10 @@ namespace MyMoneyForecast.App;
 // for a savings plan) owns all of that and hands the popup a finished list.
 //
 // See planning/28-refactoring-the-save-confirmation.md for the full design:
-// the four row kinds below, the two-layout front-end contract, and the staged
-// migration this file is step 1 of. Nothing constructs these yet — the flat
-// ImplicitChangeConfirmationRequest/Answer pair is still what runs. This file
-// exists so the later steps have a settled vocabulary to build against.
+// the row kinds below and the two-layout front-end contract. These are what
+// runs today — ConfirmationRowBuilder.BuildRows constructs them, the popup
+// (EditingHistoryConfirmationWindow) renders them, and the wrapper reads the
+// choices back off the ConfirmationOutcome.
 public abstract record ConfirmationRow(string Id);
 
 // A statement with no choice attached — a forced-consolidation notice, a

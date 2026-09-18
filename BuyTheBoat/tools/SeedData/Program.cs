@@ -70,7 +70,7 @@ int NextFinanceId() => financeId++;
 RecurrenceRule Monthly(DateOnly start, int interval = 1, DateOnly? until = null) => RecurrenceRule.Create(new RecurrenceRuleOptions
 {
     Frequency = RecurrenceFrequency.Monthly,
-    Start = start,
+    DtStart = start,
     Interval = interval,
     ByMonthDay = [start.Day],
     Until = until ?? farUntil,
@@ -79,7 +79,7 @@ RecurrenceRule Monthly(DateOnly start, int interval = 1, DateOnly? until = null)
 RecurrenceRule Biweekly(DateOnly start, DayOfWeek day, DateOnly? until = null) => RecurrenceRule.Create(new RecurrenceRuleOptions
 {
     Frequency = RecurrenceFrequency.Weekly,
-    Start = start,
+    DtStart = start,
     Interval = 2,
     ByDay = [day],
     Until = until ?? farUntil,
@@ -92,7 +92,7 @@ RecurrenceRule Biweekly(DateOnly start, DayOfWeek day, DateOnly? until = null) =
 RecurrenceRule Weekly(DateOnly start, DateOnly until) => RecurrenceRule.Create(new RecurrenceRuleOptions
 {
     Frequency = RecurrenceFrequency.Weekly,
-    Start = start,
+    DtStart = start,
     Until = until,
 });
 
@@ -103,7 +103,7 @@ RecurrenceRule Weekly(DateOnly start, DateOnly until) => RecurrenceRule.Create(n
 RecurrenceRule OneTime(DateOnly date, DateOnly? activeFrom = null) => RecurrenceRule.Create(new RecurrenceRuleOptions
 {
     Frequency = RecurrenceFrequency.Yearly,
-    Start = date,
+    DtStart = date,
     Count = 1,
     ActiveFrom = activeFrom,
 });
@@ -193,7 +193,7 @@ if (propertyTaxProposal.StartingEarmark is { } propertyTaxStartingEarmark)
 {
     manualEarmarks.Save(propertyTaxStartingEarmark);
 }
-Console.WriteLine($"Bill: County Property Tax — real Propose() output, semi-annual, first due date {propertyTax.DatePattern.Start:yyyy-MM-dd}, " +
+Console.WriteLine($"Bill: County Property Tax — real Propose() output, semi-annual, first due date {propertyTax.DatePattern.ActiveStart:yyyy-MM-dd}, " +
     $"paced at {-propertyTaxProposal.Plan.Amount:C}/payday; MaybeStartingEarmark fired: {propertyTaxProposal.StartingEarmark is not null} " +
     "(see FirstOccurrenceShortfall in the report below for the real coverage check)");
 
@@ -211,7 +211,7 @@ if (hoaProposal.StartingEarmark is { } hoaStartingEarmark)
 {
     manualEarmarks.Save(hoaStartingEarmark);
 }
-Console.WriteLine($"Bill: HOA Assessment — real Propose() output, quarterly, first due date {hoaAssessment.DatePattern.Start:yyyy-MM-dd}, " +
+Console.WriteLine($"Bill: HOA Assessment — real Propose() output, quarterly, first due date {hoaAssessment.DatePattern.ActiveStart:yyyy-MM-dd}, " +
     $"paced at {-hoaProposal.Plan.Amount:C}/payday (see FirstOccurrenceShortfall in the report below)");
 
 // A THIRD flavor of the same gap: a small dollar amount can still trigger a
@@ -227,7 +227,7 @@ if (membershipProposal.StartingEarmark is { } membershipStartingEarmark)
 {
     manualEarmarks.Save(membershipStartingEarmark);
 }
-Console.WriteLine($"Bill: Warehouse Club Membership — real Propose() output, annual, first due date {membershipDues.DatePattern.Start:yyyy-MM-dd}, " +
+Console.WriteLine($"Bill: Warehouse Club Membership — real Propose() output, annual, first due date {membershipDues.DatePattern.ActiveStart:yyyy-MM-dd}, " +
     $"paced at {-membershipProposal.Plan.Amount:C}/payday (see FirstOccurrenceShortfall in the report below)");
 
 // A genuine break-off, wired through the real factory — so the successor's
@@ -246,7 +246,7 @@ var carLeaseBreakOff = BreakOffFactory.BreakOff(new BreakOffRequest
     CutDate = new DateOnly(2026, 7, 1),
     SuccessorFinanceId = NextFinanceId(),
     SuccessorAmount = -450m,
-    SuccessorSchedule = new RecurrenceRuleOptions { Frequency = RecurrenceFrequency.Monthly, Start = new DateOnly(2026, 7, 1), ByMonthDay = [1], Until = farUntil },
+    SuccessorSchedule = new RecurrenceRuleOptions { Frequency = RecurrenceFrequency.Monthly, DtStart = new DateOnly(2026, 7, 1), ByMonthDay = [1], Until = farUntil },
     // A flat, illustrative figure — a real break-off reads this off the LIVE
     // forecast at the cut date (the UI's job, not this factory's); this
     // script has no live forecast to read yet at this point, so this is a

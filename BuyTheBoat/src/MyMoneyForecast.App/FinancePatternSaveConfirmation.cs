@@ -40,11 +40,6 @@ namespace MyMoneyForecast.App;
 //  - Let the user keep unconsolidated earmark patterns: the always-consolidate
 //    fallback on the break-off side is a safety measure, not the final design
 //    (planning/28).
-//  - Collapse the many independent trigger/answer/description fields
-//    (IsChangeCritical, ConsolidationNeeded, TouchesChainBoundary, and the rest,
-//    each with its own Determine*/Build*/Describe* trio) into the "confirmation
-//    row" model — ConfirmationRow.cs exists, the DTO/popup reshape doesn't yet
-//    (planning/28).
 //  - The goal-health suggestion (DetermineGoalHealthSuggestionIfApplicable) is a
 //    single amount-only correction; the full multi-option strategy-picker, its
 //    reject warning, and deduping identical options are unbuilt.
@@ -1335,7 +1330,7 @@ public sealed class FinancePatternSaveConfirmation
             // in place and DOES cascade forward, so its later multi-plan segments
             // still get this question, unlike the break-off-only rows above.
             CrossBoundaryConsolidations = _crossBoundaryConsolidations
-                .Select(successor => new CrossBoundaryConsolidationInput(successor.FinanceId, successor.Description))
+                .Select(successor => new CrossBoundaryConsolidationInput(successor.FinanceId, successor.Description ?? successor.Source))
                 .ToList(),
             ShowConsolidationSizing = _consolidationStrategyApplies,
             ShowConsolidationSpread = _consolidationHasIncomeForSpread,
