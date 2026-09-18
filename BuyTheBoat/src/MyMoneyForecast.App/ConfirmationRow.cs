@@ -61,16 +61,6 @@ public sealed record CandidatePickerRow(
     IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> Candidates,
     int DefaultIndex) : ConfirmationRow(Id);
 
-// A single checkbox that rides nested under a parent ChoiceRow rather than
-// standing on its own — today only "also scale each surviving plan's amount,"
-// shown under the consolidation question. ParentId is the ChoiceRow it sits
-// beneath.
-public sealed record CheckboxRiderRow(
-    string Id,
-    string ParentId,
-    string Label,
-    bool DefaultChecked) : ConfirmationRow(Id);
-
 // How a ChoiceRow's options are arranged. SideBySide (the default) suits
 // options that summarize in a few words; Stacked gives each option the popup's
 // full width, for choices that need room to explain themselves — a suggestion
@@ -91,6 +81,11 @@ public enum OptionLayout
 public static class ConfirmationRowIds
 {
     public const string WarnAboutBreakOff = "warn-about-break-off";
+    // The break-off successor's savings-plan shape (planning/25 Item G / Q2):
+    // Recommended vs keep-the-same-schedule vs keep-the-same-amount. Its selection
+    // comes back as ConfirmationOutcome.ChosenPlanShape (the picked candidate's own
+    // plan), not as an option index like the ChoiceRows — see CandidatePickerRow.
+    public const string PlanShape = "plan-shape";
     public const string Consolidation = "consolidation";
     // Nested under Consolidation's "keep them separate": offers to re-rate the
     // kept-separate plans so they meet the new amount instead of over/underfunding it.
@@ -132,8 +127,8 @@ public static class ConfirmationRowIds
 }
 
 // The user's answer, as the raw selections the popup reports — one option
-// index per ChoiceRow it drew, keyed by row Id, plus any picked plan shape and
-// checkbox riders. The popup doesn't interpret these (it never knew what a row
+// index per ChoiceRow it drew, keyed by row Id, plus any picked plan shape. The
+// popup doesn't interpret these (it never knew what a row
 // meant); the wrapper (FinancePatternSaveConfirmation.Run or
 // EarmarkPatternSaveConfirmation.Run) reads each index back into a decision,
 // each keying off the same ConfirmationRowIds. A row the popup never drew is simply absent
@@ -144,6 +139,5 @@ public sealed record ConfirmationOutcome
 {
     public required bool Proceed { get; init; }
     public IReadOnlyDictionary<string, int> ChosenOptionIndex { get; init; } = new Dictionary<string, int>();
-    public IReadOnlyDictionary<string, bool> Riders { get; init; } = new Dictionary<string, bool>();
     public EarMarkPattern? ChosenPlanShape { get; init; }
 }

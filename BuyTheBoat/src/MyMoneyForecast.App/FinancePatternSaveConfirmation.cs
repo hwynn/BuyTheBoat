@@ -1308,6 +1308,10 @@ public sealed class FinancePatternSaveConfirmation
         var inputs = new RowInputs
         {
             IsChangeCritical = IsChangeCritical && !editingEarlierSegment,
+            // Same suppression the request's own PlanShapeCandidates field uses —
+            // an earlier-segment edit never breaks off, so it has no successor plan
+            // to shape.
+            PlanShapeCandidates = editingEarlierSegment ? [] : _planShapeCandidates,
             HasMultipleEarmarkPatterns = HasMultipleEarmarkPatterns && !editingEarlierSegment,
             HasExplicitEarmarkPattern = HasExplicitEarmarkPattern,
             ConsolidationNeeded = ConsolidationNeeded && !editingEarlierSegment,
@@ -2498,9 +2502,11 @@ public sealed record ImplicitChangeConfirmationRequest
 
     // planning/25's Item G — empty whenever there's nothing to choose
     // between (most edits, multi-plan goals, or a break-off with no
-    // existing plan to draw an alternative shape from). A real popup shows
-    // each candidate's own Label and hands back whichever one's own Plan
-    // the user picked as ConfirmationOutcome.ChosenPlanShape.
+    // existing plan to draw an alternative shape from). These are also emitted
+    // into Rows as a CandidatePickerRow, which is what the popup actually renders
+    // and what hands back the picked candidate's own Plan as
+    // ConfirmationOutcome.ChosenPlanShape; this field is kept as the plain,
+    // row-independent view of what was offered (read directly by tests).
     public required IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates { get; init; }
 
     public required string Description { get; init; }

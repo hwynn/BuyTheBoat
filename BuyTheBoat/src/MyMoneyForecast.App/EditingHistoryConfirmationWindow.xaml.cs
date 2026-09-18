@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
@@ -38,6 +39,12 @@ public partial class EditingHistoryConfirmationWindow : Window
 
     private readonly Dictionary<string, ChoiceRowControls> _choiceRows = new();
 
+    // The one plan-shape picker (Item G / Q2), if this request drew one — its
+    // radios (in candidate order) and the candidates themselves, so ToOutcome can
+    // report the picked candidate's own plan as ChosenPlanShape. Null when no
+    // picker was shown (most saves), which reads back as the default candidate.
+    private (IReadOnlyList<RadioButton> Radios, IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> Candidates)? _planShapePicker;
+
     public EditingHistoryConfirmationWindow(ImplicitChangeConfirmationRequest request)
     {
         InitializeComponent();
@@ -49,23 +56,35 @@ public partial class EditingHistoryConfirmationWindow : Window
         }
     }
 
-    /// <summary>[CALC] The raw selections to hand the wrapper — one option index per ChoiceRow drawn, keyed by row Id. Call after ShowDialog returns, passing its result as proceed. No CandidatePickerRow/CheckboxRiderRow is drawn yet, so ChosenPlanShape and Riders stay empty.</summary>
+    /// <summary>[CALC] The raw selections to hand the wrapper — one option index per ChoiceRow drawn, keyed by row Id, plus the picked plan shape when a CandidatePickerRow was drawn. Call after ShowDialog returns, passing its result as proceed.</summary>
     /// <param name="proceed">The dialog result — false when the user cancelled.</param>
     public ConfirmationOutcome ToOutcome(bool proceed) => new()
     {
         Proceed = proceed,
         ChosenOptionIndex = _choiceRows.ToDictionary(entry => entry.Key, entry => SelectedIndex(entry.Value.Radios)),
+        ChosenPlanShape = PickedPlanShape(),
     };
+
+    /// <summary>[CALC] The savings-plan shape the user picked (that candidate's own plan), or null when no picker was drawn or somehow nothing is selected — null reads back as the wrapper's default "Recommended" candidate.</summary>
+    private EarMarkPattern? PickedPlanShape()
+    {
+        if (_planShapePicker is not { } picker)
+        {
+            return null;
+        }
+
+        var selected = SelectedIndex(picker.Radios);
+        return selected >= 0 ? picker.Candidates[selected].Plan.Plan : null;
+    }
 
     /// <summary>[CALC] Builds the one control that renders a single row, dispatched on its kind.</summary>
     private UIElement BuildRowControl(ConfirmationRow row) => row switch
     {
         AnnouncementRow announcement => BuildAnnouncement(announcement),
         ChoiceRow choice => BuildChoice(choice),
-        // CandidatePickerRow / CheckboxRiderRow aren't produced by
-        // FinancePatternSaveConfirmation.BuildRows yet (their choices aren't
-        // surfaced today), so they never reach here. Fail loud rather than
-        // draw nothing if a later thread emits one without adding its template.
+        CandidatePickerRow picker => BuildCandidatePicker(picker),
+        // Fail loud rather than draw nothing if a new row kind is ever added
+        // without a template here.
         _ => throw new NotSupportedException($"No popup template for confirmation row kind {row.GetType().Name}."),
     };
 
@@ -156,6 +175,39 @@ public partial class EditingHistoryConfirmationWindow : Window
         _choiceRows[row.Id] = controls;
         UpdateConsequenceFooter(controls); // set the footer for the default selection up front
 
+        return container;
+    }
+
+    /// <summary>[CALC] The plan-shape picker (Item G / Q2): its bold prompt and one radio per candidate shape, the recommended one pre-selected. Each candidate's own plan is remembered so ToOutcome can report the picked one as ChosenPlanShape.</summary>
+    private FrameworkElement BuildCandidatePicker(CandidatePickerRow row)
+    {
+        var container = new StackPanel { Margin = new Thickness(0, 0, 0, 14) };
+
+        container.Children.Add(new TextBlock
+        {
+            Text = row.Question,
+            FontWeight = FontWeights.Bold,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+
+        // One radio per candidate, its own Label as the text — no consequence
+        // footer or child rows, unlike a ChoiceRow: a candidate is just a shape.
+        var radios = new List<RadioButton>(row.Candidates.Count);
+        for (var i = 0; i < row.Candidates.Count; i++)
+        {
+            var radio = new RadioButton
+            {
+                Content = row.Candidates[i].Label,
+                GroupName = row.Id,
+                IsChecked = i == row.DefaultIndex,
+                Margin = new Thickness(0, 0, 0, 4),
+            };
+            radios.Add(radio);
+            container.Children.Add(radio);
+        }
+
+        _planShapePicker = (radios, row.Candidates);
         return container;
     }
 

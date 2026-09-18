@@ -9,6 +9,14 @@ namespace MyMoneyForecast.App;
 internal sealed record RowInputs
 {
     public bool IsChangeCritical { get; init; }
+
+    // The break-off successor's alternative savings-plan shapes (planning/25 Item
+    // G / Q2), or empty when there's no real choice — most edits, or a break-off
+    // with no existing plan to draw an alternative from. More than one entry means
+    // a genuine choice; each carries its own proposed plan, so this becomes a
+    // CandidatePickerRow rather than a plain ChoiceRow.
+    public IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates { get; init; } = [];
+
     public bool HasMultipleEarmarkPatterns { get; init; }
     // Whether at least one of the plans is one the user made their own — the
     // "combine / keep separate" question is only shown when this is true (a set
@@ -83,7 +91,7 @@ internal static class ConfirmationRowBuilder
 {
     /// <summary>[CALC] Projects the computed inputs into the confirmation-row list (planning/28) — one row per section, in most-vital-first order, under the same visibility conditions the hand-built popup used. Serves both entry points: the earmark path only sets the chain fields, so it naturally yields just those rows.
     ///
-    /// Deliberately NOT emitted, because today's popup surfaces neither, so turning them into rows would offer a choice that isn't offered now — a behavior change left to a later thread: the plan-shape picker (PlanShapeCandidates → a CandidatePickerRow, still carried on the request) and the amount-scale rider (a CheckboxRiderRow).
+    /// The plan-shape picker (Q2) is emitted as a CandidatePickerRow right under the break-off announcement, so the successor's shape is a real choice rather than a silent "Recommended."
     ///
     /// An always-shown description that accompanies a choice (the cascade/trivial/paced-bills descriptions) rides as BOTH options' Consequence, so the popup's "footer under the selected option" shows it whichever option is picked. A per-option warning (the chain-boundary case) rides only on the option it belongs to.</summary>
     public static IReadOnlyList<ConfirmationRow> BuildRows(RowInputs r)
@@ -96,6 +104,19 @@ internal static class ConfirmationRowBuilder
         {
             rows.Add(new AnnouncementRow(ConfirmationRowIds.WarnAboutBreakOff,
                 "This reaches back to history that's already happened, so it will start a new segment from today — your past records stay exactly as they were."));
+        }
+
+        // Item G / Q2 — the new segment's savings plan can be shaped a few ways
+        // (Recommended, keep the same schedule, keep the same amount). Only shown
+        // when there's a real choice (more than one candidate); the picker returns
+        // the chosen candidate's own plan as ChosenPlanShape, so it's its own row
+        // kind, not a ChoiceRow. Recommended is index 0, the pre-selected default.
+        if (r.PlanShapeCandidates.Count > 0)
+        {
+            rows.Add(new CandidatePickerRow(ConfirmationRowIds.PlanShape,
+                "How should the new segment's savings plan be shaped?",
+                r.PlanShapeCandidates,
+                DefaultIndex: 0));
         }
 
         // Item F's consolidation choice — only when there's a real choice to
