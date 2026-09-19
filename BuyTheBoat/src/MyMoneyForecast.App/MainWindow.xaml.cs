@@ -1787,13 +1787,48 @@ public partial class MainWindow : Window
         return true;
     }
 
-    /// <summary>[STEP] Shows EditingHistoryConfirmationWindow and returns the raw selections it reports — shared by both the Expense and Earmark save paths' own ConfirmImplicitChanges wiring, since the window is the same either way; each request's own rows decide what it actually shows, and the wrapper reads each selection back into a decision.</summary>
+    /// <summary>[STEP] Shows the save-confirmation popup and returns the raw selections it reports — shared by both the Expense and Earmark save paths' ConfirmImplicitChanges wiring. When a save's rows are too tall for one screen it splits them into height-based pages (planning/28 Thread 4), shown one after another; selections accumulate into one outcome and a cancel on any page aborts the whole save. A save whose rows fit one page is unchanged.</summary>
     private ConfirmationOutcome ShowEditingHistoryConfirmation(ImplicitChangeConfirmationRequest request)
     {
-        var confirmWindow = new EditingHistoryConfirmationWindow(request) { Owner = this };
-        var proceed = confirmWindow.ShowDialog() == true;
-        return confirmWindow.ToOutcome(proceed);
+        var pages = ConfirmationPaginator.Paginate(
+            request.Rows, MaxComfortableConfirmationHeight(), ConfirmationRowHeights.EstimateWorstCase);
+
+        var chosenOptionIndex = new Dictionary<string, int>();
+        EarMarkPattern? chosenPlanShape = null;
+
+        // One dialog per page; each row lives on exactly one page, so their ids
+        // never collide as their selections accumulate. A cancel on any page
+        // returns a non-proceeding outcome, which aborts the save.
+        for (var pageNumber = 1; pageNumber <= pages.Count; pageNumber++)
+        {
+            var isFinalPage = pageNumber == pages.Count;
+            var pageRequest = request with { Rows = pages[pageNumber - 1], IsFinalPage = isFinalPage };
+            var confirmWindow = new EditingHistoryConfirmationWindow(pageRequest, pageNumber, pages.Count) { Owner = this };
+            if (confirmWindow.ShowDialog() != true)
+            {
+                return new ConfirmationOutcome { Proceed = false };
+            }
+
+            var pageOutcome = confirmWindow.ToOutcome(proceed: true);
+            foreach (var (rowId, index) in pageOutcome.ChosenOptionIndex)
+            {
+                chosenOptionIndex[rowId] = index;
+            }
+
+            chosenPlanShape ??= pageOutcome.ChosenPlanShape;
+        }
+
+        return new ConfirmationOutcome
+        {
+            Proceed = true,
+            ChosenOptionIndex = chosenOptionIndex,
+            ChosenPlanShape = chosenPlanShape,
+        };
     }
+
+    /// <summary>[CALC] The comfortable height budget for one confirmation page's rows — the usable screen height less room for the window's title bar, description, page indicator, button row, and margins, floored so a small screen still makes progress. Feeds ConfirmationPaginator.Paginate.</summary>
+    private static double MaxComfortableConfirmationHeight() =>
+        System.Math.Max(300, SystemParameters.WorkArea.Height - 260);
 
     /// <summary>[UI] AskWhichEarmarkPatternToOpen's own real disambiguation, built 2026-08-17 — shows EarmarkPatternPickerWindow and returns whichever plan the user picked. Cancelling the picker returns null, which AskWhichEarmarkPatternToOpen reads as "don't navigate" — the save has already committed, so the user simply stays on their current tab rather than being dropped onto a plan they didn't choose.</summary>
     /// <param name="plans">Every EarMarkPattern surviving for the goal — always more than one; AskWhichEarmarkPatternToOpen's own gate never calls this otherwise.</param>

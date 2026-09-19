@@ -2654,4 +2654,10 @@ public sealed record ImplicitChangeConfirmationRequest
     public IReadOnlyList<ConfirmationRow> Rows { get; init; } = [];
 
     public required string Description { get; init; }
+
+    // False on every confirmation page except the last, so the popup's commit
+    // button reads "Continue…" rather than "Save" (planning/28 Thread 4). The
+    // wrapper always builds one logical request with this true; MainWindow's
+    // popup driver flips it per page when a save's rows span more than one page.
+    public bool IsFinalPage { get; init; } = true;
 }

@@ -45,11 +45,28 @@ public partial class EditingHistoryConfirmationWindow : Window
     // picker was shown (most saves), which reads back as the default candidate.
     private (IReadOnlyList<RadioButton> Radios, IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> Candidates)? _planShapePicker;
 
-    public EditingHistoryConfirmationWindow(ImplicitChangeConfirmationRequest request)
+    public EditingHistoryConfirmationWindow(
+        ImplicitChangeConfirmationRequest request, int pageNumber = 1, int pageCount = 1)
     {
         InitializeComponent();
 
+        // Cap at the working screen so a tall page — or a single row too tall to
+        // split — scrolls inside the window instead of pushing the buttons
+        // off-screen; the scroll fallback behind height-based pagination.
+        MaxHeight = SystemParameters.WorkArea.Height * 0.92;
+
         DescriptionText.Text = request.Description;
+
+        // "Continue…" while more pages follow, "Save" on the last — the only thing
+        // the popup itself knows about pagination (planning/28 Thread 4).
+        CommitButton.Content = request.IsFinalPage ? "Save" : "Continue…";
+
+        if (pageCount > 1)
+        {
+            PageIndicator.Text = $"Page {pageNumber} of {pageCount}";
+            PageIndicator.Visibility = Visibility.Visible;
+        }
+
         foreach (var row in request.Rows)
         {
             RowsPanel.Children.Add(BuildRowControl(row));
