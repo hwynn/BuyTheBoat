@@ -44,6 +44,11 @@ internal static class Confirm
     // trivial-fields cascade — [0] only this segment, [1] apply forward.
     public static ConfirmationOutcome ChoseCascadeTrivialFields(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.TrivialFieldsCascade, 1);
 
+    // earmark-rerate — [0] break off / split at today (the popup's pre-selection,
+    // keeps what's already set aside), [1] recalculate the whole plan (re-rate).
+    public static ConfirmationOutcome ChoseToBreakOffRerate(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.EarmarkRerate, 0);
+    public static ConfirmationOutcome ChoseToRecalculateWholePlan(this ConfirmationOutcome o) => o.At(ConfirmationRowIds.EarmarkRerate, 1);
+
     public static ConfirmationOutcome WithPlanShape(this ConfirmationOutcome o, EarMarkPattern plan) => o with { ChosenPlanShape = plan };
 
     // The plan-shape candidates offered on a request, read out of its one

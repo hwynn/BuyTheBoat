@@ -82,4 +82,4 @@ a day's activity — grouping the two-pane by account gives each account exactly
 space it needs, and stays closest to the two-pane already chosen for one account.
 
 Full write-up of both chosen directions and the refinement reasoning:
-[`../11-ui-design-and-decisions.md`](../11-ui-design-and-decisions.md).
+[`../21-forms-and-ui.md`](../21-forms-and-ui.md).

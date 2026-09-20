@@ -23,7 +23,7 @@ detail.
 
 ## Why this exists
 
-[planning/25](25-editing-patterns-with-history.md)'s own scope note (added 2026-08-14, prompted by
+[planning/13](13-adjusting-the-plan-charter.md)'s editing-history record (formerly planning/25)'s own scope note (added 2026-08-14, prompted by
 `EarmarkFormLivePreviewTests.Editing_a_savings_plans_own_amount_retroactively_rerates_its_whole_history_with_no_protection`)
 found that editing an `EarMarkPattern` through the Earmark form has none of Items B–G's protection —
 at the time, `EarmarkFormPanel.SaveSavingsPlan` → `MainWindow`'s `EarmarkForm.PatternSaved` → a plain
@@ -31,18 +31,24 @@ at the time, `EarmarkFormPanel.SaveSavingsPlan` → `MainWindow`'s `EarmarkForm.
 scope boundary, or a real gap? The author's answer, same day: a real gap worth addressing eventually,
 but not now.
 
-**Still true as of 2026-08-16, despite an unrelated change to that same save path:**
-[planning/27](27-editing-within-a-patterns-chain.md) has since given that handler a real
-`FinancePatternSaveConfirmation` of its own — but its two questions are scoped to a plan's relationship
-with its own chain siblings, not a B–G-style guard against rewriting that plan's *own* past. For a
-single, unchained plan specifically, nothing has changed: no confirmation, nothing. See planning/25's
-own 2026-08-16 update to its scope note for the full distinction — this document's own scope (below)
-is unaffected by planning/27's work.
+The chain-cascade work (formerly planning/27, now in the code + [13](13-adjusting-the-plan-charter.md))
+gave that save path a real `FinancePatternSaveConfirmation`, but its questions were scoped to a plan's
+relationship with its chain siblings, not to rewriting a lone plan's *own* past.
+
+**BUILT 2026-09-20 — the lone-plan gap this section identified is now closed.** Editing a single,
+unchained savings plan's amount/rate when it's already been accumulating (its active span began before
+today) now offers a **"break off vs. recalculate the whole plan"** choice in the save confirmation
+(`EarmarkPatternSaveConfirmation`, using `RestructureFactory.Restructure`). Break off — the pre-selected,
+non-destructive default — splits the plan at today, keeping what's already set aside (the jar's current
+balance) and applying the new rate only going forward; recalculating re-rates the whole history (warned
+that the current set-aside amount changes). A headless save (no popup) still re-rates in place, so
+nothing silently restructures. **Still deferred:** the broader direction below — freedom-by-default
+editing, protecting the jar's real `ExpectedAmount`, and a "defer allocation on purpose" want.
 
 ## Vocabulary, reaffirmed (not new)
 
 **"Savings Plan"** — already settled (see `feedback_design_in_class_documentation_terms.md`'s own
-worked example, and [planning/21](21-form-architecture.md#the-three-forms-philosophy-7)) — means every
+worked example, and [planning/21](21-forms-and-ui.md#the-forms)) — means every
 `EarMarkPattern` sharing one `FinancialPattern`'s `finance_id`, collectively. The author restated this
 explicitly (2026-08-14) while giving the direction below: everything here is about editing any one (or
 more) of the `EarMarkPattern`s making up a goal's Savings Plan.
@@ -236,7 +242,7 @@ mandatory bill's occurrence coming due within a week, with the repeated earmarks
 to cover it, should get an implicit isolated earmark so the milestone is still reached in time — and if
 it's genuinely missing, "that's a problem." **Explicitly not related to deferring funding** (the
 author's own words) — tracked instead as state #8 in
-[planning/19](19-stage6-warnings-levers-shortcuts.md#the-concerning-states-inventory-item-19--draft-not-final),
+the concerning-states inventory (former planning/19's Stage 6, dropped — see [13](13-adjusting-the-plan-charter.md)),
 alongside the author's added ask for forecast-tab detection plus a shortcut button.
 
 **Mechanism (C) is now BUILT, 2026-08-15** — "go ahead and build mechanism C," the author's own direction,
@@ -349,12 +355,12 @@ of being lost. What WAS still wrong: `AllocationPlanProposer.Propose`, the sourc
 0` in the picker even when a real one existed, alongside its two siblings
 (`ProposeSameSchedule`/`ProposeSameAmount`) which already got this right. Fixed the same way those two
 already work: `Propose` gained the identical optional `carriedOverJarBalance` parameter. Full account in
-[planning/25](25-editing-patterns-with-history.md#item-g--strategy-choice-for-an-implicit-plan-proposal--built-2026-08-14-for-the-single-plan-break-off-case),
+Item G's strategy-choice for an implicit plan proposal (built; see [28](28-refactoring-the-save-confirmation.md)),
 Item G's own section, since that's where the candidate picker itself lives.
 
 **One more downstream consideration, raised by the author the same day, recorded not built — a genuinely
 separate concern from anything above, tracked in full as its own new state (#9) in
-[planning/19](19-stage6-warnings-levers-shortcuts.md#the-concerning-states-inventory-item-19--draft-not-final)
+the concerning-states inventory (former planning/19's Stage 6, dropped — see [13](13-adjusting-the-plan-charter.md))
 rather than duplicated here:** now that skipping a specific date is possible, a future goal-shortfall
 lever (which doesn't exist in any form today — checked, not assumed) shouldn't default to suggesting
 the user raise their allocation rate or add a manual earmark. It should first check whether the shortfall

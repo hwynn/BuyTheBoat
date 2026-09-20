@@ -105,6 +105,11 @@ public static class ConfirmationRowIds
     public const string BoundaryExtension = "boundary-extension";
     public const string ChainBoundary = "chain-boundary";
     public const string Cascade = "cascade";
+    // Editing the amount/rate of a lone savings plan that's already been
+    // accumulating: split it at today (break off — keep what's set aside, new
+    // rate forward) or recalculate the whole plan at the new rate. Earmark path
+    // only. [0] = break off (the pre-selected, jar-preserving default).
+    public const string EarmarkRerate = "earmark-rerate";
     public const string TrivialFieldsCascade = "trivial-fields-cascade";
     public const string PacedBillsCascade = "paced-bills-cascade";
 

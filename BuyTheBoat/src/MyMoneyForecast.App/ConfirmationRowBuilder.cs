@@ -97,6 +97,12 @@ internal sealed record RowInputs
     // exists (otherwise both spreads land on the same result).
     public bool ShowConsolidationSizing { get; init; }
     public bool ShowConsolidationSpread { get; init; }
+
+    // Earmark path only: offer the "split at today vs recalculate the whole plan"
+    // choice for an amount/rate edit to a lone savings plan that already has past
+    // contributions. Break off (index 0) is the pre-selected default — it keeps
+    // what's already set aside instead of re-rating the jar's whole history.
+    public bool OfferRerateBreakOff { get; init; }
 }
 
 // One later segment that needs a cross-boundary combine-or-keep-separate question,
@@ -353,6 +359,28 @@ internal static class ConfirmationRowBuilder
         else if (cascadeRow is not null)
         {
             rows.Add(cascadeRow); // no chain boundary in play — the cascade question stands on its own
+        }
+
+        // Editing a lone savings plan's amount/rate when it's already been
+        // accumulating: split it at today (keep what's set aside) or recalculate
+        // the whole plan. Break off is the pre-selected, non-destructive default;
+        // re-rating carries the warning that the current set-aside amount changes.
+        if (r.OfferRerateBreakOff)
+        {
+            rows.Add(new ChoiceRow(ConfirmationRowIds.EarmarkRerate,
+                "This savings plan has already been setting money aside. How should the new amount apply?",
+                [
+                    new ChoiceOption(
+                        "From today on — keep what's already set aside",
+                        "Splits the plan at today: what you've saved so far stays put, and the new amount applies going forward.",
+                        ""),
+                    new ChoiceOption(
+                        "Recalculate the whole plan",
+                        "",
+                        "The amount set aside so far will be recalculated at the new rate — it won't reflect what was actually put aside."),
+                ],
+                DefaultIndex: 0,
+                Layout: OptionLayout.Stacked));
         }
 
         // Phase 1's trivial-fields cascade (Priority/Mandatory/Description/

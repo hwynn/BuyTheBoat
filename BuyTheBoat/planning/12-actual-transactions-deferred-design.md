@@ -138,7 +138,7 @@ Tags as of this writing, all of which are revisit sites for import
 - **A new warning class becomes possible** (forecast overview design,
   warning *b*): a bill in the near past that still hasn't been paid, or that came
   in at an unexpectedly different cost. **This is now load-bearing for a Stage 6 decision
-  ([19](19-stage6-warnings-levers-shortcuts.md), states 3/4, author's ruling 2026-07-30):**
+  ([the dropped Stage 6](13-adjusting-the-plan-charter.md), states 3/4, author's ruling 2026-07-30):**
   a plan's pacing going stale — because its bill moved accounts, or because the paycheck it
   was paced against changed — gets **no dedicated detection or lever at all** right now, not
   even an informational one. The author's reasoning: the user should notice a change that
@@ -203,19 +203,19 @@ Tags as of this writing, all of which are revisit sites for import
 
 - **Item 5 — identity-only change: the biller's description/source string changes, nothing else does,
   so nothing pairs.** *Raised: [13's charter](13-adjusting-the-plan-charter.md), item 5, scoped in
-  [16](16-stage3-break-off.md), 2026-07-29.* A bank starts describing the same real-world electric bill
+  [the break-off design](13-adjusting-the-plan-charter.md), 2026-07-29.* A bank starts describing the same real-world electric bill
   with new statement text (a merger, a rebrand) — the pattern hasn't changed in any way the user cares
   about, but automatic `Source` matching breaks. *What it blocks:* needs a contextual "we found this new
   transaction, is this your electric bill?" offer once pairing exists; no mechanism to design without
   actuals to observe the mismatch against.
 - **Item 17 — a bill cancelled in the past and never told to the app.** *Raised: charter item 17, scoped
-  in [16](16-stage3-break-off.md), 2026-07-29.* The user stopped paying something (or it stopped being
+  in [the break-off design](13-adjusting-the-plan-charter.md), 2026-07-29.* The user stopped paying something (or it stopped being
   charged) without ever recording it — the pattern keeps generating expected transactions that will
   never be fulfilled. *What it blocks:* most likely surfaces as an option on the unpaired-transaction
   warning ("this bill hasn't shown up in N cycles — did it end?"), which needs unpaired-actual detection
   to exist first.
 - **F23 — `Source` uniqueness is documented but unenforced, and a break-off's kept predecessor will
-  collide with it.** *Raised: [16](16-stage3-break-off.md), 2026-07-29, while scoping item 4's identity
+  collide with it.** *Raised: [the break-off design](13-adjusting-the-plan-charter.md), 2026-07-29, while scoping item 4's identity
   question.* `4.2.a1` requires `Source` non-null; the pressure map separately states "no two patterns
   share one," but neither `FinancialPattern.Create` nor the persistence layer enforces uniqueness today
   (confirmed in code). Stage 3's break-off mechanism may keep a bounded predecessor pattern around for
@@ -307,10 +307,10 @@ None of these have been answered anywhere:
   `ASSUMED-PAIRING` / `DIVERGENCE`); this document summarizes the actuals-relevant ones above.
 - [06-deallocation-math.md](06-deallocation-math.md) — the deallocation proof, written in actuals
   terms; its proof-term → engine stand-in mapping is in `DeallocationCalculator`'s own comments.
-- [11-ui-design-and-decisions.md](11-ui-design-and-decisions.md) — the forecast-tab UI, including
+- [21-forms-and-ui.md](21-forms-and-ui.md) — the forecast-tab UI, including
   the "once actuals exist" goals.
 - [01-glossary-of-terms.md](../../01-glossary-of-terms.md#actualtransaction) —
   the original documented shape of `ActualTransaction` and the pairing
   vocabulary.
-- [16-stage3-break-off.md](16-stage3-break-off.md) — items 5 and 17 registered above came from scoping
+- the break-off design (retired to the code + the [13 charter](13-adjusting-the-plan-charter.md)) — items 5 and 17 registered above came from scoping
   this stage; F23 (`Source` uniqueness) was found there too.

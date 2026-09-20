@@ -685,7 +685,7 @@ trace this assumption's place in the dependency order (e.g. once it's implemente
 ### Chapter 20: Editing a finance pattern with existing history
 
 *(Author, 2026-08-11. Full mechanism design — what satisfies this when the user wants more than an
-`end_date` change — is in [MyMoneyForecast/planning/25-editing-patterns-with-history.md](MyMoneyForecast/planning/25-editing-patterns-with-history.md), not here.)*
+`end_date` change — is in the code + the [charter](MyMoneyForecast/planning/13-adjusting-the-plan-charter.md), not here.)*
 
 ```
 {4.1.a1, 7.1.a1}
@@ -709,7 +709,7 @@ of history.
 > `FinancialPattern.Amount`) or the linked `EarMarkPattern`'s span (`3.11.2.a2`) are restricted:
 > `start_date`, `amount`, and the recurrence shape. `end_date`, `description`, `source`, `priority`,
 > and `mandatory`/skippable were already settled elsewhere as plain, uniform, no-retroactive-effect
-> edits ([16, items B7/B8/B9 in the action catalog](MyMoneyForecast/planning/13b-user-action-catalog.md)) —
+> edits (the action catalog's items B7/B8/B9 (folded into the [charter](MyMoneyForecast/planning/13-adjusting-the-plan-charter.md))) —
 > nothing ties them to anything this assumption exists to protect, so they stay unrestricted regardless
 > of history.
 >

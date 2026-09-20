@@ -150,9 +150,28 @@ public sealed class EarmarkPatternSaveConfirmation
         PlanTouchesChainBoundary = (startChanged && hasPredecessor) || (untilChanged && hasSuccessor);
         PlanChangeCanCascade = amountOrShapeChanged && (hasSuccessor || crossBoundaryTarget is not null);
 
-        if (PlanTouchesChainBoundary || PlanChangeCanCascade)
+        // A lone savings plan (no chain neighbour, no cross-boundary successor)
+        // whose amount/rate changed and that has already been accumulating (its
+        // active span began before today): editing it in place would re-rate its
+        // whole history, quietly changing how much is set aside right now. Offer
+        // to split it at today instead — the same-finance_id break-off
+        // RestructureFactory already does, which keeps the jar's current balance
+        // and applies the new rate only going forward. Only offered when there's
+        // a real future segment to apply it to (an aligned successor exists).
+        var offerRerateBreakOff = false;
+        RecurrenceRuleOptions? rerateSuccessorSchedule = null;
+        if (amountOrShapeChanged && !PlanTouchesChainBoundary && !PlanChangeCanCascade
+            && saved.DatePattern.ActiveStart < forecast.AsOfDate)
         {
-            var request = BuildEarmarkConfirmationRequest(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal);
+            rerateSuccessorSchedule = AllocationPlanProposer.AlignedSchedule(
+                proposedPlan.DatePattern, forecast.AsOfDate, proposedPlan.DatePattern.Until);
+            offerRerateBreakOff = rerateSuccessorSchedule is not null;
+        }
+
+        var userChoseBreakOff = false;
+        if (PlanTouchesChainBoundary || PlanChangeCanCascade || offerRerateBreakOff)
+        {
+            var request = BuildEarmarkConfirmationRequest(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal, offerRerateBreakOff);
             var outcome = ConfirmImplicitChanges?.Invoke(request) ?? DefaultOutcome();
             if (!outcome.Proceed)
             {
@@ -161,9 +180,18 @@ public sealed class EarmarkPatternSaveConfirmation
 
             UserChoseStayLinked = ChoseStayLinked(outcome);
             UserChoseCascadeForward = ChoseCascadeForward(outcome);
+            userChoseBreakOff = ChoseBreakOff(outcome);
         }
 
-        PerformEarmarkSave(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal);
+        if (offerRerateBreakOff && userChoseBreakOff)
+        {
+            PerformRerateBreakOff(saved, goal, forecast.AsOfDate, proposedPlan, rerateSuccessorSchedule!);
+        }
+        else
+        {
+            PerformEarmarkSave(proposedPlan, saved, otherPlans, goal, crossBoundaryTarget, crossBoundaryGoal);
+        }
+
         return true;
     }
 
@@ -324,7 +352,31 @@ public sealed class EarmarkPatternSaveConfirmation
         }
     }
 
-    /// <summary>[READS FILE] Builds what ConfirmImplicitChanges needs for the EarMarkPattern-editing case — planning/27's own "stay linked or break" and "cascade forward or not" questions, now with the concrete-consequence wording that document's own settled content calls for (StayLinkedWarning/LetItBreakWarning/CascadeDescription). Only ever called when at least one of PlanTouchesChainBoundary/PlanChangeCanCascade is true (Run's own gate), so Description always names at least one. [READS FILE] because the "let it break" preview dry-runs FindOrphanedManualEarmarkDates, which reads ManualEarmarks — safe here, since nothing has been saved yet this Run().</summary>
+    /// <summary>[WRITES FILE] Splits a lone savings plan at today instead of re-rating its whole history (RestructureFactory.Restructure) — the old rate stays on record through yesterday, the new rate takes over from today, and the jar's current balance carries across untouched (one jar, same finance_id). Chosen by the user for a plan that's already been accumulating; recalculating the whole plan goes through PerformEarmarkSave instead.</summary>
+    /// <param name="saved">The plan as it's saved today — becomes the truncated predecessor (its own Start unchanged).</param>
+    /// <param name="goal">The goal this savings plan funds.</param>
+    /// <param name="cutDate">Today (the forecast's as-of date) — where the old rate ends and the new one begins.</param>
+    /// <param name="proposed">The form's current values — supplies the successor's new amount.</param>
+    /// <param name="successorSchedule">The proposed recurrence re-anchored to the cut date (AllocationPlanProposer.AlignedSchedule).</param>
+    private void PerformRerateBreakOff(
+        EarMarkPattern saved, FinancialPattern goal, DateOnly cutDate, EarMarkPattern proposed, RecurrenceRuleOptions successorSchedule)
+    {
+        var result = RestructureFactory.Restructure(new RestructureRequest
+        {
+            Predecessor = saved,
+            Goal = goal,
+            CutDate = cutDate,
+            SuccessorAmount = proposed.Amount,
+            SuccessorSchedule = successorSchedule,
+        });
+
+        // The predecessor keeps its own Start (only its Until shrank), so this is
+        // an in-place update; the successor is a new (FinanceId, Start) row.
+        _repositories.EarMarkPatterns.Save(result.Predecessor);
+        _repositories.EarMarkPatterns.Save(result.Successor);
+    }
+
+    /// <summary>[READS FILE] Builds what ConfirmImplicitChanges needs for the EarMarkPattern-editing case — planning/27's own "stay linked or break" and "cascade forward or not" questions, now with the concrete-consequence wording that document's own settled content calls for (StayLinkedWarning/LetItBreakWarning/CascadeDescription). Only ever called when at least one of PlanTouchesChainBoundary/PlanChangeCanCascade/offerRerateBreakOff is true (Run's own gate), so Description always names at least one. [READS FILE] because the "let it break" preview dry-runs FindOrphanedManualEarmarkDates, which reads ManualEarmarks — safe here, since nothing has been saved yet this Run().</summary>
     /// <param name="current">The plan as the user is currently proposing to save it.</param>
     /// <param name="saved">The plan as it's actually saved today.</param>
     /// <param name="otherPlans">Every other EarMarkPattern sharing the same finance_id (concurrent plans already excluded — see Run's own note).</param>
@@ -333,7 +385,7 @@ public sealed class EarmarkPatternSaveConfirmation
     /// <param name="crossBoundaryGoal">The far side's own goal, paired with crossBoundaryTarget.</param>
     private ImplicitChangeConfirmationRequest BuildEarmarkConfirmationRequest(
         EarMarkPattern current, EarMarkPattern saved, IReadOnlyList<EarMarkPattern> otherPlans, FinancialPattern goal,
-        EarMarkPattern? crossBoundaryTarget, FinancialPattern? crossBoundaryGoal)
+        EarMarkPattern? crossBoundaryTarget, FinancialPattern? crossBoundaryGoal, bool offerRerateBreakOff)
     {
         var predecessors = otherPlans.Where(plan => plan.DatePattern.DtStart < saved.DatePattern.DtStart).ToList();
         var successors = otherPlans.Where(plan => plan.DatePattern.DtStart > saved.DatePattern.DtStart).ToList();
@@ -348,16 +400,21 @@ public sealed class EarmarkPatternSaveConfirmation
             StayLinkedWarning = PlanTouchesChainBoundary ? DescribeStayLinkedConsequence(current, saved, predecessors, successors, goal) : "",
             LetItBreakWarning = PlanTouchesChainBoundary ? DescribeLetItBreakConsequence(current, saved, predecessors, successors, otherPlans, goal) : "",
             CascadeDescription = PlanChangeCanCascade ? DescribeCascadeConsequence(current, successors, crossBoundaryTarget, crossBoundaryGoal) : "",
+            OfferRerateBreakOff = offerRerateBreakOff,
         };
 
         return new ImplicitChangeConfirmationRequest
         {
-            Description = (PlanTouchesChainBoundary, PlanChangeCanCascade) switch
-            {
-                (true, true) => "This plan is part of a chain. Its date range touches a neighboring segment, and its amount or schedule change could carry forward too.",
-                (true, false) => "This plan is part of a chain. Its date range touches a neighboring segment.",
-                _ => "This plan is part of a chain. Later segments could pick up this same amount or schedule change.",
-            },
+            // offerRerateBreakOff is only ever set for a lone plan (both chain
+            // flags false), so its own wording takes precedence over the chain one.
+            Description = offerRerateBreakOff
+                ? "This savings plan has already been setting money aside."
+                : (PlanTouchesChainBoundary, PlanChangeCanCascade) switch
+                {
+                    (true, true) => "This plan is part of a chain. Its date range touches a neighboring segment, and its amount or schedule change could carry forward too.",
+                    (true, false) => "This plan is part of a chain. Its date range touches a neighboring segment.",
+                    _ => "This plan is part of a chain. Later segments could pick up this same amount or schedule change.",
+                },
             Rows = ConfirmationRowBuilder.BuildRows(inputs),
         };
     }
@@ -477,6 +534,13 @@ public sealed class EarmarkPatternSaveConfirmation
 
     // cascade: [0] apply forward (default), [1] only this segment.
     private static bool ChoseCascadeForward(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.Cascade) != 1;
+
+    // earmark-rerate: [0] break off / split at today (jar preserved), [1] recalculate the whole plan.
+    // Unlike the sibling readers, absent → false (recalculate): the split is a user-facing choice only
+    // the real popup surfaces, so a headless save keeps the historical plain in-place re-rate rather
+    // than silently restructuring. The popup always reports index 0 for its pre-selected default, so a
+    // real user who just clicks Save still gets the safe break-off.
+    private static bool ChoseBreakOff(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.EarmarkRerate) == 0;
 
     /// <summary>[CALC] The default outcome when no ConfirmImplicitChanges delegate is wired up (most tests, and any host that hasn't connected a real popup) — a bare Proceed with no selections, so every question reads back as its own safe default (stay linked, cascade a rate/schedule change forward). Always proceeds — there's no one here to cancel on.</summary>
     private static ConfirmationOutcome DefaultOutcome() => new() { Proceed = true };

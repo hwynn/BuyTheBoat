@@ -559,6 +559,122 @@ public class EarmarkPatternSaveConfirmationTests : IDisposable
 
     // ---- shared scenario-building helpers ----------------------------------
 
+    // ---- lone-plan amount edit: split at today vs recalculate the whole plan ----
+    // Editing the amount/rate of a single savings plan that's already been
+    // accumulating (its active span began before the as-of date). Break off (the
+    // pre-selected default) preserves what's set aside; recalculating re-rates the
+    // whole history. The harness's as-of is 2025-01-01, so these plans start in
+    // mid-2024 to have real past to preserve.
+
+    [Fact]
+    public void Choosing_break_off_on_a_lone_plans_amount_edit_splits_it_at_today_keeping_what_was_set_aside()
+    {
+        var goal = Goal(-100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(goal, accountId: 1);
+        var plan = Plan(goal, -100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _earMarkPatterns.Save(plan);
+
+        var editedPlan = Plan(goal, -60m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        var confirmation = Confirmation(editedPlan, plan.DatePattern.ActiveStart, goal);
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToBreakOffRerate();
+
+        confirmation.Run().ShouldBeTrue();
+
+        var plans = _earMarkPatterns.GetAll().OrderBy(p => p.DatePattern.ActiveStart).ToList();
+        plans.Count.ShouldBe(2);
+        // Predecessor: the old rate, ending before today — its accumulated
+        // contributions (and so the jar's current balance) are left as they were.
+        plans[0].Amount.ShouldBe(-100m);
+        plans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2024, 7, 1));
+        plans[0].DatePattern.Until.ShouldBeLessThan(new DateOnly(2025, 1, 1));
+        // Successor: the new rate, from today forward.
+        plans[1].Amount.ShouldBe(-60m);
+        plans[1].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 1, 1));
+    }
+
+    [Fact]
+    public void Choosing_to_recalculate_a_lone_plans_amount_leaves_one_re_rated_plan()
+    {
+        var goal = Goal(-100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(goal, accountId: 1);
+        var plan = Plan(goal, -100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _earMarkPatterns.Save(plan);
+
+        var editedPlan = Plan(goal, -60m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        var confirmation = Confirmation(editedPlan, plan.DatePattern.ActiveStart, goal);
+        confirmation.ConfirmImplicitChanges = _ => Confirm.Proceed().ChoseToRecalculateWholePlan();
+
+        confirmation.Run().ShouldBeTrue();
+
+        var plans = _earMarkPatterns.GetAll();
+        plans.ShouldHaveSingleItem();
+        plans[0].Amount.ShouldBe(-60m);
+        plans[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2024, 7, 1)); // same start — the whole plan re-rated
+    }
+
+    // With no popup wired, the split is never offered, so nothing silently
+    // restructures — the historical plain in-place re-rate stands.
+    [Fact]
+    public void With_no_popup_a_lone_plan_amount_edit_falls_back_to_recalculating_in_place()
+    {
+        var goal = Goal(-100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(goal, accountId: 1);
+        var plan = Plan(goal, -100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _earMarkPatterns.Save(plan);
+
+        var editedPlan = Plan(goal, -60m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        var confirmation = Confirmation(editedPlan, plan.DatePattern.ActiveStart, goal);
+        // No ConfirmImplicitChanges wired up.
+
+        confirmation.Run().ShouldBeTrue();
+
+        _earMarkPatterns.GetAll().ShouldHaveSingleItem();
+        _earMarkPatterns.GetAll()[0].Amount.ShouldBe(-60m);
+    }
+
+    // Nothing has been set aside yet on a plan that starts in the future, so
+    // there's no jar state to preserve — the split isn't offered at all.
+    [Fact]
+    public void Editing_a_future_starting_plans_amount_asks_nothing_and_re_rates()
+    {
+        var goal = Goal(-100m, new DateOnly(2025, 6, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(goal, accountId: 1);
+        var plan = Plan(goal, -100m, new DateOnly(2025, 6, 1), new DateOnly(2025, 12, 31));
+        _earMarkPatterns.Save(plan);
+
+        var editedPlan = Plan(goal, -60m, new DateOnly(2025, 6, 1), new DateOnly(2025, 12, 31));
+        var confirmation = Confirmation(editedPlan, plan.DatePattern.ActiveStart, goal);
+        confirmation.ConfirmImplicitChanges = _ => throw new InvalidOperationException("should never be asked — nothing is set aside yet");
+
+        confirmation.Run().ShouldBeTrue();
+
+        _earMarkPatterns.GetAll().ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public void The_lone_plan_amount_edit_offers_the_split_with_a_warning_on_recalculating()
+    {
+        var goal = Goal(-100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _financialPatterns.Save(goal, accountId: 1);
+        var plan = Plan(goal, -100m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        _earMarkPatterns.Save(plan);
+
+        ImplicitChangeConfirmationRequest? captured = null;
+        var editedPlan = Plan(goal, -60m, new DateOnly(2024, 7, 1), new DateOnly(2025, 12, 31));
+        var confirmation = Confirmation(editedPlan, plan.DatePattern.ActiveStart, goal);
+        confirmation.ConfirmImplicitChanges = request =>
+        {
+            captured = request;
+            return Confirm.Proceed();
+        };
+
+        confirmation.Run().ShouldBeTrue();
+
+        captured.ShouldNotBeNull();
+        captured.HasRow(ConfirmationRowIds.EarmarkRerate).ShouldBeTrue();
+        captured.OptionConsequence(ConfirmationRowIds.EarmarkRerate, 1).ShouldContain("recalculated");
+    }
+
     private static FinancialPattern Goal(decimal amount, DateOnly start, DateOnly until) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {
