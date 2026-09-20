@@ -220,6 +220,13 @@
                                                                     <TextBlock Text="{Binding Name.ShortText}" FontWeight="SemiBold" FontSize="11"
                                                                                VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource RedTextBrush}"
                                                                                Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
+                                                                    <!-- "Funds running low": the free-funds warning a step below "short"
+                                                                         (planning/21). Also stands in for a dipped safety cushion, which
+                                                                         always co-occurs with thin, so it's folded into this one warning. -->
+                                                                    <TextBlock Text="Funds running low" FontWeight="SemiBold" FontSize="11"
+                                                                               VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource WatchTextBrush}"
+                                                                               Visibility="{Binding Name.IsThin, Converter={StaticResource BoolToVis}}"
+                                                                               AutomationProperties.AutomationId="AccountThinText"/>
                                                                 </StackPanel>
                                                             </DockPanel>
                                                             <TextBlock Text="{Binding Name.RungText}" FontSize="10" Foreground="Gray" TextWrapping="Wrap"

@@ -1088,6 +1088,10 @@ public partial class MainWindow : Window
         ShowDayDetail(cell.Date!.Value);
     }
 
+    // How thin free funds may get before we warn, as a multiple of the account's
+    // safety-cushion target: 1.0 = warn once free drops below one cushion's worth.
+    private const decimal ThinnessMultiplier = 1.0m;
+
     /// <summary>[UI] The detail pane is the inner layer of the display onion (§3): the cell IS a BalanceSnapshot, and selecting it shows everything the day holds — every event ("what happened today", left) and every fund jar with its per-type health (right), plus the day's free amount. Account-first (planning/11, grouped two-pane): both panes group by account so each account's story — its events (left) and its jars (right) — stays together. The header shows the household free to spend and names any short account, so a positive total never hides a locally-short one.</summary>
     /// <param name="date">The day to show detail for.</param>
     private void ShowDayDetail(DateOnly date)
@@ -1183,7 +1187,17 @@ public partial class MainWindow : Window
                         .FirstOrDefault();
                 }
             }
-            var groupKey = new AccountGroupKey(account.AccountId, account.Name, accountBalance, shortfall, canCoverElsewhere, donorName);
+            // "Funds running low": free funds have fallen toward the reserve but not
+            // gone negative (negative is "short", the harsher state on the same axis).
+            // Skipped when no cushion is set — nothing to be thin against. This also
+            // covers a dipped safety cushion: the cushion only drops below target when
+            // a deallocation drains it to avoid going short, which leaves free near
+            // zero, so a reserve dip always reads as thin anyway (folded in here rather
+            // than shown as its own warning — see planning/21).
+            var cushionTarget = page.IdealSafetyCushion;
+            var isThin = cushionTarget > 0m && accountFree >= 0m && accountFree < ThinnessMultiplier * cushionTarget;
+
+            var groupKey = new AccountGroupKey(account.AccountId, account.Name, accountBalance, shortfall, canCoverElsewhere, donorName, isThin);
 
             var context = new DayDetailContext
             {

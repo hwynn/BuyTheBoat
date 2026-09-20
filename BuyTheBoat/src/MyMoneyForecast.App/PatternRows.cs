@@ -524,8 +524,14 @@ internal static class DueDateText
 //            The lever is shown; a transfer can genuinely fix it.
 //   rung 3 — CanCoverElsewhere false: no other account can cover it. No lever —
 //            offering "move money in" when none can be would be a lie.
+// IsThin: free funds are low but not yet negative (below one cushion's worth) —
+// the milder free-funds warning shown beside "short" on the header. It also stands
+// in for a dipped safety cushion: a cushion only drops below target when a
+// deallocation drains it to avoid going short, which leaves free near zero, so a
+// reserve dip always reads as thin anyway (folded in rather than shown apart).
 public sealed record AccountGroupKey(
-    int AccountId, string Name, decimal Balance, decimal Shortfall, bool CanCoverElsewhere = false, string? DonorName = null)
+    int AccountId, string Name, decimal Balance, decimal Shortfall, bool CanCoverElsewhere = false, string? DonorName = null,
+    bool IsThin = false)
 {
     public bool IsShort => Shortfall > 0m;
 
