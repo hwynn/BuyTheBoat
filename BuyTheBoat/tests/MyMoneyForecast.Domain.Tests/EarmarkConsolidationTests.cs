@@ -152,7 +152,7 @@ public class EarmarkConsolidationTests
         result.ConsolidatedPlan.Amount.ShouldBe(-262.5m);
     }
 
-    // Mechanism-C follow-on (redesign/planning/26, "the glut case",
+    // Mechanism-C follow-on ("the glut case",
     // 2026-08-15): a surviving plan's real, already-accumulated glut counts
     // toward "already banked" the same way StartingAllocation and a manual
     // earmark already do — both in sizing the new rate AND carried forward
@@ -294,7 +294,7 @@ public class EarmarkConsolidationTests
         }));
     }
 
-    // ---- The two consolidate-strategy choices (planning/28) ----
+    // ---- The two consolidate-strategy choices ----
 
     [Fact]
     public void KeepCurrentPace_sizes_to_the_plans_current_scheduled_rate_not_the_goal()

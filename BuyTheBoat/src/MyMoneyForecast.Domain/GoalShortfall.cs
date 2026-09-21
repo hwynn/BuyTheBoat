@@ -20,4 +20,9 @@ public sealed record GoalShortfall
     // goal this reads the whole remaining span rather than pace against
     // the next occurrence, the same scope ShortfallAmount uses.
     public decimal OverfundedAmount => Math.Max(0m, AmountAllocatedByDueDate - AmountNeeded);
+
+    // TODO: overfunded proactive nudge. Detection is done (OverfundedAmount
+    // above); what's unbuilt is surfacing it unprompted — telling the user a
+    // goal is running ahead without waiting for them to open and save its form.
+    // Deferred as a future stage.
 }

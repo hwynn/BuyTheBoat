@@ -196,6 +196,14 @@
                                     <ItemsControl x:Name="JarDetailList" AutomationProperties.AutomationId="JarDetailList">
                                         <ItemsControl.GroupStyle>
                                             <GroupStyle>
+                                                <!-- The header's labels live inside a GroupItem header, which is
+                                                     invisible to screen readers; announce the whole account story
+                                                     through the GroupItem's own Name instead (AccountGroupKey.AccessibleSummary). -->
+                                                <GroupStyle.ContainerStyle>
+                                                    <Style TargetType="GroupItem">
+                                                        <Setter Property="AutomationProperties.Name" Value="{Binding Name.AccessibleSummary}"/>
+                                                    </Style>
+                                                </GroupStyle.ContainerStyle>
                                                 <GroupStyle.HeaderTemplate>
                                                     <DataTemplate>
                                                         <!-- A group header tells the whole story here: line one is the

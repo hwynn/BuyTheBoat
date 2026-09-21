@@ -154,7 +154,7 @@ public static class PlanHealthMessages
         return $"{verdict}\n{setAside:C0} of {firstPaymentAmount:C0} set aside · only {free:C0} free";
     }
 
-    /// <summary>[CALC] Whether a savings plan is a deliberate holding pattern (redesign/planning/26-editing-an-earmark-pattern.md, "the pause case") rather than an active contribution — nothing will actually land in the jar, either because the plan's own rule produces zero occurrences, or because every occurrence shares the pattern's one Amount at $0. True for either condition alone.</summary>
+    /// <summary>[CALC] Whether a savings plan is a deliberate holding pattern ("the pause case") rather than an active contribution — nothing will actually land in the jar, either because the plan's own rule produces zero occurrences, or because every occurrence shares the pattern's one Amount at $0. True for either condition alone.</summary>
     /// <param name="amount">The plan's own contribution amount — 0 means every occurrence contributes nothing.</param>
     /// <param name="occurrenceCount">How many occurrences the plan's own rule actually produces.</param>
     public static bool IsPaused(decimal amount, int occurrenceCount) => amount == 0m || occurrenceCount == 0;

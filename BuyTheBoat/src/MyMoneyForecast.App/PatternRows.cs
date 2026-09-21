@@ -559,6 +559,25 @@ public sealed record AccountGroupKey(
                 ? $"In another account — the money's in {donor}."
                 : "In another account — the money's in your other accounts."
             : "No other account can cover it.";
+
+    // The header's individual labels sit inside a WPF GroupItem header, whose
+    // automation peer drops header content — so a screen reader can't reach the
+    // balance, "Short $X", "funds running low", or the rung narrative one by one.
+    // Rolling them into a single string lets the GroupItem announce the whole
+    // header story through its own Name instead (bound in MainWindow.xaml). Order
+    // mirrors the visual header: name and balance, then the warnings, then the rung.
+    /// <summary>[CALC] The account's header spoken as one line for screen readers — name and balance, plus any "short"/"funds running low" warning and the rung narrative — since the individual header labels are invisible to assistive tech.</summary>
+    public string AccessibleSummary
+    {
+        get
+        {
+            var summary = $"{Name}, balance {BalanceText}";
+            if (IsShort) summary += $", {ShortText}";
+            if (IsThin) summary += ", funds running low";
+            if (IsShort && RungText.Length > 0) summary += $". {RungText}";
+            return summary;
+        }
+    }
 }
 
 public sealed class DayEventRow

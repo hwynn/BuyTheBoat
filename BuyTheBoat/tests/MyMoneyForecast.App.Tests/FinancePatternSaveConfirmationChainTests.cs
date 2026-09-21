@@ -306,8 +306,8 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
     }
 
     // ---- editing an EARLIER segment (has a later one): edit in place +
-    //      cascade forward, never a break-off (planning/28's "open the earliest
-    //      segment; the change flows forward from there") ---------------------
+    //      cascade forward, never a break-off (open the earliest
+    //      segment; the change flows forward from there) ---------------------
 
     [Fact]
     public void Editing_an_earlier_segments_amount_edits_it_in_place_and_cascades_forward_by_default()

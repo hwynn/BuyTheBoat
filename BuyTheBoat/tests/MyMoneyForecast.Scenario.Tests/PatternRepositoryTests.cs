@@ -167,7 +167,7 @@ public class PatternRepositoryTests : IDisposable
         all[0].StartingAllocation.ShouldBe(5000m);
     }
 
-    // Mechanism C (redesign/planning/26, "the glut case") — mirrors the
+    // Mechanism C ("the glut case") — mirrors the
     // ActiveFrom round-trip pair below exactly (Financial_pattern_active_
     // from_round_trips_through_sqlite / A_pattern_with_no_active_from_
     // round_trips_as_null), same shared-column shape.

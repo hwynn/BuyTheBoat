@@ -10,8 +10,8 @@ namespace MyMoneyForecast.App;
 // (FinancePatternSaveConfirmation for a bill/paycheck, EarmarkPatternSaveConfirmation
 // for a savings plan) owns all of that and hands the popup a finished list.
 //
-// See planning/28-refactoring-the-save-confirmation.md for the full design:
-// the row kinds below and the two-layout front-end contract. These are what
+// The design is the row kinds below and the two-layout front-end contract.
+// These are what
 // runs today — ConfirmationRowBuilder.BuildRows constructs them, the popup
 // (EditingHistoryConfirmationWindow) renders them, and the wrapper reads the
 // choices back off the ConfirmationOutcome.
@@ -48,7 +48,7 @@ public sealed record ChoiceOption(string Label, string Detail, string Consequenc
     // they appear indented under it in the popup and disappear when another
     // option is picked — so a follow-up question only shows when it's actually
     // relevant. Empty for a leaf option. The wrapper builds the tree; the popup
-    // shows/hides mechanically, at most three levels deep (planning/28).
+    // shows/hides mechanically, at most three levels deep.
     public IReadOnlyList<ConfirmationRow> Children { get; init; } = [];
 }
 
@@ -127,7 +127,7 @@ public static class ConfirmationRowIds
     /// <param name="financeId">The later segment the question is about.</param>
     public static string CrossBoundaryConsolidation(int financeId) => CrossBoundaryConsolidationPrefix + financeId;
 
-    // The two consolidate-strategy questions (planning/28), shown whenever a
+    // The two consolidate-strategy questions, shown whenever a
     // consolidation is on the table: how the folded plan is sized (meet the goal
     // vs keep the current rate) and how it's spread (across paydays vs evenly).
     // One pair for the whole save, applied to every consolidation it makes.

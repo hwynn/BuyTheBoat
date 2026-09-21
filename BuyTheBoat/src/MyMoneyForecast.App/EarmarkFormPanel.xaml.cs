@@ -92,8 +92,8 @@ public partial class EarmarkFormPanel : UserControl
 
         // Only the Earmark form gets this — a savings plan's own recurrence
         // is an organizational construct the user has real freedom over
-        // (redesign/planning/26, "EarmarkPatterns aren't 'real' the way
-        // FinancialPatterns are"); Expense's bill/paycheck schedule doesn't
+        // (EarmarkPatterns aren't 'real' the way
+        // FinancialPatterns are); Expense's bill/paycheck schedule doesn't
         // offer it.
         RuleEditor.ShowExcludedDatesEditor();
 
@@ -1820,6 +1820,8 @@ public partial class EarmarkFormPanel : UserControl
     private (decimal ExpectedAmount, decimal MilestoneAmount) GetLiveJarAmounts(
         IReadOnlyList<EarMarkPattern> patterns, EarMarkPattern proposed, FinancialPattern goal, decimal startingTotal, DateOnly asOfDate)
     {
+        // TODO: this live preview ignores a mid-plan ManualEarmark that the real forecast counts,
+        // so the Summary can show a misleading jar balance — revisit the preview's honesty.
         var activeStart = proposed.DatePattern.ActiveStart;
         var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(patterns, goal, activeStart, asOfDate);
         var liveMilestone = milestoneTrajectory.Count > 0 ? milestoneTrajectory[^1].MilestoneAmount : 0m;

@@ -17,7 +17,7 @@ namespace MyMoneyForecast.App;
 // ConfirmImplicitChanges isn't wired (most tests, or a host with no popup),
 // DefaultOutcome supplies the safest, least-destructive answers.
 //
-// Forward-only (planning/28): a Critical edit — one reaching an already-occurred
+// Forward-only: a Critical edit — one reaching an already-occurred
 // occurrence — always breaks off forward from today; there is no retroactive
 // "apply to the past" path. PerformImplicitEarmarkChanges carries out that
 // break-off — a freshly-proposed successor (PerformSingleSuccessorBreakOff), or,
@@ -38,8 +38,13 @@ namespace MyMoneyForecast.App;
 //
 // Open items (TODO):
 //  - Let the user keep unconsolidated earmark patterns: the always-consolidate
-//    fallback on the break-off side is a safety measure, not the final design
-//    (planning/28).
+//    fallback on the break-off side is a safety measure, not the final design.
+//    In particular a recurrence-shape change still forces the
+//    combine (the keep-separate pick is offered otherwise) — declined for now,
+//    keep forcing consolidation.
+//  - Chain-cascade "Phase 3": the further chain side-effect extension beyond
+//    the Phase 1 cascade-forward built here — declined for now, keep forcing
+//    consolidation; left on record for a future session.
 //  - Goal-health corrections: underfunded offers a flat "raise the rate" pick;
 //    overfunded offers "lower the rate" or, keeping the rate, a nested "skip some
 //    events" sub-question (skip the next / a stretch / none). A one-time catch-up
@@ -575,7 +580,7 @@ public sealed class FinancePatternSaveConfirmation
         // the new one" timing as its inward siblings.
         DetermineBoundaryExtensionsIfApplicable();
 
-        // Cross-boundary Q6 (planning/28): a later segment the Amount cascade will
+        // Cross-boundary Q6: a later segment the Amount cascade will
         // land on, funded by more than one plan, gets its own combine-or-keep-
         // separate question — worked out here so the confirmation can ask it. Its
         // own row, deliberately never the break-off Consolidation one.
@@ -858,9 +863,8 @@ public sealed class FinancePatternSaveConfirmation
         // Editing a segment that has a LATER segment in its chain is NOT a
         // break-off, even when it reaches already-occurred history — it's
         // forward-only's own "open the earliest segment you want changed; the
-        // change flows forward from there" (planning/28, reconciling planning/27's
-        // own earlier scope note with planning/16 F24's "editing and break-off
-        // are separate, deliberately-chosen actions"). Such a segment is saved
+        // change flows forward from there" — editing and break-off
+        // are separate, deliberately-chosen actions. Such a segment is saved
         // in place and its own occurrences change (PerformSave and
         // PerformImplicitEarmarkChanges route on the same hasSuccessor), and
         // these chain questions apply to it. Only a Critical edit of the CURRENT
@@ -869,6 +873,7 @@ public sealed class FinancePatternSaveConfirmation
         // stays suppressed for that one case (the cascade/trivial rows already
         // require hasSuccessor, so they suppress themselves there).
         TouchesChainBoundary = (!IsChangeCritical || hasSuccessor) && ((startChanged && hasPredecessor) || (untilChanged && hasSuccessor));
+        // TODO: compose the cascade question onto a Critical edit's break-off successor too, not just an existing forward segment.
         ChangeCanCascade = (_amountChanged || _recurrenceShapeChanged) && hasSuccessor;
         TrivialFieldsCanCascade = trivialFieldsChanged && hasSuccessor;
 
@@ -1126,7 +1131,7 @@ public sealed class FinancePatternSaveConfirmation
         return $"{_proposedPattern.Source} now occurs {times} — its savings plan grows to keep pace.";
     }
 
-    /// <summary>[READS FILE] Works out which later finance patterns this finance pattern's own Amount change will be carried forward onto that are funded by MORE THAN ONE earmark pattern (planning/28's cross-boundary Q6) — each needs its own combine-or-keep-separate question, since folding several earmark patterns into one is a real choice, not a forced one. Amount-only successors only: a schedule change moves the dates and forces them to consolidate with no question (ReconcileCascadedSuccessorSavingsPlans handles that directly). Stored in _crossBoundaryConsolidations for the confirmation to ask about; a no-op unless this change can actually be carried forward. Same "read before anything is saved" timing as its sibling Determine* calls. internal so a test can drive it directly.</summary>
+    /// <summary>[READS FILE] Works out which later finance patterns this finance pattern's own Amount change will be carried forward onto that are funded by MORE THAN ONE earmark pattern (the cross-boundary Q6) — each needs its own combine-or-keep-separate question, since folding several earmark patterns into one is a real choice, not a forced one. Amount-only successors only: a schedule change moves the dates and forces them to consolidate with no question (ReconcileCascadedSuccessorSavingsPlans handles that directly). Stored in _crossBoundaryConsolidations for the confirmation to ask about; a no-op unless this change can actually be carried forward. Same "read before anything is saved" timing as its sibling Determine* calls. internal so a test can drive it directly.</summary>
     internal void DetermineCrossBoundaryConsolidationsIfApplicable()
     {
         if (!ChangeCanCascade || _chainContext is not { } context)
@@ -1283,7 +1288,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[READS FILE] The skip-some-events strategies offered for an overfunded plan — "skip the next contribution," and, when it drops more than that one alone, "skip a stretch to clear the surplus" (planning/28). Empty when there isn't a whole contribution's worth of surplus to skip safely, so the skip sub-question doesn't show. [READS FILE] via the forecast's as-of date.</summary>
+    /// <summary>[READS FILE] The skip-some-events strategies offered for an overfunded plan — "skip the next contribution," and, when it drops more than that one alone, "skip a stretch to clear the surplus". Empty when there isn't a whole contribution's worth of surplus to skip safely, so the skip sub-question doesn't show. [READS FILE] via the forecast's as-of date.</summary>
     /// <param name="plan">The overfunded plan whose upcoming contributions might be skipped.</param>
     private IReadOnlyList<GoalHealthSkip> BuildGoalHealthSkips(EarMarkPattern plan)
     {
@@ -1305,7 +1310,7 @@ public sealed class FinancePatternSaveConfirmation
         return skips;
     }
 
-    /// <summary>[CALC] Drops goal-health corrections that would land the plan in the same place as an earlier one — same amount, schedule, and skipped dates — so the picker never shows two options doing the identical thing (planning/28). Keeps the first of each identical group, preserving the recommendation order. A no-op while only one correction is offered.</summary>
+    /// <summary>[CALC] Drops goal-health corrections that would land the plan in the same place as an earlier one — same amount, schedule, and skipped dates — so the picker never shows two options doing the identical thing. Keeps the first of each identical group, preserving the recommendation order. A no-op while only one correction is offered.</summary>
     /// <param name="corrections">The corrections in recommendation order.</param>
     private static IReadOnlyList<GoalHealthCorrection> DedupeCorrections(IReadOnlyList<GoalHealthCorrection> corrections) =>
         corrections
@@ -1731,7 +1736,7 @@ public sealed class FinancePatternSaveConfirmation
         _concerningPlanNotice = PlanHealthMessages.CurrentJarStateLine(jar, state);
     }
 
-    /// <summary>[WRITES FILE] Persists the FinancialPattern side of the edit — the proposed pattern saved under the same FinanceId for a plain (non-Critical) edit, or nothing at all when a Critical edit is about to break off instead. Forward-only (planning/28): a Critical edit always breaks off, so its FinancialPattern-side save is two rows under two different FinanceIds (the truncated original plus a brand-new successor), written by PerformImplicitEarmarkChanges — never _proposedPattern saved as-is under _financeId.</summary>
+    /// <summary>[WRITES FILE] Persists the FinancialPattern side of the edit — the proposed pattern saved under the same FinanceId for a plain (non-Critical) edit, or nothing at all when a Critical edit is about to break off instead. Forward-only: a Critical edit always breaks off, so its FinancialPattern-side save is two rows under two different FinanceIds (the truncated original plus a brand-new successor), written by PerformImplicitEarmarkChanges — never _proposedPattern saved as-is under _financeId.</summary>
     private void PerformSave()
     {
         // A Critical edit of the CURRENT segment breaks off — its FinancialPattern
@@ -1948,8 +1953,8 @@ public sealed class FinancePatternSaveConfirmation
         }
 
         // Gated on UserChoseStayLinked too: breaking the chain leaves no forward
-        // chain to carry the change onto (planning/28's "break ⇒ no forward chain
-        // ⇒ Q4 gone"), matching the popup hiding this question under "let the
+        // chain to carry the change onto (break ⇒ no forward chain
+        // ⇒ Q4 gone), matching the popup hiding this question under "let the
         // chain break." UserChoseStayLinked defaults true, so an amount-only edit
         // with no chain-boundary question still cascades as before.
         if (ChangeCanCascade && UserChoseCascadeForward && UserChoseStayLinked)
@@ -2027,7 +2032,7 @@ public sealed class FinancePatternSaveConfirmation
         ReconcileCascadedSuccessorSavingsPlans(cascadeTouchedSuccessors);
     }
 
-    /// <summary>[WRITES FILE] After the edited finance pattern's Amount/schedule change is carried forward onto the LATER finance patterns in its chain (the Q4 cascade), brings each of those later finance patterns' own savings plans back in line with the new figure — so a later finance pattern isn't left with earmark patterns still saving toward the old one (planning/28's cross-boundary Q6). Choosing to apply the change going forward is itself the consent, so nothing here asks again. A schedule change makes the later earmark patterns fold into one moved onto the new dates (EarmarkConsolidation.Consolidate) regardless of how many there are — the settled rule, since the dates move and each earmark pattern's own timing has to be worked out afresh, which one folded plan does correctly and re-dating several individually doesn't. An amount-only change on a single earmark pattern re-rates it proportionally in place (EarmarkScaling.Scale). An amount-only change on a later finance pattern funded by MORE THAN ONE earmark pattern is the cross-boundary Q6: the user's per-finance-pattern combine-or-keep-separate answer (_successorCombineChoices) picks between folding them into one and re-rating each proportionally.</summary>
+    /// <summary>[WRITES FILE] After the edited finance pattern's Amount/schedule change is carried forward onto the LATER finance patterns in its chain (the Q4 cascade), brings each of those later finance patterns' own savings plans back in line with the new figure — so a later finance pattern isn't left with earmark patterns still saving toward the old one (the cross-boundary Q6). Choosing to apply the change going forward is itself the consent, so nothing here asks again. A schedule change makes the later earmark patterns fold into one moved onto the new dates (EarmarkConsolidation.Consolidate) regardless of how many there are — the settled rule, since the dates move and each earmark pattern's own timing has to be worked out afresh, which one folded plan does correctly and re-dating several individually doesn't. An amount-only change on a single earmark pattern re-rates it proportionally in place (EarmarkScaling.Scale). An amount-only change on a later finance pattern funded by MORE THAN ONE earmark pattern is the cross-boundary Q6: the user's per-finance-pattern combine-or-keep-separate answer (_successorCombineChoices) picks between folding them into one and re-rating each proportionally.</summary>
     /// <param name="touched">Each later finance pattern the cascade reached, as (its pre-cascade form, its carried-forward form), in no particular order.</param>
     private void ReconcileCascadedSuccessorSavingsPlans(IReadOnlyList<(FinancialPattern Before, FinancialPattern After)> touched)
     {
@@ -2315,7 +2320,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] Carries out the break-off a Critical edit triggers (planning/25's Item C/D/E/F, forward-only per planning/28) — a single freshly-proposed successor (PerformSingleSuccessorBreakOff), or, when more than one EarMarkPattern already funds the goal, either one combined successor (PerformMultiPlanBreakOff) or the plans kept separate onto the successor (PerformMultiPlanKeepSeparateBreakOff) per the user's pick, with a shape/start change forcing the combine. A non-Critical edit does nothing here.</summary>
+    /// <summary>[WRITES FILE] Carries out the break-off a Critical edit triggers (forward-only) — a single freshly-proposed successor (PerformSingleSuccessorBreakOff), or, when more than one EarMarkPattern already funds the goal, either one combined successor (PerformMultiPlanBreakOff) or the plans kept separate onto the successor (PerformMultiPlanKeepSeparateBreakOff) per the user's pick, with a shape/start change forcing the combine. A non-Critical edit does nothing here.</summary>
     private void PerformImplicitEarmarkChanges()
     {
         // Break off only for a Critical edit of the CURRENT segment. A Critical
@@ -2328,7 +2333,7 @@ public sealed class FinancePatternSaveConfirmation
             return;
         }
 
-        // Forward-only (planning/28): a Critical edit — one that
+        // Forward-only: a Critical edit — one that
         // reaches an already-occurred occurrence — always breaks off from
         // today. There is no retroactive "correct it everywhere" path.
         //
@@ -2656,7 +2661,7 @@ public sealed record ImplicitChangeConfirmationRequest
     public required string Description { get; init; }
 
     // False on every confirmation page except the last, so the popup's commit
-    // button reads "Continue…" rather than "Save" (planning/28 Thread 4). The
+    // button reads "Continue…" rather than "Save". The
     // wrapper always builds one logical request with this true; MainWindow's
     // popup driver flips it per page when a save's rows span more than one page.
     public bool IsFinalPage { get; init; } = true;

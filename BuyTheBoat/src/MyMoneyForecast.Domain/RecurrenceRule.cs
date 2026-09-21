@@ -41,8 +41,7 @@ public sealed record RecurrenceRuleOptions
     public DateOnly? ActiveFrom { get; init; }
 
     // RFC 5545's own EXDATE — dates GetOccurrences skips even though the
-    // schedule would otherwise land on them (redesign/planning/26-editing-
-    // an-earmark-pattern.md, "the glut case," mechanism C). Deliberately NOT
+    // schedule would otherwise land on them ("the glut case," mechanism C). Deliberately NOT
     // validated against DtStart/Until/the pattern's own real occurrences here —
     // real EXDATE semantics treat a non-matching date as a harmless no-op,
     // not an error, and every existing range-narrowing operation (WithUntil,

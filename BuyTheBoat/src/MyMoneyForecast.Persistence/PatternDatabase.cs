@@ -246,7 +246,7 @@ public sealed class PatternDatabase
         EnsureColumn(connection, "FinancialPatterns", "AutoRenew", "INTEGER NOT NULL DEFAULT 0");
 
         // RFC 5545's own EXDATE: specific dates a schedule otherwise would
-        // land on, skipped anyway (redesign/planning/26, "the glut case,"
+        // land on, skipped anyway ("the glut case,"
         // mechanism C). NULL for every pre-existing pattern — the migration
         // is simply the absence of any exclusion, same shape as ActiveFrom's
         // own migration above. Only the Earmark form's own recurrence editor

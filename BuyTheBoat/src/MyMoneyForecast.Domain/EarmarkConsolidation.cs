@@ -36,7 +36,7 @@ namespace MyMoneyForecast.Domain;
 // even though the money never actually went anywhere (found 2026-08-14, via
 // a save-then-rebuild-the-forecast test in FinancePatternSaveConfirmationTests).
 //
-// A also gained a glut term, 2026-08-15 (redesign/planning/26, "the glut
+// A also gained a glut term, 2026-08-15 ("the glut
 // case"): A as originally derived only ever covered money OUTSIDE the
 // schedule being replaced (StartingAllocation + manual earmarks) — correct
 // for its own "no double-count against the contributions being replaced"
@@ -53,7 +53,7 @@ namespace MyMoneyForecast.Domain;
 // that — the new plan asks for exactly that much less, protecting the
 // surplus instead of erasing it.
 // How much the single consolidated plan should total — the first of the two
-// consolidate-strategy choices (planning/28). MeetGoal sizes it to exactly cover
+// consolidate-strategy choices. MeetGoal sizes it to exactly cover
 // the goal, net of what's already banked (no over- or under-shoot). KeepCurrentPace
 // instead keeps the surviving plans' own current scheduled pace (their amount-per-day
 // at full cadence — manual and skipped earmarks don't figure in), which may under-

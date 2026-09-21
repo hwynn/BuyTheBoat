@@ -244,7 +244,7 @@ Tags as of this writing, all of which are revisit sites for import
   future work, and it overlaps this area: "this bill didn't actually happen" is
   adjacent to "this bill was paired to nothing."
 - Pairing is **symmetric** in the documented model
-  ([01-glossary](../../01-glossary-of-terms.md#actualtransaction)):
+  ([01-glossary](01-glossary-of-terms.md#actualtransaction)):
   `paired_finance_id` and `paired_expected_date` are both set or both null, and
   the `ExpectedTransaction` side mirrors it. Whatever implements pairing has to
   maintain both sides.
@@ -288,7 +288,7 @@ None of these have been answered anywhere:
   actual be to an expected before they pair? What happens on ambiguity (two
   candidate expecteds)?
 - Does the user confirm every automatic pairing, or only ambiguous ones?
-  ([design philosophy 1](../../design-philosophies.md): inform and equip, don't
+  ([design philosophy 1](design-philosophies.md): inform and equip, don't
   automate away agency — which argues against silent auto-pairing.)
 - What does the entered per-account balance *mean* once actuals exist — is it
   still hand-entered, or derived from imported transactions? The whole
@@ -309,7 +309,7 @@ None of these have been answered anywhere:
   terms; its proof-term → engine stand-in mapping is in `DeallocationCalculator`'s own comments.
 - [21-forms-and-ui.md](21-forms-and-ui.md) — the forecast-tab UI, including
   the "once actuals exist" goals.
-- [01-glossary-of-terms.md](../../01-glossary-of-terms.md#actualtransaction) —
+- [01-glossary-of-terms.md](01-glossary-of-terms.md#actualtransaction) —
   the original documented shape of `ActualTransaction` and the pairing
   vocabulary.
 - the break-off design (retired to the code + the [13 charter](13-adjusting-the-plan-charter.md)) — items 5 and 17 registered above came from scoping

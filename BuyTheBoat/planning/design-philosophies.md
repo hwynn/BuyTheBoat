@@ -7,9 +7,9 @@ These are forward-looking and apply to every implementation equally. They are de
 *Author-stated 2026-07-21. The author's own read at that point: we're already largely meeting these; #2 and #3 just haven't been exercised much yet, because the UI and cross-account features aren't fleshed out.*
 
 *Philosophies 4–7 added 2026-07-30, at the start of the dedicated UI-implementation pass following the
-["Adjusting the Plan" phase](MyMoneyForecast/planning/13-adjusting-the-plan-charter.md). Full elaboration —
+["Adjusting the Plan" phase](13-adjusting-the-plan-charter.md). Full elaboration —
 form layout, the two shortcut-transparency mechanics, and everything still open — lives in
-[planning/21](MyMoneyForecast/planning/21-forms-and-ui.md); these entries state the principle only,
+[planning/21](21-forms-and-ui.md); these entries state the principle only,
 matching 1–3's own level of detail.*
 
 ---
@@ -65,7 +65,7 @@ screen in front of them — not one tab over, not something they have to go reca
 We already meet this once: the recurrence-rule editor shows a live preview of the actual occurrences a
 rule will produce, right where the user is setting it. That is the bar — *what does someone need to
 know, right here, to make this specific choice well* — for every other action, not just that one.
-[Planning/21](MyMoneyForecast/planning/21-forms-and-ui.md) works through cases this hasn't been
+[Planning/21](21-forms-and-ui.md) works through cases this hasn't been
 built for yet (what a manual earmark's date needs to show; where a "funds are thin" warning's own
 shortcut would even go).
 

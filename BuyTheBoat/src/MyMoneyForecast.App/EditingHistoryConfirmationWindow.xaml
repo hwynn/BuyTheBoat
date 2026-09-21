@@ -4,7 +4,7 @@
         Title="Confirm This Change" Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <DockPanel Margin="16">
-        <!-- planning/28 Thread 4: shown only when a save's rows span more than one
+        <!-- shown only when a save's rows span more than one
              page, so the user can tell "Continue…" leads to further questions. -->
         <TextBlock x:Name="PageIndicator" DockPanel.Dock="Top" Foreground="Gray" Margin="0,0,0,10" Visibility="Collapsed"/>
         <TextBlock x:Name="DescriptionText" DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,14"/>
@@ -16,7 +16,7 @@
             <Button x:Name="CommitButton" Content="Save" Width="90" Padding="0,5" Click="OnSaveClick" IsDefault="True"/>
         </StackPanel>
 
-        <!-- planning/28 Thread 2: every question/announcement is now a
+        <!-- every question/announcement is now a
              ConfirmationRow in request.Rows. The code-behind fills this panel
              from that list, in order — this window no longer knows which
              sections exist or what they mean. The wrapper

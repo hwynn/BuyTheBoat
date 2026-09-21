@@ -258,8 +258,8 @@ public sealed class EarmarkPatternSaveConfirmation
         }
 
         // Gated on UserChoseStayLinked too (both branches): breaking the chain
-        // leaves no forward chain to carry the change onto (planning/28's "break
-        // ⇒ no forward chain"), matching the popup hiding this question under
+        // leaves no forward chain to carry the change onto (break
+        // ⇒ no forward chain), matching the popup hiding this question under
         // "let the chain break." UserChoseStayLinked defaults true, so a plan
         // with no chain-boundary question still cascades as before.
         if (PlanChangeCanCascade && UserChoseCascadeForward && UserChoseStayLinked && successors.Count > 0)

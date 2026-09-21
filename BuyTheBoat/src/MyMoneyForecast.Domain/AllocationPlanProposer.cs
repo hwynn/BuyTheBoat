@@ -54,7 +54,7 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 // re-proposing a plan against an EXISTING EarMarkPattern rather than
 // building one from scratch — planning/25's Item G (suggestions) is meant to
 // offer these alongside Propose's own default. Deliberately narrower
-// freedom than a user's own edits get (planning/26): these should always
+// freedom than a user's own edits get: these should always
 // still be genuinely ideal, so both return null — "don't offer this" —
 // whenever their own result wouldn't be, or would be indistinguishable from
 // Propose's own default. Shared alignment fix (AlignedSchedule, below):
@@ -71,6 +71,12 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 // field BreakOffFactory already reads off the forecast for its own default
 // Propose-based successor (BreakOffRequest.CarriedOverJarBalance) — these
 // two methods now expect the same real number from their own caller.
+//
+// TODO: multi-option strategy picker for a goal-health suggestion. The
+// candidate machinery is built — ProposeSameSchedule/ProposeSameAmount give
+// the two alternatives alongside Propose's own default — but there is no UI
+// letting the user pick between them; a suggestion just takes the default.
+// Only the picker is unbuilt. Deferred.
 //
 // IsPacedAgainst/FindPlansPacedAgainst (2026-08-17): a first, DETECTION-ONLY
 // piece of planning's own "loose association" thread (redesign/memory's own
@@ -106,7 +112,7 @@ public static class AllocationPlanProposer
     /// <param name="allPatterns">Every other pattern, to look for a single clear income stream to pace against.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the plan starts contributing from.</param>
     /// <param name="spreadEvenlyWithNoIncome">Whether a single-occurrence outflow with no clear income spreads evenly across the remaining time (the default) or reserves the full amount immediately — pass false for a transfer's withdrawal, which stays plain with no adaptive behavior.</param>
-    /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added 2026-08-15 specifically so Item G's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. See planning/26's own "the glut case" for why protecting that balance matters.</param>
+    /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added 2026-08-15 specifically so Item G's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. Protecting that carried-over balance is why this parameter exists.</param>
     /// <param name="startingEarmarkCeiling">The most a proposed starting (front-load) earmark may set aside, from AffordabilityCeiling.ForStartingEarmark; null leaves it uncapped (the full first-occurrence amount), the default for callers not doing an affordability-sized proposal.</param>
     /// <param name="ongoingRateCeiling">The most the plan's per-cycle contribution may reserve, from AffordabilityCeiling.For (the range ceiling, as room FOR this plan); when the paced/spread rate would exceed it the plan is held to it instead and knowingly underfunds the outflow. Null leaves the rate uncapped. A transfer's own immediate single contribution is never capped — it stays plain regardless. Same conservative same-day reading the scaling caps use: one cycle's contribution against the window's tightest free point, not a full cumulative solve.</param>
     public static ProposedAllocationPlan Propose(

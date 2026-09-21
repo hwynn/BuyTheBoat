@@ -117,7 +117,7 @@ internal sealed record CrossBoundaryConsolidationInput(int FinanceId, string Lab
 // in what the popup shows.
 internal static class ConfirmationRowBuilder
 {
-    /// <summary>[CALC] Projects the computed inputs into the confirmation-row list (planning/28) — one row per section, in most-vital-first order, under the same visibility conditions the hand-built popup used. Serves both entry points: the earmark path only sets the chain fields, so it naturally yields just those rows.
+    /// <summary>[CALC] Projects the computed inputs into the confirmation-row list — one row per section, in most-vital-first order, under the same visibility conditions the hand-built popup used. Serves both entry points: the earmark path only sets the chain fields, so it naturally yields just those rows.
     ///
     /// The plan-shape picker (Q2) is emitted as a CandidatePickerRow right under the break-off announcement, so the successor's shape is a real choice rather than a silent "Recommended."
     ///
@@ -274,7 +274,7 @@ internal static class ConfirmationRowBuilder
 
         // "Cascade forward or not" for an Amount/shape change, built first so it
         // can be nested under the chain question below. The cross-boundary Q6
-        // questions (planning/28) nest under its "apply going forward" option —
+        // questions nest under its "apply going forward" option —
         // they only matter if the change actually carries forward, so the popup
         // shows them only while that option is selected, instead of as flat rows
         // always visible. One per later finance pattern the amount change reaches
@@ -339,7 +339,7 @@ internal static class ConfirmationRowBuilder
         // "Stay linked or break" — shared by both chain types (only one is ever
         // true per request). The cascade question nests under "keep it linked":
         // breaking the chain leaves no forward chain to carry the change onto
-        // (planning/28's "break ⇒ no forward chain ⇒ Q4 gone"), so the popup hides
+        // (break ⇒ no forward chain ⇒ Q4 gone), so the popup hides
         // it there — and the wrapper gates the cascade on the stay-linked answer
         // to match. Each option carries its own consequence, shown while selected.
         if (r.TouchesChainBoundary || r.PlanTouchesChainBoundary)

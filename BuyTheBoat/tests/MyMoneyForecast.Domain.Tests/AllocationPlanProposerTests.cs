@@ -533,7 +533,7 @@ public class AllocationPlanProposerTests
         Should.Throw<ArgumentException>(() => AllocationPlanProposer.ProposeEmpty(income, AsOf));
     }
 
-    // Mechanism-C follow-on (redesign/planning/26, "the glut case," 2026-08-15)
+    // Mechanism-C follow-on ("the glut case," 2026-08-15)
     // — a detail the author flagged early on ("keep the glut as an up-front
     // earmark event should be a valid option... we might need an optional
     // parameter on the propose functions to handle that") that got set aside
@@ -619,7 +619,7 @@ public class AllocationPlanProposerTests
         result.ShouldBeNull(); // already fully funded by the REAL balance, regardless of the decoy field
     }
 
-    // Mechanism-C follow-on (redesign/planning/26, "the glut case",
+    // Mechanism-C follow-on ("the glut case",
     // 2026-08-15): unlike EarmarkConsolidation, ProposeSameSchedule/
     // ProposeSameAmount needed no code change to protect a glut — the test
     // right above this one already proves carriedOverJarBalance wins over a

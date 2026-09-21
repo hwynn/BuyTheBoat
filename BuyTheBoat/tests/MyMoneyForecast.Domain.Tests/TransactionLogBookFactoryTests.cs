@@ -114,7 +114,7 @@ public class TransactionLogBookFactoryTests
     }
 
     // Mechanism C, end to end: proves an EarMarkPattern's own ExcludedDates
-    // (redesign/planning/26, "the glut case") actually suppresses a real
+    // ("the glut case") actually suppresses a real
     // contribution in a real forecast, not just in GetOccurrences' own unit
     // tests (RecurrenceRuleTests) — every call site the cascade uses
     // (TransactionLogBookFactory.cs line ~375, the repeated-earmark-event

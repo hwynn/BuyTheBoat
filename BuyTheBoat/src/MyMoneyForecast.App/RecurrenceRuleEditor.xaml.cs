@@ -42,7 +42,7 @@ public partial class RecurrenceRuleEditor : UserControl
     private bool _showAllOccurrences;
 
     // RFC 5545 EXDATE — dates skipped even though the schedule would
-    // otherwise land on them (redesign/planning/26, "the glut case,"
+    // otherwise land on them ("the glut case,"
     // mechanism C). Maintained here regardless of whether
     // ExcludedDatesSection is actually visible, same as every other schedule
     // field — only the section's own Visibility is host-gated.

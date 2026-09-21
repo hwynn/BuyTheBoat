@@ -136,8 +136,7 @@
 
             <!-- Skip specific dates (RFC 5545 EXDATE) — hidden unless a host
                  calls ShowExcludedDatesEditor (today just the Earmark form's
-                 own savings-plan editor: redesign/planning/26-editing-an-
-                 earmark-pattern.md, "the glut case," mechanism C — a
+                 own savings-plan editor, "the glut case," mechanism C — a
                  FinancialPattern's own real bill/paycheck events don't get
                  this freedom). Picks FROM this schedule's own real
                  occurrences rather than a freeform date field, so there's no

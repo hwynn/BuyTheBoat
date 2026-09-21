@@ -61,6 +61,50 @@ public class AccountGroupKeyTests
         key.RungText.ShouldBe("No other account can cover it.");
     }
 
+    // AccessibleSummary rolls the header's separate labels into one line, because a
+    // screen reader can't reach them individually inside the WPF GroupItem header.
+    // These pin what each state announces.
+
+    [Fact]
+    public void AccessibleSummary_for_a_healthy_account_is_just_name_and_balance()
+    {
+        var key = new AccountGroupKey(AccountId: 1, Name: "Bill Pool", Balance: 2987m, Shortfall: 0m);
+
+        key.AccessibleSummary.ShouldBe("Bill Pool, balance $2,987");
+    }
+
+    [Fact]
+    public void AccessibleSummary_for_a_short_account_adds_the_shortfall_and_rung()
+    {
+        var key = new AccountGroupKey(
+            AccountId: 1, Name: "primary", Balance: 0m, Shortfall: 2000m,
+            CanCoverElsewhere: true, DonorName: "Bill Pool");
+
+        key.AccessibleSummary.ShouldBe(
+            "primary, balance $0, Short $2,000. In another account — the money's in Bill Pool.");
+    }
+
+    [Fact]
+    public void AccessibleSummary_for_a_thin_but_not_short_account_adds_the_low_funds_warning()
+    {
+        var key = new AccountGroupKey(AccountId: 1, Name: "primary", Balance: 50m, Shortfall: 0m, IsThin: true);
+
+        key.AccessibleSummary.ShouldBe("primary, balance $50, funds running low");
+    }
+
+    [Fact]
+    public void AccessibleSummary_can_carry_both_the_shortfall_and_low_funds_warnings()
+    {
+        // Short and thin are independent flags that can both hold; the summary
+        // announces both, in the header's own left-to-right order.
+        var key = new AccountGroupKey(
+            AccountId: 1, Name: "primary", Balance: 0m, Shortfall: 2000m,
+            CanCoverElsewhere: false, DonorName: null, IsThin: true);
+
+        key.AccessibleSummary.ShouldBe(
+            "primary, balance $0, Short $2,000, funds running low. No other account can cover it.");
+    }
+
     [Fact]
     public void An_overdrawn_account_reports_a_negative_balance()
     {

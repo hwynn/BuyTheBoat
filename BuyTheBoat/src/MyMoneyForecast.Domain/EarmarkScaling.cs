@@ -47,7 +47,7 @@ public sealed record MeetGoalScalingResult
 }
 
 // The upcoming contribution dates two skip strategies would drop to use up an
-// overfunded plan's surplus (planning/28's "skip some events"). SkipNext is just
+// overfunded plan's surplus ("skip some events"). SkipNext is just
 // the soonest one; SkipStretch is a continuous run of the soonest ones that fits
 // within the surplus. Both never drop the plan below the goal.
 public sealed record SurplusSkipPlan

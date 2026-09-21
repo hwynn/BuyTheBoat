@@ -37,8 +37,7 @@ public sealed record FundJar
 
     // A jar already holding more than its own schedule currently calls for —
     // its very next scheduled contribution could be skipped and the jar
-    // would still read on-pace, not behind (redesign/planning/26-editing-an-
-    // earmark-pattern.md, "the glut case," definition confirmed 2026-08-15).
+    // would still read on-pace, not behind ("the glut case," definition confirmed 2026-08-15).
     // Reduces to comparing this same date's own two amounts: skipping one
     // future contribution moves ExpectedAmount and MilestoneAmount by the
     // same amount (both accumulate from the identical earmark-event stream,

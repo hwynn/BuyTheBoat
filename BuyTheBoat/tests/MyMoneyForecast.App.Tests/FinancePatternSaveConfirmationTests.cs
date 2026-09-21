@@ -241,7 +241,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorBill.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
     }
 
-    // Mechanism-C follow-on (redesign/planning/26, "the glut case,"
+    // Mechanism-C follow-on ("the glut case,"
     // 2026-08-15) — a detail flagged early in that thread ("keep the glut as
     // an up-front earmark event should be a valid option") that got set
     // aside while building mechanism C and only surfaced again later. Before
@@ -885,7 +885,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         (captured?.HasRow(ConfirmationRowIds.GoalHealthSuggestion) ?? false).ShouldBeFalse(); // plan already meets it — nothing to offer
     }
 
-    // The OVERfunded goal-health case (planning/28's "skip some events"): shrinking
+    // The OVERfunded goal-health case ("skip some events"): shrinking
     // a goal so its plan now over-saves offers a NESTED question — lower the rate,
     // or keep the rate and (a sub-question) skip some upcoming contributions.
     private (FinancialPattern edited, FinancePatternSaveConfirmation confirmation) OverfundedGoalHealthScenario()
@@ -1595,7 +1595,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         cascade.Options[1].Children.ShouldBeEmpty(); // nothing under "only this segment"
     }
 
-    // Completing planning/28's Q3 -> Q4 -> Q6 tree: when an edit touches the chain
+    // Completing the Q3 -> Q4 -> Q6 tree: when an edit touches the chain
     // boundary AND the amount, the cascade question nests under "keep it linked" —
     // breaking the chain leaves nothing forward to carry the change onto.
     [Fact]

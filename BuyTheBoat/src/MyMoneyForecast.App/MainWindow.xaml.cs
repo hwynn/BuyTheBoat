@@ -1801,7 +1801,7 @@ public partial class MainWindow : Window
         return true;
     }
 
-    /// <summary>[STEP] Shows the save-confirmation popup and returns the raw selections it reports — shared by both the Expense and Earmark save paths' ConfirmImplicitChanges wiring. When a save's rows are too tall for one screen it splits them into height-based pages (planning/28 Thread 4), shown one after another; selections accumulate into one outcome and a cancel on any page aborts the whole save. A save whose rows fit one page is unchanged.</summary>
+    /// <summary>[STEP] Shows the save-confirmation popup and returns the raw selections it reports — shared by both the Expense and Earmark save paths' ConfirmImplicitChanges wiring. When a save's rows are too tall for one screen it splits them into height-based pages, shown one after another; selections accumulate into one outcome and a cancel on any page aborts the whole save. A save whose rows fit one page is unchanged.</summary>
     private ConfirmationOutcome ShowEditingHistoryConfirmation(ImplicitChangeConfirmationRequest request)
     {
         var pages = ConfirmationPaginator.Paginate(

@@ -8,7 +8,7 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// planning/28: a dumb renderer over request.Rows. Each row is one question or
+// A dumb renderer over request.Rows. Each row is one question or
 // announcement FinancePatternSaveConfirmation decided to raise on a single
 // save; this window draws them top-to-bottom and reports the raw selections
 // back as a ConfirmationOutcome (one option index per ChoiceRow it drew). It
@@ -58,7 +58,7 @@ public partial class EditingHistoryConfirmationWindow : Window
         DescriptionText.Text = request.Description;
 
         // "Continue…" while more pages follow, "Save" on the last — the only thing
-        // the popup itself knows about pagination (planning/28 Thread 4).
+        // the popup itself knows about pagination.
         CommitButton.Content = request.IsFinalPage ? "Save" : "Continue…";
 
         if (pageCount > 1)
