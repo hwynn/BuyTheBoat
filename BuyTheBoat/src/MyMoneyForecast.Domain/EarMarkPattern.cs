@@ -4,6 +4,7 @@ namespace MyMoneyForecast.Domain;
 // pattern's own identity — it's the FinanceId of the FinancialPattern (the
 // goal) being saved for; that's the only link between them
 // (redesign/01-glossary-of-terms.md#earmarkpattern).
+// Deliberately carries no account of its own.
 public sealed record EarMarkPatternOptions
 {
     public required int FinanceId { get; init; }
