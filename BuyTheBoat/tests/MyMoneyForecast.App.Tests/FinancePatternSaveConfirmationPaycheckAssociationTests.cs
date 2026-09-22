@@ -5,8 +5,7 @@ using Shouldly;
 
 namespace MyMoneyForecast.App.Tests;
 
-// The paycheck-association cascade (redesign/memory's own project_next_phase.md,
-// 2026-08-16/17 blocks; built 2026-08-17 on explicit request) — driving Run()'s
+// The paycheck-association cascade — driving Run()'s
 // own FinancialPattern-editing path when the pattern being edited is INCOME,
 // not a bill. Every scenario keeps the income's own Start AFTER AsOf,
 // deliberately, same discipline as FinancePatternSaveConfirmationChainTests:

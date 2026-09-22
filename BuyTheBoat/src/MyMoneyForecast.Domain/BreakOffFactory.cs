@@ -27,7 +27,7 @@ public sealed record BreakOffRequest
     // unaffected either way.
     public bool SpreadEvenlyWithNoIncome { get; init; } = true;
 
-    // planning/25's Item G: when the caller already asked the user which
+    // The chosen-plan-shape input: when the caller already asked the user which
     // plan shape they wanted (AllocationPlanProposer.Propose's own default,
     // ProposeSameSchedule, or ProposeSameAmount) and got a real answer, pass
     // it here to use AS-IS instead of computing Propose's own default
@@ -60,15 +60,15 @@ public sealed record BreakOffResult
     public required ManualEarmark? SuccessorStartingEarmark { get; init; }
 }
 
-// The multi-predecessor-plan break-off case (planning/25's Item F — more
-// than one EarMarkPattern already shares a finance_id, F27's relaxation of
+// The multi-predecessor-plan break-off case (more
+// than one EarMarkPattern already shares a finance_id, relaxing
 // 3.11.1.a1 — consolidating them, whether forced or chosen, into one fresh
 // successor plan). Otherwise identical to BreakOffRequest; PredecessorPlans
 // replaces the single, nullable PredecessorPlan. Still just ONE
 // CarriedOverJarBalance, not one per plan — a finance_id has exactly one
 // jar regardless of how many EarMarkPatterns feed it, so the caller reads
 // it the same single way BreakOffRequest's own field already documents
-// (F27/F34 — the jar-balance handoff already sums across every plan sharing
+// (the jar-balance handoff already sums across every plan sharing
 // a finance_id before this request is even built).
 public sealed record MultiPlanBreakOffRequest
 {
@@ -82,7 +82,7 @@ public sealed record MultiPlanBreakOffRequest
     public required IReadOnlyList<FinancialPattern> AllPatterns { get; init; }
     public bool SpreadEvenlyWithNoIncome { get; init; } = true;
 
-    // planning/25's Item G, extended here 2026-08-16 to match
+    // The chosen-plan-shape input, extended here to match
     // BreakOffRequest's own field of the same name: when the predecessor's
     // several surviving plans turn out to be a genuine sequential chain
     // (RestructureFactory.FindCurrentPlan finds one, not a concurrent set),
@@ -101,7 +101,7 @@ public sealed record MultiPlanBreakOffRequest
 
 // PredecessorPlans replaces the single, nullable PredecessorPlan — every
 // surviving plan, truncated, none dropped. There's still exactly one
-// SuccessorPlan: Item F's own ruling is that consolidating N plans always
+// SuccessorPlan: the ruling is that consolidating N plans always
 // means ONE freshly-proposed successor, the same shape as an ordinary
 // single-plan break-off, never N successors.
 public sealed record MultiPlanBreakOffResult
@@ -113,8 +113,8 @@ public sealed record MultiPlanBreakOffResult
     public required ManualEarmark? SuccessorStartingEarmark { get; init; }
 }
 
-// The keep-separate counterpart to MultiPlanBreakOffResult (Item F's own "keep
-// separate through a break-off"): the successor keeps ONE plan PER surviving
+// The keep-separate counterpart to MultiPlanBreakOffResult (the "keep
+// separate through a break-off" case): the successor keeps ONE plan PER surviving
 // predecessor plan (SuccessorPlans, not a single SuccessorPlan), each continuing
 // its own rate, rather than folding them all into one. No SuccessorStartingEarmark
 // — the carried jar balance rides on the first plan's own StartingAllocation.
@@ -161,8 +161,8 @@ public sealed record RenewalRequest
 // of the cut. Income (Amount >= 0) never has a plan at all and skips
 // straight to just the cut — no jar machinery runs.
 //
-// planning/25's Item G (2026-08-14, BreakOffRequest.ChosenSuccessorPlan;
-// extended 2026-08-16 to MultiPlanBreakOffRequest's own field of the same
+// The caller-chosen successor plan (BreakOffRequest.ChosenSuccessorPlan;
+// also on MultiPlanBreakOffRequest's own field of the same
 // name, once RestructureFactory.FindCurrentPlan made "which shape" answerable
 // even when the predecessor's own plans are a sequential chain rather than
 // exactly one row). Either overload's own successor is the caller's chosen
@@ -239,7 +239,7 @@ public static class BreakOffFactory
         };
     }
 
-    /// <summary>[CALC] The same break-off, when more than one EarMarkPattern already shares the predecessor's finance_id — planning/25's Item F, the consolidating case specifically (forced, or chosen): every surviving plan is truncated, and the successor still gets exactly one freshly-proposed plan, seeded from the one balance the finance_id's single jar actually holds. Keeping multiple plans separate under the new finance_id, instead of consolidating, is a different, not-yet-built mechanism — see FinancePatternSaveConfirmation's own TODO for that case.</summary>
+    /// <summary>[CALC] The same break-off, when more than one EarMarkPattern already shares the predecessor's finance_id — the consolidating case specifically (forced, or chosen): every surviving plan is truncated, and the successor still gets exactly one freshly-proposed plan, seeded from the one balance the finance_id's single jar actually holds. Keeping multiple plans separate under the new finance_id, instead of consolidating, is a different, not-yet-built mechanism — see FinancePatternSaveConfirmation's own TODO for that case.</summary>
     /// <param name="request">The pattern being changed, every surviving plan, the cut date, the new amount/schedule, and the one jar balance to carry across.</param>
     /// <returns>The now-bounded original pattern plus every one of its plans (each truncated), plus the new pattern that continues from the cut date, with one consolidated savings plan already set up.</returns>
     public static MultiPlanBreakOffResult BreakOff(MultiPlanBreakOffRequest request)
@@ -309,7 +309,7 @@ public static class BreakOffFactory
         };
     }
 
-    /// <summary>[CALC] Item F's "keep separate through a break-off" (planning/25): breaks a chain segment off at the cut like BreakOff does — same truncated predecessor, same new successor pattern — but instead of folding the predecessor's several plans into one, gives the successor one plan PER surviving plan, each continuing its own rate at its own cadence from the cut under the new finance_id. The carried jar balance rides on the first plan's own StartingAllocation, since the new finance_id has one combined jar and where the balance sits doesn't change what that jar reads. The request's ChosenSuccessorPlan/SpreadEvenlyWithNoIncome go unused — no single successor shape is proposed.</summary>
+    /// <summary>[CALC] The "keep separate through a break-off" case: breaks a chain segment off at the cut like BreakOff does — same truncated predecessor, same new successor pattern — but instead of folding the predecessor's several plans into one, gives the successor one plan PER surviving plan, each continuing its own rate at its own cadence from the cut under the new finance_id. The carried jar balance rides on the first plan's own StartingAllocation, since the new finance_id has one combined jar and where the balance sits doesn't change what that jar reads. The request's ChosenSuccessorPlan/SpreadEvenlyWithNoIncome go unused — no single successor shape is proposed.</summary>
     /// <param name="request">The same break-off request the consolidating overload takes.</param>
     public static MultiPlanKeepSeparateResult BreakOffKeepingPlansSeparate(MultiPlanBreakOffRequest request)
     {
@@ -441,7 +441,7 @@ public static class BreakOffFactory
         }
 
         // Checks ActiveStart (Start-or-ActiveFrom), not raw Start, since
-        // 2026-08-17: a Weekly successor's own Start may need to land on
+        // a Weekly successor's own Start may need to land on
         // the reference pattern's own next real occurrence rather than
         // literally on cutDate, to keep its cadence from silently drifting
         // (FinancePatternSaveConfirmation.BuildSuccessorSchedule's own
@@ -496,12 +496,12 @@ public static class BreakOffFactory
             candidate.FinanceId != pattern.FinanceId &&
             pattern.DatePattern.ImmediatelyPrecedes(candidate.DatePattern));
 
-    /// <summary>[CALC] Whether two FinancialPatterns sharing a Source have overlapping active spans — unlike EarMarkPattern's own F27 concurrent earmark pattern shape, nothing in this project designs for two FinancialPatterns sharing a Source and overlapping on purpose (FindPredecessor/FindSuccessor only ever match STRICTLY contiguous dates), but FinancialPattern.Create itself validates no such thing, so a caller building the fuller "every other same-Source pattern" list (not just FindPredecessor/FindSuccessor's own strict match) needs this guard for the same reason RestructureFactory.SpansOverlap exists — an overlapping pattern must never be mistaken for a sequential chain neighbor and absorbed/cascaded onto.</summary>
+    /// <summary>[CALC] Whether two FinancialPatterns sharing a Source have overlapping active spans — unlike EarMarkPattern's own concurrent earmark pattern shape, nothing in this project designs for two FinancialPatterns sharing a Source and overlapping on purpose (FindPredecessor/FindSuccessor only ever match STRICTLY contiguous dates), but FinancialPattern.Create itself validates no such thing, so a caller building the fuller "every other same-Source pattern" list (not just FindPredecessor/FindSuccessor's own strict match) needs this guard for the same reason RestructureFactory.SpansOverlap exists — an overlapping pattern must never be mistaken for a sequential chain neighbor and absorbed/cascaded onto.</summary>
     /// <returns>True when the two patterns' own active spans (ActiveStart–Until) share any day.</returns>
     public static bool SpansOverlap(FinancialPattern a, FinancialPattern b) =>
         a.DatePattern.ActiveSpansOverlap(b.DatePattern);
 
-    /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27, Phase 1) for a segment's own Until moving, against every other FinancialPattern sharing its Source — the neighbor a growing Until reaches into shrinks or expands to match; one reached far enough to be fully overtaken is absorbed instead (its own FinanceId ceases to exist entirely — see the class-level note on what a caller still owes it), and the walk keeps going in case it reaches even further. Mirrors RestructureFactory.ExtendUntil's own shape exactly, one level up — no goal parameter needed here (a FinancialPattern has no parent to validate against, unlike EarMarkPattern).</summary>
+    /// <summary>[CALC] Resolves "stay linked in the chain" for a segment's own Until moving, against every other FinancialPattern sharing its Source — the neighbor a growing Until reaches into shrinks or expands to match; one reached far enough to be fully overtaken is absorbed instead (its own FinanceId ceases to exist entirely — see the class-level note on what a caller still owes it), and the walk keeps going in case it reaches even further. Mirrors RestructureFactory.ExtendUntil's own shape exactly, one level up — no goal parameter needed here (a FinancialPattern has no parent to validate against, unlike EarMarkPattern).</summary>
     /// <param name="current">The segment being saved, with its own Until about to change.</param>
     /// <param name="otherPatterns">Every other FinancialPattern sharing the same Source.</param>
     /// <param name="newUntil">The proposed new Until.</param>
@@ -543,7 +543,7 @@ public static class BreakOffFactory
         return new FinancialChainBoundaryResult { Current = current.WithUntil(newUntil), Absorbed = absorbed, AdjustedNeighbor = neighbor };
     }
 
-    /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27, Phase 1) for a segment's own Start moving, against every other FinancialPattern sharing its Source — the mirror of ExtendUntil, walking backward through earlier segments instead.</summary>
+    /// <summary>[CALC] Resolves "stay linked in the chain" for a segment's own Start moving, against every other FinancialPattern sharing its Source — the mirror of ExtendUntil, walking backward through earlier segments instead.</summary>
     /// <param name="current">The segment being saved, with its own Start about to change.</param>
     /// <param name="otherPatterns">Every other FinancialPattern sharing the same Source.</param>
     /// <param name="newStart">The proposed new Start.</param>
@@ -561,9 +561,8 @@ public static class BreakOffFactory
         // is still a real absorb candidate (the loop's own newStart <=
         // pattern.DatePattern.ActiveStart check below would say so), so filtering
         // it out here with a strict < silently dropped that exact-boundary
-        // case entirely. Found 2026-08-17 while writing this method's own
-        // app-layer test — RestructureFactory.ExtendStart had the identical,
-        // already-latent bug, fixed there too the same pass.
+        // case entirely. RestructureFactory.ExtendStart uses the same
+        // inclusive boundary rule.
         var earlierPatterns = otherPatterns
             .Where(pattern => pattern.DatePattern.ActiveStart <= current.DatePattern.ActiveStart)
             .OrderByDescending(pattern => pattern.DatePattern.ActiveStart)
@@ -590,7 +589,7 @@ public static class BreakOffFactory
         return new FinancialChainBoundaryResult { Current = current.WithStart(newStart), Absorbed = absorbed, AdjustedNeighbor = neighbor };
     }
 
-    /// <summary>[CALC] Applies a segment's own newly-edited Amount and recurrence shape to every later same-Source segment — planning/27's "cascade forward" choice for a FinancialPattern chain (Phase 1), the default when Amount or shape changes. Each later segment keeps its own Start/Until/Priority/Mandatory/Description/AutoRenew; only Amount and shape (Frequency/Interval/ByDay/ByMonthDay) change. Mirrors RestructureFactory.CascadeForward exactly, one level up.</summary>
+    /// <summary>[CALC] Applies a segment's own newly-edited Amount and recurrence shape to every later same-Source segment — the "cascade forward" choice for a FinancialPattern chain, the default when Amount or shape changes. Each later segment keeps its own Start/Until/Priority/Mandatory/Description/AutoRenew; only Amount and shape (Frequency/Interval/ByDay/ByMonthDay) change. Mirrors RestructureFactory.CascadeForward exactly, one level up.</summary>
     /// <param name="newShape">The edited segment's own new recurrence shape — only Frequency/Interval/ByDay/ByMonthDay are read from it, not its Start/Until.</param>
     /// <param name="newAmount">The edited segment's own new Amount.</param>
     /// <param name="laterPatterns">Every later segment in the same chain (Start after the segment being edited).</param>
@@ -610,7 +609,7 @@ public static class BreakOffFactory
             }))
             .ToList();
 
-    /// <summary>[CALC] Applies a segment's own newly-edited Priority/Mandatory/Description/AutoRenew to every later same-Source segment — planning/27's own reopened "trivial fields" question (round 3 of the fourth relationship's small questions), a FinancialPattern-only mechanism with no EarMarkPattern equivalent (EarMarkPattern has none of these fields). Structurally the same shape as CascadeForward, but for the OTHER field group — Amount/shape/Start/Until all stay each later segment's own.</summary>
+    /// <summary>[CALC] Applies a segment's own newly-edited Priority/Mandatory/Description/AutoRenew to every later same-Source segment — the "trivial fields" cascade, a FinancialPattern-only mechanism with no EarMarkPattern equivalent (EarMarkPattern has none of these fields). Structurally the same shape as CascadeForward, but for the OTHER field group — Amount/shape/Start/Until all stay each later segment's own.</summary>
     /// <param name="current">The edited segment — its own new Priority/Mandatory/Description/AutoRenew are what gets copied forward.</param>
     /// <param name="laterPatterns">Every later segment in the same chain.</param>
     /// <returns>One freshly-built segment per entry in laterPatterns, in the same order, each carrying the new trivial-field values forward.</returns>
@@ -630,7 +629,7 @@ public static class BreakOffFactory
             .ToList();
 }
 
-// What ExtendUntil/ExtendStart (Phase 1) need the caller to actually carry
+// What ExtendUntil/ExtendStart need the caller to actually carry
 // out — mirrors RestructureFactory's own ChainBoundaryResult exactly, one
 // level up. Deliberately silent on what an absorbed segment's own FinanceId
 // takes with it: unlike EarMarkPattern-level absorption, absorbing a whole

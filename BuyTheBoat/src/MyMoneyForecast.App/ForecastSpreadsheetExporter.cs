@@ -8,14 +8,13 @@ namespace MyMoneyForecast.App;
 // Data/Import Data (which copy the raw SQLite file byte-for-byte for
 // backup/transfer) — this never round-trips back in.
 //
-// Design philosophy: planning/11-ui-design-and-decisions.md §A. Because
-// the export can't offer dynamic day-selection, it has to lay ALL the detail
+// Because the export can't offer dynamic day-selection, it has to lay ALL the detail
 // out statically: per day, the current/free amounts, a breakdown of every fund
 // jar, and every transaction — with the full amount due + due date shown for
 // EVERY expense type (unlike the tailored on-screen views), and colors/clear
 // headers/grouped columns doing the work of communicating good-vs-bad at a
-// glance. (Today it's a two-sheet mirror of the on-screen grids; §4 is the
-// target it should grow toward, and one day may offer multiple layouts.)
+// glance. (Today it's a two-sheet mirror of the on-screen grids; a richer
+// layout is the target it should grow toward, and one day may offer multiple layouts.)
 public static class ForecastSpreadsheetExporter
 {
     public static void Export(ForecastResult forecast, string path)

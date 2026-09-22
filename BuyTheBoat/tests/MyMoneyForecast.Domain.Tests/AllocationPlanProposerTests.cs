@@ -94,14 +94,15 @@ public class AllocationPlanProposerTests
         result.Plan.Amount.ShouldBeGreaterThan(-600m);
     }
 
-    // Regression (2026-08-27) for the double-counting-income trap: a break-off
+    // The double-counting-income guard: a break-off
     // truncates an income's predecessor row but never deletes it, so it lingers
-    // with a positive Amount forever. A bare "Amount > 0" income count then saw
+    // with a positive Amount forever. A bare "Amount > 0" income count would see
     // TWO income streams (the dead predecessor + the live successor) for every
-    // future plan, and — since pacing only fires for exactly one — silently
-    // dropped every plan to the front-loaded fallback. Here the live biweekly
-    // income should still pace the plan (Weekly/2, a fraction of the bill); under
-    // the bug it front-loads to the bill's own Monthly cadence at the full amount.
+    // future plan, and — since pacing only fires for exactly one — drop
+    // every plan to the front-loaded fallback. Here the live biweekly
+    // income should still pace the plan (Weekly/2, a fraction of the bill);
+    // counting the dead predecessor would front-load it to the bill's own
+    // Monthly cadence at the full amount instead.
     [Fact]
     public void A_broken_off_incomes_truncated_predecessor_does_not_derail_pacing()
     {
@@ -118,12 +119,12 @@ public class AllocationPlanProposerTests
         result.Plan.Amount.ShouldBeGreaterThan(-600m); // a fraction per payday, not the full amount
     }
 
-    // Found 2026-08-14: the plan's contributions used to land on Wednesdays
-    // (asOfDate's own weekday) instead of the income's real Fridays — a
-    // silent phase loss from anchoring Start at asOfDate while copying
+    // The plan's contributions must land on the income's real Fridays, not on
+    // asOfDate's own weekday (a Wednesday here) — a
+    // silent phase loss comes from anchoring Start at asOfDate while copying
     // income's own Frequency/Interval/ByDay (RFC 5545 then ties an omitted
-    // ByDay to DTSTART's own weekday, so the SAME implicit rule now resolved
-    // against the wrong day). Fixed via AlignedSchedule, which re-anchors at
+    // ByDay to DTSTART's own weekday, so the SAME implicit rule resolves
+    // against the wrong day). AlignedSchedule re-anchors at
     // income's own next real payday instead — this test locks the dates in,
     // where the sibling test above only ever checked Amount bounds.
     [Fact]
@@ -216,10 +217,10 @@ public class AllocationPlanProposerTests
     [Fact]
     public void A_one_off_outflow_with_no_income_spreads_evenly_by_default()
     {
-        // planning/13 (C1): a single-occurrence outflow with no clean income
+        // A single-occurrence outflow with no clean income
         // must not generate one full contribution per frequency cycle
         // between the as-of date and its due date (that would over-reserve
-        // many times over) — and, since Stage 1's revision, it must not
+        // many times over) — and it must not
         // reserve the whole amount immediately either. It spreads evenly:
         // $800 over 9 monthly installments (Jan through Sep inclusive).
         var oneOff = FinancialPattern.Create(new FinancialPatternOptions
@@ -276,7 +277,7 @@ public class AllocationPlanProposerTests
     {
         // spreadEvenlyWithNoIncome: false — what MainWindow's transfer
         // creation and TransferBreakOffFactory both actually pass. A
-        // transfer's withdrawal stays plain and immediate (planning/13, C1) —
+        // transfer's withdrawal stays plain and immediate —
         // the same scenario as the pre-C1 behavior, opted back into
         // explicitly rather than left as the silent default.
         var oneOffTransferWithdrawal = FinancialPattern.Create(new FinancialPatternOptions
@@ -457,7 +458,7 @@ public class AllocationPlanProposerTests
     {
         // The bill's first occurrence (Feb 1) is after the as-of date, so its plan
         // begins accumulating before it — the returned outflow carries an ActiveFrom
-        // at the as-of date so the plan fits (planning/15). Occurrences are untouched.
+        // at the as-of date so the plan fits. Occurrences are untouched.
         var bill = MonthlyBill(-300m, 1, new DateOnly(2025, 2, 1), new DateOnly(2025, 8, 1));
 
         var result = AllocationPlanProposer.Propose(bill, [bill], AsOf);
@@ -533,15 +534,12 @@ public class AllocationPlanProposerTests
         Should.Throw<ArgumentException>(() => AllocationPlanProposer.ProposeEmpty(income, AsOf));
     }
 
-    // Mechanism-C follow-on ("the glut case," 2026-08-15)
-    // — a detail the author flagged early on ("keep the glut as an up-front
-    // earmark event should be a valid option... we might need an optional
-    // parameter on the propose functions to handle that") that got set aside
-    // while building mechanism C and only surfaced again when asked to track
-    // it down. Propose's own candidate never carried a caller-supplied
+    // The glut case: keeping a glut as an up-front earmark event is a valid
+    // option, which the propose functions handle through a caller-supplied
+    // carriedOverJarBalance parameter. Propose's own candidate never carried a caller-supplied
     // balance forward before this — BreakOffFactory.BreakOff already
     // overrides StartingAllocation with the real one regardless of which
-    // Item G candidate gets chosen, but the "Recommended" candidate the
+    // candidate gets chosen, but the "Recommended" candidate the
     // picker itself shows the user, before a choice is even made, silently
     // read $0 there. Same class of bug as EarmarkFormLivePreviewTests'
     // findings — a preview that doesn't match what actually gets saved.
@@ -619,9 +617,8 @@ public class AllocationPlanProposerTests
         result.ShouldBeNull(); // already fully funded by the REAL balance, regardless of the decoy field
     }
 
-    // Mechanism-C follow-on ("the glut case",
-    // 2026-08-15): unlike EarmarkConsolidation, ProposeSameSchedule/
-    // ProposeSameAmount needed no code change to protect a glut — the test
+    // The glut case for ProposeSameSchedule/ProposeSameAmount: unlike
+    // EarmarkConsolidation, these protect a glut with no special handling — the test
     // right above this one already proves carriedOverJarBalance wins over a
     // stale StartingAllocation field; this proves the stronger claim, that
     // it's the REAL, forecast-computed balance (not a hand-picked number)
@@ -743,7 +740,7 @@ public class AllocationPlanProposerTests
     }
 
     // ---- IsPacedAgainst / FindPlansPacedAgainst -------------------------------
-    // 2026-08-17: these two methods are the detection primitive; the actual
+    // These two methods are the detection primitive; the actual
     // cascade that consumes them (FinancePatternSaveConfirmation.
     // PerformPaycheckAssociationCascadeIfApplicable) is covered by its own
     // end-to-end tests instead — FinancePatternSaveConfirmationPaycheckAssociationTests.cs

@@ -95,7 +95,7 @@ public class BreakOffFactoryTests
     [Fact]
     public void The_successor_carries_the_predecessors_auto_renew_marker()
     {
-        // planning/13 (B12): a break-off changes amount/schedule, not whether
+        // A break-off changes amount/schedule, not whether
         // the pattern "keeps going" — that marker travels with the successor
         // like every other identity field.
         var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), autoRenew: true);
@@ -273,8 +273,8 @@ public class BreakOffFactoryTests
     {
         // The proposer only stretches ActiveFrom when Start > asOfDate; here
         // Start == CutDate == the asOfDate passed to the proposer, so no
-        // stretch happens — confirms item 4-B/F25's reasoning holds in code,
-        // not just in the design doc.
+        // stretch happens — confirms the reasoning holds in code,
+        // not just in the design.
         var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         var cutDate = new DateOnly(2025, 7, 1);
 
@@ -296,7 +296,7 @@ public class BreakOffFactoryTests
     [Fact]
     public void A_cut_date_in_the_past_works_the_same_way_as_one_in_the_future()
     {
-        // F25: nothing before the as-of date is a locked ledger yet, so a past
+        // Nothing before the as-of date is a locked ledger yet, so a past
         // cut date ("starting three paychecks ago, my rent went up") is just
         // as valid as a future one — no special-casing needed.
         var rent = MonthlyBill(-1_600m, 1, new DateOnly(2024, 1, 1), new DateOnly(2026, 1, 1));
@@ -348,7 +348,7 @@ public class BreakOffFactoryTests
             Predecessor = rent,
             PredecessorPlan = null,
             CutDate = cutDate,
-            SuccessorFinanceId = 1, // same as the predecessor — item 4-A forbids this
+            SuccessorFinanceId = 1, // same as the predecessor — forbidden
             SuccessorAmount = -1_800m,
             SuccessorSchedule = MonthlyFrom(cutDate, 1, new DateOnly(2026, 1, 1)),
             CarriedOverJarBalance = 0m,
@@ -375,9 +375,9 @@ public class BreakOffFactoryTests
         }));
     }
 
-    // Multi-plan BreakOff — planning/25's Item F, the consolidating case
+    // Multi-plan BreakOff — the consolidating case
     // (more than one EarMarkPattern already shares the predecessor's own
-    // finance_id — F27's relaxation of 3.11.1.a1).
+    // finance_id — relaxing 3.11.1.a1).
 
     private static EarMarkPattern MonthlyPlan(FinancialPattern goal, decimal amount, DateOnly start, DateOnly until) =>
         EarMarkPattern.Create(
@@ -422,7 +422,7 @@ public class BreakOffFactoryTests
     [Fact]
     public void Multi_plan_break_off_still_produces_exactly_one_freshly_proposed_successor_plan()
     {
-        // Item F's own ruling: consolidating N plans always means ONE
+        // The ruling: consolidating N plans always means ONE
         // successor, the same shape as an ordinary single-plan break-off —
         // never N successors.
         var carLease = MonthlyBill(-420m, 1, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
@@ -450,7 +450,7 @@ public class BreakOffFactoryTests
     public void Multi_plan_break_off_seeds_the_successor_from_the_one_combined_carried_over_balance()
     {
         // Not per-plan — a finance_id has exactly one jar regardless of how
-        // many EarMarkPatterns feed it (F27/F34), so there is only ever one
+        // many EarMarkPatterns feed it, so there is only ever one
         // CarriedOverJarBalance to read, already summed before this request
         // is built.
         var carLease = MonthlyBill(-420m, 1, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
@@ -492,7 +492,7 @@ public class BreakOffFactoryTests
         }));
     }
 
-    // BreakOffKeepingPlansSeparate — Item F's "keep separate through a
+    // BreakOffKeepingPlansSeparate — the "keep separate through a
     // break-off." Same truncated predecessor as the consolidating overload, but
     // one successor plan per surviving plan instead of one combined fresh one.
 
@@ -576,9 +576,8 @@ public class BreakOffFactoryTests
         result.SuccessorPlans.Count(plan => plan.StartingAllocation > 0m).ShouldBe(1); // on exactly one plan
     }
 
-    // Renew — periodic renewal for "ongoing" patterns (planning/15, worked
-    // through with the author 2026-07-29). Distinct from BreakOff: nothing
-    // about the bill changes, only how far out it reaches.
+    // Renew — periodic renewal for "ongoing" patterns. Distinct from BreakOff:
+    // nothing about the bill changes, only how far out it reaches.
 
     [Fact]
     public void Renew_keeps_the_amount_and_schedule_shape_exactly_the_same_as_the_predecessor()
@@ -802,7 +801,7 @@ public class BreakOffFactoryTests
     [Fact]
     public void Renew_reaches_however_many_years_the_caller_asks_for()
     {
-        // A rare, multi-year renewal cadence (author, 2026-07-29) — the
+        // A rare, multi-year renewal cadence — the
         // segment length is the caller's choice, not a hardcoded year.
         var rent = MonthlyBill(-150m, 5, new DateOnly(2023, 1, 5), new DateOnly(2026, 1, 5));
         var renewalDate = new DateOnly(2026, 1, 5);
@@ -838,8 +837,8 @@ public class BreakOffFactoryTests
         }));
     }
 
-    // FindCurrentSegment — the free lookup Source-reuse already gives us
-    // (2026-07-29): finding which segment of a bill is live, so an edit
+    // FindCurrentSegment — the free lookup Source-reuse already gives us:
+    // finding which segment of a bill is live, so an edit
     // started from a stale row can find the one it should actually target.
 
     [Fact]
@@ -1014,7 +1013,7 @@ public class BreakOffFactoryTests
         BreakOffFactory.FindSuccessor(brokenOff.Successor, allPatterns).ShouldBeNull();
     }
 
-    // planning/27's Phase 1 — the FinancialPattern-level mirror of
+    // The FinancialPattern-level mirror of
     // RestructureFactory's own ExtendUntil/ExtendStart/CascadeForward, built
     // for EarMarkPattern chains first. Same shared-Source chain shape
     // BreakOff/FindPredecessor/FindSuccessor already use above, just testing
@@ -1155,12 +1154,12 @@ public class BreakOffFactoryTests
     // Deliberately matches how the real caller (FinancePatternSaveConfirmation)
     // actually invokes this — current's own Start is ALREADY newStart (every
     // real call passes current.DatePattern.ActiveStart as newStart directly), not
-    // some other value like the test above uses. Found 2026-08-17: with
-    // current.Start already equal to newStart, a predecessor landing on that
-    // EXACT same date used to fail the (buggy) `pattern.Start < current.Start`
-    // filter and get silently skipped instead of absorbed, even though the
-    // loop's own `newStart <= pattern.Start` check would have said to absorb
-    // it — the same bug RestructureFactory.ExtendStart had, fixed there too.
+    // some other value like the test above uses. With
+    // current.Start equal to newStart, a predecessor landing on that
+    // EXACT same date must still be absorbed: a strict `pattern.Start < current.Start`
+    // filter would skip it even though the loop's own `newStart <= pattern.Start`
+    // check says to absorb it. RestructureFactory.ExtendStart uses the same
+    // inclusive rule.
     [Fact]
     public void ExtendStart_absorbs_a_predecessor_landing_exactly_on_the_new_start_when_current_already_reflects_it()
     {

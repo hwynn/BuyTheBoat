@@ -109,14 +109,14 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
             : "Safety cushion";
 }
 
-// ===== The calendar overview (planning/11-ui-design-and-decisions.md §A) =====
+// ===== The calendar overview =====
 //
 // The OVERVIEW region's job is showing many days at a glance — every balance
 // snapshot in the window, per-day free + TOTAL allocated (never a per-jar
 // breakdown), event dots for money in/out/aside, attention tints for days
-// worth a closer look, and TODAY visually distinct (§2.g). Rendered as month
-// sections of Sun–Sat day cells (the chosen calendar direction, see
-// planning/mockups/README.md); per-day detail lives in the selected-day region.
+// worth a closer look, and TODAY visually distinct. Rendered as month
+// sections of Sun–Sat day cells (the chosen calendar direction); per-day
+// detail lives in the selected-day region.
 
 // One month section: a title plus its cells in grid order (leading padding
 // cells align day 1 under its weekday; the UniformGrid fills left-to-right).
@@ -128,9 +128,9 @@ public sealed class MonthRow
 }
 
 // One account's money-flow marker in a day cell: the account's first letter
-// plus an arrow — ↑ money in, ↓ money out, • no change (planning/11 §C.2,
-// which replaced an unreadable "status square"). The letter and glyph carry
-// the meaning, so it reads without relying on color (§C.1).
+// plus an arrow — ↑ money in, ↓ money out, • no change (which replaced an
+// unreadable "status square"). The letter and glyph carry
+// the meaning, so it reads without relying on color.
 public sealed class AccountFlowCell
 {
     public required string Letter { get; init; }
@@ -138,7 +138,7 @@ public sealed class AccountFlowCell
     public required string Kind { get; init; } // "In" | "Out" | "None"
 }
 
-// One calendar day cell — the "rich month calendar" (planning/11 §B): two
+// One calendar day cell — the "rich month calendar": two
 // LABELED numbers (Total + Free), the day's top event by name, an explicit
 // event count top-right, a per-account flow strip, and a ⚠ + words warning.
 // Everything a trigger reads is precomputed at construction so recycled
@@ -164,10 +164,10 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
     public bool FreeNegative { get; }
 
     // The day's highest-priority expected transaction, by name — replaces the
-    // old "set aside" figure, which was internal jargon (§C.5).
+    // old "set aside" figure, which was internal jargon.
     public string TopEventText { get; } = string.Empty;
 
-    // Spelled out rather than dots — there is room to just say it (§C.6).
+    // Spelled out rather than dots — there is room to just say it.
     public string EventCountText { get; } = string.Empty;
 
     public IReadOnlyList<AccountFlowCell> Flows { get; } = [];
@@ -206,7 +206,7 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
     {
     }
 
-    /// <summary>[CALC] An event-less day: present but faint, with nothing to report (§2.I.d).</summary>
+    /// <summary>[CALC] An event-less day: present but faint, with nothing to report.</summary>
     /// <param name="date">The day this cell represents.</param>
     public DayCellRow(DateOnly date)
     {
@@ -255,7 +255,7 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
     }
 }
 
-// ===== The selected-day region (planning/11-ui-design-and-decisions.md §A) =====
+// ===== The selected-day region =====
 //
 // Leverages the full BalanceSnapshot: every transaction listed (left pane),
 // every fund jar with per-type Q3 health (right pane), and the day's free
@@ -278,15 +278,15 @@ public sealed class DayDetailContext
     public IReadOnlySet<int> FlooredFinanceIds { get; init; } = new HashSet<int>();
 }
 
-// One fund jar in the selected-day detail pane, rendered per its ExpenseKind
-// (§3.III): a bill shows amount due + "can I pay it in full now" styling; a
+// One fund jar in the selected-day detail pane, rendered per its ExpenseKind:
+// a bill shows amount due + "can I pay it in full now" styling; a
 // one-time goal shows its milestone and a relative due summary; the cushion
 // shows its target. StatusKind drives pill colors in XAML: "FullyCovered"
 // (strongest green) / "OnTrack" (green) / "Behind" (amber) / "Neutral".
 public sealed class JarDetailRow
 {
     // Which account this jar belongs to — the selected-day panes group by it so
-    // each account's story stays together (grouped two-pane, planning/11).
+    // each account's story stays together (grouped two-pane).
     public AccountGroupKey? Account { get; set; }
 
     public required string Jar { get; init; }
@@ -304,7 +304,7 @@ public sealed class JarDetailRow
     // got floored — drives the amber warning on the sub line.
     public bool Floored { get; init; }
 
-    // The Q4 on-ramp (§3.III.a): a behind goal invites restructuring its plan.
+    // The Q4 on-ramp: a behind goal invites restructuring its plan.
     // Inert affordance for now — the restructure flow is future design work.
     public bool ShowAdjustNudge { get; init; }
 
@@ -355,7 +355,7 @@ public sealed class JarDetailRow
     private static string WithFlooredWarning(string subText, bool floored) =>
         floored ? $"⚠ a manual withdrawal exceeded this jar — only what it held moved · {subText}" : subText;
 
-    /// <summary>[CALC] §3.III.c — a regular bill: show the amount due; styling distinguishes "on track vs. the milestone" (green) from "could pay the whole bill right now" (strongest green). Precise due date, month as a word.</summary>
+    /// <summary>[CALC] A regular bill: show the amount due; styling distinguishes "on track vs. the milestone" (green) from "could pay the whole bill right now" (strongest green). Precise due date, month as a word.</summary>
     /// <param name="label">The jar's display label.</param>
     /// <param name="pattern">The bill's financial pattern, for its amount and due date.</param>
     /// <param name="jar">The bill's fund jar, for its milestone.</param>
@@ -404,7 +404,7 @@ public sealed class JarDetailRow
         };
     }
 
-    /// <summary>[CALC] §3.III.a/b — a goal with a savings plan: progress toward the MILESTONE (am I on track setting money aside), not the full amount. One-time goals get a relative due summary when far out; repeating ones a precise date.</summary>
+    /// <summary>[CALC] A goal with a savings plan: progress toward the MILESTONE (am I on track setting money aside), not the full amount. One-time goals get a relative due summary when far out; repeating ones a precise date.</summary>
     /// <param name="label">The jar's display label.</param>
     /// <param name="pattern">The goal's financial pattern, for its due date and amount.</param>
     /// <param name="jar">The goal's fund jar, for its milestone.</param>
@@ -483,7 +483,7 @@ public sealed class JarDetailRow
             .Sum(earmark => earmark.ExpectedAmount);
 }
 
-// §3.III.a: a far-off goal reads as a summary ("~8 months away"); an actual
+// A far-off goal reads as a summary ("~8 months away"); an actual
 // formatted date (month as a word) only once it's close (within ~2 months).
 internal static class DueDateText
 {
@@ -508,15 +508,15 @@ internal static class DueDateText
 }
 
 // One event in the selected-day "What happened today" pane — every transaction
-// and earmark event the day holds (§3.I), ordered so a paycheck sits directly
-// above the allocations it funds (§3.III.d), with deallocation pulls last.
+// and earmark event the day holds, ordered so a paycheck sits directly
+// above the allocations it funds, with deallocation pulls last.
 // ChipKind drives chip colors in XAML: "In" / "Out" / "Aside" / "Release" / "Pull".
 // The grouping key for the selected-day panes: the account and its balance on the
 // day being shown, plus how short it is and — when short — whether the gap is
-// coverable from another account (the three-rung shortfall ladder, planning/22).
+// coverable from another account (the three-rung shortfall ladder).
 // Grouping by this record (records give value equality, so grouping still works)
 // rather than a bare name lets the group header carry the account's own balance,
-// the shortfall narrative, and the "move money in" lever — philosophy 1: a
+// the shortfall narrative, and the "move money in" lever — a
 // problem the app surfaces comes with a fix.
 //
 //   rung 2 — CanCoverElsewhere true:  the money exists, just in another account
@@ -592,7 +592,7 @@ public sealed class DayEventRow
     public bool IsPositive { get; init; }
     public bool IsPull { get; init; }
 
-    // Allocations render indented under the day's income (§3.III.d "how much
+    // Allocations render indented under the day's income ("how much
     // did I get, and where did it go?").
     public bool Indented { get; init; }
 
@@ -713,7 +713,7 @@ public sealed class GoalStatusRow(GoalShortfall status)
 }
 
 // One row of the Accounts tab. Cushion is shown blank rather than "$0.00" when
-// the user hasn't given the account one — philosophy 2: don't surface an
+// the user hasn't given the account one — don't surface an
 // internal zero as if it were a setting they chose.
 public sealed class AccountRow(Account account)
 {
@@ -737,6 +737,6 @@ public sealed class TransferRow(Transfer transfer, string fromName, string toNam
     public string Repeats => Transfer.DatePattern.ToRruleString();
 }
 
-// One entry in the overview's account filter (planning/11 §C.3). A null
+// One entry in the overview's account filter. A null
 // AccountId is the "All accounts" household roll-up.
 public sealed record AccountFilterOption(int? AccountId, string Name);

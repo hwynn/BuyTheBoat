@@ -10,7 +10,7 @@ namespace MyMoneyForecast.App.Tests;
 // tests, just for the App-layer orchestrator instead of the repositories
 // directly. Every [Fact] drives Run(): a scenario's own data (which fields
 // changed, whether history / a plan / multiple plans exist) determines which
-// of planning/25's Items C-F actually fires, and each test wires a
+// of the history-aware confirmations actually fires, and each test wires a
 // ConfirmImplicitChanges double to answer the questions it expects — or leaves
 // it unset, in which case DefaultOutcome answers every question with its
 // safest, least-destructive default. One [Fact] per named case — add to this
@@ -84,7 +84,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorPlan.StartingAllocation.ShouldBe(expectedCarriedOverBalance);
     }
 
-    // planning/25's Item G, new 2026-08-14: the existing plan's own shape
+    // The plan-shape candidates: the existing plan's own shape
     // (biweekly, not the bill's own monthly cadence) makes ProposeSameSchedule's
     // candidate structurally distinct from Propose's own default (which, with
     // no income pattern in this scenario, falls back to the bill's own
@@ -135,15 +135,14 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         existingPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.DtStart);
     }
 
-    // Found 2026-08-17 while grounding the paycheck-association cascade:
     // BuildSuccessorSchedule copies the edited pattern's own Frequency/
-    // Interval/ByDay/ByMonthDay but sets DtStart = cutDate directly — for a
+    // Interval/ByDay/ByMonthDay but must not set DtStart = cutDate directly — for a
     // Weekly pattern with an empty ByDay (RecurrenceRuleEditor's own
     // checkboxes let a real user leave every one unchecked), RFC 5545 ties
     // an omitted BYDAY to DTSTART's own weekday, so the successor's own
-    // occurrences silently land on cutDate's weekday instead of the pattern's
-    // originally-intended one — the same bug class already fixed in
-    // AllocationPlanProposer.ProposePaced on 2026-08-14. AsOf (2025-06-15) is
+    // occurrences would silently land on cutDate's weekday instead of the pattern's
+    // intended one — the same weekday-drift ProposePaced guards against.
+    // AsOf (2025-06-15) is
     // deliberately a Sunday, and the edited bill's own intended cadence is
     // biweekly Fridays (anchored 2025-01-03) — a day that never coincides
     // with a Sunday, so any drift shows up unmistakably.
@@ -181,7 +180,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         firstOccurrence.DayOfWeek.ShouldBe(DayOfWeek.Friday);
     }
 
-    // The broader half of the same 2026-08-17 finding — an EXPLICIT ByDay
+    // The broader case — an EXPLICIT ByDay
     // does not, on its own, protect an Interval > 1 Weekly pattern from the
     // same drift (RecurrenceRuleTests.Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere
     // proves this at the raw ical.net level; this proves it flows correctly
@@ -241,19 +240,14 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorBill.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
     }
 
-    // Mechanism-C follow-on ("the glut case,"
-    // 2026-08-15) — a detail flagged early in that thread ("keep the glut as
-    // an up-front earmark event should be a valid option") that got set
-    // aside while building mechanism C and only surfaced again later. Before
-    // the fix, the "Recommended" candidate's own preview always read
-    // StartingAllocation = 0, even though BreakOffFactory.BreakOff already
-    // unconditionally overrides it with the real carried-over balance once
-    // any candidate is actually saved — a live preview-vs-saved mismatch,
-    // the same class of bug EarmarkFormLivePreviewTests already found
-    // elsewhere. Explicitly chooses "Recommended" (by the same object
+    // The "glut case" for candidate previews: the "Recommended" candidate's
+    // own preview must read the real carried-over balance as its
+    // StartingAllocation, matching what BreakOffFactory.BreakOff saves once
+    // any candidate is chosen — not 0, which would be a preview-vs-saved
+    // mismatch. Explicitly chooses "Recommended" (by the same object
     // reference the candidate itself carried) so this exercises
-    // DeterminePlanShapeCandidatesIfApplicable's own fixed construction, not
-    // just BreakOff's already-correct fallback override.
+    // DeterminePlanShapeCandidatesIfApplicable's own construction, not
+    // just BreakOff's fallback override.
     [Fact]
     public void Item_G_the_Recommended_candidates_own_preview_matches_what_actually_gets_saved_for_StartingAllocation()
     {
@@ -366,12 +360,12 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         savedRate.ShouldBeGreaterThan(0m);
     }
 
-    // planning/24's own Item-G gap, fixed 2026-08-16: a Savings Plan that's
+    // A Savings Plan that's
     // already been restructured once (two sequential EarMarkPatterns sharing
     // one finance_id — an earlier, since-superseded segment plus the one
-    // that's actually current) used to disable Item G entirely, since
-    // HasMultipleEarmarkPatterns bailed before any candidate was ever built,
-    // even though exactly one segment is genuinely current.
+    // that's actually current) still gets the shape choice: it has exactly one
+    // genuinely current segment, so HasMultipleEarmarkPatterns being true
+    // must not disable candidates.
     // RestructureFactory.FindCurrentPlan is what tells this apart from a
     // concurrent set (the regression test right below). Proves candidates
     // build from the CURRENT segment's own shape specifically, not the
@@ -430,9 +424,9 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         currentPlan.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.DtStart);
     }
 
-    // Regression lock, 2026-08-16: the fix above must not reach into F27's
-    // own concurrent earmark pattern case, where the author's own ruling (planning/25's
-    // Item G closing note) says no shape choice should be offered at all —
+    // The candidate-building above must not reach into the
+    // concurrent earmark pattern case, where the author's own ruling
+    // says no shape choice should be offered at all —
     // "it'll already be complicated enough" once the not-yet-built
     // size-both-plans-in-unison mechanism exists.
     [Fact]
@@ -440,7 +434,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     {
         var bill = Bill(1, "Storage Unit Rental", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(bill, accountId: 1);
-        // Two concurrent earmark patterns (F27), staggered by a day, both active
+        // Two concurrent earmark patterns, staggered by a day, both active
         // across nearly the whole range — same shape this file's own
         // A_break_off_with_multiple_surviving_plans_kept_separate_is_a_safe_no_op_for_now
         // already uses for the concurrent case.
@@ -464,9 +458,9 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         capturedRequest!.PlanShapeCandidates().ShouldBeEmpty();
     }
 
-    // 03's 1.2.3.10.a5 only restricts start_date/amount/recurrence shape —
+    // Assumption 1.2.3.10.a5 only restricts start_date/amount/recurrence shape —
     // description/source/priority/mandatory stay plain edits regardless of
-    // history (planning/25's "Final field categorization" table). Changing
+    // history (the field categorization). Changing
     // ONLY a Trivial field must never trip a break-off, even with a full
     // history of past occurrences behind it.
     [Fact]
@@ -494,7 +488,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         patterns[0].Amount.ShouldBe(-15.99m);
     }
 
-    // Item A's own carve-out (03, Ch.20): a pattern with no expected
+    // The end_date carve-out: a pattern with no expected
     // transaction on or before the as-of date isn't protected at all, no
     // matter which field changes — there's no history yet to alter. A
     // future-dated bill already saved in the database is exactly that case.
@@ -515,11 +509,10 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         patterns[0].Amount.ShouldBe(-60m);
     }
 
-    // The sharp edge PerformSingleSuccessorBreakOff used to defer, resolved
-    // 2026-09-05 (a real mortgage edited on its own start date hit it in the
-    // portable demo): a Critical field change on a pattern whose only occurrence
+    // A Critical field change on a pattern whose only occurrence
     // is the as-of day has no settled history to preserve — a break-off there
-    // would leave a zero-day predecessor and BreakOffFactory would reject the cut.
+    // would leave a zero-day predecessor and BreakOffFactory would reject the cut,
+    // so it's a plain in-place replace instead.
     // So it's a plain in-place replace, not a break-off, and nothing throws.
     [Fact]
     public void A_critical_edit_on_a_pattern_that_started_today_replaces_in_place_instead_of_breaking_off()
@@ -618,21 +611,19 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.GetAll().ShouldBeEmpty(); // income never gets a jar, predecessor or successor
     }
 
-    // planning/25's Item F, the keep-them-separate sub-case — now honored
-    // (2026-08-27). With more than one surviving plan and nothing forcing
-    // consolidation (amount-only, so the schedule/start are untouched), the
-    // user's default "keep them separate" stands: the successor gets one plan
-    // per surviving plan, each continuing its own rate at its own cadence,
-    // rather than folding into one. The finance_id's one combined jar balance
-    // rides on a single successor plan. Was a documented no-op before it was
-    // built, then a fall-back-to-consolidating stopgap; this is the real thing.
+    // The keep-them-separate sub-case. With more than one surviving plan and
+    // nothing forcing consolidation (amount-only, so the schedule/start are
+    // untouched), the user's default "keep them separate" stands: the successor
+    // gets one plan per surviving plan, each continuing its own rate at its own
+    // cadence, rather than folding into one. The finance_id's one combined jar
+    // balance rides on a single successor plan.
     [Fact]
     public void A_break_off_with_multiple_surviving_plans_keeps_them_separate_by_default()
     {
         var bill = Bill(1, "Car Lease Payment", -420m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
         _financialPatterns.Save(bill, accountId: 1);
 
-        // Two concurrent earmark patterns on the same goal (F27) — different rates, so
+        // Two concurrent earmark patterns on the same goal — different rates, so
         // they'd never be merged back together even if offered the chance.
         _earMarkPatterns.Save(Plan(bill, -300m, new DateOnly(2025, 1, 1), bill.DatePattern.Until));
         _earMarkPatterns.Save(Plan(bill, -120m, new DateOnly(2025, 1, 2), bill.DatePattern.Until));
@@ -660,7 +651,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorPlans.Sum(p => p.StartingAllocation).ShouldBe(expectedCarriedOverBalance); // the one combined jar's balance, carried once
     }
 
-    // The other side of the same Item F question: when the user explicitly picks
+    // The other side of the same consolidation question: when the user explicitly picks
     // "combine them into one," the break-off folds every surviving plan into a
     // single freshly-proposed successor plan seeded with the combined jar balance
     // — the same result a forced (shape/start-change) consolidation produces.
@@ -691,7 +682,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorPlan.StartingAllocation.ShouldBe(expectedCarriedOverBalance);
     }
 
-    // The keep-separate funding question (2026-08-27): raising the amount leaves
+    // The keep-separate funding question: raising the amount leaves
     // the kept-separate plans contributing at the old, now-too-low total, so the
     // confirmation offers to re-rate them to meet the new amount — its OWN nested
     // question under "keep them separate," never a top-level row and never merged
@@ -750,7 +741,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         (magnitudes[0] / magnitudes[1]).ShouldBe(2.5m, 0.02m); // the 300:120 split is preserved through the scale
     }
 
-    // The goal-health suggestion (planning/25's deferred picker, 2026-08-27):
+    // The goal-health suggestion (the deferred picker):
     // editing a FUTURE goal so its single plan no longer meets it offers a
     // correction — an accept/reject question whose "accept" pre-fills that plan's
     // own form with the fix as an unsaved edit (not saved implicitly, since there
@@ -1014,7 +1005,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         overrides.ShouldBeNull(); // "don't skip any" is the default → nothing pre-filled
     }
 
-    // planning/25's Item F, the forced-consolidation sub-case: the
+    // The forced-consolidation sub-case: the
     // recurrence shape changing makes ConsolidationNeeded true, which combines
     // regardless of the user's keep-separate/combine pick — the plans can't keep
     // their own occurrence dates onto a differently shaped successor. So this,
@@ -1053,18 +1044,16 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorPlan.StartingAllocation.ShouldBe(expectedCarriedOverBalance); // the ONE combined jar's balance, not either plan's own share
     }
 
-    // planning/25 Item A's own back-boundary invariant (3.11.2.a2): end_date
-    // is always a plain, never-Critical edit (03's own categorization
+    // The end_date back-boundary invariant (3.11.2.a2): end_date
+    // is always a plain, never-Critical edit (the field categorization
     // table), but that only ever meant it's exempt from NEEDING TO ASK — not
     // from keeping every existing EarMarkPattern still fitting inside the
-    // goal's own, possibly-just-shortened Until afterward. Found via the
-    // user's own real, manual use of the app (2026-08-13): shortening only a
-    // multi-plan goal's own end date used to save the goal's new, shorter
-    // Until with no such check, leaving the database in a state where
-    // EarMarkPatternRepository.GetAll() threw on every subsequent read —
-    // including the app's own startup RefreshGrids. DetermineBackTruncationsIfApplicable/
-    // ApplyBackTruncationsIfNeeded fix this; the three tests below lock in
-    // the fix rather than the bug that motivated it.
+    // goal's own, possibly-just-shortened Until afterward. Without truncating
+    // every surviving plan that would exceed the new, shorter Until, the
+    // database lands in a state where EarMarkPatternRepository.GetAll() throws
+    // on every subsequent read — including the app's own startup RefreshGrids.
+    // DetermineBackTruncationsIfApplicable/ApplyBackTruncationsIfNeeded handle
+    // it; the three tests below lock that in.
     [Fact]
     public void Shortening_only_the_end_date_truncates_every_surviving_plan_that_would_otherwise_exceed_it()
     {
@@ -1111,7 +1100,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     }
 
     // The degenerate case EndOn itself can't handle: a plan that hasn't even
-    // started contributing yet under the new, shorter range (F27's
+    // started contributing yet under the new, shorter range (the
     // sequential-plans shape — one already active, one still ahead).
     // "Truncate to fit" isn't well-formed there (it would ask for a plan
     // ending before its own start), so ApplyBackTruncationsIfNeeded deletes
@@ -1136,7 +1125,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plans[0].DatePattern.Until.ShouldBe(newUntil); // the surviving plan was also truncated to match
     }
 
-    // planning/25's Item B: the confirmation is always a real choice, never a
+    // The confirmation is always a real choice, never a
     // forced continue. Cancelling it must leave everything exactly as it was
     // — Run() itself, not a private method, since this is testing the
     // ConfirmImplicitChanges wiring, not any one mechanism behind it.
@@ -1165,14 +1154,11 @@ public class FinancePatternSaveConfirmationTests : IDisposable
     // above: not "did the saved plan's own raw fields come out right" but
     // "once that save actually lands and the forecast is rebuilt off it —
     // the same way the Summary region or a fresh app launch would — does
-    // GoalShortfall agree that the concern is resolved." New 2026-08-14,
-    // prompted directly by the user's own question about testing whether a
-    // saved resolution actually satisfies what it was meant to fix.
+    // GoalShortfall agree that the concern is resolved.
 
-    // The plan's health heads-up — was a separate post-save "Worth a look"
-    // MessageBox, now an announcement row in the confirmation (centralized
-    // 2026-08-27 at the author's request, so all of a save's messaging lives in
-    // this one system). Independent of everything else that might fire this save:
+    // The plan's health heads-up — an announcement row in the confirmation, so
+    // all of a save's messaging lives in this one system. Independent of
+    // everything else that might fire this save:
     // the edit here is purely Trivial (Description only), so the notice row stands
     // on its own trigger (ChangeWarrantsSuggestions), not as a side effect of some
     // other question already showing. Shown on BOTH save buttons — "Save and plan"
@@ -1248,8 +1234,8 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         capturedNotice.ShouldNotBeNullOrEmpty();
     }
 
-    // AskWhichEarmarkPatternToOpen's own real disambiguation — BUILT
-    // 2026-08-17 (EarmarkPatternPickerWindow), replacing "the first match."
+    // AskWhichEarmarkPatternToOpen's own disambiguation
+    // (EarmarkPatternPickerWindow), rather than just taking the first match.
     [Fact]
     public void Save_and_plan_asks_which_plan_to_open_when_more_than_one_survives()
     {
@@ -1317,10 +1303,10 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
     // ---- shared scenario-building helpers ----------------------------------
 
-    // M2's front-truncation — the Start-side twin of the back-truncation
-    // crash fix. A future bill (starts after AsOf, so editing its Start is
-    // non-Critical and saves in place) whose Start is pushed later leaves its
-    // plan starting before it — a 3.11.2.a2 violation that used to crash the
+    // Front-truncation — the Start-side twin of the back-truncation clamp. A
+    // future bill (starts after AsOf, so editing its Start is
+    // non-Critical and saves in place) whose Start is pushed later would leave its
+    // plan starting before it — a 3.11.2.a2 violation that crashes the
     // next EarMarkPatternRepository.GetAll(). The clamp brings the plan in line.
     [Fact]
     public void Moving_a_future_goals_start_forward_clamps_its_plan_and_doesnt_crash_the_next_read()
@@ -1382,8 +1368,8 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         plan.DatePattern.GetOccurrences().ShouldContain(new DateOnly(2025, 11, 1)); // and the new months are really there
     }
 
-    // The extend-outward announcement (2026-08-27): growing a plan by moving the
-    // goal's boundary out is otherwise silent, so the save now surfaces a row
+    // The extend-outward announcement: growing a plan by moving the
+    // goal's boundary out is otherwise silent, so the save surfaces a row
     // naming how many more times the goal occurs.
     [Fact]
     public void Extending_a_goals_end_date_announces_how_many_more_times_it_occurs()

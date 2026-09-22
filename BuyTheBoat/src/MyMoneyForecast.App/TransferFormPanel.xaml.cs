@@ -101,7 +101,7 @@ public partial class TransferFormPanel : UserControl
         UpdateSummary();
     }
 
-    /// <summary>[STEP] Pre-fills the form to cover one short account on one day — the selected-day "Cover from another account" lever (planning/11 §B). Points To at the short account for exactly the amount it's short, on a one-off schedule on that day, and leaves it dirty so it's ready to Save in one click. The user still confirms; we make the fix easy, we don't move their money for them (Philosophy 1).</summary>
+    /// <summary>[STEP] Pre-fills the form to cover one short account on one day — the selected-day "Cover from another account" lever. Points To at the short account for exactly the amount it's short, on a one-off schedule on that day, and leaves it dirty so it's ready to Save in one click. The user still confirms; we make the fix easy, we don't move their money for them.</summary>
     /// <param name="toAccountId">The short account to deposit into.</param>
     /// <param name="amount">The amount it's short.</param>
     /// <param name="date">The day to schedule the one-off transfer on.</param>
@@ -167,7 +167,7 @@ public partial class TransferFormPanel : UserControl
         UpdateSummary();
     }
 
-    /// <summary>[UI] Reflects the "keeps going" toggle: when on, the schedule's own "Ends" controls step aside and the end date becomes the forecast horizon plus a cycle (planning/15); when off, the schedule controls its own end date again.</summary>
+    /// <summary>[UI] Reflects the "keeps going" toggle: when on, the schedule's own "Ends" controls step aside and the end date becomes the forecast horizon plus a cycle; when off, the schedule controls its own end date again.</summary>
     private void ApplyKeepsGoingMode()
     {
         var keepsGoing = KeepsGoingCheckBox.IsChecked == true;

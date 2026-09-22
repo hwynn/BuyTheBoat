@@ -5,9 +5,8 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// The permanent Account tab, replacing the old AccountWindow popup. Fields,
-// captions and validation ported verbatim, including the name-uniqueness
-// check MainWindow used to run after ShowDialog() — moved in here so a
+// The permanent Account tab. Fields, captions and validation, including the
+// name-uniqueness check, live here so a
 // clash shows inline instead of a MessageBox, matching every other
 // permanent-tab form. AccountRepository's own UNIQUE column is still the
 // backstop (case-sensitive — no COLLATE NOCASE on that column — matched
@@ -93,7 +92,7 @@ public partial class AccountFormPanel : UserControl
         BalanceTextBox.Text = existing.Balance.ToString(CultureInfo.InvariantCulture);
 
         // A cushion of 0 means "none set", so show it blank — otherwise editing
-        // implies the user deliberately chose a zero cushion (philosophy 2).
+        // implies the user deliberately chose a zero cushion.
         CushionTextBox.Text = existing.IdealSafetyCushion == 0m
             ? string.Empty
             : existing.IdealSafetyCushion.ToString(CultureInfo.InvariantCulture);

@@ -53,7 +53,7 @@ public class TransactionLogBookFactoryTests
     private static decimal CushionJar(BalanceSnapshot snapshot) =>
         snapshot.FundJars.Single(jar => jar.FinanceId is null).ExpectedAmount;
 
-    // Answers a real, asked question (2026-08-14): does a release reset
+    // Does a release reset
     // ExpectedAmount to 0, or does it only subtract the goal's own
     // per-occurrence amount, leaving any excess sitting in the jar? Only
     // MilestoneAmount resets at release (3.13.5.4.a1) — ExpectedAmount just
@@ -183,7 +183,7 @@ public class TransactionLogBookFactoryTests
         milestoneAtEnd.ShouldBe(300m);
     }
 
-    // Answers a real, asked question (2026-08-14): can a zero-amount
+    // Can a zero-amount
     // EarMarkPattern hold an already-accumulated balance through a funding
     // pause, then a THIRD plan resume real contributions afterward — three
     // separate rows sharing one finance_id, sequential and non-overlapping,
@@ -354,7 +354,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void Milestone_resets_after_each_release_instead_of_climbing_forever()
     {
-        // planning/14 (2026-08-03): a repeating goal's milestone must track
+        // A repeating goal's milestone must track
         // pacing toward the CURRENT cycle, not a lifetime total — otherwise a
         // plan that is exactly on schedule reads as "short" by an ever-growing
         // amount the moment it has paid more than once. Bill (1st) and
@@ -515,8 +515,8 @@ public class TransactionLogBookFactoryTests
     public void ComputeMilestoneTrajectory_washes_out_a_same_day_contribution_with_its_own_release()
     {
         // A plan deliberately paced to land its contribution on the exact
-        // day its own bill releases (planning/23 seed data's own Mobile
-        // Carrier scenario) never shows a nonzero milestone at all — the
+        // day its own bill releases (the Mobile Carrier scenario) never
+        // shows a nonzero milestone at all — the
         // contribution accumulates first, then the same-day reset wipes it,
         // every single cycle. Not a bug in the caller reading this; the
         // underlying stream genuinely never gets ahead even by a day.
@@ -1036,7 +1036,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void An_underfunded_streams_milestone_floors_at_zero_instead_of_going_negative()
     {
-        // planning/14 (2026-08-03): a stream that has fallen behind must never
+        // A stream that has fallen behind must never
         // show a NEGATIVE milestone — that would flip the ExpectedAmount-vs-
         // MilestoneAmount comparison backwards and make a badly underfunded
         // plan read as overfunded instead of merely "on track" (the honest
@@ -1089,8 +1089,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void Two_concurrent_plans_summing_past_the_bills_own_rate_dont_let_the_milestone_accumulate_a_lifetime_surplus()
     {
-        // Found in the field (2026-08-13, Storage Unit Rental): two
-        // concurrent EarMarkPatterns, $35 + $25 = $60/mo, against a $50/mo
+        // Two concurrent EarMarkPatterns, $35 + $25 = $60/mo, against a $50/mo
         // bill — genuinely $10/mo ahead. The initial-snapshot milestone used
         // to take a "lifetime contributed minus lifetime withdrawn"
         // shortcut that only resets correctly when a goal's plans exactly
@@ -1533,15 +1532,14 @@ public class TransactionLogBookFactoryTests
         state.MostImportantHealthState.ShouldBe(PlanHealthCategory.AlreadyMissing); // today still wins
     }
 
-    // planning/22 §5, full IsWorthWarningAbout spec, built 2026-08-05 (was a
-    // placeholder always returning true). Non-repeated and repeated get
+    // The full IsWorthWarningAbout spec. Non-repeated and repeated get
     // separate coverage below because the rule sets genuinely differ.
 
     [Fact]
     public void IsWorthWarningAbout_true_for_currently_short_regardless_of_anything_else()
     {
         // Same fixture as MostImportantHealthState_is_AlreadyMissing... above
-        // — a shortage today always wins, before any of §5's other rules.
+        // — a shortage today always wins, before any of the other rules.
         var (goal, earmark) = LiveGoal(1);
 
         var result = TransactionLogBookFactory.CreateForecast(Options(
@@ -1560,7 +1558,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void IsWorthWarningAbout_true_for_a_non_repeated_goal_short_and_due_soon()
     {
-        // planning/22 §5, non-repeated rule 2: due within the warn-if-within
+        // Non-repeated rule 2: due within the warn-if-within
         // window → warn regardless of size, even though the free balance
         // here is large enough that the far-off rule would have ignored it.
         var goal = FinancialPattern.Create(new FinancialPatternOptions
@@ -1606,7 +1604,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void IsWorthWarningAbout_false_for_a_non_repeated_goal_short_but_far_off_and_small_next_to_free_funds()
     {
-        // planning/22 §5, non-repeated rule 3: far off, and the shortfall is
+        // Non-repeated rule 3: far off, and the shortfall is
         // under half of projected account free funds that day → ignore.
         // Reuses LiveGoal's well-established 8700 shortfall (see the
         // ProjectedShortfallStartDate/WillMiss tests above) against a huge
@@ -1619,7 +1617,7 @@ public class TransactionLogBookFactoryTests
             // Has to reach past the 2026-06-01 due date, or the cascade never
             // simulates the actual release and HalfOfFreeFunds reads
             // pre-release (still-reserved) free funds instead of post-release
-            // — exactly the horizon caveat planning/22 §3 flagged.
+            // — exactly the known horizon caveat.
             horizonEndDate: new DateOnly(2026, 7, 1),
             financialPatterns: [goal],
             earMarkPatterns: [earmark]));
@@ -1633,7 +1631,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void IsWorthWarningAbout_true_for_a_non_repeated_goal_short_and_far_off_but_large_next_to_free_funds()
     {
-        // planning/22 §5, non-repeated rule 4: same far-off 8700 shortfall as
+        // Non-repeated rule 4: same far-off 8700 shortfall as
         // above, but this time the starting balance is small enough that
         // half of projected free funds no longer covers it.
         var (goal, earmark) = LiveGoal(1);
@@ -1653,7 +1651,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void IsWorthWarningAbout_true_for_a_repeated_pattern_short_within_the_six_month_lookahead()
     {
-        // planning/22 §5, repeated rule 3: any occurrence within six months
+        // Repeated rule 3: any occurrence within six months
         // being short warns regardless of the half-of-free-funds check.
         // Same underfunding fixture as IsChronicShortfall_is_true_... above
         // (100/month bill, 50/month plan) — Feb through Jun 2025 are all
@@ -1706,7 +1704,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void IsWorthWarningAbout_true_for_a_repeated_pattern_clear_near_term_but_large_far_off_shortfall()
     {
-        // planning/22 §5, repeated rule 2: the plan matches the bill exactly
+        // Repeated rule 2: the plan matches the bill exactly
         // through August (every near-term release is fully funded — nothing
         // in the six-month lookahead is short), then stops contributing
         // while the bill keeps going, so releases from September onward come
@@ -1801,7 +1799,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void IsWorthWarningAbout_true_for_excess_beyond_double_the_smallest_repeated_contribution()
     {
-        // planning/22 §5's excess rule: projected excess on the date of the
+        // The excess rule: projected excess on the date of the
         // next expected transaction exceeds double the smallest repeated
         // EarMarkPattern amount. $500/month for 5 months way overshoots a
         // $1000 goal; double the $500 rate is $1000, and the projected
@@ -1934,7 +1932,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
-                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date
             }),
             Amount = -1000m,
             Mandatory = false,
@@ -1971,7 +1969,7 @@ public class TransactionLogBookFactoryTests
         shortfall.OverfundedAmount.ShouldBe(0m); // short, not over-funded — mutually exclusive
     }
 
-    // planning/17, item 24 (F32): the mirror case — a goal met early (the
+    // The mirror case — a goal met early (the
     // charter's own example: a big manual earmark got a jar ahead of
     // schedule). No new engine computation; OverfundedAmount just surfaces
     // what AmountAllocatedByDueDate/AmountNeeded already carry.
@@ -2033,7 +2031,7 @@ public class TransactionLogBookFactoryTests
 
         result.HasNegativeFreeBalance.ShouldBeTrue();
 
-        // Stage-1 revision: the car repair has no Allocation Plan, so it is not
+        // The car repair has no Allocation Plan, so it is not
         // reserved ahead of time — it only reduces free funds when it lands on
         // Feb 1. So the shortfall first shows on Feb 1, not on the as-of day.
         result.FirstNegativeFreeBalanceDate.ShouldBe(new DateOnly(2025, 2, 1));
@@ -2111,7 +2109,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = new DateOnly(2025, 6, 1),
                 Count = 1,
-                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date
             }),
             Amount = -1200m,
         });
@@ -2149,7 +2147,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void An_outflow_without_an_allocation_plan_does_not_reserve()
     {
-        // Stage-1 revision (planning/14 "Revision 2026-07-24"): the computed
+        // The computed
         // ramp is retired. An outflow with no Allocation Plan of its own gets
         // NO jar — it simply reduces free funds on its due date. (In the app
         // every outflow is given a plan at creation; the engine reserves only
@@ -2196,7 +2194,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = new DateOnly(2030, 1, 1),
                 Count = 1,
-                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date
             }),
             Amount = -10000m,
             Mandatory = false,
@@ -2236,7 +2234,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void A_repeating_bills_plan_that_underfunds_the_stream_is_flagged_short()
     {
-        // F21: the need is the whole stream (100 x 12 = 1200), not one
+        // The need is the whole stream (100 x 12 = 1200), not one
         // occurrence. A plan contributing only 50/month reaches 600 across the
         // 12 months, so it is short by 600.
         var bill = FinancialPattern.Create(new FinancialPatternOptions
@@ -2283,7 +2281,7 @@ public class TransactionLogBookFactoryTests
     [Fact]
     public void An_isolated_earmark_counts_toward_the_amount_allocated_by_the_due_date()
     {
-        // F21: manual earmarks (and the starting earmark) count toward what the
+        // Manual earmarks (and the starting earmark) count toward what the
         // plan will have put in by the due date, not just the pattern's own
         // contributions.
         var bill = FinancialPattern.Create(new FinancialPatternOptions
@@ -2346,7 +2344,7 @@ public class TransactionLogBookFactoryTests
             Amount = -1000m,
         });
 
-        // Stage-1 revision: a bill reserves through its own Allocation Plan (an
+        // A bill reserves through its own Allocation Plan (an
         // EarMarkPattern), exactly like a goal — so it gets a jar and a label
         // the same way.
         var rentPlan = EarMarkPattern.Create(
@@ -2441,7 +2439,7 @@ public class TransactionLogBookFactoryTests
         SnapshotOn(result, new DateOnly(2025, 1, 15)).ExpectedAmount.ShouldBe(7000m); // + paycheck
         SnapshotOn(result, new DateOnly(2025, 2, 1)).ExpectedAmount.ShouldBe(5800m); // - rent
 
-        // Stage-1 revision: rent has no Allocation Plan, so it no longer gets a
+        // Rent has no Allocation Plan, so it does not get a
         // jar (the ramp's monthly-resetting auto-funding jar is gone). The
         // performance guard and the expected-amount arithmetic above are what
         // this test protects.
@@ -2589,7 +2587,7 @@ public class TransactionLogBookFactoryTests
             cushion.MilestoneAmount.ShouldBeNull();
         }
 
-        // Stage-1 revision: the rent bill has no Allocation Plan of its own, so
+        // The rent bill has no Allocation Plan of its own, so
         // it gets no jar at all — nothing to carry a milestone.
         result.GetTimeline()[^1].Snapshot.FundJars.ShouldNotContain(jar => jar.FinanceId == 30);
     }
@@ -2719,7 +2717,7 @@ public class TransactionLogBookFactoryTests
         Jar(purchaseDay, 1).ShouldBe(100m);
         purchaseDay.ExpectedFreeAmount.ShouldBe(0m);
 
-        // Stage-1 revision: the couch has no Allocation Plan, so it is not
+        // The couch has no Allocation Plan, so it is not
         // reserved ahead — the $500 balance is exactly committed to Vacation,
         // free reads $0 throughout, and the deallocation on the purchase day
         // rebalances without ever driving free negative.
@@ -2772,8 +2770,8 @@ public class TransactionLogBookFactoryTests
         // because a
         // plan that commits more than the balance covers is the honest "you are
         // short right now" signal rather than something to quietly drain away.
-        // Item A makes that common — every planned outflow reserves — so what
-        // used to be a rare case is now the normal opening position.
+        // That's common — every planned outflow reserves — so it's the
+        // normal opening position.
         foreach (var entry in result.GetTimeline().Where(row => row.Date != result.AsOfDate))
         {
             var expected = entry.Snapshot.ExpectedAmount!.Value;
@@ -2836,7 +2834,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = farFuture,
                 Count = 1,
-                ActiveFrom = new DateOnly(2025, 2, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2025, 2, 1), // saving starts before the due date
             }),
         });
         var earmark = EarMarkPattern.Create(
@@ -2927,10 +2925,10 @@ public class TransactionLogBookFactoryTests
             financialPatterns: [purchase, paycheck],
             idealSafetyCushion: 100m));
 
-        // F20 DISSOLVED by the stage-1 revision (planning/14): the purchase has
+        // The purchase has
         // no Allocation Plan, so it has no jar to strand money in — the $50 comes
-        // straight out of the cushion on the purchase day, leaving $50 (the
-        // correct answer this asserted before stage 1). The paycheck refills it.
+        // straight out of the cushion on the purchase day, leaving $50. The
+        // paycheck refills it.
         CushionJar(SnapshotOn(result, new DateOnly(2025, 3, 1))).ShouldBe(50m);
         CushionJar(SnapshotOn(result, new DateOnly(2025, 6, 1))).ShouldBe(100m); // refilled
     }
@@ -2969,8 +2967,8 @@ public class TransactionLogBookFactoryTests
             financialPatterns: [goal, small, big],
             earMarkPatterns: [earmark]));
 
-        // Stage-1 revision: outflows no longer reserve ahead, so this is back to
-        // the pre-item-A behaviour the test name describes. The small $10 expense
+        // Outflows don't reserve ahead, so this matches the behaviour the test
+        // name describes. The small $10 expense
         // is covered by free funds ($200 free after the $300 goal jar), so its
         // day is NOT a deallocation day. The later $250 expense exceeds free and
         // raids the goal jar, so it is.
@@ -2997,7 +2995,7 @@ public class TransactionLogBookFactoryTests
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = new DateOnly(2026, 6, 1),
                 Count = 1,
-                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date
             }),
         });
         var earmark = EarMarkPattern.Create(
@@ -3023,12 +3021,11 @@ public class TransactionLogBookFactoryTests
             new ManualEarmarkOptions { FinanceId = pattern.FinanceId, Date = date, Amount = amount },
             pattern);
 
-    // planning/17, item 8 (F27/F29): more than one EarMarkPattern can now
+    // More than one EarMarkPattern can now
     // share a finance_id — a "Restructure the plan" predecessor + successor.
-    // These two tests are the regression proof for the aggregation bug found
-    // while building it: both the initial-jar seed and the shortfall used to
-    // ASSIGN per pattern (last one processed wins) instead of summing across
-    // every plan funding the same goal.
+    // These two tests pin the aggregation: both the initial-jar seed and the
+    // shortfall must SUM across every plan funding the same goal, not assign
+    // per pattern (which would let the last one processed win).
     [Fact]
     public void Two_earmark_patterns_sharing_a_finance_id_sum_into_one_jar()
     {
@@ -3145,7 +3142,7 @@ public class TransactionLogBookFactoryTests
         shortfall.AmountAllocatedByDueDate.ShouldBe(1_500m);
     }
 
-    // planning/17, item 9 (F30): two concurrent earmark patterns (e.g. a household
+    // Two concurrent earmark patterns (e.g. a household
     // partner's own paycheck starts funding the same goal) can generate an
     // occurrence on the same day — merged into ONE event, summing the
     // amounts, not two separate events (3.13.8.1.a2).
@@ -3216,7 +3213,7 @@ public class TransactionLogBookFactoryTests
         february.EarMarkEvents.Single(e => e.FinanceId == 91).ExpectedAmount.ShouldBe(80m);
     }
 
-    // planning/17, item 22 (F31): "stop contributing, keep the jar alive" —
+    // "stop contributing, keep the jar alive" —
     // proves the actual forecast behavior, not just the successor's shape
     // (already covered by RestructureFactoryTests): no new inflow, but the
     // jar keeps draining on the goal's own schedule right through to the due
@@ -3400,7 +3397,7 @@ public class TransactionLogBookFactoryTests
         // into the user's own isolated event, and ExplicitAmount keeps their
         // number no matter how large the give-back is.
         //
-        // Stage-1 revision: the $4,800 emergency has no Allocation Plan, so it
+        // The $4,800 emergency has no Allocation Plan, so it
         // isn't reserved ahead — there are no deallocation days before Jun 15, so
         // the goal's $100 monthly contributions all land and its jar reaches $700
         // by June ($100 start + 6 months). On Jun 15 the emergency forces a
@@ -3418,7 +3415,7 @@ public class TransactionLogBookFactoryTests
     }
 
     // End to end: proves EarmarkConsolidation's own glut protection
-    // (CurrentJar/GlutSurplus, 2026-08-15) survives a real save-then-rebuild,
+    // (CurrentJar/GlutSurplus) survives a real save-then-rebuild,
     // not just Consolidate's own immediate return value. Same $100 goal /
     // $150 plan shape as the structural-glut test above (reuses its
     // already-verified $150-at-Mar-1 number), fed through consolidation and
@@ -3506,8 +3503,8 @@ public class TransactionLogBookFactoryTests
         Jar(SnapshotOn(rebuilt, new DateOnly(2025, 4, 1)), goal.FinanceId).ShouldBe(0m);
     }
 
-    // EarmarkScaling's own glut check, 2026-08-15 — unlike EarmarkConsolidation
-    // (above), Scale needed no code change: it never reads or discounts
+    // EarmarkScaling's own glut check — unlike EarmarkConsolidation
+    // (above), Scale needs no special handling: it never reads or discounts
     // "already banked" money at all, only multiplies the ongoing rate by the
     // same ratio the goal's own Amount changed by, leaving StartingAllocation
     // and the schedule untouched (EarmarkScalingTests already covers that

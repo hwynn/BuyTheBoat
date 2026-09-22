@@ -64,7 +64,7 @@ public partial class CreateEarMarkPatternWindow : Window
         UpdateSummary();
     }
 
-    /// <summary>[UI] Keeps the Summary preview reacting live to every field that feeds it (Philosophy 4) — subscribed once per constructor, right after InitializeComponent, so every field-prefill line below it in each constructor also triggers a refresh for free.</summary>
+    /// <summary>[UI] Keeps the Summary preview reacting live to every field that feeds it — subscribed once per constructor, right after InitializeComponent, so every field-prefill line below it in each constructor also triggers a refresh for free.</summary>
     private void WireLiveUpdates()
     {
         GoalComboBox.SelectionChanged += (_, _) => UpdateSummary();

@@ -15,7 +15,7 @@ namespace MyMoneyForecast.App;
 // never decides which rows exist, what they mean, or that one answer might
 // unlock another — and, with the row-keyed outcome, it no longer even knows
 // what a selection means: the wrapper reads each index back into a decision.
-// Still deliberately the minimal plain-WPF look (the styled mockup is the
+// Still deliberately the minimal plain-WPF look (a styled version is the
 // eventual target, not this).
 //
 // Built in code-behind rather than an ItemsControl + DataTemplates on purpose:
@@ -39,7 +39,7 @@ public partial class EditingHistoryConfirmationWindow : Window
 
     private readonly Dictionary<string, ChoiceRowControls> _choiceRows = new();
 
-    // The one plan-shape picker (Item G / Q2), if this request drew one — its
+    // The one plan-shape picker, if this request drew one — its
     // radios (in candidate order) and the candidates themselves, so ToOutcome can
     // report the picked candidate's own plan as ChosenPlanShape. Null when no
     // picker was shown (most saves), which reads back as the default candidate.
@@ -195,7 +195,7 @@ public partial class EditingHistoryConfirmationWindow : Window
         return container;
     }
 
-    /// <summary>[CALC] The plan-shape picker (Item G / Q2): its bold prompt and one radio per candidate shape, the recommended one pre-selected. Each candidate's own plan is remembered so ToOutcome can report the picked one as ChosenPlanShape.</summary>
+    /// <summary>[CALC] The plan-shape picker: its bold prompt and one radio per candidate shape, the recommended one pre-selected. Each candidate's own plan is remembered so ToOutcome can report the picked one as ChosenPlanShape.</summary>
     private FrameworkElement BuildCandidatePicker(CandidatePickerRow row)
     {
         var container = new StackPanel { Margin = new Thickness(0, 0, 0, 14) };

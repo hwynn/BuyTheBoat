@@ -24,22 +24,22 @@ namespace MyMoneyForecast.App;
 // plan's CURRENTLY-SAVED health outlines the button, but comparing the
 // live-typed fields against what's saved, to catch an edit that would
 // NEWLY cause a problem, is a separate, more involved check, still not
-// built. "Keeps going" is wired now (2026-09-14): it sets AutoRenew and
+// built. "Keeps going" is wired: it sets AutoRenew and
 // pushes the end date to horizon+cycle (UpdateKeepsGoingEnd); the forecast-
 // time renewal pass keeps it going past that. The advanced hand-built-
 // single-occurrence escape hatch is not built — a one-time Expense only ever
 // gets the plain Due-date field.
 //
-// Summary region (2026-08-13): the aside ("Fund jar, today") and the
-// milestone/actual chart lines are wired for real now — RequestForecast
+// Summary region: the aside ("Fund jar, today") and the
+// milestone/actual chart lines are wired — RequestForecast
 // for an existing Expense with exactly one saved plan (live pattern math
 // as the fallback, same shape as EarmarkFormPanel's own UpdateSummary),
 // AllocationPlanProposer.Propose for a rough live PREVIEW when no plan
 // exists yet (matching what MainWindow.AutoCreateAllocationPlan would
 // actually create on Save, not a guess). More than one existing
 // EarMarkPattern shows the goal alone with an explanation instead of a
-// chart that might not match what a forced consolidation (planning/25
-// Item F) would actually produce — see UpdateSummary's own doc comment.
+// chart that might not match what a forced consolidation would actually
+// produce — see UpdateSummary's own doc comment.
 public partial class ExpenseFormPanel : UserControl
 {
     private enum LoadedMode { NewBill, NewPattern, Editing }
@@ -70,10 +70,10 @@ public partial class ExpenseFormPanel : UserControl
     private IReadOnlyDictionary<int, EarMarkPattern> _patternsByFinanceId = new Dictionary<int, EarMarkPattern>();
     private IReadOnlyDictionary<int, int> _earmarkPatternCountByFinanceId = new Dictionary<int, int>();
 
-    // planning/15/16's own "silent redirect" ruling (opening any segment of
+    // The "silent redirect" ruling (opening any segment of
     // a break-off/renewal chain for editing always lands on the CURRENT one)
-    // — designed but never wired in until now (planning/24's own logged
-    // gap). Needed here, not just at each caller, since LoadPattern below is
+    // — designed but never wired in until now. Needed here, not just at each
+    // caller, since LoadPattern below is
     // the one place both entry points (the grid's Edit button and this
     // form's own instance picker) funnel through.
     private IReadOnlyList<FinancialPattern> _allPatterns = [];
@@ -152,7 +152,7 @@ public partial class ExpenseFormPanel : UserControl
 
         // How MANY plans each finance id has, not just the one above —
         // UpdateSummary's own signal for "editing this could force a
-        // consolidation" (planning/25's Item F), which a single-plan preview
+        // consolidation", which a single-plan preview
         // can't predict the shape of.
         _earmarkPatternCountByFinanceId = earMarkPatterns
             .GroupBy(pattern => pattern.FinanceId)
@@ -244,7 +244,7 @@ public partial class ExpenseFormPanel : UserControl
             .DistinctBy(pattern => pattern.FinanceId)
             .ToList();
 
-        // No per-segment "expired" flag exists yet (05's divergence registry —
+        // No per-segment "expired" flag exists yet (the divergence registry —
         // Expired is permanently false today), so nothing is filtered out here;
         // once real multi-page history/expiry exists, exclude expired segments
         // at this point so they never appear as options.
@@ -257,7 +257,7 @@ public partial class ExpenseFormPanel : UserControl
         return PickChainSegment(segments) ?? current;
     }
 
-    /// <summary>[STEP] Loads a pattern for editing — FinanceId is fixed. Also reachable from this form's own instance picker, not just the list tab's "Edit Selected." When the pattern is part of a break-off/renewal chain with more than one segment, a second popup (ChainSegmentPickerWindow, via PickChainSegment) lets the user choose WHICH segment to open — the older "always land on the current segment" redirect (planning/15/16/24) is replaced by an explicit choice, so an earlier segment can be opened on purpose (open the earliest segment you want changed). A standalone pattern, an unwired picker, or a cancelled pick still loads the current segment.</summary>
+    /// <summary>[STEP] Loads a pattern for editing — FinanceId is fixed. Also reachable from this form's own instance picker, not just the list tab's "Edit Selected." When the pattern is part of a break-off/renewal chain with more than one segment, a second popup (ChainSegmentPickerWindow, via PickChainSegment) lets the user choose WHICH segment to open — the older "always land on the current segment" redirect is replaced by an explicit choice, so an earlier segment can be opened on purpose (open the earliest segment you want changed). A standalone pattern, an unwired picker, or a cancelled pick still loads the current segment.</summary>
     /// <param name="existing">The pattern picked to load for editing — the actual segment opened is whatever the picker returns (or the current one).</param>
     /// <param name="currentAccountId">Which account the PICKED pattern is currently filed under — re-resolved against the chosen segment's own FinanceId, on the (rare) chance a chain crosses accounts.</param>
     public void LoadPattern(FinancialPattern existing, int currentAccountId)
@@ -361,7 +361,7 @@ public partial class ExpenseFormPanel : UserControl
             ? (string.IsNullOrWhiteSpace(existing.Description) ? existing.Source : existing.Description)
             : "— New Expense —";
 
-    /// <summary>[UI] This Expense's own linked savings plan — the same Summary region Earmark shows, present even in the plain healthy state, not just surfaced through a warning. Four cases: no savings plan exists yet (brand new, or an existing Expense never given one) shows a live PROPOSED preview built from whatever's currently typed, exactly like Save would create it (see ShowProposedPreview); income never gets one; more than one existing EarMarkPattern already funds this Expense shows the goal alone with an explanation, since editing it could force planning/25's Item F consolidation and reshape the plan in a way this preview can't predict; exactly one existing plan shows the real thing, reading live off RequestForecast when a saved PlanHealthState/FundJar reading exists yet, live pattern math otherwise (same fallback shape as EarmarkFormPanel's own UpdateSummary).</summary>
+    /// <summary>[UI] This Expense's own linked savings plan — the same Summary region Earmark shows, present even in the plain healthy state, not just surfaced through a warning. Four cases: no savings plan exists yet (brand new, or an existing Expense never given one) shows a live PROPOSED preview built from whatever's currently typed, exactly like Save would create it (see ShowProposedPreview); income never gets one; more than one existing EarMarkPattern already funds this Expense shows the goal alone with an explanation, since editing it could force a consolidation and reshape the plan in a way this preview can't predict; exactly one existing plan shows the real thing, reading live off RequestForecast when a saved PlanHealthState/FundJar reading exists yet, live pattern math otherwise (same fallback shape as EarmarkFormPanel's own UpdateSummary).</summary>
     private void UpdateSummary()
     {
         UpdateStatusIndicator();
@@ -394,7 +394,7 @@ public partial class ExpenseFormPanel : UserControl
         if (_earmarkPatternCountByFinanceId.GetValueOrDefault(existing.FinanceId) > 1)
         {
             // More than one EarMarkPattern already funds this Expense —
-            // editing it goes through planning/25's Item F question, which
+            // editing it goes through the consolidation question, which
             // can consolidate them into a single fresh plan. A chart built
             // from just ONE of the existing plans would show a shape Save
             // might not actually produce, so show the goal alone instead of
@@ -460,7 +460,7 @@ public partial class ExpenseFormPanel : UserControl
             firstPaymentLine: firstPaymentLine);
     }
 
-    /// <summary>[UI] Shows whether this Expense continues an earlier segment, or has since been continued by a later one — break-offs/restructures (planning/25's Item C) create a genuinely new FinanceId, so it's easy to forget, looking at just this one row, that it's part of a longer chain. BreakOffFactory.FindPredecessor/FindSuccessor do the actual lookup (the same Source-reuse mechanism FindCurrentSegment already relies on); this just surfaces what they find. Hidden entirely for a brand-new, unsaved pattern (nothing to look up yet) and whenever neither applies — a pattern with no history reads exactly as it does today, no added noise.</summary>
+    /// <summary>[UI] Shows whether this Expense continues an earlier segment, or has since been continued by a later one — break-offs/restructures create a genuinely new FinanceId, so it's easy to forget, looking at just this one row, that it's part of a longer chain. BreakOffFactory.FindPredecessor/FindSuccessor do the actual lookup (the same Source-reuse mechanism FindCurrentSegment already relies on); this just surfaces what they find. Hidden entirely for a brand-new, unsaved pattern (nothing to look up yet) and whenever neither applies — a pattern with no history reads exactly as it does today, no added noise.</summary>
     private void UpdateContinuityNote()
     {
         if (_loadedExisting is not { } existing)
@@ -832,8 +832,8 @@ public partial class ExpenseFormPanel : UserControl
             var accountId = SelectedAccountId;
             var isNew = _isNew;
 
-            // The confirmation-and-consequence flow for planning/25's Items
-            // B/E/F runs inside PatternSaved's own handler (MainWindow.
+            // The confirmation-and-consequence flow for the history-aware
+            // edits runs inside PatternSaved's own handler (MainWindow.
             // OnExpensePatternSaved constructs and runs a
             // FinancePatternSaveConfirmation) — this panel hands off the raw,
             // just-typed pattern and stays WPF/persistence-free itself.
@@ -886,7 +886,7 @@ public partial class ExpenseFormPanel : UserControl
             // it, so don't let a stale radio state leak into the saved pattern.
             Mandatory = ExpenseRadioButton.IsChecked == true && UnskippableRadioButton.IsChecked == true,
             Description = string.IsNullOrWhiteSpace(DescriptionTextBox.Text) ? null : DescriptionTextBox.Text,
-            // "It just keeps going" — an invisible marker (planning/15). Only a
+            // "It just keeps going" — an invisible marker. Only a
             // repeating pattern can be ongoing; the Stops… question is hidden for
             // one-time. Its end date rides on the rule (SetHostEndDate → horizon +
             // a cycle, in UpdateKeepsGoingEnd); the renewal pass extends it later.
@@ -1015,7 +1015,7 @@ public partial class ExpenseFormPanel : UserControl
             StopEndDatePicker.SelectedDate is { } date ? DateOnly.FromDateTime(date) : null);
     }
 
-    /// <summary>[UI] For "it just keeps going": sets the schedule's end date to the forecast horizon plus one cycle (planning/15), but never less than a year from today — so a near-in horizon can't leave the ongoing bill with just a few occurrences. The renewal pass (MainWindow.RenewOngoingPatternsToHorizon) pushes it further as the horizon moves out, and the exact date is never shown to the user.</summary>
+    /// <summary>[UI] For "it just keeps going": sets the schedule's end date to the forecast horizon plus one cycle, but never less than a year from today — so a near-in horizon can't leave the ongoing bill with just a few occurrences. The renewal pass (MainWindow.RenewOngoingPatternsToHorizon) pushes it further as the horizon moves out, and the exact date is never shown to the user.</summary>
     private void UpdateKeepsGoingEnd()
     {
         PayoffReadoutText.Text = string.Empty;

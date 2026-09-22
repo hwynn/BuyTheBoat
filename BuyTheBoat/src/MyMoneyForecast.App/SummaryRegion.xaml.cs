@@ -7,8 +7,8 @@ using System.Windows.Shapes;
 namespace MyMoneyForecast.App;
 
 // The Earmark form's Summary region — a narrative sentence, a small line
-// chart, and an aside, replacing what used to be separate Goal detail /
-// Current jar state / proposed-plan boxes. Compose the actual wording with
+// chart, and an aside, covering the goal detail, current jar state, and
+// proposed plan in one place. Compose the actual wording with
 // PlanHealthMessages before calling Load; this control only lays it out and
 // draws the chart, it doesn't decide what anything says.
 //

@@ -5,13 +5,13 @@ using Shouldly;
 
 namespace MyMoneyForecast.App.Tests;
 
-// planning/27's Phase 1 — the FinancialPattern-chain mirror of
+// The FinancialPattern-chain mirror of
 // FinancePatternSaveConfirmationEarmarkTests, driving Run()'s own
 // FinancialPattern-editing path (not RunForPlan) against real chain
 // neighbors. Every scenario keeps the pattern being edited starting AFTER
 // AsOf, deliberately — a past occurrence would make the edit IsChangeCritical
 // too, and DetermineChainConditionsIfApplicable's own gate suppresses every
-// Phase 1 question whenever that's true (see its own field comment for why).
+// chain question whenever that's true (see its own field comment for why).
 public class FinancePatternSaveConfirmationChainTests : IDisposable
 {
     private static readonly DateOnly AsOf = new(2025, 6, 15);
@@ -118,7 +118,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
         // Deliberately the ONE test in this file where the pattern being
         // edited starts BEFORE AsOf — proving DetermineChainConditionsIfApplicable's
         // own !IsChangeCritical gate actually suppresses the chain question
-        // when Item C's own break-off question is what fires instead.
+        // when the break-off question is what fires instead.
         var predecessor = Bill(1, "Rent", -1_600m, new DateOnly(2024, 1, 1), new DateOnly(2025, 3, 31));
         var current = Bill(2, "Rent", -1_800m, new DateOnly(2025, 4, 1), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(predecessor, accountId: 1);
@@ -149,7 +149,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
     {
         // Both start AFTER AsOf (2025-06-15), same discipline as every other
         // test in this file — main's own Start moving is what's under test
-        // here, not Item C's own break-off question, which a past-occurrence
+        // here, not the break-off question, which a past-occurrence
         // Start edit would otherwise also (correctly) trigger, muddying the
         // result this test is actually checking.
         var main = Bill(1, "Storage Unit Rental", -100m, new DateOnly(2025, 7, 1), new DateOnly(2026, 6, 30));
@@ -170,7 +170,7 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
     public void Amount_change_cascades_forward_by_default_when_driven_directly_against_a_successor()
     {
         // Run() itself is unreachable this way through the real app today —
-        // ExpenseFormPanel.LoadPattern's own silent redirect (planning/24)
+        // ExpenseFormPanel.LoadPattern's own silent redirect
         // never lets a segment with a successor be loaded for editing in the
         // first place, so ChangeCanCascade never actually fires via the UI.
         // Still real, correct, and worth testing directly the way this
@@ -376,10 +376,10 @@ public class FinancePatternSaveConfirmationChainTests : IDisposable
     public void Editing_an_earlier_segment_that_has_its_own_savings_plan_does_not_crash()
     {
         // Mirrors the real break-off chain (the seeded Car Lease): every segment
-        // has its own savings plan. The plan-shape picker used to run for any
-        // Critical edit and propose a break-off successor plan starting today
-        // against the earlier segment's own past-starting schedule — which threw
-        // "can't begin allocating before its goal's span starts."
+        // has its own savings plan. The plan-shape picker must not run for a
+        // Critical edit on an earlier segment and propose a break-off successor
+        // plan starting today against that segment's own past-starting schedule —
+        // that throws "can't begin allocating before its goal's span starts."
         var earlier = Bill(1, "Rent", -1_600m, new DateOnly(2025, 1, 1), new DateOnly(2025, 3, 31));
         var current = Bill(2, "Rent", -1_800m, new DateOnly(2025, 4, 1), new DateOnly(2025, 12, 31));
         _financialPatterns.Save(earlier, accountId: 1);

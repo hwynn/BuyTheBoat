@@ -11,8 +11,8 @@ public class MultiAccountForecastTests
     private static readonly DateOnly AsOf = new(2026, 7, 23);
     private static readonly DateOnly ExpenseDay = new(2026, 8, 1);
 
-    // A single-occurrence discretionary expense with no Allocation Plan. Stage-1
-    // revision: it no longer reserves ahead — it just reduces free funds on its
+    // A single-occurrence discretionary expense with no Allocation Plan. It
+    // doesn't reserve ahead — it just reduces free funds on its
     // due date. (In the app an outflow is given a plan at creation; a test that
     // wants a reservation adds one explicitly, as the transfer test below does.)
     private static FinancialPattern OneOffExpense(int id, decimal amount) =>
@@ -154,7 +154,7 @@ public class MultiAccountForecastTests
         result.Household.AsOfFree.ShouldBe(5700m);
     }
 
-    // planning/14 item C: the middle warning state — not over-committed, but
+    // The middle warning state — not over-committed, but
     // the buffer took the hit.
     [Fact]
     public void An_account_whose_cushion_is_not_whole_is_flagged_separately_from_being_short()
@@ -190,7 +190,7 @@ public class MultiAccountForecastTests
     [Fact]
     public void A_cushion_of_zero_can_never_report_as_dipped()
     {
-        // The state is inert for anyone who hasn't set a cushion (finding F12):
+        // The state is inert for anyone who hasn't set a cushion:
         // 0 cannot sit below 0, so the middle warning never fires.
         foreach (var day in TwoAccounts().Household.Days)
         {

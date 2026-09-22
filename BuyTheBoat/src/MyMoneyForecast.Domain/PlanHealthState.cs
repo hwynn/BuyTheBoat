@@ -36,10 +36,9 @@ public sealed record PlanHealthState
     // opposed to happening to sit a little ahead today for a one-off
     // reason. Distinguishes "this will keep reading as overfunded every
     // cycle, permanently, until the plan itself changes" from "a genuinely
-    // transient surplus." Added 2026-08-13 (found via Storage Unit Rental
-    // in the field: two concurrent plans summing to more than the bill
-    // needed, permanently, which read identically to a one-off surplus
-    // until this existed). Only meaningful for a repeating pattern, same as
+    // transient surplus" — e.g. two concurrent plans summing to more than the
+    // bill needs, permanently, which would otherwise read identically to a
+    // one-off surplus. Only meaningful for a repeating pattern, same as
     // IsChronicShortfall.
     public required bool IsChronicOverfund { get; init; }
 

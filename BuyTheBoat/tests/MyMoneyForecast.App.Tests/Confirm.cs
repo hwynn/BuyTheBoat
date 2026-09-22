@@ -3,8 +3,8 @@ using MyMoneyForecast.Domain;
 namespace MyMoneyForecast.App.Tests;
 
 // Builds the ConfirmationOutcome a fake popup hands back, named in terms of the
-// same choices the old flat answer used — so a test double reads the way it
-// used to (Confirm.Proceed().ChoseToRepaceBills()) rather than in raw row-id /
+// choices themselves — so a test double reads as
+// Confirm.Proceed().ChoseToRepaceBills() rather than in raw row-id /
 // option-index pairs. Each setter fills one ChoiceRow's index the way the real
 // popup would; a choice left unset stays at that row's own safe default (the
 // wrapper treats a row absent from the outcome as its default), so
@@ -52,8 +52,8 @@ internal static class Confirm
     public static ConfirmationOutcome WithPlanShape(this ConfirmationOutcome o, EarMarkPattern plan) => o with { ChosenPlanShape = plan };
 
     // The plan-shape candidates offered on a request, read out of its one
-    // CandidatePickerRow — empty when no picker was shown. The request no longer
-    // carries a separate candidates field; the row is the single source.
+    // CandidatePickerRow — empty when no picker was shown. The row is the single
+    // source; there is no separate candidates field.
     public static IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates(this ImplicitChangeConfirmationRequest request) =>
         request.Rows.OfType<CandidatePickerRow>().SingleOrDefault()?.Candidates ?? [];
 

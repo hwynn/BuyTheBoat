@@ -138,7 +138,7 @@ public class PatternRepositoryTests : IDisposable
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = new DateOnly(2030, 1, 1),
                 Count = 1,
-                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date
             }),
             Amount = -10000m,
             Mandatory = false,
@@ -247,7 +247,7 @@ public class PatternRepositoryTests : IDisposable
         _earMarkPatterns.GetAll().Single().DatePattern.ExcludedDates.ShouldBe([new DateOnly(2025, 6, 1)]);
     }
 
-    // planning/17, item 8 (F27): more than one EarMarkPattern may now share a
+    // More than one EarMarkPattern may now share a
     // finance_id (a "Restructure the plan" predecessor + successor) — keyed
     // on (FinanceId, StartDate), not FinanceId alone.
     [Fact]
@@ -598,7 +598,7 @@ public class PatternRepositoryTests : IDisposable
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = new DateOnly(2025, 1, 1),
                 Count = 1,
-                ActiveFrom = new DateOnly(2022, 1, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2022, 1, 1), // saving starts before the due date
             }),
             Amount = -5000m,
         });
@@ -777,7 +777,7 @@ public class PatternRepositoryTests : IDisposable
         byAccount[9].Single().Source.ShouldBe("Boat fund");
     }
 
-    // planning/17, F33: the Allocation Plan proposer's income scan must be
+    // The Allocation Plan proposer's income scan must be
     // scoped to the outflow's own account, not household-wide.
     [Fact]
     public void Excluding_transfer_patterns_by_account_only_returns_that_accounts_non_transfer_patterns()

@@ -36,7 +36,7 @@ public partial class AccountWindow : Window
         BalanceTextBox.Text = existing.Balance.ToString(CultureInfo.InvariantCulture);
 
         // A cushion of 0 means "none set", so show it blank — otherwise editing
-        // implies the user deliberately chose a zero cushion (philosophy 2).
+        // implies the user deliberately chose a zero cushion.
         CushionTextBox.Text = existing.IdealSafetyCushion == 0m
             ? string.Empty
             : existing.IdealSafetyCushion.ToString(CultureInfo.InvariantCulture);

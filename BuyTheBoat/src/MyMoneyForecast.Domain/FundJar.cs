@@ -37,7 +37,7 @@ public sealed record FundJar
 
     // A jar already holding more than its own schedule currently calls for —
     // its very next scheduled contribution could be skipped and the jar
-    // would still read on-pace, not behind ("the glut case," definition confirmed 2026-08-15).
+    // would still read on-pace, not behind ("the glut case").
     // Reduces to comparing this same date's own two amounts: skipping one
     // future contribution moves ExpectedAmount and MilestoneAmount by the
     // same amount (both accumulate from the identical earmark-event stream,
@@ -46,7 +46,7 @@ public sealed record FundJar
     // False when no EarMarkPattern drives this jar (MilestoneAmount is
     // null) — nothing to skip, nothing to be ahead of.
     //
-    // Consulted by EarmarkConsolidation (2026-08-15) before it treats a
+    // Consulted by EarmarkConsolidation before it treats a
     // surviving plan's balance as fungible — see that class's own comment for
     // why. AllocationPlanProposer.ProposeSameSchedule/ProposeSameAmount and
     // EarmarkScaling were checked the same day and found not to need this:

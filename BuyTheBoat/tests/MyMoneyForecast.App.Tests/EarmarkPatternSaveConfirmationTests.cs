@@ -6,7 +6,7 @@ using Shouldly;
 namespace MyMoneyForecast.App.Tests;
 
 // Exercises EarmarkPatternSaveConfirmation — the EarMarkPattern-editing save
-// path (planning/27), the sibling of FinancePatternSaveConfirmation that
+// path, the sibling of FinancePatternSaveConfirmation that
 // FinancePatternSaveConfirmationTests covers. Same real-SQLite-temp-file shape
 // as that file; every [Fact] drives Run() itself.
 public class EarmarkPatternSaveConfirmationTests : IDisposable
@@ -201,7 +201,7 @@ public class EarmarkPatternSaveConfirmationTests : IDisposable
     }
 
     // Found while grounding the UI-wiring work, not asked for — a genuinely
-    // concurrent plan (F27: two earmark patterns both live at once, e.g. the "Storage
+    // concurrent plan (two earmark patterns both live at once, e.g. the "Storage
     // Unit Rental" seed scenario) must NEVER be mistaken for a sequential
     // chain neighbor. Before this was guarded, otherPlans filtered purely on
     // Start comparison, so a concurrent plan with a later Start than the one
@@ -261,7 +261,7 @@ public class EarmarkPatternSaveConfirmationTests : IDisposable
         plans.Single(p => p.DatePattern.ActiveStart == new DateOnly(2025, 3, 1)).Amount.ShouldBe(-50m); // untouched
     }
 
-    // planning/27's own "let the chain break" case: the gap left behind
+    // The "let the chain break" case: the gap left behind
     // orphans a ManualEarmark that used to sit inside the shrunk span. Left
     // undeleted, the very next ManualEarmarkRepository.GetAll() (the next
     // forecast rebuild, or this same save's own post-save refresh) would
@@ -343,7 +343,7 @@ public class EarmarkPatternSaveConfirmationTests : IDisposable
         _manualEarmarks.GetAll().ShouldContain(e => e.Date == new DateOnly(2025, 7, 15));
     }
 
-    // Same mirror check for absorption specifically — planning/27's own
+    // Same mirror check for absorption specifically — the
     // settled claim ("nothing is orphaned by absorption itself, the
     // survivor's span covers the union of both old ranges") backed by a
     // real ManualEarmark this time, not just StartingAllocation.
@@ -368,7 +368,7 @@ public class EarmarkPatternSaveConfirmationTests : IDisposable
     }
 
     // ---- concrete-consequence wording on the confirmation request ----------
-    // planning/27's own "must name the concrete consequence, not a generic
+    // The "must name the concrete consequence, not a generic
     // notice" requirement. Every test here captures the real
     // ImplicitChangeConfirmationRequest ConfirmImplicitChanges receives and
     // asserts on its own StayLinkedWarning/LetItBreakWarning/CascadeDescription

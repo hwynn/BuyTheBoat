@@ -3,12 +3,10 @@ using System.Linq;
 
 namespace MyMoneyForecast.App.Tests;
 
-// Reads a confirmation request's rows the way a test used to read its flat
-// trigger/warning fields — so a test can still ask "was the paced-bills
-// question raised?" or "what warning sits under the let-it-break option?"
-// now that those live inside the rows the popup would draw, not as their own
-// request fields. An absent row (the question wasn't raised) reads as "" /
-// false, exactly as the old empty-string / false field did.
+// Reads a confirmation request's rows as flat trigger/warning fields — so a
+// test can ask "was the paced-bills question raised?" or "what warning sits
+// under the let-it-break option?" without digging through the rows the popup
+// would draw. An absent row (the question wasn't raised) reads as "" / false.
 internal static class RequestRows
 {
     // True when the request drew a row with this Id at all — the row-model

@@ -5,7 +5,7 @@ using Shouldly;
 
 namespace MyMoneyForecast.Scenario.Tests;
 
-// End-to-end for the stage-1 App wiring (planning/14 revision): a bill created
+// End-to-end for the App wiring: a bill created
 // with its proposed Allocation Plan (and any starting earmark) persists, reads
 // back through the repositories — where the earmark repo re-validates each plan
 // against its goal on the way out — and the forecast then reserves for it. This
@@ -64,7 +64,7 @@ public class AllocationPlanWiringTests : IDisposable
 
         // The create-window flow: propose the plan from the current as-of date and
         // the user's own-account income, then persist the plan (and any starting
-        // earmark) — mirrors AutoCreateAllocationPlan (planning/17, F33: scoped to
+        // earmark) — mirrors AutoCreateAllocationPlan (scoped to
         // the outflow's own account, not household-wide).
         var proposal = AllocationPlanProposer.Propose(
             bill, _financialPatterns.GetByAccountExcludingTransferPatterns(1), asOf);
@@ -99,7 +99,7 @@ public class AllocationPlanWiringTests : IDisposable
         maxBillJar.ShouldBeGreaterThan(0m);
     }
 
-    // planning/17, F33: a paycheck filed under a DIFFERENT account than the
+    // A paycheck filed under a DIFFERENT account than the
     // bill must not be treated as this bill's income. A paced plan copies the
     // income's own Frequency (Weekly here) — if the wrong-account paycheck
     // leaked in, the proposed plan would come back Weekly instead of Monthly.
@@ -166,7 +166,7 @@ public class AllocationPlanWiringTests : IDisposable
         // The wiring gives the withdrawal a front-loaded plan and persists the
         // prepared withdrawal (with ActiveFrom) via the transfer, so its plan fits.
         // spreadEvenlyWithNoIncome: false matches what MainWindow's transfer
-        // creation actually passes (planning/13, C1) — a transfer stays plain.
+        // creation actually passes — a transfer stays plain.
         var plan = AllocationPlanProposer.Propose(
             transfer.Withdrawal, [], new DateOnly(2025, 1, 1), spreadEvenlyWithNoIncome: false);
         _transfers.Save(transfer with { Withdrawal = plan.Outflow });

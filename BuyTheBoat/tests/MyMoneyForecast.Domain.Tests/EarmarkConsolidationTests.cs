@@ -125,8 +125,7 @@ public class EarmarkConsolidationTests
         // And that $300 doesn't just shrink the new plan's own Amount — it
         // has to carry forward as the new plan's own StartingAllocation too,
         // or GoalShortfall stops counting it anywhere the moment planA/planB's
-        // rows are gone (found 2026-08-14 via a save-then-rebuild-the-forecast
-        // test in FinancePatternSaveConfirmationTests, fixed here).
+        // rows are gone.
         result.ConsolidatedPlan.StartingAllocation.ShouldBe(300m);
     }
 
@@ -152,8 +151,7 @@ public class EarmarkConsolidationTests
         result.ConsolidatedPlan.Amount.ShouldBe(-262.5m);
     }
 
-    // Mechanism-C follow-on ("the glut case",
-    // 2026-08-15): a surviving plan's real, already-accumulated glut counts
+    // The glut case: a surviving plan's real, already-accumulated glut counts
     // toward "already banked" the same way StartingAllocation and a manual
     // earmark already do — both in sizing the new rate AND carried forward
     // onto the new plan's own StartingAllocation, or it would be discounted
@@ -219,7 +217,7 @@ public class EarmarkConsolidationTests
             SurvivingPlans = [plan],
             ManualEarmarksForThisGoal = [],
             AllPatterns = [goal],
-            CurrentJar = null, // every pre-2026-08-15 caller — backward compatible
+            CurrentJar = null, // optional — callers that don't supply a jar
         });
 
         result.ConsolidatedPlan.Amount.ShouldBe(-275m);

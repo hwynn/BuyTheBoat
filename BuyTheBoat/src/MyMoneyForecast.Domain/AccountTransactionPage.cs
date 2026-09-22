@@ -1,7 +1,7 @@
 namespace MyMoneyForecast.Domain;
 
 // One account's slice of a TransactionLogPage's date range. The organization
-// scheme, per the design's author (2026-07-10): the TransactionLogBook is a
+// scheme, per the design's author: the TransactionLogBook is a
 // book of ALL of a user's finance information; each TransactionLogPage is a
 // chunk of the calendar showing every account inside that range; this class
 // is a SINGLE account inside that chunk; and BalanceRecord maps each
@@ -38,8 +38,8 @@ public sealed record AccountTransactionPage
     // The dateless seed snapshot the cascade starts from, kept OUTSIDE
     // BalanceRecord per the original model. Its FullAmount is the
     // user-entered balance — the one manually-supplied number in the whole
-    // structure; every later value cascades from it (design decision
-    // 2026-07-10: seed the first snapshot manually, cascade the rest).
+    // structure; every later value cascades from it (seed the first snapshot
+    // manually, cascade the rest).
     public required BalanceSnapshot InitialSnapshot { get; init; }
 
     // Date -> that day's snapshot. One entry per date with >= 1 event
@@ -88,7 +88,7 @@ public sealed record AccountTransactionPage
         return snapshot;
     }
 
-    // TODO (actual-transaction history — see planning/12-actual-transactions-deferred-design.md): the
+    // TODO (actual-transaction history): the
     // affordability methods below, and the suggestion-sizing that will use them, assume no snapshot
     // predates the as-of date (a page runs [asOfDate, horizon], 3.13.1.a1) and that ExpectedFreeAmount is
     // future-only. Once actual-transaction history adds past-dated snapshots, a suggestion sized or placed

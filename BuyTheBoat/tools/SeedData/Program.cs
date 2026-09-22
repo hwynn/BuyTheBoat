@@ -344,12 +344,12 @@ Console.WriteLine("Transfer: Checking -> Savings, $200/month");
 var rentPlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = rent.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -1800m }, rent);
 earMarkPatterns.Save(rentPlan);
 
-// Matches the Earmark mockup's own "Car insurance savings plan" numbers
-// exactly ($100/month) — so the real UI can be compared directly against it.
+// The "Car insurance savings plan" numbers
+// ($100/month) — so the real UI can be compared directly against them.
 var carInsurancePlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = carInsurance.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 15)), Amount = -100m }, carInsurance);
 earMarkPatterns.Save(carInsurancePlan);
 
-// Matches the Earmark mockup's own "Trip to Japan" numbers exactly ($320
+// The "Trip to Japan" numbers ($320
 // biweekly Fridays, Jun 5 - Dec 1) — this plan out-paces the $3,200 goal on
 // its own (13 occurrences x $320 = $4,160), so it's deliberately the
 // WillBeOverfunded/CurrentlyOverfunded exemplar, not a healthy one; see the
@@ -371,7 +371,7 @@ earMarkPatterns.Save(tripPlanPartner);
 var carRepairPlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = carRepair.FinanceId, DatePattern = Weekly(asOfDate.AddDays(-11), asOfDate.AddDays(3)), Amount = -50m }, carRepair);
 earMarkPatterns.Save(carRepairPlan);
 
-Console.WriteLine("Savings plans: Rent, Car Insurance ($100/mo, matches mockup), Trip to Japan (+ a second concurrent earmark pattern, F27), Emergency car repair (deliberately underfunded)");
+Console.WriteLine("Savings plans: Rent, Car Insurance ($100/mo), Trip to Japan (+ a second concurrent earmark pattern), Emergency car repair (deliberately underfunded)");
 
 // ---- Manual earmarks (one-off adjustments) --------------------------------
 
@@ -396,7 +396,7 @@ manualEarmarks.Save(ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = 
 
 Console.WriteLine("Manual earmarks: +$200 on Trip to Japan (Jul 4), +$50 on Car Insurance (Mar 1), +$500 on Emergency Fund Top-up (day one, plain user decision), -$40 on Car Repair (recent withdrawal, forces AlreadyMissing)");
 
-// ---- planning/25 Item E/F manual-test scenarios (2026-08-13) --------------
+// ---- Editing-with-history manual-test scenarios --------------
 // Two bills built specifically to exercise editing-with-history through the
 // REAL UI, not just the automated tests: each already has real history
 // (occurrences well before asOfDate) and its own savings plan(s), so editing
@@ -406,7 +406,7 @@ Console.WriteLine("Manual earmarks: +$200 on Trip to Japan (Jul 4), +$50 on Car 
 // matches its bill's due amount gets drained back to near $0 every cycle,
 // leaving nothing real to see get carried over or absorbed.
 
-// Item F (planning/25 — multiple existing EarMarkPatterns sharing a
+// The forced-consolidation case (multiple existing EarMarkPatterns sharing a
 // finance_id): two concurrent earmark patterns. Edit the due date (e.g. the 1st ->
 // the 15th) and save — the schedule itself changing makes ConsolidationNeeded
 // true, so the popup should ANNOUNCE the combine rather than ask, and the
@@ -417,7 +417,7 @@ var storageUnitPlanA = EarMarkPattern.Create(new EarMarkPatternOptions { Finance
 earMarkPatterns.Save(storageUnitPlanA);
 var storageUnitPlanB = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = storageUnit.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 2)), Amount = -25m }, storageUnit);
 earMarkPatterns.Save(storageUnitPlanB);
-Console.WriteLine("Bill: Storage Unit Rental — TWO concurrent savings plans, real history since Jan 2026. To see Item F's forced consolidation: edit its due date (e.g. 1st -> 15th) and save.");
+Console.WriteLine("Bill: Storage Unit Rental — TWO concurrent savings plans, real history since Jan 2026. To see the forced consolidation: edit its due date (e.g. 1st -> 15th) and save.");
 
 // A single-plan bill with real history, plus a manual top-up dated in the
 // past. Editing a Critical field (amount or start date) breaks off a new
@@ -484,7 +484,7 @@ foreach (var health in forecast.PlanHealthStates.OrderBy(h => h.MostImportantHea
     var plans = plansByFinanceId.GetValueOrDefault(health.FinanceId) ?? [];
     var startingAllocation = plans.Sum(p => p.StartingAllocation);
     var startingNote = startingAllocation > 0m ? $" | StartingAllocation {startingAllocation:C}" : string.Empty;
-    var concurrentNote = plans.Count > 1 ? $" | {plans.Count} concurrent plans (F27)" : string.Empty;
+    var concurrentNote = plans.Count > 1 ? $" | {plans.Count} concurrent plans" : string.Empty;
     var firstOccNote = health.IsFirstOccurrencePending
         ? $" | firstOccPending=true firstOccShort={health.FirstOccurrenceShortfall:C}"
         : string.Empty;

@@ -292,7 +292,7 @@ public class TransferBreakOffFactoryTests
         result.SuccessorWithdrawalPlan.StartingAllocation.ShouldBe(50m);
     }
 
-    // planning/13 (B12): the lockstep discipline BreakOff already enforces for
+    // The lockstep discipline BreakOff already enforces for
     // amount/schedule, extended to the new AutoRenew marker — both legs must
     // always agree, never drift independently.
     [Fact]

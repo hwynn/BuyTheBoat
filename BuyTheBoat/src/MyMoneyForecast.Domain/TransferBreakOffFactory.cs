@@ -90,7 +90,7 @@ public static class TransferBreakOffFactory
         if (request.PredecessorWithdrawal.AutoRenew != request.PredecessorDeposit.AutoRenew)
         {
             throw new ArgumentException(
-                "Both legs of a transfer must agree on AutoRenew (planning/13, B12) — they have already drifted apart.",
+                "Both legs of a transfer must agree on AutoRenew — they have already drifted apart.",
                 nameof(request));
         }
 
@@ -112,7 +112,7 @@ public static class TransferBreakOffFactory
         var depositResult = BreakOffFactory.BreakOff(new BreakOffRequest
         {
             Predecessor = request.PredecessorDeposit,
-            PredecessorPlan = null, // income never has one (Stage 1)
+            PredecessorPlan = null, // income never has one
             CutDate = request.CutDate,
             SuccessorFinanceId = request.SuccessorDepositFinanceId,
             SuccessorAmount = request.SuccessorAmount,
@@ -174,7 +174,7 @@ public static class TransferBreakOffFactory
         if (request.PredecessorWithdrawal.AutoRenew != request.PredecessorDeposit.AutoRenew)
         {
             throw new ArgumentException(
-                "Both legs of a transfer must agree on AutoRenew (planning/13, B12) — they have already drifted apart.",
+                "Both legs of a transfer must agree on AutoRenew — they have already drifted apart.",
                 nameof(request));
         }
 
@@ -192,7 +192,7 @@ public static class TransferBreakOffFactory
         var depositResult = BreakOffFactory.Renew(new RenewalRequest
         {
             Predecessor = request.PredecessorDeposit,
-            PredecessorPlan = null, // income never has one (Stage 1)
+            PredecessorPlan = null, // income never has one
             RenewalDate = request.RenewalDate,
             SegmentYears = request.SegmentYears,
             SuccessorFinanceId = request.SuccessorDepositFinanceId,

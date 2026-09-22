@@ -10,8 +10,7 @@ namespace MyMoneyForecast.Domain;
 // total allocation never exceeds available funds.
 //
 // The algorithm, symbols, formulas, worked examples and invariants are all
-// from redesign/MyMoneyForecast/planning/06-deallocation-math.md, reconstructed
-// from DeallocationProof.ods. Two steps:
+// reconstructed from DeallocationProof.ods. Two steps:
 //   Step A (paired earmarks, p) — for each jar whose saved-for goal was bought
 //     (a paired transaction), pull its cost from that jar; leftover rolls on.
 //   Step B (balancing earmarks, b) — cover everything still owed by draining
@@ -19,8 +18,8 @@ namespace MyMoneyForecast.Domain;
 //     is met, cancel any now-unaffordable scheduled earmark on each jar.
 //
 // No cascade integration lives here (that's Step 2): this is proof-faithful
-// math with zero dependence on the rest of the engine, validated against 06's
-// examples + invariants and vectors mined from the proof workbook.
+// math with zero dependence on the rest of the engine, validated against the
+// proof's examples + invariants and vectors mined from the proof workbook.
 public static class DeallocationCalculator
 {
     /// <summary>[CALC] Reports whether today is a deallocation day: yesterday's free funds plus all of today's money movement lands below zero, meaning spending outran free funds and jars must give money back. Step 2 uses this to decide whether to call Deallocate at all — Deallocate itself assumes the caller already confirmed it.</summary>

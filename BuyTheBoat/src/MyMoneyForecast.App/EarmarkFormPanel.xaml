@@ -18,9 +18,9 @@
             <StackPanel>
                 <!-- REGION 1 — instance-information-block: which goal, and
                      how to change it. Split apart from the mode toggle below
-                     (2026-08-06) — settled-designs.html's Earmark mockups
-                     show these as two separate blocks, matching planning/21's
-                     own #1/#2 region split; they'd been merged into one
+                     (2026-08-06) — the settled Earmark design shows these
+                     as two separate blocks (instance-info and mode toggle);
+                     they'd been merged into one
                      "Which goal" GroupBox before this pass, which matched
                      neither. Mirrors ExpenseFormPanel's own instance-info-
                      block (Editing / name / Change...), minus the modified-
@@ -46,7 +46,7 @@
 
                 <!-- REGION 2 — characterization-field-block: what kind of
                      earmark this is. Clear form lives here now, not in the
-                     bottom bar (2026-08-06) — settled-designs.html groups it
+                     bottom bar (2026-08-06) — the settled design groups it
                      with the mode toggle, not with Save. -->
                 <GroupBox Header="What kind of earmark is this?" Padding="10" Margin="0,0,0,10">
                     <DockPanel>
@@ -82,8 +82,8 @@
                         <!-- Amount per occurrence: declared here so it's still a
                              normal, code-behind-wired part of this form, but
                              handed to RuleEditor's own left column in the
-                             constructor (SetLeadingContent) — settled-
-                             designs.html Earmark·1's Placement C put it above
+                             constructor (SetLeadingContent) — the settled
+                             design first put it above
                              the recurrence fields (2026-08-06); moved again
                              the same day to share the Ends row instead, once
                              it turned out nothing was reserved in the space
@@ -103,8 +103,8 @@
                              (was dummy-values-only layout since its own
                              introduction earlier the same day). Scope
                              deliberately narrowed to amount + date only —
-                             "Option A" from earmark-starting-amount-
-                             mockups.html (100px, no reason text), the
+                             the narrow amount+date layout (100px, no
+                             reason text), the
                              author's own choice once real data made the
                              region worth building: distinguishing *why* a
                              starting balance exists (inherited from a
@@ -114,7 +114,7 @@
                              out — a ManualEarmark carries no reason field, so
                              an automatic front-load and a user's own manual
                              entry are indistinguishable in storage today.
-                             Left for a real decision later (planning/23),
+                             Left for a real decision later,
                              not guessed at here. StartingReasonText stays
                              declared, collapsed, for whenever that's
                              resolved — same "keep the machinery, don't wire
@@ -131,7 +131,7 @@
                              honest total, captioned only with what's certain
                              (the amount and the date), not a guess at why. The
                              whole region hides itself when that total is $0 —
-                             mockups' own 4th "ordinary case" card, now real
+                             the "ordinary case" layout, now real
                              instead of a TODO. -->
                         <DockPanel Margin="0,0,0,4">
                             <Border x:Name="StartingPointRegion" DockPanel.Dock="Left" Width="100" Margin="0,0,14,0" Padding="0,0,14,0"
@@ -154,7 +154,7 @@
                                     </StackPanel>
                                     <TextBlock x:Name="StartingReasonText" TextWrapping="Wrap" FontSize="10.5" Foreground="#FF9A4F08"
                                                Background="#FFFBF0E2" Padding="6,5" Margin="0,10,0,0" Visibility="Collapsed"/>
-                                    <!-- planning/23 addendum, 2026-08-07: the "will the first
+                                    <!-- The "will the first
                                          payment be covered" warning (PlanHealthState.
                                          FirstOccurrenceShortfall) — same visual treatment as
                                          StartingReasonText above but a distinct element, since
@@ -167,7 +167,7 @@
                             </Border>
 
                             <!-- Tightened 10->4 (2026-08-06) — the author's own
-                                 call: no need for mockup-scale padding above the
+                                 call: no need for generous padding above the
                                  Summary region, and SummaryRegion.xaml's own
                                  internal spacing is already minimal (a plain 6px
                                  margin, checked before touching this). -->
@@ -193,7 +193,7 @@
                              call) — not shown even in Advanced mode. Both are
                              for a shortcut whose own placement hasn't been
                              figured out yet (neither ever appeared in
-                             settled-designs.html's 4 Earmark states either).
+                             the settled design's Earmark states either).
                              The machinery for both stays: _startingAllocation
                              (code-behind) still flows through Load*/Save/
                              Summary exactly as before, just with no visible
@@ -218,7 +218,7 @@
                                     <ComboBox x:Name="TargetComboBox" DisplayMemberPath="DisplayText" Margin="0,2,0,10"/>
                                 </StackPanel>
                                 <TextBlock Text="On what day?"/>
-                                <!-- planning/23 item B: days that already carry an isolated
+                                <!-- Days that already carry an isolated
                                      earmark for the selected goal are marked when the
                                      dropdown opens (OnEarmarkDatePickerCalendarOpened) —
                                      clicking one loads that entry instead of starting a new
@@ -235,12 +235,12 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- planning/23 addendum, 2026-08-07: shows in BOTH modes now,
+                <!-- Shows in BOTH modes now,
                      not just Savings-plan — a one-off adjustment is often
                      made specifically to fix what this region's own
                      PlanHealthState-derived warnings describe, so the
                      information belongs wherever the fix is actually being
-                     made (Philosophy 4), not gated to one mode. -->
+                     made, not gated to one mode. -->
                 <local:SummaryRegion x:Name="Summary" Margin="0,10,0,0"/>
             </StackPanel>
         </ScrollViewer>

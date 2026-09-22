@@ -1,7 +1,7 @@
 namespace MyMoneyForecast.Domain;
 
 // The root of the onion: a book of ALL of a user's finance information,
-// made of calendar pages (per the design's author, 2026-07-10 — "the
+// made of calendar pages (per the design's author — "the
 // TransactionLogBook was actually meant to be like a book of all of a
 // user's finance information. And it had pages... that represented large
 // chunks of a calendar so we could isolate a range of dates and show all
@@ -41,7 +41,7 @@ public sealed record TransactionLogBook
     public int NextFinanceId() =>
         AllFinancialPatterns().Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max() + 1;
 
-    /// <summary>[CALC] Returns every EarMarkPattern the user has, across every account and page — every segment of every Savings Plan, not deduped. More than one can legitimately share a FinanceId (F27's relaxation of 3.11.1.a1 — a Restructure/break-off chain's segments, or concurrent earmark patterns), so unlike AllFinancialPatterns this never collapses them down to one.</summary>
+    /// <summary>[CALC] Returns every EarMarkPattern the user has, across every account and page — every segment of every Savings Plan, not deduped. More than one can legitimately share a FinanceId (relaxing 3.11.1.a1 — a Restructure/break-off chain's segments, or concurrent earmark patterns), so unlike AllFinancialPatterns this never collapses them down to one.</summary>
     public IReadOnlyList<EarMarkPattern> AllEarMarkPatterns()
     {
         var patterns = new List<EarMarkPattern>();

@@ -50,27 +50,26 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 //    plan is bounded by min(income.Until, bill.Until), so occurrences past
 //    the income's end simply aren't funded and the shortfall reports them.
 //
-// ProposeSameSchedule/ProposeSameAmount (2026-08-14): two further methods for
+// ProposeSameSchedule/ProposeSameAmount: two further methods for
 // re-proposing a plan against an EXISTING EarMarkPattern rather than
-// building one from scratch — planning/25's Item G (suggestions) is meant to
-// offer these alongside Propose's own default. Deliberately narrower
+// building one from scratch — the goal-health suggestion picker offers
+// these alongside Propose's own default. Deliberately narrower
 // freedom than a user's own edits get: these should always
 // still be genuinely ideal, so both return null — "don't offer this" —
 // whenever their own result wouldn't be, or would be indistinguishable from
-// Propose's own default. Shared alignment fix (AlignedSchedule, below):
-// copying a reference pattern's own Frequency/Interval/ByDay/ByMonthDay at a
-// NEW Start silently loses phase whenever the reference relied on RFC
-// 5545's implicit "omitted BYDAY defaults to DTSTART's own weekday" — found
-// 2026-08-14 as a live, confirmed bug in ProposePaced itself (below), not
-// just a risk for these two new methods. Both take carriedOverJarBalance as
+// Propose's own default. AlignedSchedule (below) copies a reference
+// pattern's own Frequency/Interval/ByDay/ByMonthDay at a NEW Start; it must
+// spell the weekday out explicitly, because relying on RFC 5545's implicit
+// "omitted BYDAY defaults to DTSTART's own weekday" silently loses phase at
+// the new Start. Both take carriedOverJarBalance as
 // its own parameter rather than reading existingPlan.StartingAllocation —
 // the author's own explicit direction: whatever plan gets created here must
 // carry the previous plan's own real, current funds forward, and
-// StartingAllocation is a static field frozen at whenever the existing plan
+// StartingAllocation is a static field frozen when the existing plan
 // was first created, not a live reading. Same "carry the funds forward"
 // field BreakOffFactory already reads off the forecast for its own default
 // Propose-based successor (BreakOffRequest.CarriedOverJarBalance) — these
-// two methods now expect the same real number from their own caller.
+// two methods expect the same real number from their own caller.
 //
 // TODO: multi-option strategy picker for a goal-health suggestion. The
 // candidate machinery is built — ProposeSameSchedule/ProposeSameAmount give
@@ -78,21 +77,18 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 // letting the user pick between them; a suggestion just takes the default.
 // Only the picker is unbuilt. Deferred.
 //
-// IsPacedAgainst/FindPlansPacedAgainst (2026-08-17): a first, DETECTION-ONLY
-// piece of planning's own "loose association" thread (redesign/memory's own
-// project_next_phase.md, 2026-08-16/17 blocks) — finding which of a
+// IsPacedAgainst/FindPlansPacedAgainst: a DETECTION-ONLY
+// piece of the "loose association" work — finding which of a
 // household's EXISTING plans were paced against a given income, since
-// nothing in EarMarkPatternOptions stores that link. Built as the exact
+// nothing in EarMarkPatternOptions stores that link. The exact
 // converse of ProposePaced's own forward construction: every occurrence of
 // a genuinely-paced plan lands on one of the income's own real paydays, by
 // construction, so checking for that live is the natural inverse. A
-// deliberately narrow first pass, not a settled definition — flagged in
-// both methods' own doc comments and in project_next_phase.md as my own
-// grounded heuristic. UPDATE 2026-08-17, same day: the suggestion/cascade
-// this was built to support is now real too —
-// FinancePatternSaveConfirmation.PerformPaycheckAssociationCascadeIfApplicable
-// re-Proposes each invalidated plan (via this same class's own Propose) once
-// the user opts in through EditingHistoryConfirmationWindow's own new row.
+// deliberately narrow heuristic, not a settled definition. The
+// suggestion/cascade it supports is
+// FinancePatternSaveConfirmation.PerformPaycheckAssociationCascadeIfApplicable,
+// which re-Proposes each invalidated plan (via this same class's own Propose)
+// once the user opts in through EditingHistoryConfirmationWindow's own row.
 // These two detection methods are still exactly the heuristic described
 // above; only the orchestration around them changed.
 public static class AllocationPlanProposer
@@ -112,7 +108,7 @@ public static class AllocationPlanProposer
     /// <param name="allPatterns">Every other pattern, to look for a single clear income stream to pace against.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the plan starts contributing from.</param>
     /// <param name="spreadEvenlyWithNoIncome">Whether a single-occurrence outflow with no clear income spreads evenly across the remaining time (the default) or reserves the full amount immediately — pass false for a transfer's withdrawal, which stays plain with no adaptive behavior.</param>
-    /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added 2026-08-15 specifically so Item G's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. Protecting that carried-over balance is why this parameter exists.</param>
+    /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added specifically so the goal-health suggestion picker's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. Protecting that carried-over balance is why this parameter exists.</param>
     /// <param name="startingEarmarkCeiling">The most a proposed starting (front-load) earmark may set aside, from AffordabilityCeiling.ForStartingEarmark; null leaves it uncapped (the full first-occurrence amount), the default for callers not doing an affordability-sized proposal.</param>
     /// <param name="ongoingRateCeiling">The most the plan's per-cycle contribution may reserve, from AffordabilityCeiling.For (the range ceiling, as room FOR this plan); when the paced/spread rate would exceed it the plan is held to it instead and knowingly underfunds the outflow. Null leaves the rate uncapped. A transfer's own immediate single contribution is never capped — it stays plain regardless. Same conservative same-day reading the scaling caps use: one cycle's contribution against the window's tightest free point, not a full cumulative solve.</param>
     public static ProposedAllocationPlan Propose(
@@ -397,14 +393,13 @@ public static class AllocationPlanProposer
         return new ProposedAllocationPlan(preparedOutflow, plan, null);
     }
 
-    // 2026-08-17: the first piece of "loose association" (planning's own
-    // paycheck-cascade thread) — detecting an EXISTING plan's association
+    // The "loose association" detection — detecting an EXISTING plan's association
     // with an income, not proposing a new one. No stored link exists
     // anywhere in EarMarkPatternOptions for this; IsPacedAgainst re-derives
     // it live by checking the same relationship ProposePaced builds going
-    // forward. This is a first-pass heuristic (see its own comment below for
+    // forward. A heuristic (see its own comment below for
     // what it does and doesn't catch), not a settled definition — it exists
-    // so a future "your paycheck changed, want to re-pace these bills too?"
+    // so the "your paycheck changed, want to re-pace these bills too?"
     // suggestion has something to detect candidates with. That suggestion
     // itself, and any cascade/orchestration around it, is NOT built here.
 
@@ -472,15 +467,13 @@ public static class AllocationPlanProposer
         // (the forecast then reports the shortfall) rather than reserving money that isn't there.
         var perPayday = RateUnderCeiling(Math.Round(billAmount * billOccurrenceCount / paydayCount, 2), ongoingRateCeiling);
 
-        // Fixed 2026-08-14 — was: DtStart = asOfDate here, blindly. Copying
+        // DtStart must not be asOfDate blindly here. Copying
         // income's own Frequency/Interval/ByDay/ByMonthDay but anchoring at
         // asOfDate instead of a real payday silently loses phase whenever
         // income relies on RFC 5545's implicit "omitted BYDAY defaults to
         // DTSTART's own weekday" (true for any interval-anchored income with
-        // no explicit ByDay, e.g. a biweekly paycheck) — confirmed live:
-        // income paydays Jan 3/17/31 (Fridays) vs. the old code's own plan
-        // landing Jan 1/15/29 (Wednesdays), same scenario as
-        // Biweekly_income_against_a_monthly_bill_paces_below_the_full_amount.
+        // no explicit ByDay, e.g. a biweekly paycheck): the plan would land on
+        // the wrong weekday, one the income never actually pays on.
         // AlignedSchedule (below) re-anchors at income's own next real payday
         // instead. paydayCount > 0 already guarantees one exists on or after
         // asOfDate within [asOfDate, planUntil], so this can't come back null.
@@ -686,7 +679,7 @@ public static class AllocationPlanProposer
         return occurrences.Count > 0 ? occurrences[0] : null;
     }
 
-    /// <summary>[CALC] Re-anchors a reference pattern's own recurrence shape at a new start date without losing phase — finds the reference's own next real occurrence on or after the desired date and uses THAT as the new Start, rather than the raw desired date itself. Safe even when the reference's ByDay/ByMonthDay was never set explicitly: RFC 5545 then implicitly ties an omitted BYDAY to DTSTART's own weekday, which a raw new Start would silently change out from under it (see ProposePaced's own header comment for the confirmed bug this fixes). Also the only safe way to re-anchor an Interval > 1 Weekly rule at all, even with an EXPLICIT ByDay: confirmed empirically 2026-08-17 (RecurrenceRuleTests.Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere) that "every Nth week" is counted from DTSTART's own calendar week regardless of ByDay, so a raw new Start can land a whole interval-step off even when the weekday itself is spelled out. Extends the reference's own Until first when the caller needs a later window than the reference itself currently reaches — the reference's SHAPE is what's being preserved, not its own current end date. When the aligned occurrence lands after desiredStart, sets ActiveFrom back to desiredStart — same reasoning as Propose's own outflow-preparation step — so the jar still reads as alive (and a starting earmark can still be dated) from desiredStart onward, not only from the first real contribution. Public since 2026-08-17: FinancePatternSaveConfirmation.BuildSuccessorSchedule reuses this directly for a break-off successor's own Weekly schedule, rather than duplicating the logic — see that method's own comment for why a break-off successor needed the exact same fix.</summary>
+    /// <summary>[CALC] Re-anchors a reference pattern's own recurrence shape at a new start date without losing phase — finds the reference's own next real occurrence on or after the desired date and uses THAT as the new Start, rather than the raw desired date itself. Safe even when the reference's ByDay/ByMonthDay was never set explicitly: RFC 5545 then implicitly ties an omitted BYDAY to DTSTART's own weekday, which a raw new Start would silently change out from under it. Also the only safe way to re-anchor an Interval > 1 Weekly rule at all, even with an EXPLICIT ByDay: as RecurrenceRuleTests.Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere shows, "every Nth week" is counted from DTSTART's own calendar week regardless of ByDay, so a raw new Start can land a whole interval-step off even when the weekday itself is spelled out. Extends the reference's own Until first when the caller needs a later window than the reference itself currently reaches — the reference's SHAPE is what's being preserved, not its own current end date. When the aligned occurrence lands after desiredStart, sets ActiveFrom back to desiredStart — same reasoning as Propose's own outflow-preparation step — so the jar still reads as alive (and a starting earmark can still be dated) from desiredStart onward, not only from the first real contribution. Public because FinancePatternSaveConfirmation.BuildSuccessorSchedule reuses this directly for a break-off successor's own Weekly schedule, rather than duplicating the logic.</summary>
     /// <param name="reference">The pattern whose recurrence shape (and phase) to preserve.</param>
     /// <param name="desiredStart">Where the new schedule should start from, ideally.</param>
     /// <param name="until">The new schedule's own end date.</param>

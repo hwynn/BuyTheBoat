@@ -17,7 +17,7 @@ public class EarMarkPatternTests
             DtStart = new DateOnly(2025, 1, 1),
             Count = 1,
             // Saving started three years before the due date, so the goal's
-            // active span reaches back that far (planning/15, ActiveFrom).
+            // active span reaches back that far (its ActiveFrom).
             ActiveFrom = new DateOnly(2022, 1, 1),
         }),
         Amount = -5000m,
@@ -48,7 +48,7 @@ public class EarMarkPatternTests
     {
         // The whole point of an earmark pattern — saving in advance for a
         // single-occurrence goal. It is allowed because the goal carries an
-        // ActiveFrom reaching back to the save-start day (planning/15), so the
+        // ActiveFrom reaching back to the save-start day, so the
         // earmark stays within the goal's active span even though it begins
         // before the goal's own single occurrence.
         var goal = BoatGoal(); // single occurrence on 2025-01-01

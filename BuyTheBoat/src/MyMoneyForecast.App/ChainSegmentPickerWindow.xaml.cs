@@ -6,8 +6,7 @@ using MyMoneyForecast.Domain;
 namespace MyMoneyForecast.App;
 
 // Lets the user pick WHICH segment of a bill/paycheck's break-off chain to
-// open for editing, rather than always being sent to the current one (the old
-// always-redirect that ExpenseFormPanel.LoadPattern used to do on its own).
+// open for editing, rather than always being sent to the current one.
 // Shown only when a chain actually has more than one segment; a standalone
 // pattern skips it. The current segment — same Source, latest Start, per
 // BreakOffFactory.FindCurrentSegment's own rule — is set apart in bold.

@@ -1,7 +1,7 @@
 namespace MyMoneyForecast.Domain;
 
-// Item F's "amount changed, no date shift" row (planning/25) — the smallest
-// of its four mechanisms: when a goal's own Amount changes but neither its
+// The "amount changed, no date shift" edit — the smallest of the
+// history-preserving edit cases: when a goal's own Amount changes but neither its
 // start_date nor its recurrence shape does, and the user chooses to keep
 // several surviving EarMarkPatterns separate rather than fold them into one
 // (EarmarkConsolidation.Consolidate), each surviving plan's own Amount can

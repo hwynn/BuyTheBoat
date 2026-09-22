@@ -10,8 +10,8 @@ internal sealed record RowInputs
 {
     public bool IsChangeCritical { get; init; }
 
-    // The break-off successor's alternative savings-plan shapes (planning/25 Item
-    // G / Q2), or empty when there's no real choice — most edits, or a break-off
+    // The break-off successor's alternative savings-plan shapes, or empty when
+    // there's no real choice — most edits, or a break-off
     // with no existing plan to draw an alternative from. More than one entry means
     // a genuine choice; each carries its own proposed plan, so this becomes a
     // CandidatePickerRow rather than a plain ChoiceRow.
@@ -134,7 +134,7 @@ internal static class ConfirmationRowBuilder
                 "This reaches back to history that's already happened, so it will start a new segment from today — your past records stay exactly as they were."));
         }
 
-        // Item G / Q2 — the new segment's savings plan can be shaped a few ways
+        // The new segment's savings plan can be shaped a few ways
         // (Recommended, keep the same schedule, keep the same amount). Only shown
         // when there's a real choice (more than one candidate); the picker returns
         // the chosen candidate's own plan as ChosenPlanShape, so it's its own row
@@ -147,7 +147,7 @@ internal static class ConfirmationRowBuilder
                 DefaultIndex: 0));
         }
 
-        // Item F's consolidation choice — only when there's a real choice to
+        // The consolidation choice — only when there's a real choice to
         // make (more than one plan, the schedule/start date isn't forcing
         // consolidation, and at least one plan is the user's own — folding or
         // splitting a set of untouched dummies alters nothing they explicitly
@@ -186,21 +186,21 @@ internal static class ConfirmationRowBuilder
                 Layout: OptionLayout.Stacked));
         }
 
-        // Item F's forced case — announced, not asked. Mirrors
+        // The forced-consolidation case — announced, not asked. Mirrors
         // ConsolidationForcedText.
         if (r.HasMultipleEarmarkPatterns && r.ConsolidationNeeded && !string.IsNullOrEmpty(r.ConsolidationForcedReason))
         {
             rows.Add(new AnnouncementRow(ConfirmationRowIds.ConsolidationForced, r.ConsolidationForcedReason));
         }
 
-        // planning/27's Source row — "warn, don't block." Mirrors
+        // The Source row — "warn, don't block." Mirrors
         // SourceChangeWarningText.
         if (!string.IsNullOrEmpty(r.SourceChangeWarning))
         {
             rows.Add(new AnnouncementRow(ConfirmationRowIds.SourceChange, r.SourceChangeWarning));
         }
 
-        // The goal-health suggestion (planning/25): a plan that no longer meets
+        // The goal-health suggestion: a plan that no longer meets
         // its edited goal, offered one or more corrections to pre-fill its own
         // form with, then a trailing "leave it as is." The first correction is
         // pre-selected (the healthy option); "leave it" carries a consequence
@@ -383,7 +383,7 @@ internal static class ConfirmationRowBuilder
                 Layout: OptionLayout.Stacked));
         }
 
-        // Phase 1's trivial-fields cascade (Priority/Mandatory/Description/
+        // The trivial-fields cascade (Priority/Mandatory/Description/
         // AutoRenew) — no EarMarkPattern equivalent. Defaults to "just this
         // segment" (index 0), the one place this doesn't mirror Amount/shape's
         // own default. Mirrors TrivialFieldsCascadeSection.
@@ -401,8 +401,7 @@ internal static class ConfirmationRowBuilder
 
         // The paycheck-association cascade. The popup pre-selects "update them"
         // (index 0) — the author's chosen default for what a real user sees, so
-        // matching the bills to the new schedule is one Save away (changed from
-        // "leave them" 2026-08-19, on the author's call). The headless fallback
+        // matching the bills to the new schedule is one Save away. The headless fallback
         // (DefaultOutcome) still declines, so nothing re-paces money
         // when no one was actually asked. Each option carries its own
         // consequence, shown while selected. Mirrors PacedBillsCascadeSection.

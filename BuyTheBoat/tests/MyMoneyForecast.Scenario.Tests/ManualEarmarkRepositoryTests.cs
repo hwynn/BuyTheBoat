@@ -32,7 +32,7 @@ public class ManualEarmarkRepositoryTests : IDisposable
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = new DateOnly(2026, 6, 1),
                 Count = 1,
-                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date (planning/15)
+                ActiveFrom = new DateOnly(2025, 1, 1), // saving starts before the due date
             }),
         });
         _pattern = EarMarkPattern.Create(
@@ -113,10 +113,10 @@ public class ManualEarmarkRepositoryTests : IDisposable
     {
         // More than one EarMarkPattern may share a finance id (a second
         // concurrent earmark pattern, or a break-off predecessor+successor).
-        // GetAll() used to key its lookup dictionary by FinanceId alone,
-        // throwing "same key already added" the moment two plans shared
+        // GetAll() must not key its lookup dictionary by FinanceId alone, or
+        // it throws "same key already added" the moment two plans share
         // one. Two non-overlapping segments here (like a real break-off)
-        // prove the fix does more than dodge the crash — it validates each
+        // prove it does more than dodge the crash — it validates each
         // earmark against whichever segment's own span actually covers its
         // date, not just whichever loaded first.
         var goal = FinancialPattern.Create(new FinancialPatternOptions

@@ -41,8 +41,8 @@
         <StackPanel Grid.Column="0">
             <TextBlock Text="Repeat" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
 
-            <!-- Frequency + Every paired side by side (2026-08-06) — matches
-                 settled-designs.html's own Earmark mockups, and is what
+            <!-- Frequency + Every paired side by side — matches
+                 the settled Earmark design, and is what
                  needed the extra left-column width above. -->
             <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
@@ -70,7 +70,7 @@
 
             <!-- On-these-days (or On-these-day(s)-of-month, mutually
                  exclusive by frequency) + Starts, also paired (2026-08-06),
-                 same mockup evidence as above. -->
+                 same reasoning as above. -->
             <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -103,7 +103,7 @@
             <!-- Ends paired with a host-injection slot (2026-08-06) — this is
                  where Earmark's Amount field lives now (SetLeadingContent),
                  moved from its own dedicated band above "Repeat." Checked
-                 planning/21 + planning/22 first: neither reserves anything
+                 the form designs first: neither reserves anything
                  for the space beside Amount, so it was costing this column
                  height for nothing — sharing Ends' own already-existing row
                  instead means Amount adds essentially no extra height here,
@@ -169,7 +169,7 @@
             </StackPanel>
 
             <!-- Hidden unless a host turns on Advanced mode (the author's own
-                 call, 2026-08-06 — planning/21's Advanced-mode section, which
+                 call — the Advanced-mode design, which
                  only ever covered Expense, is now settled on location
                  [characterization-field-block, every form] but this is the
                  first concrete piece of *content* gated by it). Takes real

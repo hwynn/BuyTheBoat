@@ -3,7 +3,7 @@ using Shouldly;
 namespace MyMoneyForecast.App.Tests;
 
 // The selected-day group header's shortfall narrative — the three-rung ladder's
-// wording (planning/22). The donor-detection that feeds these lives in
+// wording. The donor-detection that feeds these lives in
 // MainWindow.ShowDayDetail (WPF, not unit-tested); this pins the strings each
 // resulting state produces, the way PlanHealthMessagesTests pins the forms'.
 public class AccountGroupKeyTests

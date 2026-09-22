@@ -46,8 +46,7 @@
 
         <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
             <TabItem Header="Forecast">
-                <!-- Design philosophy: planning/11-ui-design-and-decisions.md.
-                     Three regions with distinct jobs — TOP CONTROLS (forecast range +
+                <!-- Three regions with distinct jobs — TOP CONTROLS (forecast range +
                      a Forecast button that should only look active when the shown
                      forecast's range differs from the fields), the OVERVIEW timeline
                      (many days at a glance: totals, allocations, trends, and days worth
@@ -74,7 +73,7 @@
                                        Height="23" Padding="0,4,0,0" MinWidth="230"
                                        AutomationProperties.AutomationId="AccountsSummaryText"/>
                         </StackPanel>
-                        <!-- Pending-state affordance (philosophy §1): looks active only
+                        <!-- Pending-state affordance: looks active only
                              while an input differs from the forecast on screen. -->
                         <Button x:Name="ForecastButton" Content="Forecast" Padding="16,5" VerticalAlignment="Bottom" Click="OnForecastClick"/>
                         <Button x:Name="ExportForecastSpreadsheetButton" Content="Export as Spreadsheet..." Padding="16,5" Margin="8,0,0,0"
@@ -83,9 +82,9 @@
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,12" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                Text="Forecast only — assumes every bill and paycheck happens exactly as scheduled. No real transactions are tracked yet. Select a day in the calendar to see everything that day holds."/>
 
-                    <!-- SELECTED DAY (philosophy §3): the full snapshot. Two panes,
+                    <!-- SELECTED DAY: the full snapshot. Two panes,
                          "What happened today" LEFT and fund jars RIGHT (the author's
-                         chosen direction — see planning/mockups/README.md). -->
+                         chosen direction). -->
                     <Grid DockPanel.Dock="Bottom" Height="205" Margin="0,10,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -101,7 +100,7 @@
                                         <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
                                     </StackPanel>
-                                    <!-- Rung-1 nudge (planning/22): spare cash on hand, but nothing the user set
+                                    <!-- Rung-1 nudge: spare cash on hand, but nothing the user set
                                          aside is reserved, so "free" is really just the balance. A reminder, not
                                          per-expense math. Set from code-behind; hidden when it doesn't apply. -->
                                     <TextBlock x:Name="FreeNudgeText" HorizontalAlignment="Right" TextAlignment="Right" MaxWidth="300"
@@ -210,8 +209,8 @@
                                                              account, its balance ("how much money is in the account"), and —
                                                              when short — the "Short $X" warning to the right of it; line two is
                                                              which rung it's on (money in another account, or none can cover it),
-                                                             and the lever pre-fills a transfer into it (planning/11 §B,
-                                                             planning/22's ladder). Every account always appears in this
+                                                             and the lever pre-fills a transfer into it (the shortfall
+                                                             ladder). Every account always appears in this
                                                              pane, so the balance, narrative, and lever can never go missing. -->
                                                         <StackPanel Margin="0,8,0,3">
                                                             <DockPanel>
@@ -228,8 +227,8 @@
                                                                     <TextBlock Text="{Binding Name.ShortText}" FontWeight="SemiBold" FontSize="11"
                                                                                VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource RedTextBrush}"
                                                                                Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
-                                                                    <!-- "Funds running low": the free-funds warning a step below "short"
-                                                                         (planning/21). Also stands in for a dipped safety cushion, which
+                                                                    <!-- "Funds running low": the free-funds warning a step below "short".
+                                                                         Also stands in for a dipped safety cushion, which
                                                                          always co-occurs with thin, so it's folded into this one warning. -->
                                                                     <TextBlock Text="Funds running low" FontWeight="SemiBold" FontSize="11"
                                                                                VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource WatchTextBrush}"
@@ -319,9 +318,9 @@
                         </Grid>
                     </Grid>
 
-                    <!-- OVERVIEW (philosophy §2): the chosen calendar direction — month
+                    <!-- OVERVIEW: the chosen calendar direction — month
                          sections of day cells; per-day free + total set aside; every day
-                         in range present; attention tints; TODAY framed (§2.g). Outer
+                         in range present; attention tints; TODAY framed. Outer
                          ListBox = virtualization + ScrollIntoView; months themselves are
                          not selectable (bare item template) — day-cell Buttons are the
                          interactive unit, selection handled manually in code-behind. -->
@@ -331,7 +330,7 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <DockPanel Margin="0,0,0,4">
-                            <!-- Account filter (§C.3): All = the household roll-up;
+                            <!-- Account filter: All = the household roll-up;
                                  picking an account re-scopes every number below. -->
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <TextBlock Text="Show" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -395,14 +394,14 @@
                                                                         BorderBrush="{StaticResource CellBorderBrush}"
                                                                         Background="White" MinHeight="86" Padding="4,2">
                                                                     <StackPanel>
-                                                                        <!-- Day number left, explicit event count right (§C.6). -->
+                                                                        <!-- Day number left, explicit event count right. -->
                                                                         <DockPanel>
                                                                             <TextBlock DockPanel.Dock="Right" Text="{Binding EventCountText}" FontSize="8"
                                                                                        Foreground="Gray" VerticalAlignment="Center"/>
                                                                             <TextBlock x:Name="DayNumberText" Text="{Binding DayNumber}" FontSize="10" Foreground="Gray"/>
                                                                         </DockPanel>
 
-                                                                        <!-- Per-account flow: letter + ↑ in / ↓ out / • none (§C.2). -->
+                                                                        <!-- Per-account flow: letter + ↑ in / ↓ out / • none. -->
                                                                         <ItemsControl ItemsSource="{Binding Flows}" Margin="0,1,0,0">
                                                                             <ItemsControl.ItemsPanel>
                                                                                 <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
@@ -426,11 +425,11 @@
                                                                             </ItemsControl.ItemTemplate>
                                                                         </ItemsControl>
 
-                                                                        <!-- The day's top event, by name — not "set aside" (§C.5). -->
+                                                                        <!-- The day's top event, by name — not "set aside". -->
                                                                         <TextBlock Text="{Binding TopEventText}" FontSize="9" Margin="0,1,0,0"
                                                                                    Foreground="{StaticResource NeutralTextBrush}" TextTrimming="CharacterEllipsis"/>
 
-                                                                        <!-- Warning: symbol + WORDS, never color alone (§C.1). -->
+                                                                        <!-- Warning: symbol + WORDS, never color alone. -->
                                                                         <StackPanel Orientation="Horizontal" Margin="0,1,0,0"
                                                                                     Visibility="{Binding ShowWarning, Converter={StaticResource BoolToVis}}">
                                                                             <TextBlock Text="&#x26A0;" FontSize="9" Margin="0,0,2,0" Foreground="{StaticResource RedTextBrush}"/>
@@ -438,7 +437,7 @@
                                                                                        Foreground="{StaticResource RedTextBrush}" TextTrimming="CharacterEllipsis"/>
                                                                         </StackPanel>
 
-                                                                        <!-- Two LABELED numbers, so neither has to be guessed (§C.4).
+                                                                        <!-- Two LABELED numbers, so neither has to be guessed.
                                                                              Hidden entirely on an event-less day — bare labels with no
                                                                              figures under them are just noise. -->
                                                                         <Grid Margin="0,2,0,0" Visibility="{Binding HasSnapshot, Converter={StaticResource BoolToVis}}">
@@ -462,11 +461,11 @@
                                                                     <DataTrigger Binding="{Binding IsPadding}" Value="True">
                                                                         <Setter TargetName="CellBorder" Property="Visibility" Value="Hidden"/>
                                                                     </DataTrigger>
-                                                                    <!-- Event-less days: present but faint (§2.I.d). -->
+                                                                    <!-- Event-less days: present but faint. -->
                                                                     <DataTrigger Binding="{Binding HasSnapshot}" Value="False">
                                                                         <Setter TargetName="CellBorder" Property="Opacity" Value="0.45"/>
                                                                     </DataTrigger>
-                                                                    <!-- A day worth a closer look (§2.II). -->
+                                                                    <!-- A day worth a closer look. -->
                                                                     <DataTrigger Binding="{Binding NeedsAttention}" Value="True">
                                                                         <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource RedBgBrush}"/>
                                                                     </DataTrigger>
@@ -476,7 +475,7 @@
                                                                     <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                                         <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource SelectionBrush}"/>
                                                                     </DataTrigger>
-                                                                    <!-- TODAY is unmistakable (§2.g). -->
+                                                                    <!-- TODAY is unmistakable. -->
                                                                     <DataTrigger Binding="{Binding IsToday}" Value="True">
                                                                         <Setter TargetName="CellBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                                                         <Setter TargetName="CellBorder" Property="BorderThickness" Value="2"/>
@@ -560,10 +559,10 @@
                         <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddFinancialPatternClick"/>
                         <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditFinancialPatternClick"/>
                         <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteFinancialPatternClick"/>
-                        <!-- planning/14 item D-1: the lever that turns an
+                        <!-- The lever that turns an
                              automatically-filled jar into a savings plan the
                              user controls. Lives on the pattern, not in the
-                             create form (item D-3). -->
+                             create form. -->
                         <Button Content="Set Up Savings Plan..." Padding="12,5" Margin="20,0,0,0"
                                 Click="OnSetUpSavingsPlanClick"
                                 AutomationProperties.AutomationId="SetUpSavingsPlanButton"/>
@@ -626,7 +625,7 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- ACCOUNT / EXPENSE / EARMARK (planning/21 Philosophy 5/7): the
+            <!-- ACCOUNT / EXPENSE / EARMARK: the
                  permanent form tabs, one per list tab above (Accounts, Bills &
                  Paychecks, Allocations), in the same left-to-right order —
                  replacing the AccountWindow/CreateFinancialPatternWindow/

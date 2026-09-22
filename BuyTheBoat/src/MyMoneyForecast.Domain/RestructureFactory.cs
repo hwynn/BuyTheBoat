@@ -167,7 +167,7 @@ public static class RestructureFactory
         }
 
         // Any two plans whose active spans overlap means this is a genuinely
-        // concurrent set (F27), not a sequential chain — nothing here is
+        // concurrent set, not a sequential chain — nothing here is
         // "the" current one, so bail before picking anything.
         for (var i = 0; i < plans.Count; i++)
         {
@@ -183,12 +183,12 @@ public static class RestructureFactory
         return plans.OrderByDescending(plan => plan.DatePattern.ActiveStart).First();
     }
 
-    /// <summary>[CALC] Whether two EarMarkPatterns sharing one finance_id are genuinely concurrent (F27 — e.g. two household-partner earmark patterns both live at once) rather than sequential chain neighbors. The one shared definition of "overlap" for this whole file — FindCurrentPlan's own pairwise check above, extracted so FinancePatternSaveConfirmation.RunForPlan can rule out a concurrent plan before ever treating it as a predecessor/successor, instead of re-deriving the same test a second way.</summary>
+    /// <summary>[CALC] Whether two EarMarkPatterns sharing one finance_id are genuinely concurrent (e.g. two household-partner earmark patterns both live at once) rather than sequential chain neighbors. The one shared definition of "overlap" for this whole file — FindCurrentPlan's own pairwise check above, extracted so FinancePatternSaveConfirmation.RunForPlan can rule out a concurrent plan before ever treating it as a predecessor/successor, instead of re-deriving the same test a second way.</summary>
     /// <returns>True when the two plans' own active spans (ActiveStart–Until) share any day.</returns>
     public static bool SpansOverlap(EarMarkPattern a, EarMarkPattern b) =>
         a.DatePattern.ActiveSpansOverlap(b.DatePattern);
 
-    /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27) for a plan's own Until moving, against every other EarMarkPattern sharing its finance_id — the neighbor a growing Until reaches into shrinks or expands to match; one reached far enough to be fully overtaken is absorbed instead, and the walk keeps going in case it reaches even further.</summary>
+    /// <summary>[CALC] Resolves "stay linked in the chain" for a plan's own Until moving, against every other EarMarkPattern sharing its finance_id — the neighbor a growing Until reaches into shrinks or expands to match; one reached far enough to be fully overtaken is absorbed instead, and the walk keeps going in case it reaches even further.</summary>
     /// <param name="current">The plan being saved, with its own Until about to change.</param>
     /// <param name="otherPlans">Every other EarMarkPattern sharing the same finance_id.</param>
     /// <param name="goal">The goal this Savings Plan funds.</param>
@@ -256,7 +256,7 @@ public static class RestructureFactory
         return new ChainBoundaryResult { Current = updatedCurrent, Absorbed = absorbed, AdjustedNeighbor = neighbor };
     }
 
-    /// <summary>[CALC] Resolves "stay linked in the chain" (planning/27) for a plan's own Start moving, against every other EarMarkPattern sharing its finance_id — the mirror of ExtendUntil, walking backward through earlier plans instead of forward through later ones.</summary>
+    /// <summary>[CALC] Resolves "stay linked in the chain" for a plan's own Start moving, against every other EarMarkPattern sharing its finance_id — the mirror of ExtendUntil, walking backward through earlier plans instead of forward through later ones.</summary>
     /// <param name="current">The plan being saved, with its own Start about to change.</param>
     /// <param name="otherPlans">Every other EarMarkPattern sharing the same finance_id.</param>
     /// <param name="goal">The goal this Savings Plan funds.</param>
@@ -275,7 +275,7 @@ public static class RestructureFactory
         // is still a real absorb candidate (the loop's own newStart <=
         // plan.DatePattern.ActiveStart check below would say so), so filtering it
         // out here with a strict < silently dropped that exact-boundary
-        // case entirely. Found 2026-08-17 while building Phase 1's own
+        // case entirely. Found while building the FinancialPattern-level
         // mirror of this method and hitting the case directly; fixed here
         // too since the same bug was already latent in this, the original.
         var earlierPlans = otherPlans
@@ -324,7 +324,7 @@ public static class RestructureFactory
         return new ChainBoundaryResult { Current = updatedCurrent, Absorbed = absorbed, AdjustedNeighbor = neighbor };
     }
 
-    /// <summary>[CALC] Applies a plan's own newly-edited Amount and recurrence shape to every later plan sharing the same finance_id — planning/27's "cascade forward" choice for an EarMarkPattern chain, the default when Amount or shape changes. Each later plan keeps its own Start/Until/ActiveFrom/ExcludedDates/StartingAllocation; only Amount and shape (Frequency/Interval/ByDay/ByMonthDay) change.</summary>
+    /// <summary>[CALC] Applies a plan's own newly-edited Amount and recurrence shape to every later plan sharing the same finance_id — the "cascade forward" choice for an EarMarkPattern chain, the default when Amount or shape changes. Each later plan keeps its own Start/Until/ActiveFrom/ExcludedDates/StartingAllocation; only Amount and shape (Frequency/Interval/ByDay/ByMonthDay) change.</summary>
     /// <param name="newShape">The edited plan's own new recurrence shape — only Frequency/Interval/ByDay/ByMonthDay are read from it, not its Start/Until.</param>
     /// <param name="newAmount">The edited plan's own new Amount.</param>
     /// <param name="laterPlans">Every later plan in the same chain (Start after the plan being edited).</param>
@@ -346,7 +346,7 @@ public static class RestructureFactory
 
 // What ExtendUntil/ExtendStart need the caller to actually carry out — the
 // plan being saved's own updated shape, plus whatever the rest of the chain
-// needs (planning/27's "stay linked in the chain" question). Deliberately
+// needs (the "stay linked in the chain" question). Deliberately
 // silent on ManualEarmarks: these are pure domain functions with no
 // repository access, same reasoning as PatternTruncation/BreakOffRequest's
 // own carried-balance fields — a caller with real data decides what (if

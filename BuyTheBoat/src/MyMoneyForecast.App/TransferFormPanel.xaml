@@ -41,7 +41,7 @@
                     <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
                                Text="Moves money out of one of your accounts and into another on this schedule. For a one-time transfer, set &quot;Ends: After this many occurrences&quot; to 1 in the schedule below."/>
 
-                    <!-- "Keeps going" for a transfer (planning/13 B12): sets AutoRenew
+                    <!-- "Keeps going" for a transfer: sets AutoRenew
                          on both legs and an end date of horizon+cycle, and the
                          forecast-time pass extends it as the horizon advances. When
                          checked, the schedule's own "Ends" controls step aside (the
@@ -59,11 +59,10 @@
 
             <!-- Helper region: a plain live confirmation of the move (accounts +
                  amount, whose direction is easy to reverse by accident). Sits
-                 BELOW the characterization block per planning/21's one settled
+                 BELOW the characterization block, the one settled
                  layout constraint. Deliberately minimal for this first pass —
                  the fuller per-region helper inventory for Transfer was never
-                 designed with the author (planning/21 stopped at "Transfer not
-                 started"), so this stays a single honest line, not invented
+                 designed with the author, so this stays a single honest line, not invented
                  plan-health content the way the Earmark form has. -->
             <GroupBox Header="Summary" Padding="10" Margin="0,10,0,0" HorizontalAlignment="Left" Width="420">
                 <TextBlock x:Name="SummaryText" TextWrapping="Wrap"/>

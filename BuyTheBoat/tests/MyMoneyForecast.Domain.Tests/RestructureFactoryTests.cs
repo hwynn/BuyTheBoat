@@ -71,7 +71,7 @@ public class RestructureFactoryTests
     public void The_successor_shares_the_predecessors_finance_id_not_a_new_one()
     {
         // Unlike BreakOffFactory (a new finance_id for a changed bill/goal),
-        // item 8 never touches the goal — F27's whole point is that one
+        // this never touches the goal — the whole point is that one
         // finance_id can now have more than one EarMarkPattern.
         var goal = Goal(-5_000m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
         var predecessor = Plan(-100m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1), goal);
@@ -93,7 +93,7 @@ public class RestructureFactoryTests
     [Fact]
     public void The_successor_has_no_starting_allocation()
     {
-        // F28: no jar hand-off is needed at all — the same finance_id means
+        // No jar hand-off is needed at all — the same finance_id means
         // the same jar throughout, so its balance carries across the cut via
         // the ordinary cascade, with nothing to seed.
         var goal = Goal(-5_000m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
@@ -164,7 +164,7 @@ public class RestructureFactoryTests
         }));
     }
 
-    // planning/17, item 22 (F31): "stop contributing, keep the jar alive" is
+    // "stop contributing, keep the jar alive" is
     // Restructure targeting a zero-rate successor, not a separate mechanism.
     [Fact]
     public void StopContributing_zeroes_the_successors_amount()
@@ -256,9 +256,9 @@ public class RestructureFactoryTests
         }));
     }
 
-    // planning/24's own Item-G gap, fixed 2026-08-16: FindCurrentPlan is what
+    // FindCurrentPlan is what
     // lets DeterminePlanShapeCandidatesIfApplicable tell a genuine sequential
-    // chain apart from F27's concurrent earmark pattern shape.
+    // chain apart from the concurrent earmark pattern shape.
     [Fact]
     public void FindCurrentPlan_picks_the_plan_with_the_latest_start_among_a_sequential_chain()
     {
@@ -272,7 +272,7 @@ public class RestructureFactoryTests
     [Fact]
     public void FindCurrentPlan_returns_null_when_two_plans_own_active_spans_overlap()
     {
-        // F27's own concurrent earmark pattern shape (e.g. two household partners) —
+        // The concurrent earmark pattern shape (e.g. two household partners) —
         // both plans genuinely active at once, so there's no single
         // "current" one to pick.
         var goal = Goal(-5_000m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1));
@@ -298,7 +298,7 @@ public class RestructureFactoryTests
     }
 
     // SpansOverlap itself — extracted from FindCurrentPlan's own pairwise
-    // check above (2026-08-16) so FinancePatternSaveConfirmation.RunForPlan
+    // check above, so FinancePatternSaveConfirmation.RunForPlan
     // can rule out a concurrent plan before ever treating it as a chain
     // predecessor/successor, found necessary while grounding the UI-wiring
     // work: without it, a concurrent plan with a later Start than the one
@@ -345,7 +345,7 @@ public class RestructureFactoryTests
         RestructureFactory.SpansOverlap(partnerOne, partnerTwo).ShouldBeTrue();
     }
 
-    // planning/27's own "stay linked in the chain, or let it break" question,
+    // The "stay linked in the chain, or let it break" question,
     // resolved for a same-finance_id EarMarkPattern chain. Goal spans the
     // whole of 2025 so there's room for several segments.
     private static readonly FinancialPattern ChainGoal =
@@ -494,11 +494,11 @@ public class RestructureFactoryTests
     // Deliberately matches how the real caller (FinancePatternSaveConfirmation)
     // actually invokes this — current's own Start is ALREADY newStart (every
     // real call passes current.DatePattern.ActiveStart as newStart directly), not
-    // some other value like the test above uses. Found 2026-08-17: with
-    // current.Start already equal to newStart, a predecessor landing on that
-    // EXACT same date used to fail the (buggy) `plan.Start < current.Start`
-    // filter and get silently skipped instead of absorbed, even though the
-    // loop's own `newStart <= plan.Start` check would have said to absorb it.
+    // some other value like the test above uses. With
+    // current.Start equal to newStart, a predecessor landing on that
+    // EXACT same date must still be absorbed: a strict `plan.Start < current.Start`
+    // filter would skip it even though the loop's own `newStart <= plan.Start`
+    // check says to absorb it.
     [Fact]
     public void ExtendStart_absorbs_a_predecessor_landing_exactly_on_the_new_start_when_current_already_reflects_it()
     {
@@ -521,7 +521,7 @@ public class RestructureFactoryTests
             RestructureFactory.ExtendStart(current, [], ChainGoal, new DateOnly(2025, 7, 1)));
     }
 
-    // planning/27's own "cascade forward" default for an Amount/shape change
+    // The "cascade forward" default for an Amount/shape change
     // on an EarMarkPattern chain.
     [Fact]
     public void CascadeForward_applies_the_new_amount_and_shape_to_a_later_plan_keeping_its_own_dates()

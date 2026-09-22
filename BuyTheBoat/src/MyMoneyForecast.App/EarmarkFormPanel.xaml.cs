@@ -537,7 +537,7 @@ public partial class EarmarkFormPanel : UserControl
     private void OnAdvancedModeChanged(object sender, RoutedEventArgs e) =>
         RuleEditor.SetAdvancedMode(AdvancedModeCheckBox.IsChecked == true);
 
-    /// <summary>[STEP] Unwired from any control for now — the "+ Add manual earmark on this goal" button this used to back is removed from the layout until it has a settled home. Left in place, untouched, as the machinery for whenever it gets one.</summary>
+    /// <summary>[STEP] Unwired from any control for now — the "+ Add manual earmark on this goal" button it would back isn't in the layout until it has a settled home. Kept as the machinery for whenever it gets one.</summary>
     private void OnTransformToOneOffClick(object sender, RoutedEventArgs e)
     {
         if (_selectedGoal is not { } goal || !_patternsByFinanceId.ContainsKey(goal.FinanceId))
@@ -1220,21 +1220,16 @@ public partial class EarmarkFormPanel : UserControl
         return pattern.StartingAllocation + (manualAtStart?.Amount ?? 0m);
     }
 
-    /// <summary>[UI] Rebuilds the Summary region (narrative sentence, chart, and the two aside lines) from PlanHealthState/FundJar data, in both Savings-plan and One-off mode. Both modes fold whatever's currently typed into a throwaway what-if forecast and read the goal's real health + jar off THAT, so the aside text updates live — not just the chart (fixed 2026-09-05: it used to read the saved PlanHealthState once one existed, so a mandatory bill's auto-earmark reading sat frozen while its plan was being designed). Falls back to the saved reading, then pure pattern math, when no what-if forecast source is wired.</summary>
+    /// <summary>[UI] Rebuilds the Summary region (narrative sentence, chart, and the two aside lines) from PlanHealthState/FundJar data, in both Savings-plan and One-off mode. Both modes fold whatever's currently typed into a throwaway what-if forecast and read the goal's real health + jar off THAT, so the aside text updates live — not just the chart. Falls back to the saved reading, then pure pattern math, when no what-if forecast source is wired.</summary>
     private void UpdateSummary()
     {
-        // Suspect (1) FIXED 2026-08-27 (reported 2026-08-20): landing on this form
-        // right after saving a bill — especially an earlier-segment edit that
-        // cascades forward — used to show a stale Summary, because _forecast was
-        // the pre-save snapshot the confirmation ran against, never re-pulled after
-        // the save that navigated here. MainWindow's own NavigateToEarmarkForm now
+        // _forecast is the post-save world: MainWindow's NavigateToEarmarkForm
         // recomputes the forecast (RefreshForecast) before handing it in via
-        // SetContext, so this reads the post-save world.
-        // Suspect (2) RESOLVED: the chart's forward line now always reflects the
-        // typed-but-unsaved fields. On this (earmark) form it's the live
-        // proposedTrajectory, and the frozen "committed plan" milestone line that
-        // used to sit stale beside it was removed. The finance-pattern form no
-        // longer draws a milestone line at all, since a finance-pattern edit only
+        // SetContext, so landing here right after a save — even an earlier-segment
+        // edit that cascades forward — reads current numbers, not a pre-save
+        // snapshot. The chart's forward line reflects the typed-but-unsaved fields
+        // (the live proposedTrajectory here on the earmark form); the finance-pattern
+        // form draws no milestone line at all, since a finance-pattern edit only
         // changes the plan implicitly, behind the save-confirmation popup.
         UpdateStartingPointRegion();
 
@@ -1444,8 +1439,8 @@ public partial class EarmarkFormPanel : UserControl
             // read the goal's REAL health + jar off it, so the aside's TEXT updates
             // live as you type — not just the chart. This matters most for a
             // MANDATORY bill (a mortgage, say): it already carries an auto-earmark
-            // health, so without this the aside sat frozen on that reading while you
-            // designed the plan (the bug reported 2026-09-05). Falls back to the
+            // health, so the aside has to track the what-if reading rather than
+            // sitting frozen on that while you design the plan. Falls back to the
             // saved health, then to pure pattern math, when no what-if source is
             // wired. (The starting-point warning runs its own copy of this same
             // forecast; sharing one pass between them is a possible later tidy-up.)
@@ -1481,8 +1476,8 @@ public partial class EarmarkFormPanel : UserControl
                     ?? PlanHealthMessages.SummaryRecurringPhrase(liveHealth);
                 // The first-payment warning is NOT shown in the aside in Savings-plan
                 // mode: the STARTING POINT column's own live warning
-                // (StartingShortfallWarningText) is its sole home here (author,
-                // 2026-09-05), so leaving firstPaymentLine null avoids saying the same
+                // (StartingShortfallWarningText) is its sole home here,
+                // so leaving firstPaymentLine null avoids saying the same
                 // sentence twice. One-off mode, where that column is hidden, still
                 // routes it into the aside below. The chart highlight stays — it ties
                 // to the column warning by its shared amber color.
@@ -1513,7 +1508,7 @@ public partial class EarmarkFormPanel : UserControl
             }
         }
 
-        // TODO(2026-08-13): the narrative above, and the chart's own
+        // TODO: the narrative above, and the chart's own
         // "actual"/"proposed" lines, only ever describe THIS ONE
         // EarMarkPattern (plan) — but the aside (jarStateLine/
         // firstPaymentLine) and the health figures behind it
@@ -1531,7 +1526,7 @@ public partial class EarmarkFormPanel : UserControl
         // total what it's doing.
         var hasConcurrentPlan = patternsForMilestone.Any(other =>
             other.DatePattern.ActiveStart != plan.DatePattern.ActiveStart && // a different row, not this same plan read back
-            // Overlaps this plan's own active span — F27's "concurrent
+            // Overlaps this plan's own active span — the "concurrent
             // earmark pattern" shape, as opposed to a break-off/restructure chain's
             // sequential segments, which never overlap by construction (a
             // predecessor's own Until always ends the day before its

@@ -140,7 +140,7 @@ public class OneTimeGoalFactoryTests
         // The goal's only occurrence is its due date, but the savings plan starts
         // earlier — ActiveFrom stretches the goal's active span back to the
         // save-start day so the plan (and jar) legitimately live before the due
-        // date (planning/15). The due-date occurrence itself is unchanged.
+        // date. The due-date occurrence itself is unchanged.
         var result = OneTimeGoalFactory.Create(new OneTimeGoalRequest
         {
             FinanceId = 1,

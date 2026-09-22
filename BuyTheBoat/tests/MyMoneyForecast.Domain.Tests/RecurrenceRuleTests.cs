@@ -330,8 +330,7 @@ public class RecurrenceRuleTests
         rule.WithActiveFrom(new DateOnly(2025, 1, 1)).ExcludedDates.ShouldBe(rule.ExcludedDates);
     }
 
-    // Found 2026-08-17 while fixing BuildSuccessorSchedule's own phase-drift
-    // bug: an explicit ByDay does NOT, by itself, protect a Weekly rule's
+    // An explicit ByDay does NOT, by itself, protect a Weekly rule's
     // own Interval > 1 cadence from drifting when Start is pinned to a date
     // that isn't itself part of the original series. RFC 5545's "every Nth
     // week" is counted from DTSTART's own calendar week — pinning Start at
@@ -378,7 +377,7 @@ public class RecurrenceRuleTests
     [Fact]
     public void ImmediatelyPrecedes_uses_the_active_span_start_not_the_rrule_anchor()
     {
-        // The bug FindSuccessor/FindPredecessor used to carry: contiguity must
+        // Contiguity must
         // key on where the pattern's span STARTS (ActiveStart), not on its
         // rrule anchor (DtStart), which a lead-in — or a phase-preserved
         // relink — can push later than the span's real start.

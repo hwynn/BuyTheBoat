@@ -5,7 +5,7 @@ using Shouldly;
 
 namespace MyMoneyForecast.App.Tests;
 
-// planning/27's own "fourth relationship" — does an Amount/shape edit on the
+// The "fourth relationship" — does an Amount/shape edit on the
 // LAST EarMarkPattern in one finance_id's own chain reach across a
 // FinancialPattern-level break-off into the successor segment's own,
 // different-finance_id plan. Distinct scenario from
@@ -129,7 +129,7 @@ public class EarmarkPatternSaveConfirmationCrossBoundaryTests : IDisposable
         var editedPlan = Plan(original, -120m, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30));
         var confirmation = Confirmation(editedPlan, current.DatePattern.ActiveStart, original);
         // No ConfirmImplicitChanges wired up — proves the DEFAULT (cascade
-        // forward) is what runs, matching Phase 2's own same-chain tests.
+        // forward) is what runs, matching the same-chain tests.
 
         confirmation.Run().ShouldBeTrue();
 

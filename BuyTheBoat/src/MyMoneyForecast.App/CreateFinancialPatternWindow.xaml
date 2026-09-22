@@ -48,11 +48,11 @@
                     <StackPanel/>
                 </UniformGrid>
 
-                <!-- planning/14 item B-3: two named options rather than a
+                <!-- Two named options rather than a
                      checkbox, following the same reasoning that made
                      Expense/Income a radio pair — a checkbox's meaning depends
                      on reading its caption, two named options don't. Hidden for
-                     income (B-4): money coming in is never something you skip
+                     income: money coming in is never something you skip
                      paying. -->
                 <StackPanel x:Name="MandatoryPanel" Margin="0,10,0,0">
                     <TextBlock Text="If money got tight, could you skip this?"/>
@@ -67,11 +67,11 @@
             </StackPanel>
         </GroupBox>
 
-        <!-- planning/15 item D: the simple bill form asks "when does this stop?"
+        <!-- The simple bill form asks "when does this stop?"
              and supplies the end date to the schedule editor itself, so the
-             editor's own Ends controls step aside (ruling D-1). Only two of the
+             editor's own Ends controls step aside. Only two of the
              three answers are built here — the "it just keeps going" answer
-             waits on the deferred indeterminate-length design (planning/15). -->
+             waits on the deferred indeterminate-length design. -->
         <GroupBox x:Name="StopQuestionBox" DockPanel.Dock="Top" Header="When does this stop?" Padding="10" Margin="0,0,0,10" Visibility="Collapsed">
             <StackPanel>
                 <StackPanel Orientation="Horizontal">

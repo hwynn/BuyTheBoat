@@ -3,13 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:MyMoneyForecast.App">
     <DockPanel Margin="8">
-        <!-- Bottom bar: the two settled save buttons (planning/21 "The save
-             controls"). Both persist identically; only where they navigate to
+        <!-- Bottom bar: the two settled save buttons. Both persist
+             identically; only where they navigate to
              afterward differs. StatusText added 2026-08-07 (author's own
-             go-ahead) — planning/21's own "Four plan-health states, SETTLED
-             2026-08-02" / "Labels, SETTLED 2026-08-05": the linked plan's
-             own health, docked left per the mockup's own left-status /
-             right-actions layout (settled-designs.html's "Expense · 1"). -->
+             go-ahead) — the settled four plan-health states and their
+             labels: the linked plan's
+             own health, docked left per the settled left-status /
+             right-actions layout. -->
         <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="True">
             <TextBlock x:Name="StatusText" DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold"
                        Foreground="#FF9A4F08" Background="#FFFBF0E2" Padding="6,4" Visibility="Collapsed"/>
@@ -30,8 +30,8 @@
              unreachable once the tab ran out of height. -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
-                <!-- REGION 1 — the instance-information-block (planning/21 "Form
-                     layout, top to bottom" #1). Topmost, always. Which instance is
+                <!-- REGION 1 — the instance-information-block.
+                     Topmost, always. Which instance is
                      loaded, whether it has unsaved edits, and the controls to
                      discard those edits or start a blank one. No delete button here
                      — deletion stays on the Expenses list tab, next to the row. -->
@@ -40,8 +40,8 @@
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock x:Name="ModifiedIndicatorText" Text="● Unsaved changes" Foreground="DarkOrange"
                                        FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0" Visibility="Collapsed"/>
-                            <!-- "Discard changes" wording is explicitly OPEN in planning/21
-                                 ("Exact wording: OPEN") — provisional, easy to retitle later. -->
+                            <!-- "Discard changes" wording is explicitly left
+                                 open — provisional, easy to retitle later. -->
                             <Button x:Name="DiscardChangesButton" Content="Discard changes" Padding="8,3" Margin="0,0,8,0" Click="OnDiscardChangesClick"/>
                             <Button Content="Clear form" Padding="8,3" Click="OnClearClick"/>
                         </StackPanel>
@@ -49,14 +49,14 @@
                             <TextBlock Text="Editing" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <!-- The button opens FinancialPatternPickerWindow (the
                                  author's own call, 2026-08-06) — not a ComboBox, and
-                                 not the fancier searchable control planning/21 leaves
+                                 not the fancier searchable control left
                                  undecided; this is the one settled shape, reused the
                                  same way in every form's instance-info-block except
                                  Account's. Setting SelectedInstanceText directly (not
                                  through this button) is also how a MainWindow
                                  shortcut ("Edit Selected...", "Create Bill...") lands
                                  on this form — programmatically, the popup never
-                                 visibly opens on its own (Philosophy 6). -->
+                                 visibly opens on its own. -->
                             <TextBlock x:Name="SelectedInstanceText" Text="— New Expense —" VerticalAlignment="Center"
                                        Margin="0,0,8,0" FontWeight="SemiBold" AutomationProperties.AutomationId="SelectedInstanceText"/>
                             <Button Content="Change..." Padding="8,3" Click="OnChangeInstanceClick"
@@ -65,13 +65,12 @@
                     </DockPanel>
                 </Border>
 
-                <!-- REGION 2 — the characterization-field-block (planning/21 "Form
-                     layout, top to bottom" #2; Expense Step 1, SETTLED 2026-07-30).
+                <!-- REGION 2 — the characterization-field-block.
                      What KIND of thing this is, plus a computed, always-present label. -->
                 <GroupBox Header="What is this?" Padding="10" Margin="0,0,0,10">
                     <DockPanel>
                         <!-- Advanced mode (the author's own call, 2026-08-06;
-                             planning/21's own Advanced-mode section only ever
+                             the Advanced-mode design only ever
                              covered Expense, with its content itself partly
                              still undecided — see this control's own doc
                              comment in code-behind for exactly what's wired
@@ -102,8 +101,8 @@
                 </GroupBox>
 
                 <!-- REGION 3 — everything else. Not yet organized into named
-                     sub-blocks per planning/21 ("Everything else" is literally its
-                     own heading with no further breakdown), so this stays one
+                     sub-blocks (there's no settled further breakdown), so
+                     this stays one
                      GroupBox of the remaining consistent fields. -->
                 <GroupBox Header="Details" Padding="10" Margin="0,0,0,10">
                     <StackPanel>
@@ -134,7 +133,7 @@
                             <StackPanel/>
                         </UniformGrid>
 
-                        <!-- planning/14 item B-3/B-4: hidden for income — money coming
+                        <!-- Hidden for income — money coming
                              in is never something you skip paying. -->
                         <StackPanel x:Name="MandatoryPanel" Margin="0,10,0,0">
                             <TextBlock Text="If money got tight, could you skip this?"/>
@@ -149,7 +148,7 @@
                     </StackPanel>
                 </GroupBox>
 
-                <!-- One-time (planning/21 Expense Step 2, "RESOLVED 2026-08-02"): a
+                <!-- One-time: a
                      single plain date, not the full recurrence machinery. Internally
                      still becomes a real one-occurrence RecurrenceRule at save time. -->
                 <StackPanel x:Name="DueDatePanel" Margin="0,0,0,10">
@@ -158,15 +157,15 @@
                 </StackPanel>
 
                 <!-- Repeating: "when does this stop?" now shows for every repeating
-                     Expense (planning/21 Step 2's Stops… trigger table), not only the
+                     Expense, not only the
                      old "Create Bill" shortcut — supplies the schedule editor's end
-                     date itself, so its own raw Ends controls step aside (ruling D-1). -->
+                     date itself, so its own raw Ends controls step aside. -->
                 <GroupBox x:Name="StopQuestionBox" Header="When does this stop?" Padding="10" Margin="0,0,0,10">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <RadioButton x:Name="StopOnDateRadio" Content="On a date I know" GroupName="Stop" IsChecked="True" Checked="OnStopModeChanged" Margin="0,0,18,0"/>
                             <RadioButton x:Name="StopPaidOffRadio" Content="When I've paid it off (a loan)" GroupName="Stop" Checked="OnStopModeChanged" Margin="0,0,18,0"/>
-                            <!-- "Keeps going" (B12 / planning/15): sets an invisible
+                            <!-- "Keeps going": sets an invisible
                                  AutoRenew flag with nothing to configure. Its end date
                                  is pushed out to the forecast horizon plus a cycle, and
                                  renewed as the horizon advances (MainWindow.

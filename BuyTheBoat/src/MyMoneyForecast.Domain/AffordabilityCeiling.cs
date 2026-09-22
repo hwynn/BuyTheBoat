@@ -13,8 +13,8 @@ public enum ChangeKind
 
 // The most money a plan or earmark for a given bill/goal may set aside without over-committing — one
 // ceiling a suggestion or implicit change can size itself against, composed from the Frugality-tiered
-// free-funds methods on AccountTransactionPage. It applies the settled tier rules (redesign design
-// discussion, 2026-09-01): the tier(s), window(s), and the short-/long-term split are chosen from whether
+// free-funds methods on AccountTransactionPage. It applies the settled tier rules: the tier(s),
+// window(s), and the short-/long-term split are chosen from whether
 // the expense is mandatory, whether its whole savings-plan chain reaches past the split point, and whether
 // this is a bold suggestion or a cautious implicit change.
 public static class AffordabilityCeiling

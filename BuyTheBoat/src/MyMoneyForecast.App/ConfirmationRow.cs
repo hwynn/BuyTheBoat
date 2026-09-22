@@ -52,7 +52,7 @@ public sealed record ChoiceOption(string Label, string Detail, string Consequenc
     public IReadOnlyList<ConfirmationRow> Children { get; init; } = [];
 }
 
-// Choose one of several labelled candidate plan shapes (planning/25 Item G) —
+// Choose one of several labelled candidate plan shapes —
 // each candidate carries its own preview, so this is its own kind rather than
 // a plain ChoiceRow. DefaultIndex is the recommended candidate.
 public sealed record CandidatePickerRow(
@@ -81,7 +81,7 @@ public enum OptionLayout
 public static class ConfirmationRowIds
 {
     public const string WarnAboutBreakOff = "warn-about-break-off";
-    // The break-off successor's savings-plan shape (planning/25 Item G / Q2):
+    // The break-off successor's savings-plan shape:
     // Recommended vs keep-the-same-schedule vs keep-the-same-amount. Its selection
     // comes back as ConfirmationOutcome.ChosenPlanShape (the picked candidate's own
     // plan), not as an option index like the ChoiceRows — see CandidatePickerRow.
@@ -93,7 +93,7 @@ public static class ConfirmationRowIds
     public const string ConsolidationForced = "consolidation-forced";
     public const string SourceChange = "source-change";
     // Accept/reject offer to pre-fill the single plan's form with a correction
-    // that meets the edited goal (planning/25's goal-health suggestion picker).
+    // that meets the edited goal (the goal-health suggestion picker).
     public const string GoalHealthSuggestion = "goal-health-suggestion";
     // Nested under the overfunded goal-health "keep saving at this rate" option:
     // skip the next contribution, skip a stretch, or don't skip — using up the

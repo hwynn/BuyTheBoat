@@ -4,10 +4,10 @@ using Shouldly;
 namespace MyMoneyForecast.Domain.Tests;
 
 // Proof-faithful tests for the pure deallocation math (Step 1 of
-// redesign/MyMoneyForecast/planning/06-deallocation-math.md).
+// the deallocation algorithm).
 //
 // Three layers of evidence, strongest last:
-//   1. The two worked examples from 06-deallocation-math.md, asserted to the
+//   1. The two worked examples from the proof, asserted to the
 //      cent (exact per-jar p/b and resulting balances).
 //   2. The three end-goal invariants (Goal 1, Goal 2.1/2.2, Goal 3.x) applied
 //      to every scenario as a reusable oracle.
@@ -17,7 +17,7 @@ namespace MyMoneyForecast.Domain.Tests;
 //      positive paired transactions, and mixed-sign scheduled earmarks.
 public class DeallocationCalculatorTests
 {
-    // ===== Worked example 1 — simple, no paired transactions (06) =====
+    // ===== Worked example 1 — simple, no paired transactions =====
     // c = 200; jars f = [50, 0, 120, 10]; free = 20; one unpaired au = -100.
     // 80 must come out of jars: jar 1 gives 50, jar 3 gives the last 30.
     [Fact]
@@ -55,7 +55,7 @@ public class DeallocationCalculatorTests
         AssertProofInvariants(200m, jars, [], -100m, result);
     }
 
-    // ===== Worked example 2 — a paired transaction (06) =====
+    // ===== Worked example 2 — a paired transaction =====
     // c = 700; jars f = [50, 0, 120, 500]; free = 30; unpaired au = -100;
     // paired on jar 4 (the boat) ap4 = -550 — pricier than the 500 saved.
     [Fact]
@@ -92,7 +92,7 @@ public class DeallocationCalculatorTests
     }
 
     // ===== The Q1 resolution example — cancelling an unaffordable scheduled
-    // earmark on a jar past the point the need is met (06, Intention 2) =====
+    // earmark on a jar past the point the need is met (Intention 2) =====
     // c = 100, jars f = [30, 40]; a scheduled +20 on jar 2; unpaired -60.
     [Fact]
     public void Step_B_iterates_all_jars_cancelling_scheduled_earmarks_it_can_no_longer_afford()
@@ -119,7 +119,7 @@ public class DeallocationCalculatorTests
         AssertProofInvariants(100m, jars, [], -60m, result);
     }
 
-    // ===== Debt case (06, Q2 / Goal 2.2) =====
+    // ===== Debt case (Q2 / Goal 2.2) =====
     // Spending exceeds current funds: every jar drains to 0 and free balance
     // goes negative by exactly Nbn+1 = c + Σap + au.
     [Fact]
@@ -213,7 +213,7 @@ public class DeallocationCalculatorTests
         AssertProofInvariants(v.C, jars, paired, v.Au, result);
     }
 
-    // ---- the three end-goal invariants from 06, as a reusable oracle ----
+    // ---- the three end-goal invariants from the proof, as a reusable oracle ----
     private static void AssertProofInvariants(
         decimal c,
         IReadOnlyList<DeallocationJar> jars,
@@ -269,7 +269,7 @@ public class DeallocationCalculatorTests
     }
 
     // Auto-extracted from DeallocationProof.ods sheet DeallTest_2 (columns where
-    // planning/14 item B: skippability outranks the priority number outright.
+    // Skippability outranks the priority number outright.
     // Everything the user said they could skip is emptied before anything they
     // said they have to pay is touched.
     [Fact]

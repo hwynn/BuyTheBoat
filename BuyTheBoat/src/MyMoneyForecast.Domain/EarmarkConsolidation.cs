@@ -3,13 +3,13 @@ namespace MyMoneyForecast.Domain;
 // Folds several EarMarkPatterns sharing one finance_id into ONE, IN PLACE —
 // the multi-plan consolidation the "combine them" paths use (a break-off's
 // combine choice, and a cross-boundary schedule change) to collapse several
-// plans without creating a new one to collapse them into (planning/25, Item
-// F's own "in place" case). There is no new finance_id and no cut date; the
+// plans without creating a new one to collapse them into (the "in place"
+// consolidation case). There is no new finance_id and no cut date; the
 // consolidated plan spans from the earliest surviving plan's own start
 // through the goal's own end.
 //
-// The total the one new plan needs to contribute, author-derived
-// (2026-08-13): call the amount already sitting in the jar before the
+// The total the one new plan needs to contribute, author-derived:
+// call the amount already sitting in the jar before the
 // earliest surviving plan's own start A, the total the goal will consume
 // between start and end B, and the target balance right after the last of
 // those releases washes out C. Conservation gives contributions = B + C - A.
@@ -33,14 +33,12 @@ namespace MyMoneyForecast.Domain;
 // itself, not just into sizing its (smaller) Amount — otherwise that
 // already-banked money stops being counted anywhere the moment the old
 // plans' rows are deleted, leaving GoalShortfall short by exactly that much
-// even though the money never actually went anywhere (found 2026-08-14, via
-// a save-then-rebuild-the-forecast test in FinancePatternSaveConfirmationTests).
+// even though the money never actually went anywhere.
 //
-// A also gained a glut term, 2026-08-15 ("the glut
-// case"): A as originally derived only ever covered money OUTSIDE the
-// schedule being replaced (StartingAllocation + manual earmarks) — correct
-// for its own "no double-count against the contributions being replaced"
-// reasoning, but blind to a real risk that reasoning didn't anticipate. If a
+// A also includes a glut term ("the glut
+// case"): besides money OUTSIDE the schedule being replaced
+// (StartingAllocation + manual earmarks, which avoid double-counting the
+// contributions being replaced), there's a further case. If a
 // surviving plan has been over-contributing (a genuine, deliberate glut —
 // FundJar.HasGlut), that surplus is REAL money sitting in the jar TODAY,
 // beyond what the plan's own "on pace" trajectory (MilestoneAmount) would
@@ -118,12 +116,9 @@ public static class EarmarkConsolidation
         }
 
         // Clamped forward to the goal's own ActiveStart when it lands
-        // later, 2026-08-17 — found while widening ConsolidationNeeded to
-        // also force this mechanism for a start_date change, not just a
-        // recurrence-shape one: this method was only ever exercised
-        // against a goal whose own Start never moved, so the consolidated
+        // later: when a start_date change forces consolidation, the consolidated
         // plan's own Start (the earliest surviving plan's own, unclamped)
-        // could land BEFORE the goal's newly-moved-forward one, which
+        // could land BEFORE the goal's moved-forward one, which
         // EarMarkPattern.Create's own validation rejects outright. Safe to
         // clamp with no effect on the money math: GetOccurrences already
         // self-clamps to the goal's own real Start regardless of how early
@@ -189,17 +184,15 @@ public static class EarmarkConsolidation
                 // old plans' rows are gone, and a fresh plan with
                 // StartingAllocation left at 0 doesn't remember they ever
                 // held it — leaving GoalShortfall short by exactly this much
-                // even though the money is still real. Found 2026-08-14 via
-                // FinancePatternSaveConfirmationTests' own
-                // save-then-rebuild-the-forecast shortfall check.
+                // even though the money is still real.
                 //
-                // GlutSurplus carries forward the SAME way, added 2026-08-15,
+                // GlutSurplus carries forward the SAME way,
                 // for the identical reason — it was only just discounted out
                 // of `total` above, so it has to land somewhere the rebuilt
                 // forecast will still see it, or it's erased the moment the
                 // old plans' rows are gone, exactly like StartingAllocation
-                // would have been. Confirmed by replaying the actual numbers,
-                // not just by the symmetry: seeding the new schedule with the
+                // would have been. The numbers work out:
+                // seeding the new schedule with the
                 // glut AND discounting its own ongoing rate by the same
                 // amount together spend the glut down evenly across the
                 // window's own remaining occurrences, landing at exactly 0

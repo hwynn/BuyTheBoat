@@ -5,13 +5,12 @@ using MyMoneyForecast.Domain;
 
 namespace MyMoneyForecast.App;
 
-// A minimal, real disambiguation popup — built 2026-08-17, replacing
-// FinancePatternSaveConfirmation.AskWhichEarmarkPatternToOpen's own
-// placeholder ("the first match," per that method's own former TODO).
+// A minimal disambiguation popup for
+// FinancePatternSaveConfirmation.AskWhichEarmarkPatternToOpen.
 // Mirrors FinancialPatternPickerWindow's own shape (a plain grid +
 // Select/Cancel) rather than inventing a new one — only fires when more
-// than one EarMarkPattern genuinely survives for one goal (F27's own
-// sequential-chain or concurrent earmark patterns shapes), the same rare case that
+// than one EarMarkPattern genuinely survives for one goal (a
+// sequential chain or concurrent earmark patterns), the same rare case that
 // window's own doc comment describes for FinancialPattern.
 public partial class EarmarkPatternPickerWindow : Window
 {

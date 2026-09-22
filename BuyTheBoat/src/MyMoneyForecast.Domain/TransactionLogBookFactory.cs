@@ -23,9 +23,7 @@ namespace MyMoneyForecast.Domain;
 // ActualTransactions, FullAmount/CurrentAmount stay null for every future
 // date exactly as documented, and all forecasting flows through
 // ExpectedAmount — this is faithful, not a divergence. The divergences that
-// DO exist are tagged ASSUMED-PAIRING / DIVERGENCE inline (grep them); the
-// actuals-relevant ones are summarized in
-// redesign/MyMoneyForecast/planning/12-actual-transactions-deferred-design.md.
+// DO exist are tagged ASSUMED-PAIRING / DIVERGENCE inline (grep them).
 public static class TransactionLogBookFactory
 {
     public const string PrimaryAccountName = "Primary";
@@ -36,7 +34,7 @@ public static class TransactionLogBookFactory
     {
         var accountInputs = ResolveAccountInputs(options);
 
-        // One page per account, each its own independent cascade (item 4-A).
+        // One page per account, each its own independent cascade.
         var pages = new Dictionary<string, AccountTransactionPage>();
         var accountForecasts = new List<AccountForecast>();
         DateOnly? firstNegative = null;
@@ -78,7 +76,7 @@ public static class TransactionLogBookFactory
             .Where(jar => jar.FinanceId is not null)
             .ToDictionary(jar => jar.FinanceId!.Value);
 
-        // planning/22 §3's two "not yet built" capabilities — the forward
+        // The two once "not yet built" capabilities — the forward
         // per-occurrence walk and account-level free funds on a future date —
         // both turn out to be the same missing thread: each account's own
         // BalanceRecord already carries both (a jar's day-by-day state, and
@@ -384,7 +382,7 @@ public static class TransactionLogBookFactory
         // Repeated earmark events from each EarMarkPattern's schedule. The
         // stored pattern amount is negative (its sign convention is "effect
         // on free balance"); an event's ExpectedAmount is positive-into-jar,
-        // so the sign flips here. planning/17, item 9 (F30): two patterns
+        // so the sign flips here. Two patterns
         // sharing a finance_id (concurrent earmark patterns) can land on the same
         // day, so this merges rather than always appending — the repeated
         // counterpart to MergeOrAppendIsolatedEarmark below.
@@ -480,8 +478,8 @@ public static class TransactionLogBookFactory
             // whole-span, never-resets metric) is what catches that; this is
             // the per-cycle pacing signal.
             //
-            // Fixed (2026-08-13): used to take a "lifetime contributed minus
-            // lifetime withdrawn" shortcut instead of an actual walk. That
+            // Walks "since the last release" rather than taking a "lifetime
+            // contributed minus lifetime withdrawn" shortcut. That
             // shortcut only equals "since the last release" when every prior
             // cycle's own contributions exactly matched what got released —
             // each such cycle then nets to zero and cancels out of the
@@ -1115,7 +1113,7 @@ public static class TransactionLogBookFactory
         IReadOnlyList<EarMarkPattern> plansForThisGoal,
         IEnumerable<DateOnly> shortReleaseDatesForThisGoal)
     {
-        // A shortage TODAY is always worth surfacing — none of §5's rules
+        // A shortage TODAY is always worth surfacing — none of the plan-health rules
         // soften "already behind right now," only the further-off/excess cases.
         if (currentShortfall > 0m)
         {

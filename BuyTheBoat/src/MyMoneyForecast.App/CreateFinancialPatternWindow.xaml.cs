@@ -181,7 +181,7 @@ public partial class CreateFinancialPatternWindow : Window
 
     // The "when does this stop?" question ------------------------------
 
-    /// <summary>[UI] Reveals the "when does this stop?" question and hands the schedule editor its end date, so the editor's own Ends controls step aside (ruling D-1).</summary>
+    /// <summary>[UI] Reveals the "when does this stop?" question and hands the schedule editor its end date, so the editor's own Ends controls step aside.</summary>
     private void EnableStopQuestion()
     {
         _simpleBillMode = true;

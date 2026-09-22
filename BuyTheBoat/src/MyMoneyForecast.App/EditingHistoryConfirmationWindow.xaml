@@ -22,9 +22,9 @@
              sections exist or what they mean. The wrapper
              (FinancePatternSaveConfirmation) decides the rows; this just draws
              them and reads the choices back. Deliberately still the minimal
-             plain-WPF look, not the styled mockup. The ScrollViewer, with the
+             plain-WPF look, not a styled version. The ScrollViewer, with the
              window's MaxHeight (set in the constructor), is the fallback behind
-             height-based pagination (Thread 4): a page that still overshoots — or
+             height-based pagination: a page that still overshoots — or
              a single row too tall to split — scrolls instead of pushing the
              buttons off-screen. -->
         <ScrollViewer VerticalScrollBarVisibility="Auto">
