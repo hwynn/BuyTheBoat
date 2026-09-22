@@ -68,7 +68,7 @@ public sealed class EarmarkPatternSaveConfirmation
 
     // The chain-boundary answer — true (keep the chain contiguous by adjusting
     // the neighbor) unless the user explicitly chose to let it break. Defaults
-    // true so a headless save keeps the safe, non-destructive shape.
+    // true so a save with no popup keeps the safe, non-destructive shape.
     public bool UserChoseStayLinked { get; private set; } = true;
 
     // The cascade answer — true (carry an Amount/shape change forward) unless
@@ -537,7 +537,7 @@ public sealed class EarmarkPatternSaveConfirmation
 
     // earmark-rerate: [0] break off / split at today (jar preserved), [1] recalculate the whole plan.
     // Unlike the sibling readers, absent → false (recalculate): the split is a user-facing choice only
-    // the real popup surfaces, so a headless save keeps the historical plain in-place re-rate rather
+    // the real popup surfaces, so a save with no popup keeps the historical plain in-place re-rate rather
     // than silently restructuring. The popup always reports index 0 for its pre-selected default, so a
     // real user who just clicks Save still gets the safe break-off.
     private static bool ChoseBreakOff(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.EarmarkRerate) == 0;

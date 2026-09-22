@@ -142,7 +142,7 @@ public static class ConfirmationRowIds
 // EarmarkPatternSaveConfirmation.Run) reads each index back into a decision,
 // each keying off the same ConfirmationRowIds. A row the popup never drew is simply absent
 // from the map — the wrapper treats absent as that row's own safe default, so
-// a headless caller (or a test) can return a bare Proceed and still get the
+// a caller with no popup (or a test) can return a bare Proceed and still get the
 // settled defaults for every question.
 public sealed record ConfirmationOutcome
 {

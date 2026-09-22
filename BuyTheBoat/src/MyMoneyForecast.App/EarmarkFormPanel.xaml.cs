@@ -125,21 +125,21 @@ public partial class EarmarkFormPanel : UserControl
     public Func<ForecastResult>? RequestForecast { get; set; }
 
     // Runs a throwaway forecast with one not-yet-saved one-off earmark folded in — the live one-off preview
-    // reads the goal's REAL jar off it (full day-by-day cascade), instead of approximating. Null in headless
-    // contexts, where the preview falls back to the plain saved reading.
+    // reads the goal's REAL jar off it (full day-by-day cascade), instead of approximating. Null when this
+    // hook isn't wired up; the preview then falls back to the plain saved reading.
     public Func<ManualEarmark, ForecastResult>? RequestForecastWithOneOff { get; set; }
 
     // Builds an affordability-capped default plan for a goal that has none yet,
     // WITHOUT saving it — the same proposal "Save and Plan" would create. Picking
     // a plan-less goal loads its values as unsaved draft edits, so the user lands
-    // on a real proposal to tweak instead of a bare monthly skeleton. Null in
-    // headless contexts, where PopulateSavingsPlanFields falls back to that skeleton.
+    // on a real proposal to tweak instead of a bare monthly skeleton. Null when
+    // this hook isn't wired up; PopulateSavingsPlanFields then falls back to that skeleton.
     public Func<FinancialPattern, ProposedAllocationPlan?>? RequestProposedPlan { get; set; }
 
     // Runs a throwaway forecast with a not-yet-saved savings PLAN substituted in (args: proposed plan, the
     // active-start of the saved segment it replaces or null if brand new, and any proposed manual earmarks
     // to fold in). Lets the live first-payment warning read real free funds for the plan as typed, instead
-    // of the no-forecast set-aside gap. Null in headless contexts, where the warning falls back to that gap.
+    // of the no-forecast set-aside gap. Null when this hook isn't wired up; the warning then falls back to that gap.
     public Func<EarMarkPattern, DateOnly?, IReadOnlyList<ManualEarmark>, ForecastResult>? RequestForecastWithProposedPlan { get; set; }
 
     // Fires whenever IsDirty or IsPopulated could have changed, so MainWindow
@@ -465,7 +465,7 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = 0m;
             StartingEarmarkAmountTextBox.Text = string.Empty;
             _loadedActiveStart = null;
-            // No existing plan and no proposer wired (headless): reset the schedule
+            // No existing plan and no proposer wired: reset the schedule
             // to a sensible default (monthly, through the goal's own due date) rather
             // than leaving whatever plan was last on screen — LoadFrom does the full
             // field reset for us.
@@ -1082,7 +1082,7 @@ public partial class EarmarkFormPanel : UserControl
             var payment = Math.Abs(goal.Amount);
 
             // Prefer a real forecast with this plan substituted in — it carries the free-funds figure the
-            // funds-aware message needs. Falls back to the plain set-aside gap (no free funds) when headless,
+            // funds-aware message needs. Falls back to the plain set-aside gap (no free funds) when the hook isn't wired,
             // or the goal has no health row in the result.
             var editedStart = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId)?.DatePattern.ActiveStart;
             var health = RequestForecastWithProposedPlan is { } request
@@ -1332,7 +1332,7 @@ public partial class EarmarkFormPanel : UserControl
             // into a throwaway what-if forecast and reading the goal's REAL jar off it — a full day-by-day
             // walk, so a backdated one-off whose excess survives a release shows up correctly (the old
             // pattern-math shortcut couldn't see that). Falls back to the plain saved reading when nothing
-            // valid is typed, no what-if source is wired (headless), or the goal has no jar in the forecast
+            // valid is typed, no what-if source is wired, or the goal has no jar in the forecast
             // yet. MilestoneAmount never moves either way — it only accumulates scheduled contributions.
             try
             {
@@ -1494,7 +1494,7 @@ public partial class EarmarkFormPanel : UserControl
             }
             else if (TryBuildProposedPattern(goal) is { } liveProposed)
             {
-                // No forecast reading available at all (headless) — a live reading
+                // No forecast reading available at all (no forecast hook wired) — a live reading
                 // computed straight from the form's own fields, no forecast needed.
                 var startingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
                 var live = GetLiveJarAmounts(GetPatternsForLiveCheck(goal, liveProposed), liveProposed, goal, startingTotal, DateOnly.FromDateTime(DateTime.Today));

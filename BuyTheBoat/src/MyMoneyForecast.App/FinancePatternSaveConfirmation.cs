@@ -197,7 +197,7 @@ public sealed class FinancePatternSaveConfirmation
 
     // The user's two consolidate-strategy answers, applied to every consolidation
     // this save makes. Default to the long-standing behavior (meet the goal, pace to
-    // income) so a headless caller consolidates exactly as before.
+    // income) so a save with no popup consolidates exactly as before.
     private ConsolidationSizing _chosenSizing = ConsolidationSizing.MeetGoal;
     private ConsolidationSpread _chosenSpread = ConsolidationSpread.AcrossPaydays;
 
@@ -413,10 +413,9 @@ public sealed class FinancePatternSaveConfirmation
     // just a trivial-field copy.
     private bool UserChoseToRepaceBills { get; set; }
 
-    // The user's answer to the "keep them separate / combine them into
-    // one" question on a break-off — meaningless unless HasMultipleEarmarkPatterns
-    // is true and ConsolidationNeeded is false (a shape/start change forces
-    // consolidation regardless). Defaults to FALSE (keep separate): that's the
+    // The user's answer to the "keep them separate / combine them into one" question on a break-off
+    // meaningless unless HasMultipleEarmarkPatterns is true and ConsolidationNeeded is false.
+    // Defaults to FALSE (keep separate): that's the
     // Consolidation row's own default, and the less-destructive option — the
     // break-off keeps one successor plan per surviving plan rather than folding
     // them into one.
@@ -427,7 +426,7 @@ public sealed class FinancePatternSaveConfirmation
     // keep-separate funding question was actually shown (_keepSeparateFunding is
     // set and its totals differ). Defaults to FALSE: keeping each plan's own rate
     // untouched is the safe no-op, and nothing re-rates money when no one was
-    // asked (headless). The popup pre-selects "adjust," mirroring the consolidate
+    // asked. The popup pre-selects "adjust," mirroring the consolidate
     // sizing question, but declining stays the default a bare Proceed reads back.
     private bool UserChoseToAdjustKeptSeparatePlans { get; set; }
 
@@ -464,7 +463,7 @@ public sealed class FinancePatternSaveConfirmation
         _requestForecastOmitting = requestForecastOmitting;
     }
 
-    /// <summary>[READS FILE] The affordability ceiling for `target`, measured on a re-forecast with `omitFinanceId`'s whole chain of savings plans left out — the "room for these plans" basis, so the plans being resized count their own current contributions as available rather than already-spent. Returns the single-date front-load ceiling when `startingEarmark` is true, otherwise the range ceiling that bounds an ongoing per-cycle contribution. Null when no omitting-forecast source is wired (headless tests). The three wrappers below fix its two knobs per caller: which chain to omit (the edited pattern's or the target's own) and which of the two ceilings.</summary>
+    /// <summary>[READS FILE] The affordability ceiling for `target`, measured on a re-forecast with `omitFinanceId`'s whole chain of savings plans left out — the "room for these plans" basis, so the plans being resized count their own current contributions as available rather than already-spent. Returns the single-date front-load ceiling when `startingEarmark` is true, otherwise the range ceiling that bounds an ongoing per-cycle contribution. Null when no omitting-forecast source is wired (as in tests that leave it null). The three wrappers below fix its two knobs per caller: which chain to omit (the edited pattern's or the target's own) and which of the two ceilings.</summary>
     /// <param name="omitFinanceId">Whose chain of plans to leave out of the re-forecast — the edited pattern's (_financeId) when the target belongs to that same chain, or the target's own when it doesn't.</param>
     /// <param name="target">The goal or bill whose plan is being sized.</param>
     /// <param name="changeKind">Whether this is a bold Suggestion or a cautious Implicit change.</param>
@@ -652,13 +651,13 @@ public sealed class FinancePatternSaveConfirmation
             UserChoseToAdjustKeptSeparatePlans = ChoseToAdjustKeptSeparatePlans(outcome);
             _successorCombineChoices = _crossBoundaryConsolidations.ToDictionary(
                 successor => successor.FinanceId,
-                // [1] combine, [0] keep separate (the default, also for a headless caller).
+                // [1] combine, [0] keep separate (the default; also when no popup asked).
                 successor => Chosen(outcome, ConfirmationRowIds.CrossBoundaryConsolidation(successor.FinanceId)) == 1);
             _chosenSizing = ChoseConsolidationSizing(outcome);
             _chosenSpread = ChoseConsolidationSpread(outcome);
 
             // The picked goal-health correction becomes the overrides the plan's
-            // form opens pre-filled with. Absent/headless answers (-1) and the
+            // form opens pre-filled with. Absent answers (-1, no popup asked) and the
             // trailing "leave it / keep the rate without skipping" options fall
             // through as "no correction," so the form opens plain.
             _acceptedSuggestionOverrides = PickGoalHealthOverrides(outcome);
@@ -702,8 +701,8 @@ public sealed class FinancePatternSaveConfirmation
 
     // The interpreters that turn the popup's raw per-row selection back into a
     // decision — the semantics the popup itself no longer knows. A row absent
-    // from the outcome (the popup never drew it, or a headless caller returned
-    // a bare Proceed) reads as index -1, which each rule below resolves to the
+    // from the outcome (the popup never drew it, or no popup was shown and a bare
+    // Proceed came back) reads as index -1, which each rule below resolves to the
     // settled safe default. The option indices mirror, exactly, the order
     // BuildRows lays each ChoiceRow out in.
     private static int Chosen(ConfirmationOutcome outcome, string rowId) =>
@@ -719,25 +718,25 @@ public sealed class FinancePatternSaveConfirmation
     private static bool ChoseCascadeTrivialFields(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.TrivialFieldsCascade) == 1;
 
     // paced-bills cascade: [0] update them (the popup's own pre-selection), [1]
-    // leave them. Absent (headless) reads as leave — nothing re-paces money
+    // leave them. Absent (no popup asked) reads as leave — nothing re-paces money
     // when no one was actually asked.
     private static bool ChoseToRepaceBills(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.PacedBillsCascade) == 0;
 
-    // consolidation: [0] keep separate (default, also headless), [1] combine.
-    // Only consulted for a break-off that ISN'T forcing consolidation (a
-    // shape/start change forces it regardless of this answer).
+    // consolidation: [0] keep separate (default; also when no popup asked),
+    // [1] combine. Only consulted for a break-off that ISN'T forcing
+    // consolidation (a shape/start change forces it regardless of this answer).
     private static bool ChoseCombinePlans(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.Consolidation) == 1;
 
     // keep-separate funding: [0] adjust to meet the goal (the popup's own
-    // pre-selection), [1] leave them. Absent (headless) reads as leave — each
+    // pre-selection), [1] leave them. Absent (no popup asked) reads as leave — each
     // plan keeps its own rate, nothing re-rates money when no one was asked.
     private static bool ChoseToAdjustKeptSeparatePlans(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.KeepSeparateFunding) == 0;
 
-    // consolidation sizing: [0] meet the goal (default, also headless), [1] keep the current rate.
+    // consolidation sizing: [0] meet the goal (default; also when no popup asked), [1] keep the current rate.
     private static ConsolidationSizing ChoseConsolidationSizing(ConfirmationOutcome outcome) =>
         Chosen(outcome, ConfirmationRowIds.ConsolidationSizing) == 1 ? ConsolidationSizing.KeepCurrentPace : ConsolidationSizing.MeetGoal;
 
-    // consolidation spread: [0] across paydays (default, also headless), [1] evenly.
+    // consolidation spread: [0] across paydays (default; also when no popup asked), [1] evenly.
     private static ConsolidationSpread ChoseConsolidationSpread(ConfirmationOutcome outcome) =>
         Chosen(outcome, ConfirmationRowIds.ConsolidationSpread) == 1 ? ConsolidationSpread.Evenly : ConsolidationSpread.AcrossPaydays;
 
@@ -1353,7 +1352,7 @@ public sealed class FinancePatternSaveConfirmation
             : "Left as is, the plan keeps saving more than the goal needs, tying up money it won't use.";
     }
 
-    /// <summary>[CALC] Reads the goal-health answer(s) back into the overrides the plan's form opens pre-filled with, or null for "no correction" (an absent/headless answer, "leave it as is," or "keep the rate" with no skip chosen). Underfunded: the chosen correction's amount. Overfunded: the lowered amount, or — when the rate is kept — the chosen skip strategy's excluded dates.</summary>
+    /// <summary>[CALC] Reads the goal-health answer(s) back into the overrides the plan's form opens pre-filled with, or null for "no correction" (a row with no popup asked, "leave it as is," or "keep the rate" with no skip chosen). Underfunded: the chosen correction's amount. Overfunded: the lowered amount, or — when the rate is kept — the chosen skip strategy's excluded dates.</summary>
     /// <param name="outcome">The confirmation answers.</param>
     private IReadOnlyDictionary<string, object?>? PickGoalHealthOverrides(ConfirmationOutcome outcome)
     {
@@ -1670,7 +1669,7 @@ public sealed class FinancePatternSaveConfirmation
     // one"; Navigate false means the user cancelled the picker, so stay put.
     private readonly record struct EarmarkNavigation(bool Navigate, EarMarkPattern? Target);
 
-    /// <summary>[READS FILE] When the user clicked Save and Plan, decides which EarMarkPattern to open next — or, if they cancel the picker, not to navigate at all. No plan yet (navigate with a null target, to propose one) and exactly one plan need no popup; more than one shows the disambiguation picker. A cancelled picker returns Navigate=false so the caller leaves the user where they are rather than opening a plan they didn't pick; a headless caller (no picker wired) still falls back to the first plan. Reads the repository directly, not the live forecast: _requestForecast may be a cached accessor (MainWindow's own EnsureForecast caches until something explicitly recomputes), so it can't be trusted to reflect what PerformSave/PerformImplicitEarmarkChanges just wrote a moment ago. Looks under _navigationFinanceId, not _financeId directly — after a break-off, _financeId's own EarMarkPattern is the truncated, no-longer-current predecessor.</summary>
+    /// <summary>[READS FILE] When the user clicked Save and Plan, decides which EarMarkPattern to open next — or, if they cancel the picker, not to navigate at all. No plan yet (navigate with a null target, to propose one) and exactly one plan need no popup; more than one shows the disambiguation picker. A cancelled picker returns Navigate=false so the caller leaves the user where they are rather than opening a plan they didn't pick; a caller with no picker wired still falls back to the first plan. Reads the repository directly, not the live forecast: _requestForecast may be a cached accessor (MainWindow's own EnsureForecast caches until something explicitly recomputes), so it can't be trusted to reflect what PerformSave/PerformImplicitEarmarkChanges just wrote a moment ago. Looks under _navigationFinanceId, not _financeId directly — after a break-off, _financeId's own EarMarkPattern is the truncated, no-longer-current predecessor.</summary>
     private EarmarkNavigation AskWhichEarmarkPatternToOpen()
     {
         var savingsPlan = _repositories.EarMarkPatterns.GetAll()

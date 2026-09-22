@@ -1534,7 +1534,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         _earMarkPatterns.GetAll().Count(p => p.FinanceId == 2).ShouldBe(1); // folded into one
     }
 
-    // The default (and headless) answer is keep-separate — each plan scaled
+    // The default (and no-popup) answer is keep-separate — each plan scaled
     // proportionally to the new amount, both rows preserved.
     [Fact]
     public void Carrying_an_amount_change_forward_keeps_a_later_segments_plans_separate_by_default()
@@ -1840,7 +1840,7 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
     private ForecastResult Forecast() => TransactionLogBookFactory.CreateForecast(ForecastOptionsForTest());
 
-    // Confirmation is given a real omitting-forecast source here (unlike headless callers that leave it
+    // Confirmation is given a real omitting-forecast source here (unlike callers that leave it
     // null), so the affordability ceiling actually runs in these tests. The generous 10,000 balance keeps
     // the cap inert in the existing cases — the cap-when-it-binds math is proven in EarmarkScalingTests /
     // AffordabilityCeilingTests; MainWindow's own ForecastOmitting (which builds the real options) is the

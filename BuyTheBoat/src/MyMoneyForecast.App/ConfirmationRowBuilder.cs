@@ -401,7 +401,7 @@ internal static class ConfirmationRowBuilder
 
         // The paycheck-association cascade. The popup pre-selects "update them"
         // (index 0) — the author's chosen default for what a real user sees, so
-        // matching the bills to the new schedule is one Save away. The headless fallback
+        // matching the bills to the new schedule is one Save away. The no-popup fallback
         // (DefaultOutcome) still declines, so nothing re-paces money
         // when no one was actually asked. Each option carries its own
         // consequence, shown while selected. Mirrors PacedBillsCascadeSection.
