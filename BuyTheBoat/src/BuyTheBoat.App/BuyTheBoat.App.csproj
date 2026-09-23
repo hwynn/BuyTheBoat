@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\BuyTheBoat.Domain\BuyTheBoat.Domain.csproj" />
+    <ProjectReference Include="..\BuyTheBoat.Persistence\BuyTheBoat.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets the App tests reach FinancePatternSaveConfirmation's internal
+         Determine*/Perform* methods directly, so a scenario's confirmation
+         conditions can be exercised without driving the real WPF popup. -->
+    <InternalsVisibleTo Include="BuyTheBoat.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

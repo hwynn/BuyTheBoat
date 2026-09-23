@@ -1,0 +1,34 @@
+<Window x:Class="BuyTheBoat.App.EditingHistoryConfirmationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Confirm This Change" Width="440" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <DockPanel Margin="16">
+        <!-- shown only when a save's rows span more than one
+             page, so the user can tell "Continue…" leads to further questions. -->
+        <TextBlock x:Name="PageIndicator" DockPanel.Dock="Top" Foreground="Gray" Margin="0,0,0,10" Visibility="Collapsed"/>
+        <TextBlock x:Name="DescriptionText" DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="Cancel" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnCancelClick"/>
+            <!-- Reads "Save" on the final page, "Continue…" before it (set in the
+                 constructor from request.IsFinalPage). -->
+            <Button x:Name="CommitButton" Content="Save" Width="90" Padding="0,5" Click="OnSaveClick" IsDefault="True"/>
+        </StackPanel>
+
+        <!-- every question/announcement is now a
+             ConfirmationRow in request.Rows. The code-behind fills this panel
+             from that list, in order — this window no longer knows which
+             sections exist or what they mean. The wrapper
+             (FinancePatternSaveConfirmation) decides the rows; this just draws
+             them and reads the choices back. Deliberately still the minimal
+             plain-WPF look, not a styled version. The ScrollViewer, with the
+             window's MaxHeight (set in the constructor), is the fallback behind
+             height-based pagination: a page that still overshoots — or
+             a single row too tall to split — scrolls instead of pushing the
+             buttons off-screen. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="RowsPanel"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

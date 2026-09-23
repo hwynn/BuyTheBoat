@@ -1,5 +1,5 @@
-using MyMoneyForecast.Domain;
-using MyMoneyForecast.Persistence;
+using BuyTheBoat.Domain;
+using BuyTheBoat.Persistence;
 
 // [WRITES FILE] Resets the app's real local database and repopulates it with a varied
 // household's worth of sample data — accounts, bills, a paycheck, one-time

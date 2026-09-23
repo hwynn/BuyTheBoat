@@ -1,0 +1,248 @@
+<UserControl x:Class="BuyTheBoat.App.EarmarkFormPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:BuyTheBoat.App">
+    <DockPanel Margin="8">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="550"
+                       VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <Button x:Name="SaveButton" Content="Save" Width="90" Padding="0,5" Click="OnSaveClick"/>
+        </StackPanel>
+
+        <!-- Wrapped in a ScrollViewer, added 2026-08-06 (the author's own
+             report: "way too tall... I wouldn't be able to see [the
+             Summary]") — guarantees every region below is reachable no
+             matter how tall the combined content gets, rather than silently
+             clipping past whatever height the tab happens to have. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <!-- REGION 1 — instance-information-block: which goal, and
+                     how to change it. Split apart from the mode toggle below
+                     (2026-08-06) — the settled Earmark design shows these
+                     as two separate blocks (instance-info and mode toggle);
+                     they'd been merged into one
+                     "Which goal" GroupBox before this pass, which matched
+                     neither. Mirrors ExpenseFormPanel's own instance-info-
+                     block (Editing / name / Change...), minus the modified-
+                     indicator and Discard-changes controls — this form still
+                     doesn't have that fuller structure (see the class-level
+                     comment). -->
+                <Border BorderBrush="#FFCCCCCC" BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,10">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Editing" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <!-- Same picker mechanism Expense uses (the author's own call,
+                             2026-08-06) — FinancialPatternPickerWindow, not a
+                             ComboBox. TargetComboBox below (the "Move to which
+                             fund?" picker) is NOT converted in this pass — still a
+                             plain ComboBox, scoped smaller since it's a secondary
+                             selector inside One-off mode specifically, not the
+                             form's main one. -->
+                        <TextBlock x:Name="SelectedGoalText" Text="— No goal selected —" VerticalAlignment="Center"
+                                   Margin="0,0,8,0" FontWeight="SemiBold" AutomationProperties.AutomationId="SelectedGoalText"/>
+                        <Button x:Name="ChangeGoalButton" Content="Change..." Padding="8,3" Click="OnChangeGoalClick"
+                                AutomationProperties.AutomationId="ChangeGoalButton"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- REGION 2 — characterization-field-block: what kind of
+                     earmark this is. Clear form lives here now, not in the
+                     bottom bar (2026-08-06) — the settled design groups it
+                     with the mode toggle, not with Save. -->
+                <GroupBox Header="What kind of earmark is this?" Padding="10" Margin="0,0,0,10">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="Clear form" Padding="8,3" Click="OnClearClick"/>
+                        <!-- Advanced mode (the author's own call, 2026-08-06)
+                             — see OnAdvancedModeChanged's own comment in
+                             code-behind for exactly what's wired vs. not. -->
+                        <CheckBox x:Name="AdvancedModeCheckBox" DockPanel.Dock="Right" Content="Advanced mode" VerticalAlignment="Center"
+                                  Margin="0,0,16,0" Checked="OnAdvancedModeChanged" Unchecked="OnAdvancedModeChanged"/>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="SavingsPlanRadio" Content="Savings plan" GroupName="EarmarkMode" IsChecked="True"
+                                         Checked="OnModeChanged" Margin="0,0,16,0"/>
+                            <RadioButton x:Name="OneOffRadio" Content="One-off adjustment" GroupName="EarmarkMode" Checked="OnModeChanged"/>
+                        </StackPanel>
+                    </DockPanel>
+                </GroupBox>
+                <TextBlock x:Name="NoPatternNote" Margin="0,0,0,10" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                           Text="This goal has no savings plan yet — set one up here before adding a one-off adjustment on top of it."
+                           Visibility="Collapsed"/>
+
+                <Grid>
+                    <!-- Savings-plan mode -->
+                    <StackPanel x:Name="SavingsPlanPanel">
+                        <!-- The goal's span, and the reason the plan's own dates
+                             are capped to it (EarMarkPattern.Create rejects a
+                             plan reaching outside its goal). Shown only in
+                             savings-plan mode, and only once a goal is picked —
+                             one-off mode surfaces the same span through its own
+                             BalanceInfoText instead. -->
+                        <TextBlock x:Name="GoalSpanText" Margin="0,0,0,10" FontSize="11" Foreground="Gray"
+                                   TextWrapping="Wrap" Visibility="Collapsed"
+                                   AutomationProperties.AutomationId="GoalSpanText"/>
+                        <!-- Amount per occurrence: declared here so it's still a
+                             normal, code-behind-wired part of this form, but
+                             handed to RuleEditor's own left column in the
+                             constructor (SetLeadingContent) — the settled
+                             design first put it above
+                             the recurrence fields (2026-08-06); moved again
+                             the same day to share the Ends row instead, once
+                             it turned out nothing was reserved in the space
+                             beside it up there — see RecurrenceRuleEditor.xaml's
+                             own comment on that Grid for the full reasoning. -->
+                        <StackPanel x:Name="AmountPanel" Margin="0,0,0,10">
+                            <CheckBox x:Name="MatchGoalCheckBox" Content="Match the goal" Margin="0,0,0,6"
+                                      Checked="OnMatchGoalToggled" Unchecked="OnMatchGoalToggled"
+                                      AutomationProperties.AutomationId="MatchGoalCheckBox"/>
+                            <TextBlock Text="Amount per occurrence"/>
+                            <TextBox x:Name="AmountTextBox" Width="150" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                            <TextBlock x:Name="MatchCoverageText" FontSize="11" Foreground="Gray"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+                        </StackPanel>
+
+                        <!-- REGION — "Starting point," REAL VALUES 2026-08-06
+                             (was dummy-values-only layout since its own
+                             introduction earlier the same day). Scope
+                             deliberately narrowed to amount + date only —
+                             the narrow amount+date layout (100px, no
+                             reason text), the
+                             author's own choice once real data made the
+                             region worth building: distinguishing *why* a
+                             starting balance exists (inherited from a
+                             break-off vs. an automatic front-load vs. a
+                             plain manual entry) is still the same open
+                             problem flagged when this region was first laid
+                             out — a ManualEarmark carries no reason field, so
+                             an automatic front-load and a user's own manual
+                             entry are indistinguishable in storage today.
+                             Left for a real decision later,
+                             not guessed at here. StartingReasonText stays
+                             declared, collapsed, for whenever that's
+                             resolved — same "keep the machinery, don't wire
+                             a control to it yet" pattern this file already
+                             uses for _startingAllocation's own retired
+                             TextBox.
+
+                             What IS real now: UpdateStartingPointRegion
+                             (code-behind) sums EarMarkPattern.StartingAllocation
+                             (the break-off case — fully unambiguous, the only
+                             mechanism that ever sets it) with any ManualEarmark
+                             dated exactly on the plan's own ActiveStart (the
+                             front-load/manual case, whichever it was) — one
+                             honest total, captioned only with what's certain
+                             (the amount and the date), not a guess at why. The
+                             whole region hides itself when that total is $0 —
+                             the "ordinary case" layout, now real
+                             instead of a TODO. -->
+                        <DockPanel Margin="0,0,0,4">
+                            <Border x:Name="StartingPointRegion" DockPanel.Dock="Left" Width="100" Margin="0,0,14,0" Padding="0,0,14,0"
+                                    BorderBrush="#FFCCCCCC" BorderThickness="0,0,1,0" Visibility="Collapsed">
+                                <StackPanel>
+                                    <TextBlock Text="STARTING POINT" FontSize="10" FontWeight="Bold" Foreground="Gray" Margin="0,0,0,8"/>
+                                    <TextBlock x:Name="StartingAmountText" FontSize="16" FontWeight="Bold"/>
+                                    <TextBlock x:Name="StartingDateText" TextWrapping="Wrap" FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
+                                    <!-- UsersCanEditFundStartPoint, 2026-08-07: the editable
+                                         counterpart to the read-only total above it — StartingAmountText
+                                         keeps showing the combined total (StartingAllocation, never
+                                         user-editable here, plus this), while this box is specifically
+                                         the isolated-earmark portion. Collapsed (not just disabled) once
+                                         ActiveStart is in the past — "locked in", per the author's own
+                                         rule, not merely greyed out. -->
+                                    <StackPanel x:Name="StartingEarmarkEditPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                                        <TextBlock Text="Starting earmark" FontSize="10" Foreground="Gray"/>
+                                        <TextBox x:Name="StartingEarmarkAmountTextBox" Width="80" HorizontalAlignment="Left" Margin="0,2,0,0"
+                                                 TextChanged="OnStartingEarmarkAmountChanged"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="StartingReasonText" TextWrapping="Wrap" FontSize="10.5" Foreground="#FF9A4F08"
+                                               Background="#FFFBF0E2" Padding="6,5" Margin="0,10,0,0" Visibility="Collapsed"/>
+                                    <!-- The "will the first
+                                         payment be covered" warning (PlanHealthState.
+                                         FirstOccurrenceShortfall) — same visual treatment as
+                                         StartingReasonText above but a distinct element, since
+                                         the two answer different questions ("why does a starting
+                                         balance exist" vs. "is what's proposed actually enough")
+                                         and shouldn't be conflated under one name. -->
+                                    <TextBlock x:Name="StartingShortfallWarningText" TextWrapping="Wrap" FontSize="10.5" Foreground="#FF9A4F08"
+                                               Background="#FFFBF0E2" Padding="6,5" Margin="0,10,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Tightened 10->4 (2026-08-06) — the author's own
+                                 call: no need for generous padding above the
+                                 Summary region, and SummaryRegion.xaml's own
+                                 internal spacing is already minimal (a plain 6px
+                                 margin, checked before touching this). -->
+                            <local:RecurrenceRuleEditor x:Name="RuleEditor"/>
+                        </DockPanel>
+
+                        <!-- Continuity note (2026-08-13, author's own request):
+                             break-offs/restructures create a genuinely new
+                             FinanceId, so it's easy to forget — looking at
+                             just this one plan — that it continues from, or
+                             is later continued by, another one. Both
+                             collapsed by default; UpdateContinuityNote
+                             (code-behind, called from inside UpdateSummary)
+                             shows whichever apply. Savings-plan mode only —
+                             this is the "recurrence fields" area the author
+                             asked for, and One-off mode has none. -->
+                        <TextBlock x:Name="PredecessorNoteText" Margin="0,4,0,0" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
+                        <TextBlock x:Name="SuccessorNoteText" Margin="0,4,0,0" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                        <!-- "Already saved toward this goal" and "+ Add manual
+                             earmark on this goal" are both omitted from the
+                             layout entirely (2026-08-06, the author's own
+                             call) — not shown even in Advanced mode. Both are
+                             for a shortcut whose own placement hasn't been
+                             figured out yet (neither ever appeared in
+                             the settled design's Earmark states either).
+                             The machinery for both stays: _startingAllocation
+                             (code-behind) still flows through Load*/Save/
+                             Summary exactly as before, just with no visible
+                             control to edit it through; OnTransformToOneOffClick
+                             is untouched, just unwired. Whatever reconnects to
+                             a control once the shortcut's home is settled
+                             should use these, not rebuild them. -->
+                    </StackPanel>
+
+                    <!-- One-off adjustment mode -->
+                    <StackPanel x:Name="OneOffPanel" Visibility="Collapsed">
+                        <GroupBox Header="One-off adjustment details" Padding="10">
+                            <StackPanel>
+                                <TextBlock Text="What do you want to do?"/>
+                                <ComboBox x:Name="ActionComboBox" Margin="0,2,0,10" SelectionChanged="OnInputsChanged" SelectedIndex="0">
+                                    <ComboBoxItem Content="Add money"/>
+                                    <ComboBoxItem Content="Withdraw"/>
+                                    <ComboBoxItem Content="Move"/>
+                                </ComboBox>
+                                <StackPanel x:Name="TargetRow" Visibility="Collapsed">
+                                    <TextBlock Text="Move to which other goal's fund?"/>
+                                    <ComboBox x:Name="TargetComboBox" DisplayMemberPath="DisplayText" Margin="0,2,0,10"/>
+                                </StackPanel>
+                                <TextBlock Text="On what day?"/>
+                                <!-- Days that already carry an isolated
+                                     earmark for the selected goal are marked when the
+                                     dropdown opens (OnEarmarkDatePickerCalendarOpened) —
+                                     clicking one loads that entry instead of starting a new
+                                     one (see OnInputsChanged). -->
+                                <DatePicker x:Name="EarmarkDatePicker" Margin="0,2,0,10" SelectedDateChanged="OnInputsChanged"
+                                            CalendarOpened="OnEarmarkDatePickerCalendarOpened"/>
+                                <TextBlock Text="Existing entries on this goal are shaded — pick one to edit it, or any other day to start a new one."
+                                           FontSize="10.5" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                <TextBlock Text="How much?"/>
+                                <TextBox x:Name="OneOffAmountTextBox" Margin="0,2,0,10" TextChanged="OnInputsChanged"/>
+                                <TextBlock x:Name="BalanceInfoText" TextWrapping="Wrap" FontStyle="Italic" Foreground="Gray"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Shows in BOTH modes now,
+                     not just Savings-plan — a one-off adjustment is often
+                     made specifically to fix what this region's own
+                     PlanHealthState-derived warnings describe, so the
+                     information belongs wherever the fix is actually being
+                     made, not gated to one mode. -->
+                <local:SummaryRegion x:Name="Summary" Margin="0,10,0,0"/>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

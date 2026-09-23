@@ -1,0 +1,671 @@
+<Window x:Class="BuyTheBoat.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:BuyTheBoat.App"
+        Title="Buy The Boat" Height="820" Width="1100"
+        MaxHeight="{x:Static SystemParameters.MaximizedPrimaryScreenHeight}"
+        MaxWidth="{x:Static SystemParameters.MaximizedPrimaryScreenWidth}"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Semantic palette shared by the calendar + selected-day templates.
+             Green = good, amber = watch, red = short/raided; the indigo accent
+             (today frame, selection) stays separate from the semantic colors. -->
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF1E66D0"/>
+        <SolidColorBrush x:Key="SelectionBrush" Color="#FFE3EDFB"/>
+        <SolidColorBrush x:Key="GoodTextBrush" Color="#FF1E7B45"/>
+        <SolidColorBrush x:Key="GoodBgBrush" Color="#FFDCF2E4"/>
+        <SolidColorBrush x:Key="WatchTextBrush" Color="#FF8A6A00"/>
+        <SolidColorBrush x:Key="WatchBgBrush" Color="#FFFBF0D0"/>
+        <SolidColorBrush x:Key="RedTextBrush" Color="#FFB00020"/>
+        <SolidColorBrush x:Key="RedBgBrush" Color="#FFF6E0E0"/>
+        <SolidColorBrush x:Key="NeutralBgBrush" Color="#FFECECEF"/>
+        <SolidColorBrush x:Key="NeutralTextBrush" Color="#FF555560"/>
+        <SolidColorBrush x:Key="CellBorderBrush" Color="#FFE3E3E8"/>
+        <SolidColorBrush x:Key="ManualBgBrush" Color="#FFEDE4F7"/>
+        <SolidColorBrush x:Key="ManualTextBrush" Color="#FF6A3FA0"/>
+    </Window.Resources>
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="Export Data..." Padding="12,5" Click="OnExportClick"/>
+                <Button Content="Import Data..." Padding="12,5" Margin="8,0,0,0" Click="OnImportClick"/>
+            </StackPanel>
+        </Grid>
+
+        <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
+            <TabItem Header="Forecast">
+                <!-- Three regions with distinct jobs — TOP CONTROLS (forecast range +
+                     a Forecast button that should only look active when the shown
+                     forecast's range differs from the fields), the OVERVIEW timeline
+                     (many days at a glance: totals, allocations, trends, and days worth
+                     a closer look — NOT every allocation or every actual transaction),
+                     and the SELECTED-DAY detail (the full snapshot: every transaction,
+                     every jar, and per-goal health answering "am I on track?"). Whatever element
+                     represents TODAY must be visually distinct from all other days. -->
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="As of" FontSize="11" Foreground="Gray"/>
+                            <DatePicker x:Name="AsOfDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged" CalendarOpened="OnAsOfCalendarOpened"/>
+                        </StackPanel>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Show forecast through" FontSize="11" Foreground="Gray"/>
+                            <DatePicker x:Name="HorizonEndDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged" CalendarOpened="OnHorizonCalendarOpened"/>
+                        </StackPanel>
+                        <!-- Balances and cushions are per account now and live on the
+                             Accounts tab; the forecast reads them from there. This is a
+                             read-only summary of exactly what it will use. -->
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Across all accounts" FontSize="11" Foreground="Gray"/>
+                            <TextBlock x:Name="AccountsSummaryText" Text="—" FontWeight="SemiBold" VerticalAlignment="Bottom"
+                                       Height="23" Padding="0,4,0,0" MinWidth="230"
+                                       AutomationProperties.AutomationId="AccountsSummaryText"/>
+                        </StackPanel>
+                        <!-- Pending-state affordance: looks active only
+                             while an input differs from the forecast on screen. -->
+                        <Button x:Name="ForecastButton" Content="Forecast" Padding="16,5" VerticalAlignment="Bottom" Click="OnForecastClick"/>
+                        <Button x:Name="ExportForecastSpreadsheetButton" Content="Export as Spreadsheet..." Padding="16,5" Margin="8,0,0,0"
+                                VerticalAlignment="Bottom" IsEnabled="False" Click="OnExportForecastSpreadsheetClick"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,12" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Forecast only — assumes every bill and paycheck happens exactly as scheduled. No real transactions are tracked yet. Select a day in the calendar to see everything that day holds."/>
+
+                    <!-- SELECTED DAY: the full snapshot. Two panes,
+                         "What happened today" LEFT and fund jars RIGHT (the author's
+                         chosen direction). -->
+                    <Grid DockPanel.Dock="Bottom" Height="205" Margin="0,10,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <DockPanel Margin="0,0,0,6">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="AdjustFundsButton" Content="Adjust funds..." Padding="10,2" Margin="0,0,16,0"
+                                        IsEnabled="False" Click="OnAdjustFundsClick"
+                                        AutomationProperties.AutomationId="AdjustFundsButton"/>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
+                                    </StackPanel>
+                                    <!-- Rung-1 nudge: spare cash on hand, but nothing the user set
+                                         aside is reserved, so "free" is really just the balance. A reminder, not
+                                         per-expense math. Set from code-behind; hidden when it doesn't apply. -->
+                                    <TextBlock x:Name="FreeNudgeText" HorizontalAlignment="Right" TextAlignment="Right" MaxWidth="300"
+                                               TextWrapping="Wrap" FontSize="10" FontStyle="Italic" Foreground="Gray" Margin="0,2,0,0"
+                                               Visibility="Collapsed" AutomationProperties.AutomationId="FreeNudgeText"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="DayDetailHeader" Text="Selected day" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <Border x:Name="DeallocationDayChip" Background="{StaticResource RedBgBrush}" CornerRadius="3"
+                                        Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
+                                        AutomationProperties.AutomationId="DeallocationDayChip">
+                                    <TextBlock Text="DEALLOCATION DAY" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource RedTextBrush}"/>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="3*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <DockPanel Grid.Column="0">
+                                <TextBlock DockPanel.Dock="Top" Text="WHAT HAPPENED TODAY" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="DayEventsList" AutomationProperties.AutomationId="DayEventsList">
+                                        <ItemsControl.GroupStyle>
+                                            <GroupStyle>
+                                                <GroupStyle.HeaderTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Name.Name}" FontWeight="Bold" FontSize="11" Margin="0,8,0,3"
+                                                                   Foreground="{StaticResource AccentBrush}"/>
+                                                    </DataTemplate>
+                                                </GroupStyle.HeaderTemplate>
+                                            </GroupStyle>
+                                        </ItemsControl.GroupStyle>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid x:Name="EventRow" Margin="0,1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="78"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border x:Name="EventChip" Background="{StaticResource NeutralBgBrush}" CornerRadius="3"
+                                                            Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                        <TextBlock x:Name="EventChipText" Text="{Binding Chip}" FontSize="9" FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource NeutralTextBrush}"/>
+                                                    </Border>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Event}" VerticalAlignment="Center" Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock x:Name="EventAmount" Grid.Column="2" Text="{Binding AmountText}" VerticalAlignment="Center"
+                                                               FontFamily="Consolas" FontSize="13"/>
+                                                </Grid>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Indented}" Value="True">
+                                                        <Setter TargetName="EventRow" Property="Margin" Value="20,1,0,1"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="In">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource GoodBgBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="Aside">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="Pull">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource RedBgBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding ChipKind}" Value="Manual">
+                                                        <Setter TargetName="EventChip" Property="Background" Value="{StaticResource ManualBgBrush}"/>
+                                                        <Setter TargetName="EventChipText" Property="Foreground" Value="{StaticResource ManualTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsPositive}" Value="True">
+                                                        <Setter TargetName="EventAmount" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                        <Setter TargetName="EventAmount" Property="FontWeight" Value="SemiBold"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsPull}" Value="True">
+                                                        <Setter TargetName="EventAmount" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+
+                            <DockPanel Grid.Column="2">
+                                <TextBlock DockPanel.Dock="Top" Text="FUND JARS — WHERE IT ALL SITS" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="JarDetailList" AutomationProperties.AutomationId="JarDetailList">
+                                        <ItemsControl.GroupStyle>
+                                            <GroupStyle>
+                                                <!-- The header's labels live inside a GroupItem header, which is
+                                                     invisible to screen readers; announce the whole account story
+                                                     through the GroupItem's own Name instead (AccountGroupKey.AccessibleSummary). -->
+                                                <GroupStyle.ContainerStyle>
+                                                    <Style TargetType="GroupItem">
+                                                        <Setter Property="AutomationProperties.Name" Value="{Binding Name.AccessibleSummary}"/>
+                                                    </Style>
+                                                </GroupStyle.ContainerStyle>
+                                                <GroupStyle.HeaderTemplate>
+                                                    <DataTemplate>
+                                                        <!-- A group header tells the whole story here: line one is the
+                                                             account, its balance ("how much money is in the account"), and —
+                                                             when short — the "Short $X" warning to the right of it; line two is
+                                                             which rung it's on (money in another account, or none can cover it),
+                                                             and the lever pre-fills a transfer into it (the shortfall
+                                                             ladder). Every account always appears in this
+                                                             pane, so the balance, narrative, and lever can never go missing. -->
+                                                        <StackPanel Margin="0,8,0,3">
+                                                            <DockPanel>
+                                                                <Button DockPanel.Dock="Right" Content="{Binding Name.MoveInText}"
+                                                                        Padding="8,1" FontSize="10" Click="OnCoverShortfallClick"
+                                                                        AutomationProperties.AutomationId="CoverShortfallButton"
+                                                                        Visibility="{Binding Name.ShowCoverButton, Converter={StaticResource BoolToVis}}"/>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding Name.Name}" FontWeight="Bold" FontSize="11"
+                                                                               VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
+                                                                    <TextBlock x:Name="HeaderBalance" Text="{Binding Name.BalanceText}" FontWeight="SemiBold"
+                                                                               FontSize="11" FontFamily="Consolas" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                                               AutomationProperties.AutomationId="AccountBalanceText"/>
+                                                                    <TextBlock Text="{Binding Name.ShortText}" FontWeight="SemiBold" FontSize="11"
+                                                                               VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource RedTextBrush}"
+                                                                               Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
+                                                                    <!-- "Funds running low": the free-funds warning a step below "short".
+                                                                         Also stands in for a dipped safety cushion, which
+                                                                         always co-occurs with thin, so it's folded into this one warning. -->
+                                                                    <TextBlock Text="Funds running low" FontWeight="SemiBold" FontSize="11"
+                                                                               VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource WatchTextBrush}"
+                                                                               Visibility="{Binding Name.IsThin, Converter={StaticResource BoolToVis}}"
+                                                                               AutomationProperties.AutomationId="AccountThinText"/>
+                                                                </StackPanel>
+                                                            </DockPanel>
+                                                            <TextBlock Text="{Binding Name.RungText}" FontSize="10" Foreground="Gray" TextWrapping="Wrap"
+                                                                       Margin="0,1,0,0" Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
+                                                        </StackPanel>
+                                                        <DataTemplate.Triggers>
+                                                            <!-- An overdrawn account: the balance itself reads red. -->
+                                                            <DataTrigger Binding="{Binding Name.BalanceNegative}" Value="True">
+                                                                <Setter TargetName="HeaderBalance" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                            </DataTrigger>
+                                                        </DataTemplate.Triggers>
+                                                    </DataTemplate>
+                                                </GroupStyle.HeaderTemplate>
+                                            </GroupStyle>
+                                        </ItemsControl.GroupStyle>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border x:Name="JarRow" Padding="6,4" BorderBrush="{StaticResource CellBorderBrush}" BorderThickness="0,0,0,1">
+                                                    <StackPanel>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock x:Name="JarName" Text="{Binding Jar}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                                <Border x:Name="StatusPill" Background="{StaticResource NeutralBgBrush}" CornerRadius="8"
+                                                                        Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                    <TextBlock x:Name="StatusPillText" Text="{Binding StatusText}" FontSize="10"
+                                                                               Foreground="{StaticResource NeutralTextBrush}"/>
+                                                                </Border>
+                                                                <Border Background="{StaticResource WatchBgBrush}" CornerRadius="8" Padding="7,1" Margin="6,0,0,0"
+                                                                        VerticalAlignment="Center"
+                                                                        Visibility="{Binding ShowAdjustNudge, Converter={StaticResource BoolToVis}}">
+                                                                    <!-- The readjustment on-ramp: inert for now, the restructure flow is future work. -->
+                                                                    <TextBlock Text="Adjust the plan →" FontSize="10" Foreground="{StaticResource WatchTextBrush}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="1" Text="{Binding AmountText}" FontFamily="Consolas" FontSize="14" FontWeight="SemiBold"/>
+                                                        </Grid>
+                                                        <ProgressBar x:Name="JarProgress" Height="5" Minimum="0" Maximum="1" Value="{Binding ProgressFraction, Mode=OneWay}"
+                                                                     Margin="0,4,0,2" Foreground="{StaticResource AccentBrush}" Background="{StaticResource NeutralBgBrush}"
+                                                                     BorderThickness="0" Visibility="{Binding ShowProgress, Converter={StaticResource BoolToVis}}"/>
+                                                        <TextBlock x:Name="JarSubText" Text="{Binding SubText}" FontSize="10" Foreground="Gray" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding StatusKind}" Value="FullyCovered">
+                                                        <Setter TargetName="StatusPill" Property="Background" Value="{StaticResource GoodTextBrush}"/>
+                                                        <Setter TargetName="StatusPillText" Property="Foreground" Value="White"/>
+                                                        <Setter TargetName="JarProgress" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatusKind}" Value="OnTrack">
+                                                        <Setter TargetName="StatusPill" Property="Background" Value="{StaticResource GoodBgBrush}"/>
+                                                        <Setter TargetName="StatusPillText" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                        <Setter TargetName="JarProgress" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatusKind}" Value="Behind">
+                                                        <Setter TargetName="StatusPill" Property="Background" Value="{StaticResource WatchBgBrush}"/>
+                                                        <Setter TargetName="StatusPillText" Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+                                                        <Setter TargetName="JarProgress" Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatusText}" Value="">
+                                                        <Setter TargetName="StatusPill" Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <!-- Raided on a deallocation day: the red treatment. -->
+                                                    <DataTrigger Binding="{Binding Drained}" Value="True">
+                                                        <Setter TargetName="JarRow" Property="Background" Value="{StaticResource RedBgBrush}"/>
+                                                        <Setter TargetName="JarName" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                    </DataTrigger>
+                                                    <!-- A manual withdrawal that exceeded the jar: amber warning. -->
+                                                    <DataTrigger Binding="{Binding Floored}" Value="True">
+                                                        <Setter TargetName="JarSubText" Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+                                                        <Setter TargetName="JarSubText" Property="FontWeight" Value="SemiBold"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Grid>
+                    </Grid>
+
+                    <!-- OVERVIEW: the chosen calendar direction — month
+                         sections of day cells; per-day free + total set aside; every day
+                         in range present; attention tints; TODAY framed. Outer
+                         ListBox = virtualization + ScrollIntoView; months themselves are
+                         not selectable (bare item template) — day-cell Buttons are the
+                         interactive unit, selection handled manually in code-behind. -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <DockPanel Margin="0,0,0,4">
+                            <!-- Account filter: All = the household roll-up;
+                                 picking an account re-scopes every number below. -->
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <TextBlock Text="Show" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox x:Name="AccountFilterComboBox" Width="170" DisplayMemberPath="Name"
+                                          SelectionChanged="OnAccountFilterChanged"
+                                          AutomationProperties.AutomationId="AccountFilterComboBox"/>
+                            </StackPanel>
+                            <TextBlock Text="Overview" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <ListBox x:Name="TimelineCalendar" Grid.Row="1"
+                                 AutomationProperties.AutomationId="TimelineCalendar"
+                                 BorderThickness="0" Background="Transparent"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling"
+                                 VirtualizingPanel.ScrollUnit="Pixel"
+                                 VirtualizingPanel.CacheLength="1" VirtualizingPanel.CacheLengthUnit="Page"
+                                 ScrollViewer.CanContentScroll="True"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Focusable" Value="False"/>
+                                    <Setter Property="AutomationProperties.AutomationId" Value="{Binding MonthAutomationId}"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <ContentPresenter Margin="0,0,0,16"/>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13" Margin="2,0,0,3"/>
+                                        <UniformGrid Columns="7" Margin="0,0,0,2">
+                                            <TextBlock Text="SU" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="MO" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="TU" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="WE" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="TH" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="FR" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="SA" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                        </UniformGrid>
+                                        <ItemsControl ItemsSource="{Binding Cells}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Columns="7"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Click="OnDayCellClick"
+                                                            IsEnabled="{Binding HasSnapshot}"
+                                                            Focusable="{Binding HasSnapshot}"
+                                                            AutomationProperties.AutomationId="{Binding AutomationId}"
+                                                            AutomationProperties.Name="{Binding AutomationName}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="CellBorder" BorderThickness="1" Margin="1"
+                                                                        BorderBrush="{StaticResource CellBorderBrush}"
+                                                                        Background="White" MinHeight="86" Padding="4,2">
+                                                                    <StackPanel>
+                                                                        <!-- Day number left, explicit event count right. -->
+                                                                        <DockPanel>
+                                                                            <TextBlock DockPanel.Dock="Right" Text="{Binding EventCountText}" FontSize="8"
+                                                                                       Foreground="Gray" VerticalAlignment="Center"/>
+                                                                            <TextBlock x:Name="DayNumberText" Text="{Binding DayNumber}" FontSize="10" Foreground="Gray"/>
+                                                                        </DockPanel>
+
+                                                                        <!-- Per-account flow: letter + ↑ in / ↓ out / • none. -->
+                                                                        <ItemsControl ItemsSource="{Binding Flows}" Margin="0,1,0,0">
+                                                                            <ItemsControl.ItemsPanel>
+                                                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                                                            </ItemsControl.ItemsPanel>
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                    <StackPanel Orientation="Horizontal" Margin="0,0,5,0">
+                                                                                        <TextBlock Text="{Binding Letter}" FontSize="9" FontFamily="Consolas" Foreground="Gray"/>
+                                                                                        <TextBlock x:Name="FlowGlyph" Text="{Binding Glyph}" FontSize="9" FontFamily="Consolas"
+                                                                                                   FontWeight="Bold" Foreground="Gray"/>
+                                                                                    </StackPanel>
+                                                                                    <DataTemplate.Triggers>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="In">
+                                                                                            <Setter TargetName="FlowGlyph" Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+                                                                                        </DataTrigger>
+                                                                                        <DataTrigger Binding="{Binding Kind}" Value="Out">
+                                                                                            <Setter TargetName="FlowGlyph" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                                                        </DataTrigger>
+                                                                                    </DataTemplate.Triggers>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+
+                                                                        <!-- The day's top event, by name — not "set aside". -->
+                                                                        <TextBlock Text="{Binding TopEventText}" FontSize="9" Margin="0,1,0,0"
+                                                                                   Foreground="{StaticResource NeutralTextBrush}" TextTrimming="CharacterEllipsis"/>
+
+                                                                        <!-- Warning: symbol + WORDS, never color alone. -->
+                                                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,0"
+                                                                                    Visibility="{Binding ShowWarning, Converter={StaticResource BoolToVis}}">
+                                                                            <TextBlock Text="&#x26A0;" FontSize="9" Margin="0,0,2,0" Foreground="{StaticResource RedTextBrush}"/>
+                                                                            <TextBlock Text="{Binding WarningText}" FontSize="8" FontWeight="SemiBold"
+                                                                                       Foreground="{StaticResource RedTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                                        </StackPanel>
+
+                                                                        <!-- Two LABELED numbers, so neither has to be guessed.
+                                                                             Hidden entirely on an event-less day — bare labels with no
+                                                                             figures under them are just noise. -->
+                                                                        <Grid Margin="0,2,0,0" Visibility="{Binding HasSnapshot, Converter={StaticResource BoolToVis}}">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <StackPanel>
+                                                                                <TextBlock Text="TOTAL" FontSize="7" Foreground="Gray"/>
+                                                                                <TextBlock Text="{Binding TotalText}" FontSize="10" FontFamily="Consolas"/>
+                                                                            </StackPanel>
+                                                                            <StackPanel Grid.Column="1">
+                                                                                <TextBlock Text="FREE" FontSize="7" Foreground="Gray"/>
+                                                                                <TextBlock x:Name="FreeText" Text="{Binding FreeText}" FontSize="11"
+                                                                                           FontWeight="SemiBold" FontFamily="Consolas"/>
+                                                                            </StackPanel>
+                                                                        </Grid>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsPadding}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="Visibility" Value="Hidden"/>
+                                                                    </DataTrigger>
+                                                                    <!-- Event-less days: present but faint. -->
+                                                                    <DataTrigger Binding="{Binding HasSnapshot}" Value="False">
+                                                                        <Setter TargetName="CellBorder" Property="Opacity" Value="0.45"/>
+                                                                    </DataTrigger>
+                                                                    <!-- A day worth a closer look. -->
+                                                                    <DataTrigger Binding="{Binding NeedsAttention}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource RedBgBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding FreeNegative}" Value="True">
+                                                                        <Setter TargetName="FreeText" Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <!-- TODAY is unmistakable. -->
+                                                                    <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                                        <Setter TargetName="CellBorder" Property="BorderThickness" Value="2"/>
+                                                                        <Setter TargetName="DayNumberText" Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                                        <Setter TargetName="DayNumberText" Property="FontWeight" Value="Bold"/>
+                                                                    </DataTrigger>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="CellBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ACCOUNTS: each account is its own silo with
+                 its own balance and its own optional cushion. Editing happens in a
+                 popup, matching every other entity in this app. -->
+            <TabItem Header="Accounts">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Add Account..." Padding="12,5" Click="OnAddAccountClick"
+                                AutomationProperties.AutomationId="AddAccountButton"/>
+                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditAccountClick"
+                                AutomationProperties.AutomationId="EditAccountButton"/>
+                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteAccountClick"
+                                AutomationProperties.AutomationId="DeleteAccountButton"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Your real accounts, each with its own balance and its own optional safety cushion. Enter what each one holds right now — the forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
+                    <DataGrid x:Name="AccountsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                              AutomationProperties.AutomationId="AccountsGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
+                            <DataGridTextColumn Header="Current balance" Binding="{Binding Balance, StringFormat={}{0:C}}" Width="170"/>
+                            <DataGridTextColumn Header="Safety cushion" Binding="{Binding Cushion}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- TRANSFERS: moving money between accounts,
+                 shown as one thing but stored as a paired withdrawal and deposit. -->
+            <TabItem Header="Transfers">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Schedule Transfer..." Padding="12,5" Click="OnAddTransferClick"
+                                AutomationProperties.AutomationId="AddTransferButton"/>
+                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditTransferClick"
+                                AutomationProperties.AutomationId="EditTransferButton"/>
+                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteTransferClick"
+                                AutomationProperties.AutomationId="DeleteTransferButton"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Money you move between your own accounts, once or on a schedule. Each transfer takes from one account and adds the same amount to another — it never changes your household total, only which account the money sits in."/>
+                    <DataGrid x:Name="TransfersGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                              AutomationProperties.AutomationId="TransfersGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="From" Binding="{Binding From}" Width="220"/>
+                            <DataGridTextColumn Header="To" Binding="{Binding To}" Width="220"/>
+                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="130"/>
+                            <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Bills &amp; Paychecks">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Create Bill..." Padding="12,5" Click="OnCreateBillClick"/>
+                        <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddFinancialPatternClick"/>
+                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditFinancialPatternClick"/>
+                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteFinancialPatternClick"/>
+                        <!-- The lever that turns an
+                             automatically-filled jar into a savings plan the
+                             user controls. Lives on the pattern, not in the
+                             create form. -->
+                        <Button Content="Set Up Savings Plan..." Padding="12,5" Margin="20,0,0,0"
+                                Click="OnSetUpSavingsPlanClick"
+                                AutomationProperties.AutomationId="SetUpSavingsPlanButton"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="A bill and a paycheck are the same kind of thing here — just a negative vs. positive amount. &quot;Create Bill&quot; is the simple path for a recurring expense you're obligated to pay; &quot;Add New (advanced)&quot; also covers paychecks, one-time goals, and anything discretionary."/>
+                    <DataGrid x:Name="FinancialPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Finance ID" Binding="{Binding FinanceId}" Width="80"/>
+                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160"/>
+                            <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="200"/>
+                            <DataGridTextColumn Header="Account" Binding="{Binding Account}" Width="120"/>
+                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="110"/>
+                            <DataGridTextColumn Header="Mandatory" Binding="{Binding Mandatory}" Width="80"/>
+                            <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="70"/>
+                            <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Allocations (Earmark Patterns)">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Create One-Time Goal..." Padding="12,5" Click="OnCreateOneTimeGoalClick"/>
+                        <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddEarMarkPatternClick"/>
+                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditEarMarkPatternClick"/>
+                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteEarMarkPatternClick"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills, one-time goals, and eventually the safety cushion. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Rows marked &quot;(Automatic)&quot; aren't something you created — every mandatory bill without its own earmark reserves money toward itself automatically; there's nothing to edit or delete there."/>
+
+                    <!-- Manual adjustments: one-off, user-made jar
+                         changes on top of the automatic plans above. Also
+                         creatable from the Forecast tab's selected-day pane. -->
+                    <DockPanel DockPanel.Dock="Bottom" Height="170" Margin="0,10,0,0">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Manual adjustments" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <Button Content="Add..." Padding="10,3" Click="OnAddManualEarmarkClick"/>
+                            <Button Content="Edit Selected..." Padding="10,3" Margin="6,0,0,0" Click="OnEditManualEarmarkClick"/>
+                            <Button Content="Delete Selected" Padding="10,3" Margin="6,0,0,0" Click="OnDeleteManualEarmarkClick"/>
+                        </StackPanel>
+                        <DataGrid x:Name="ManualEarmarksGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="110"/>
+                                <DataGridTextColumn Header="Fund" Binding="{Binding Target}" Width="260"/>
+                                <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="120"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+
+                    <DataGrid x:Name="EarMarkPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Allocation target" Binding="{Binding Goal}" Width="280"/>
+                            <DataGridTextColumn Header="Amount per occurrence" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="160"/>
+                            <DataGridTextColumn Header="Already Saved" Binding="{Binding StartingAllocation, StringFormat={}{0:C}}" Width="120"/>
+                            <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ACCOUNT / EXPENSE / EARMARK: the
+                 permanent form tabs, one per list tab above (Accounts, Bills &
+                 Paychecks, Allocations), in the same left-to-right order —
+                 replacing the AccountWindow/CreateFinancialPatternWindow/
+                 CreateEarMarkPatternWindow/ManualEarmarkWindow popups. Each
+                 list tab's Add/Edit buttons populate the matching form tab and
+                 switch to it, rather than opening a dialog. -->
+            <!-- Header is a TextBlock, not a plain string, on these three
+                 (wired 2026-08-06) — MainWindow.UpdateTabHeaderStyle sets its
+                 FontWeight/Foreground from the panel's own IsPopulated/IsDirty:
+                 bold when a form has an existing instance loaded, plus an
+                 accent color on top of that when it has unsaved changes.
+                 Tag carries the stable name SwitchToTab still matches on,
+                 since Header is no longer a plain string here. -->
+            <TabItem Tag="Account">
+                <TabItem.Header>
+                    <TextBlock x:Name="AccountTabHeaderText" Text="Account"/>
+                </TabItem.Header>
+                <local:AccountFormPanel x:Name="AccountForm"/>
+            </TabItem>
+
+            <TabItem Tag="Transfer">
+                <TabItem.Header>
+                    <TextBlock x:Name="TransferTabHeaderText" Text="Transfer"/>
+                </TabItem.Header>
+                <local:TransferFormPanel x:Name="TransferForm"/>
+            </TabItem>
+
+            <TabItem Tag="Expense">
+                <TabItem.Header>
+                    <TextBlock x:Name="ExpenseTabHeaderText" Text="Expense"/>
+                </TabItem.Header>
+                <local:ExpenseFormPanel x:Name="ExpenseForm"/>
+            </TabItem>
+
+            <TabItem Tag="Earmark">
+                <TabItem.Header>
+                    <TextBlock x:Name="EarmarkTabHeaderText" Text="Earmark"/>
+                </TabItem.Header>
+                <local:EarmarkFormPanel x:Name="EarmarkForm"/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

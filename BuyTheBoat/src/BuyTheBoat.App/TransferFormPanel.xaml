@@ -1,0 +1,72 @@
+<UserControl x:Class="BuyTheBoat.App.TransferFormPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:BuyTheBoat.App">
+    <DockPanel Margin="8">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="450"
+                       VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <Button Content="Clear form" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnClearClick"/>
+            <Button x:Name="SaveButton" Content="Save" Width="90" Padding="0,5" Click="OnSaveClick"
+                    AutomationProperties.AutomationId="SaveTransferButton"/>
+        </StackPanel>
+
+        <StackPanel>
+            <!-- Characterization-field-block: a transfer has no Description/
+                 Priority/Mandatory to characterize (all auto-set by
+                 TransferFactory), just its two accounts and amount. These
+                 fields + the schedule below are the whole of what the user
+                 sets — the same four the old CreateTransferWindow collected. -->
+            <GroupBox Header="Transfer details" Padding="10">
+                <StackPanel>
+                    <TextBlock x:Name="NeedsTwoAccountsNote" Foreground="#9A4F08" TextWrapping="Wrap"
+                               Visibility="Collapsed" Margin="0,0,0,8"
+                               Text="You need at least two accounts to transfer between. Add another on the Accounts tab first."/>
+                    <UniformGrid Columns="3">
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="From account"/>
+                            <ComboBox x:Name="FromAccountComboBox" Margin="0,2,0,0" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                      AutomationProperties.AutomationId="FromAccountComboBox"/>
+                        </StackPanel>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="To account"/>
+                            <ComboBox x:Name="ToAccountComboBox" Margin="0,2,0,0" DisplayMemberPath="Name" SelectedValuePath="Id"
+                                      AutomationProperties.AutomationId="ToAccountComboBox"/>
+                        </StackPanel>
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="Amount to move"/>
+                            <TextBox x:Name="AmountTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="TransferAmountTextBox"/>
+                        </StackPanel>
+                    </UniformGrid>
+                    <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="Moves money out of one of your accounts and into another on this schedule. For a one-time transfer, set &quot;Ends: After this many occurrences&quot; to 1 in the schedule below."/>
+
+                    <!-- "Keeps going" for a transfer: sets AutoRenew
+                         on both legs and an end date of horizon+cycle, and the
+                         forecast-time pass extends it as the horizon advances. When
+                         checked, the schedule's own "Ends" controls step aside (the
+                         host supplies the end date), matching the bill form. -->
+                    <CheckBox x:Name="KeepsGoingCheckBox" Content="This transfer just keeps going (no end date)"
+                              Margin="0,10,0,0" Checked="OnKeepsGoingChanged" Unchecked="OnKeepsGoingChanged"
+                              AutomationProperties.AutomationId="TransferKeepsGoingCheckBox"/>
+                    <TextBlock x:Name="KeepsGoingNote" Visibility="Collapsed"
+                               Text="No end date to set — it keeps going, renewing on its own as your forecast reaches further out."
+                               FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </GroupBox>
+
+            <local:RecurrenceRuleEditor x:Name="RuleEditor" Margin="0,10,0,0"/>
+
+            <!-- Helper region: a plain live confirmation of the move (accounts +
+                 amount, whose direction is easy to reverse by accident). Sits
+                 BELOW the characterization block, the one settled
+                 layout constraint. Deliberately minimal for this first pass —
+                 the fuller per-region helper inventory for Transfer was never
+                 designed with the author, so this stays a single honest line, not invented
+                 plan-health content the way the Earmark form has. -->
+            <GroupBox Header="Summary" Padding="10" Margin="0,10,0,0" HorizontalAlignment="Left" Width="420">
+                <TextBlock x:Name="SummaryText" TextWrapping="Wrap"/>
+            </GroupBox>
+        </StackPanel>
+    </DockPanel>
+</UserControl>

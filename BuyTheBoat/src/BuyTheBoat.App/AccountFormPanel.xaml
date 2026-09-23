@@ -1,0 +1,43 @@
+<UserControl x:Class="BuyTheBoat.App.AccountFormPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel Margin="8">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="450"
+                       VerticalAlignment="Center" Margin="0,0,14,0"/>
+            <Button Content="Clear form" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnClearClick"/>
+            <Button x:Name="SaveButton" Content="Save" Width="90" Padding="0,5" Click="OnSaveClick"
+                    AutomationProperties.AutomationId="SaveAccountButton"/>
+        </StackPanel>
+
+        <!-- Characterization-field-block, added 2026-08-06 — Account never
+             had one before (nothing here needs characterizing the way
+             Expense's Direction/Repeats? or Earmark's Savings-plan/One-off
+             does), so this is a new, minimal region that exists solely to
+             hold the Advanced mode checkbox the author asked every form
+             have. Currently inert: Account has no recurrence editor or any
+             other content that Advanced mode would reveal yet. -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <CheckBox x:Name="AdvancedModeCheckBox" DockPanel.Dock="Right" Content="Advanced mode" VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <GroupBox DockPanel.Dock="Top" Header="Account details" Padding="10" Width="420" HorizontalAlignment="Left">
+            <StackPanel>
+                <TextBlock Text="Account name"/>
+                <TextBox x:Name="NameTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AccountNameTextBox"/>
+                <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Whatever you call it — Checking, Savings, Bills. Each account needs its own name."/>
+
+                <TextBlock Text="Current balance" Margin="0,10,0,0"/>
+                <TextBox x:Name="BalanceTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AccountBalanceTextBox"/>
+                <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="What this account holds right now. It can be negative if the account is overdrawn."/>
+
+                <TextBlock Text="Safety cushion (optional)" Margin="0,10,0,0"/>
+                <TextBox x:Name="CushionTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AccountCushionTextBox"/>
+                <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Money to hold back in this account so it isn't counted as free to spend. Leave blank for none."/>
+            </StackPanel>
+        </GroupBox>
+    </DockPanel>
+</UserControl>
