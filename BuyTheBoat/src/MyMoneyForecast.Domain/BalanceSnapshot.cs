@@ -10,9 +10,9 @@ namespace MyMoneyForecast.Domain;
 // adjust_snapshots rule, 3.13.a3), plus exactly one dateless initial
 // snapshot per page. This is the per-day answer container for the project's
 // core questions: ExpectedAmount (how much money will I have),
-// ExpectedFreeAmount (how much of it is actually free — Q1), and FundJars
+// ExpectedFreeAmount (how much of it is actually free), and FundJars
 // (what's allocated to what, and — against MilestoneAmount — whether each
-// goal is on track: Q2/Q3).
+// goal is on track).
 public sealed record BalanceSnapshot
 {
     // null = this is the page's initial snapshot: the seed the cascade

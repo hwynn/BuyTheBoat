@@ -110,13 +110,11 @@ public partial class SummaryRegion : UserControl
         var plotWidth = width - leftMargin - rightMargin;
         var plotHeight = height - topMargin - bottomMargin;
 
-        // Due-date-for-X-axis-purposes is whatever the caller passed — the goal's
-        // own Until, OR a nearer cap the caller chose (EarmarkFormPanel caps a
-        // far-off repeating goal at a ~5-year window so its early activity is
-        // legible; the plan's lines then simply run on to the right edge). For an
-        // indefinitely-repeating bill that sits well beyond the forecast's own
-        // HorizonEndDate, the trajectory below instead stops partway across the plot
-        // and the rest reads as genuinely-unknown-yet. Both are honest, not bugs.
+        // The x-axis due date is whatever the caller passed — the goal's Until, or a nearer
+        // cap (EarmarkFormPanel caps a far-off repeating goal at ~5 years so early activity
+        // stays legible; the plan's lines then run to the right edge). For a bill well beyond
+        // the forecast horizon, the trajectory below stops partway and the rest reads as
+        // genuinely unknown-yet. Both are honest, not bugs.
         var totalDays = Math.Max(1, (chart.DueDate.ToDateTime(TimeOnly.MinValue) - chart.Start.ToDateTime(TimeOnly.MinValue)).TotalDays);
         double X(DateOnly date) => leftMargin + plotWidth *
             (date.ToDateTime(TimeOnly.MinValue) - chart.Start.ToDateTime(TimeOnly.MinValue)).TotalDays / totalDays;
@@ -144,24 +142,14 @@ public partial class SummaryRegion : UserControl
         ChartCanvas.Children.Add(TextAt($"{chart.GoalAmount:C0} goal", width - rightMargin, goalY - 12, right: true, width));
         legendEntries.Add(("Goal", Brushes.Gray, true));
 
-        // Savings-plan mode's own "proposed — rough, live estimate" line and
-        // One-off mode's own "Actual" line are mutually exclusive, never
-        // drawn together — the further down toward an isolated earmark
-        // event this form is looking, the more "what's actually saved right
-        // now" matters over "what would this proposed rate produce," which
-        // is exactly what decides which one a given call to Load even has
-        // data for (EarmarkFormPanel.UpdateSummary only ever builds a
-        // ProposedTrajectory in Savings-plan mode). Reuses the same
-        // SteelBlue solid treatment for both, since they occupy the same
-        // visual role (this savings plan's own progress) and are never on
-        // screen at the same time to be confused with each other.
-        //
-        // This proposed line is the projected jar ExpectedAmount (a release
-        // subtracts the goal's payout and floors at 0, so a starting balance or
-        // glut carries forward — NOT the reset-at-release milestone), and only
-        // the earmark-pattern form ever passes it — a projected jar is only
-        // useful where the user sets the plan directly, so the finance-pattern
-        // form never shows one.
+        // Savings-plan mode's "proposed" line and One-off mode's "Actual" line are mutually
+        // exclusive, never drawn together — the further toward an isolated earmark event this
+        // form looks, the more "what's saved now" matters over "what this proposed rate would
+        // produce" (EarmarkFormPanel.UpdateSummary only builds a ProposedTrajectory in
+        // Savings-plan mode). Both reuse the SteelBlue solid treatment — same visual role, never
+        // on screen together. This proposed line is the projected jar ExpectedAmount (a release
+        // subtracts the payout and floors at 0, so a starting balance/glut carries forward — NOT
+        // the reset-at-release milestone); only the earmark-pattern form passes it.
         if (chart.ProposedTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline
@@ -174,13 +162,10 @@ public partial class SummaryRegion : UserControl
         }
         else if (chart.ActualTrajectory.Count > 0)
         {
-            // Split at Today (see this class's own header comment for why).
-            // Before Today: the older straight-line placeholder, one real
-            // point at each end. Today onward: real, walked, per-occurrence
-            // data off the already-saved forecast, turned into a proper
-            // step/staircase (Stepped below) rather than smoothed into a
-            // ramp, so a plan whose actual balance resets at every release
-            // actually reads as resetting.
+            // Split at Today (see the header comment). Before Today: the older straight-line
+            // placeholder, one real point at each end. Today onward: real, walked, per-occurrence
+            // data off the saved forecast, stepped (Stepped below) rather than smoothed, so a plan
+            // whose balance resets at every release actually reads as resetting.
             var todayPoint = chart.ActualTrajectory[0];
             ChartCanvas.Children.Add(new Polyline
             {
@@ -197,15 +182,12 @@ public partial class SummaryRegion : UserControl
             legendEntries.Add(("Fund jar (actual)", Brushes.SteelBlue, false));
         }
 
-        // One-off mode's own extra line — the ActualTrajectory shape,
-        // shifted by the currently-typed one-off's own amount, from Today
-        // onward. Deliberately a plain parallel shift, not a recomputation
-        // through the real floor/deallocation rules: it doesn't re-solve
-        // the regular contributions, since changing the plan itself is a
-        // different action from adding a one-off. AdditionAmount already
-        // carries GetOneOffLiveDelta's own scope limit (0 for a backdated
-        // date before this goal's most recent release), so this simply
-        // won't offset in that one case rather than draw something wrong.
+        // One-off mode's extra line — the ActualTrajectory shape shifted by the typed
+        // one-off's amount, from Today onward. A plain parallel shift, not a recomputation
+        // through the floor/deallocation rules (changing the plan is a different action from
+        // adding a one-off). AdditionAmount already carries GetOneOffLiveDelta's scope limit
+        // (0 for a backdated date before the goal's most recent release), so it simply won't
+        // offset in that case rather than draw something wrong.
         if (chart.AdditionAmount is { } addition && chart.ActualTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline
@@ -218,14 +200,11 @@ public partial class SummaryRegion : UserControl
             legendEntries.Add(($"With today's addition ({(addition >= 0 ? "+" : string.Empty)}{addition:C0})", AdditionBrush, true));
         }
 
-        // A labeled gridline at each period boundary the caller supplies.
-        // Empty for a one-time goal, which keeps the plain
-        // "Due {chart.DueDate}" label below instead — it already names a
-        // real, single due date, nothing to pick out of a row of repeats.
-        // WarningBrush matches StartingShortfallWarningText's own #FF9A4F08
-        // (EarmarkFormPanel.xaml) — the same warning color already used for
-        // the first-payment warning text this gridline is meant to be found
-        // from.
+        // A labeled gridline at each period boundary the caller supplies. Empty for a
+        // one-time goal, which keeps the plain "Due {DueDate}" label below (one real date,
+        // nothing to pick out of a row of repeats). WarningBrush matches
+        // StartingShortfallWarningText's #FF9A4F08 — the first-payment warning color this
+        // gridline is meant to be found from.
         foreach (var peakDate in chart.PeakDates)
         {
             var peakX = X(peakDate);
@@ -251,11 +230,9 @@ public partial class SummaryRegion : UserControl
             ChartCanvas.Children.Add(TextAt($"Due {chart.DueDate:MMM d}", width - rightMargin, topMargin + plotHeight + 4, right: true, width));
         }
 
-        // Built from whichever lines actually got drawn above
-        // (legendEntries), not a fixed set — Savings-plan mode and One-off
-        // mode never show the same combination (see the Proposed/Actual
-        // mutual-exclusion comment above), so a fixed legend would either
-        // omit or fabricate an entry depending on mode.
+        // Built from whichever lines actually got drawn (legendEntries), not a fixed set —
+        // the two modes never show the same combination (see the mutual-exclusion comment
+        // above), so a fixed legend would omit or fabricate an entry depending on mode.
         foreach (var (label, color, dashed) in legendEntries)
         {
             var swatch = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 16, 0) };

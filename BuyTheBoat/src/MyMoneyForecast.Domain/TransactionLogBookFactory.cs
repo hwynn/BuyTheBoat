@@ -580,7 +580,7 @@ public static class TransactionLogBookFactory
                 // today's events. Deallocation runs first and appends its
                 // give-backs (the cushion, priority 0, is drained before any real
                 // jar); the page.s starting date is skipped on purpose (its over-allocation
-                // is the correct Q2 "short right now" signal, not a thing to
+                // is the correct "short right now" signal, not a thing to
                 // drain away).
                 var releaseResult = AppendDeallocationOrGoalReleases(
                     earMarkEvents, date, previousExpected, jarValues, cushionValue,
@@ -711,7 +711,7 @@ public static class TransactionLogBookFactory
         return list;
     }
 
-    /// <summary>[CALC] The Q2 engine: on a deallocation day drains the lowest-priority jars first to cap allocation at available funds; otherwise releases each goal's jar on its own occurrence. Either way, appends the result to the day's earMarkEvents (mutated in place) — deallocation never rewrites jar values directly.</summary>
+    /// <summary>[CALC] The "can I afford X?" engine: on a deallocation day drains the lowest-priority jars first to cap allocation at available funds; otherwise releases each goal's jar on its own occurrence. Either way, appends the result to the day's earMarkEvents (mutated in place) — deallocation never rewrites jar values directly.</summary>
     /// <param name="earMarkEvents">The day's already-scheduled earmark events; the day's release/deallocation events are appended here.</param>
     /// <param name="date">The day being processed.</param>
     /// <param name="previousExpected">Yesterday's ExpectedAmount (c).</param>

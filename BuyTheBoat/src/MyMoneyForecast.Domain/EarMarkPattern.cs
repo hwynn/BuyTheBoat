@@ -104,7 +104,7 @@ public sealed class EarMarkPattern
         return new EarMarkPattern(options);
     }
 
-    /// <summary>[CALC] Whether two earmark patterns under one goal can be folded into one with no change anyone would notice (M1's silent join) — same Amount, and recurrence shapes that merge to exactly the union of their occurrences (RecurrenceRule.CanMergeWith). A true result means JoinedWith yields an identical contribution schedule, so there's no user choice worth asking about; a false one is a genuine difference, left for a with-consequence consolidation to resolve. StartingAllocation is not part of the test — the join simply sums the two jars.</summary>
+    /// <summary>[CALC] Whether two earmark patterns under one goal can be folded into one with no change anyone would notice (the silent join) — same Amount, and recurrence shapes that merge to exactly the union of their occurrences (RecurrenceRule.CanMergeWith). A true result means JoinedWith yields an identical contribution schedule, so there's no user choice worth asking about; a false one is a genuine difference, left for a with-consequence consolidation to resolve. StartingAllocation is not part of the test — the join simply sums the two jars.</summary>
     /// <param name="a">One earmark pattern.</param>
     /// <param name="b">The other earmark pattern — expected to already share a's FinanceId.</param>
     public static bool CanJoinWithoutConsequence(EarMarkPattern a, EarMarkPattern b) =>

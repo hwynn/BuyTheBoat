@@ -1,6 +1,6 @@
 namespace MyMoneyForecast.Domain;
 
-// The pure deallocation math — the Q2 ("can I afford X?") engine's core,
+// The pure deallocation math — the "can I afford X?" engine's core,
 // implemented standalone and side-effect-free.
 //
 // On a "deallocation day" the money committed to fund jars would exceed what's

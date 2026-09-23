@@ -77,22 +77,15 @@ public static class PlanHealthMessages
         _ => null,
     };
 
-    // RecurrenceRuleEditor only ever applies a color to whatever dates it's
-    // told; it has no idea those dates come from
-    // PlanHealthState.UnderfundedReleaseDates, or what that means. This is
-    // that explanation, supplied from here rather than composed ad hoc in
-    // the form — always the same wording, since the highlight always means
-    // the same thing regardless of which caption (or none) goes with it:
-    // UnderfundedReleaseDates is a real, per-occurrence forecast fact,
-    // computed independently of MostImportantHealthState's own whole-plan
-    // verdict (a plan can read WillBeOverfunded overall and still have one
-    // rough release highlighted here).
+    // The legend for the calendar's underfunded-release highlight, supplied from here
+    // rather than composed in the form (RecurrenceRuleEditor colors dates without knowing
+    // what they mean). Always the same wording — UnderfundedReleaseDates is a per-occurrence
+    // forecast fact, independent of the whole-plan verdict (a plan can read WillBeOverfunded
+    // overall yet still have one rough release highlighted).
     public const string UnderfundedReleaseHighlightLegend = "Highlighted: this release came up short of what it needed.";
 
-    // Wording settled, mechanism still pending — needs the form/UI layer's
-    // at-open-vs-live diff (not built yet). Not called from anywhere yet;
-    // the strings exist so whoever builds that diffing mechanism doesn't
-    // also have to invent the copy.
+    // Placeholder copy for a not-yet-built mechanism (the form's at-open-vs-live diff).
+    // Unused for now; the strings exist so whoever builds that diff needn't invent the copy.
     public const string FixedNoLongerShort = "Fixed — no longer short";
     public const string FixedNoLongerOverfunded = "Fixed — no longer overfunded";
 

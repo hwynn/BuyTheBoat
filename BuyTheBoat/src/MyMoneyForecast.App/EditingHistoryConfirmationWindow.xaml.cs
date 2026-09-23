@@ -127,7 +127,7 @@ public partial class EditingHistoryConfirmationWindow : Window
         });
 
         // SideBySide lays the radios in a row; Stacked (what every row uses
-        // today) lays them one per line, matching the old fixed sections.
+        // today) lays them one per line.
         var sideBySide = row.Layout == OptionLayout.SideBySide;
         var optionsPanel = new StackPanel
         {

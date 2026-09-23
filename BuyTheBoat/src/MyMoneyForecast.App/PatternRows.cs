@@ -95,8 +95,7 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
 
         foreach (var earmarkEvent in snapshot.EarMarkEvents.Where(e => e.RepeatedEarmark))
         {
-            // Shown as its effect on free balance (an allocation reduces it),
-            // matching how these read before the restructure.
+            // Shown as its effect on free balance (an allocation reduces it).
             parts.Add($"{JarLabel(earmarkEvent.FinanceId, jarLabels)} {-earmarkEvent.ExpectedAmount:C}");
         }
 
@@ -163,8 +162,7 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
     public string FreeText { get; } = string.Empty;
     public bool FreeNegative { get; }
 
-    // The day's highest-priority expected transaction, by name — replaces the
-    // old "set aside" figure, which was internal jargon.
+    // The day's highest-priority expected transaction, by name.
     public string TopEventText { get; } = string.Empty;
 
     // Spelled out rather than dots — there is room to just say it.
@@ -258,9 +256,9 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
 // ===== The selected-day region =====
 //
 // Leverages the full BalanceSnapshot: every transaction listed (left pane),
-// every fund jar with per-type Q3 health (right pane), and the day's free
-// amount. Q3 "am I on track?" takes a different shape per ExpenseKind — that's
-// what JarDetailRow renders.
+// every fund jar with per-type "am I on track?" health (right pane), and the
+// day's free amount. That on-track health takes a different shape per
+// ExpenseKind — that's what JarDetailRow renders.
 
 // Everything the selected-day rows need beyond the snapshot itself, built once
 // per selection in MainWindow.
@@ -304,7 +302,7 @@ public sealed class JarDetailRow
     // got floored — drives the amber warning on the sub line.
     public bool Floored { get; init; }
 
-    // The Q4 on-ramp: a behind goal invites restructuring its plan.
+    // The readjustment on-ramp: a behind goal invites restructuring its plan.
     // Inert affordance for now — the restructure flow is future design work.
     public bool ShowAdjustNudge { get; init; }
 

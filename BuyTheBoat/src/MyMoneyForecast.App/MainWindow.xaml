@@ -52,7 +52,7 @@
                      (many days at a glance: totals, allocations, trends, and days worth
                      a closer look — NOT every allocation or every actual transaction),
                      and the SELECTED-DAY detail (the full snapshot: every transaction,
-                     every jar, and per-goal health answering Q3). Whatever element
+                     every jar, and per-goal health answering "am I on track?"). Whatever element
                      represents TODAY must be visually distinct from all other days. -->
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
@@ -268,7 +268,7 @@
                                                                 <Border Background="{StaticResource WatchBgBrush}" CornerRadius="8" Padding="7,1" Margin="6,0,0,0"
                                                                         VerticalAlignment="Center"
                                                                         Visibility="{Binding ShowAdjustNudge, Converter={StaticResource BoolToVis}}">
-                                                                    <!-- The Q4 on-ramp: inert for now, the restructure flow is future work. -->
+                                                                    <!-- The readjustment on-ramp: inert for now, the restructure flow is future work. -->
                                                                     <TextBlock Text="Adjust the plan →" FontSize="10" Foreground="{StaticResource WatchTextBrush}"/>
                                                                 </Border>
                                                             </StackPanel>

@@ -70,19 +70,15 @@ public partial class ExpenseFormPanel : UserControl
     private IReadOnlyDictionary<int, EarMarkPattern> _patternsByFinanceId = new Dictionary<int, EarMarkPattern>();
     private IReadOnlyDictionary<int, int> _earmarkPatternCountByFinanceId = new Dictionary<int, int>();
 
-    // The "silent redirect" ruling (opening any segment of
-    // a break-off/renewal chain for editing always lands on the CURRENT one)
-    // — designed but never wired in until now. Needed here, not just at each
-    // caller, since LoadPattern below is
-    // the one place both entry points (the grid's Edit button and this
-    // form's own instance picker) funnel through.
+    // Every FinancialPattern — LoadPattern/ChooseSegmentToLoad need the full chain
+    // to find which segment to open (and to fall back to the current one). Held here,
+    // not fetched per caller, since LoadPattern is the one place both entry points
+    // (the grid's Edit button and this form's own instance picker) funnel through.
     private IReadOnlyList<FinancialPattern> _allPatterns = [];
 
-    // Computes (or returns the already-cached) live forecast on demand —
-    // wired to MainWindow.EnsureForecast, which always succeeds rather than
-    // requiring the user to have pressed "Forecast" first: everything
-    // needed to compute one (the As-Of/Horizon pickers) already has a value
-    // at all times, so there's nothing to actually wait on the user for.
+    // Computes (or returns the cached) live forecast on demand — wired to
+    // MainWindow.EnsureForecast, which always succeeds (the As-Of/Horizon pickers
+    // always have values, so there's nothing to wait on the user for).
     public Func<ForecastResult>? RequestForecast { get; set; }
 
     // (pattern, accountId, isNew, jumpToEarmark) -> did the save go through.
@@ -93,12 +89,10 @@ public partial class ExpenseFormPanel : UserControl
     // so Save can leave the form exactly as it was rather than clearing it.
     public Func<FinancialPattern, int, bool, bool, bool>? PatternSaved { get; set; }
 
-    // Opens a picker for WHICH segment of a break-off chain to edit, shown by
-    // MainWindow (ChainSegmentPickerWindow). Given every same-Source segment,
-    // it returns the one the user chose. Only consulted when a chain has more
-    // than one segment; null (nothing wired) or a cancelled pick falls back to
-    // the current segment — the always-land-on-current behavior from before
-    // this picker existed.
+    // Opens a picker for WHICH segment of a break-off chain to edit
+    // (ChainSegmentPickerWindow, via MainWindow). Given every same-Source segment,
+    // returns the one the user chose. Only consulted when a chain has more than one
+    // segment; null (nothing wired) or a cancelled pick falls back to the current segment.
     public Func<IReadOnlyList<FinancialPattern>, FinancialPattern?>? PickChainSegment { get; set; }
 
     /// <summary>[UI] Fires whenever IsDirty or IsPopulated could have changed, so MainWindow can restyle this form's tab header live.</summary>
@@ -117,7 +111,7 @@ public partial class ExpenseFormPanel : UserControl
         InitializeComponent();
 
         // Subscribed once, ever, not per-load — RuleEditor is one long-lived
-        // instance now, not a fresh control each time.
+        // instance, not a fresh control each time.
         RuleEditor.ResultChanged += (_, _) => MarkDirtyIfNotSuppressed();
 
         _initialized = true;
@@ -393,14 +387,11 @@ public partial class ExpenseFormPanel : UserControl
 
         if (_earmarkPatternCountByFinanceId.GetValueOrDefault(existing.FinanceId) > 1)
         {
-            // More than one EarMarkPattern already funds this Expense —
-            // editing it goes through the consolidation question, which
-            // can consolidate them into a single fresh plan. A chart built
-            // from just ONE of the existing plans would show a shape Save
-            // might not actually produce, so show the goal alone instead of
-            // guessing. See SummaryRegion.DrawChart: passing empty
-            // trajectories still draws the goal/Today lines, just none of
-            // the plan-progress ones.
+            // More than one EarMarkPattern already funds this Expense — editing it
+            // goes through the consolidation question, which can fold them into one
+            // fresh plan. A chart from just ONE existing plan would show a shape Save
+            // might not produce, so show the goal alone. SummaryRegion.DrawChart draws
+            // the goal/Today lines from empty trajectories, just no plan-progress ones.
             Summary.Load(
                 $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.",
                 start: plan.DatePattern.ActiveStart,
@@ -623,10 +614,8 @@ public partial class ExpenseFormPanel : UserControl
         }
     }
 
-    // Shared with FinancePatternSaveConfirmation via the same TransactionLogBook
-    // method — 1 is the fallback for when RequestForecast isn't wired up yet
-    // (mirrors OnChangeInstanceClick's own null guard; RequestForecast always
-    // succeeds once the host has wired it, so this only matters pre-wiring).
+    // 1 is the fallback for when RequestForecast isn't wired up yet (RequestForecast
+    // always succeeds once the host has wired it, so this only matters pre-wiring).
     private int NextFinanceId() => RequestForecast?.Invoke().Book.NextFinanceId() ?? 1;
 
     // The instance-information-block's controls ------------------------
@@ -917,8 +906,8 @@ public partial class ExpenseFormPanel : UserControl
             }
 
             // Same one-occurrence convention used everywhere else in this app
-            // (CreateTransferWindow, OneTimeGoalFactory, AllocationPlanProposer):
-            // Frequency is immaterial for Count = 1, Yearly is the standing choice.
+            // (OneTimeGoalFactory, AllocationPlanProposer): Frequency is immaterial
+            // for Count = 1, Yearly is the standing choice.
             return RecurrenceRule.Create(new RecurrenceRuleOptions
             {
                 Frequency = RecurrenceFrequency.Yearly,
@@ -1053,7 +1042,7 @@ public partial class ExpenseFormPanel : UserControl
         };
     }
 
-    /// <summary>[UI] Works out the loan's payoff date from the owed amount, the payment, and the schedule, shows it as a floor, and hands it to the editor. The owed amount is entry-only — only the resulting date is kept (W3).</summary>
+    /// <summary>[UI] Works out the loan's payoff date from the owed amount, the payment, and the schedule, shows it as a floor, and hands it to the editor. The owed amount is entry-only — only the resulting date is kept.</summary>
     private void UpdatePayoffEnd()
     {
         try

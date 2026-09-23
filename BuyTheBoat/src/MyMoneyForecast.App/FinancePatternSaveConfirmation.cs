@@ -148,7 +148,7 @@ public sealed class FinancePatternSaveConfirmation
 
     // The later finance patterns this finance pattern's own Amount change will be
     // carried forward onto that are funded by MORE THAN ONE earmark pattern
-    // (cross-boundary Q6) — each gets its own combine-or-keep-separate question,
+    // (cross-boundary) — each gets its own combine-or-keep-separate question,
     // kept distinct from the break-off Consolidation row. Worked out before the
     // confirmation; empty when no such later finance pattern is reached.
     private IReadOnlyList<FinancialPattern> _crossBoundaryConsolidations = [];
@@ -494,19 +494,19 @@ public sealed class FinancePatternSaveConfirmation
         // the linked plan fixed up."
         DetermineBackTruncationsIfApplicable();
 
-        // The front-boundary twin (M2): the same invariant, and the same
+        // The front-boundary twin: the same invariant, and the same
         // "read before write" timing, for a Start moving forward in place —
         // otherwise a plan left starting before the new Start crashes the next
         // GetAll() exactly as an over-long Until does.
         DetermineFrontTruncationsIfApplicable();
 
-        // The outward twin of the two truncations (M2 piece 3): a boundary of the
+        // The outward twin of the two truncations: a boundary of the
         // goal moving OUT, with a plan that shared it, means that plan grows to
         // keep tracking it. Same "read the old boundary before PerformSave writes
         // the new one" timing as its inward siblings.
         DetermineBoundaryExtensionsIfApplicable();
 
-        // Cross-boundary Q6: a later segment the Amount cascade will
+        // Cross-boundary: a later segment the Amount cascade will
         // land on, funded by more than one plan, gets its own combine-or-keep-
         // separate question — worked out here so the confirmation can ask it. Its
         // own row, deliberately never the break-off Consolidation one.
@@ -947,7 +947,7 @@ public sealed class FinancePatternSaveConfirmation
         _backTruncations = new BackTruncationPlan(plansExceedingNewUntil, orphanedDates);
     }
 
-    /// <summary>[READS FILE] The front-boundary mirror of DetermineBackTruncationsIfApplicable (M2): works out whether any existing EarMarkPattern now starts BEFORE the proposed pattern's own Start — 3.11.2.a2 has to keep holding after ANY save — and if so, everything ApplyFrontTruncationsIfNeeded needs: which plans start too early, and which ManualEarmarks now fall before it and need deleting. Stored in _frontTruncations, same "read before PerformSave writes anything" reasoning as the back side. Runs unconditionally, not gated on IsChangeCritical — a Start moving forward in place (only ever a non-Critical future edit; a Critical one breaks off instead) is exempt from ASKING but never from keeping its plans valid. internal for the same reason DetermineBackTruncationsIfApplicable is — so a test can call it directly ahead of ApplyFrontTruncationsIfNeeded.</summary>
+    /// <summary>[READS FILE] The front-boundary mirror of DetermineBackTruncationsIfApplicable: works out whether any existing EarMarkPattern now starts BEFORE the proposed pattern's own Start — 3.11.2.a2 has to keep holding after ANY save — and if so, everything ApplyFrontTruncationsIfNeeded needs: which plans start too early, and which ManualEarmarks now fall before it and need deleting. Stored in _frontTruncations, same "read before PerformSave writes anything" reasoning as the back side. Runs unconditionally, not gated on IsChangeCritical — a Start moving forward in place (only ever a non-Critical future edit; a Critical one breaks off instead) is exempt from ASKING but never from keeping its plans valid. internal for the same reason DetermineBackTruncationsIfApplicable is — so a test can call it directly ahead of ApplyFrontTruncationsIfNeeded.</summary>
     internal void DetermineFrontTruncationsIfApplicable()
     {
         var forecast = _requestForecast();
@@ -972,7 +972,7 @@ public sealed class FinancePatternSaveConfirmation
         _frontTruncations = new FrontTruncationPlan(plansStartingBeforeNewStart, orphanedDates);
     }
 
-    /// <summary>[READS FILE] The OUTWARD counterpart to the two Determine…Truncations (M2 piece 3): works out whether the proposed pattern's own Start or Until has moved OUTWARD from what's saved (Until later, or a future Start earlier) and, if so, which of its plans shared that exact boundary and should therefore track it out — captured before PerformSave overwrites the goal's old boundary. Stored in _boundaryExtensions; null when nothing moved outward, or no plan shared the moved boundary. Scoped to the directly-edited goal's own plans only (see the field's own note). internal so a test can call it directly ahead of ApplyBoundaryExtensionsIfNeeded.</summary>
+    /// <summary>[READS FILE] The OUTWARD counterpart to the two Determine…Truncations: works out whether the proposed pattern's own Start or Until has moved OUTWARD from what's saved (Until later, or a future Start earlier) and, if so, which of its plans shared that exact boundary and should therefore track it out — captured before PerformSave overwrites the goal's old boundary. Stored in _boundaryExtensions; null when nothing moved outward, or no plan shared the moved boundary. Scoped to the directly-edited goal's own plans only (see the field's own note). internal so a test can call it directly ahead of ApplyBoundaryExtensionsIfNeeded.</summary>
     internal void DetermineBoundaryExtensionsIfApplicable()
     {
         var saved = _repositories.FinancialPatterns.GetByFinanceId(_financeId);
@@ -1030,7 +1030,7 @@ public sealed class FinancePatternSaveConfirmation
         return $"{_proposedPattern.Source} now occurs {times} — its savings plan grows to keep pace.";
     }
 
-    /// <summary>[READS FILE] Works out which later finance patterns this finance pattern's own Amount change will be carried forward onto that are funded by MORE THAN ONE earmark pattern (the cross-boundary Q6) — each needs its own combine-or-keep-separate question, since folding several earmark patterns into one is a real choice, not a forced one. Amount-only successors only: a schedule change moves the dates and forces them to consolidate with no question (ReconcileCascadedSuccessorSavingsPlans handles that directly). Stored in _crossBoundaryConsolidations for the confirmation to ask about; a no-op unless this change can actually be carried forward. Same "read before anything is saved" timing as its sibling Determine* calls. internal so a test can drive it directly.</summary>
+    /// <summary>[READS FILE] Works out which later finance patterns this finance pattern's own Amount change will be carried forward onto that are funded by MORE THAN ONE earmark pattern (cross-boundary) — each needs its own combine-or-keep-separate question, since folding several earmark patterns into one is a real choice, not a forced one. Amount-only successors only: a schedule change moves the dates and forces them to consolidate with no question (ReconcileCascadedSuccessorSavingsPlans handles that directly). Stored in _crossBoundaryConsolidations for the confirmation to ask about; a no-op unless this change can actually be carried forward. Same "read before anything is saved" timing as its sibling Determine* calls. internal so a test can drive it directly.</summary>
     internal void DetermineCrossBoundaryConsolidationsIfApplicable()
     {
         if (!ChangeCanCascade || _chainContext is not { } context)
@@ -1682,7 +1682,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] The front-boundary mirror of ApplyBackTruncationsIfNeeded (M2): carries out the fix DetermineFrontTruncationsIfApplicable worked out before anything was saved — deletes any ManualEarmark now dated before the goal's own new Start, then brings every EarMarkPattern that still starts before it back in line — its own Start clamped forward via PatternTruncation.StartOn (which keeps it on the same cadence) when active span survives inside the new range, or deleted outright when its own Until is already before the new Start. absorbedBalance is 0m: a Start moving forward in place is only ever a non-Critical FUTURE edit (a Critical one breaks off), so the dropped occurrences are forecasted, not real accumulated money — there's nothing yet to carry over beyond whatever StartingAllocation the plan already held. Unlike EndOn, StartOn can move the plan's DtStart (its persistence key), so this deletes the pre-clamp row before saving the re-started one. A plan straddling BOTH boundaries is brought in line here (Start then Until), and ApplyBackTruncationsIfNeeded skips it to avoid re-creating its old-key row. A no-op whenever _frontTruncations is null. Called from inside PerformSave, right after the FinancialPattern save.</summary>
+    /// <summary>[WRITES FILE] The front-boundary mirror of ApplyBackTruncationsIfNeeded: carries out the fix DetermineFrontTruncationsIfApplicable worked out before anything was saved — deletes any ManualEarmark now dated before the goal's own new Start, then brings every EarMarkPattern that still starts before it back in line — its own Start clamped forward via PatternTruncation.StartOn (which keeps it on the same cadence) when active span survives inside the new range, or deleted outright when its own Until is already before the new Start. absorbedBalance is 0m: a Start moving forward in place is only ever a non-Critical FUTURE edit (a Critical one breaks off), so the dropped occurrences are forecasted, not real accumulated money — there's nothing yet to carry over beyond whatever StartingAllocation the plan already held. Unlike EndOn, StartOn can move the plan's DtStart (its persistence key), so this deletes the pre-clamp row before saving the re-started one. A plan straddling BOTH boundaries is brought in line here (Start then Until), and ApplyBackTruncationsIfNeeded skips it to avoid re-creating its old-key row. A no-op whenever _frontTruncations is null. Called from inside PerformSave, right after the FinancialPattern save.</summary>
     private void ApplyFrontTruncationsIfNeeded()
     {
         if (_frontTruncations is not { } fix)
@@ -1720,7 +1720,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] The OUTWARD counterpart to the two Apply…Truncations (M2 piece 3): carries out the extend DetermineBoundaryExtensionsIfApplicable worked out — each plan that shared the goal's own now-outward-moved boundary grows to match it, adding occurrences on its own cadence and amount. Until-outward keeps the plan's DtStart (WithUntil), so its persistence key is stable and Save just replaces it; Start-outward moves the plan's Start earlier while keeping it on the same cadence (ReanchoredToStartOn — the same primitive StartOn uses) and can move DtStart, so that path deletes the old-key row first. A plan sharing BOTH outward-moved boundaries is grown on both in one rewrite. Skips a plan a truncation already owns this Run() (the rare edit moving one boundary out and the other in on the same plan) to avoid colliding on its key — that plan keeps its truncated shape, not yet extended. A no-op whenever _boundaryExtensions is null. Called from inside PerformSave, right after the two ApplyTruncations.</summary>
+    /// <summary>[WRITES FILE] The OUTWARD counterpart to the two Apply…Truncations: carries out the extend DetermineBoundaryExtensionsIfApplicable worked out — each plan that shared the goal's own now-outward-moved boundary grows to match it, adding occurrences on its own cadence and amount. Until-outward keeps the plan's DtStart (WithUntil), so its persistence key is stable and Save just replaces it; Start-outward moves the plan's Start earlier while keeping it on the same cadence (ReanchoredToStartOn — the same primitive StartOn uses) and can move DtStart, so that path deletes the old-key row first. A plan sharing BOTH outward-moved boundaries is grown on both in one rewrite. Skips a plan a truncation already owns this Run() (the rare edit moving one boundary out and the other in on the same plan) to avoid colliding on its key — that plan keeps its truncated shape, not yet extended. A no-op whenever _boundaryExtensions is null. Called from inside PerformSave, right after the two ApplyTruncations.</summary>
     private void ApplyBoundaryExtensionsIfNeeded()
     {
         if (_boundaryExtensions is not { } ext)
@@ -1797,17 +1797,17 @@ public sealed class FinancePatternSaveConfirmation
         // A chain neighbor stretched by keeping the boundary linked, if any:
         // ExtendStart grows a predecessor's Until forward, ExtendUntil grows a
         // successor's Start backward. Once every finance-row change here is saved,
-        // the neighbor's own savings plan is grown to match the stretch (#5), the
-        // reverse-break-off migrates any dropped occurrences under a predecessor
-        // (piece 2), and any earmark patterns left mergeable under one finance_id
-        // are silently joined (M1).
+        // the neighbor's own savings plan is grown to match the stretch, the
+        // reverse-break-off migrates any dropped occurrences under a predecessor,
+        // and any earmark patterns left mergeable under one finance_id are
+        // silently joined.
         FinancialPattern? extendedPredecessor = null;
         FinancialPattern? extendedSuccessor = null;
 
         // The later finance patterns this finance pattern's own Amount/schedule
         // change was carried forward onto, each as (pre-cascade, carried-forward)
         // — their own savings plans get brought back in line with the new figure
-        // once the finance rows are saved (cross-boundary Q6), so a later finance
+        // once the finance rows are saved (cross-boundary), so a later finance
         // pattern isn't left saving toward the old one.
         var cascadeTouchedSuccessors = new List<(FinancialPattern Before, FinancialPattern After)>();
 
@@ -1842,14 +1842,14 @@ public sealed class FinancePatternSaveConfirmation
                 if (result.AdjustedNeighbor is { } adjusted)
                 {
                     toSave[adjusted.FinanceId] = adjusted;
-                    extendedSuccessor = adjusted; // stretched backward to stay contiguous — its plan grows to match (#5)
+                    extendedSuccessor = adjusted; // stretched backward to stay contiguous — its plan grows to match
                 }
             }
         }
 
         // Gated on UserChoseStayLinked too: breaking the chain leaves no forward
-        // chain to carry the change onto (break ⇒ no forward chain
-        // ⇒ Q4 gone), matching the popup hiding this question under "let the
+        // chain to carry the change onto (break ⇒ no forward chain),
+        // matching the popup hiding this question under "let the
         // chain break." UserChoseStayLinked defaults true, so an amount-only edit
         // with no chain-boundary question still cascades as before.
         if (ChangeCanCascade && UserChoseCascadeForward && UserChoseStayLinked)
@@ -1914,20 +1914,20 @@ public sealed class FinancePatternSaveConfirmation
         if (extendedPredecessor is { } predecessor)
         {
             FitNeighborPlansToItsNewSpan(predecessors.First(p => p.FinanceId == predecessor.FinanceId), predecessor); // grow or clamp the stretched predecessor's own plans
-            PreserveDroppedOccurrencesUnderPredecessor(predecessor); // reverse-break-off (piece 2)
-            JoinMergeableEarmarkPatterns(predecessor); // M1 — fold the stretched plan and the migrated one together when identical
+            PreserveDroppedOccurrencesUnderPredecessor(predecessor); // reverse-break-off
+            JoinMergeableEarmarkPatterns(predecessor); // fold the stretched plan and the migrated one together when identical
         }
 
         if (extendedSuccessor is { } successor)
         {
             FitNeighborPlansToItsNewSpan(successors.First(s => s.FinanceId == successor.FinanceId), successor); // grow or clamp the stretched successor's own plans
-            JoinMergeableEarmarkPatterns(successor); // M1
+            JoinMergeableEarmarkPatterns(successor);
         }
 
         ReconcileCascadedSuccessorSavingsPlans(cascadeTouchedSuccessors);
     }
 
-    /// <summary>[WRITES FILE] After the edited finance pattern's Amount/schedule change is carried forward onto the LATER finance patterns in its chain (the Q4 cascade), brings each of those later finance patterns' own savings plans back in line with the new figure — so a later finance pattern isn't left with earmark patterns still saving toward the old one (the cross-boundary Q6). Choosing to apply the change going forward is itself the consent, so nothing here asks again. A schedule change makes the later earmark patterns fold into one moved onto the new dates (EarmarkConsolidation.Consolidate) regardless of how many there are — the settled rule, since the dates move and each earmark pattern's own timing has to be worked out afresh, which one folded plan does correctly and re-dating several individually doesn't. An amount-only change on a single earmark pattern re-rates it proportionally in place (EarmarkScaling.Scale). An amount-only change on a later finance pattern funded by MORE THAN ONE earmark pattern is the cross-boundary Q6: the user's per-finance-pattern combine-or-keep-separate answer (_successorCombineChoices) picks between folding them into one and re-rating each proportionally.</summary>
+    /// <summary>[WRITES FILE] After the edited finance pattern's Amount/schedule change is carried forward onto the LATER finance patterns in its chain, brings each of those later finance patterns' own savings plans back in line with the new figure — so a later finance pattern isn't left with earmark patterns still saving toward the old one. Choosing to apply the change going forward is itself the consent, so nothing here asks again. A schedule change makes the later earmark patterns fold into one moved onto the new dates (EarmarkConsolidation.Consolidate) regardless of how many there are — the settled rule, since the dates move and each earmark pattern's own timing has to be worked out afresh, which one folded plan does correctly and re-dating several individually doesn't. An amount-only change on a single earmark pattern re-rates it proportionally in place (EarmarkScaling.Scale). An amount-only change on a later finance pattern funded by MORE THAN ONE earmark pattern: the user's per-finance-pattern combine-or-keep-separate answer (_successorCombineChoices) picks between folding them into one and re-rating each proportionally.</summary>
     /// <param name="touched">Each later finance pattern the cascade reached, as (its pre-cascade form, its carried-forward form), in no particular order.</param>
     private void ReconcileCascadedSuccessorSavingsPlans(IReadOnlyList<(FinancialPattern Before, FinancialPattern After)> touched)
     {
@@ -1959,7 +1959,7 @@ public sealed class FinancePatternSaveConfirmation
 
             // Amount-only. A single earmark pattern is re-rated with no extra
             // question — choosing to apply the change going forward is the consent.
-            // More than one is a real choice (cross-boundary Q6): "combine" folds
+            // More than one is a real choice (cross-boundary): "combine" folds
             // them into one; "keep separate" (the default) re-rates each
             // proportionally, the same Scale a single earmark pattern takes.
             if (plans.Count > 1 && _successorCombineChoices.TryGetValue(after.FinanceId, out var combine) && combine)
@@ -2007,7 +2007,7 @@ public sealed class FinancePatternSaveConfirmation
         _repositories.EarMarkPatterns.Save(consolidated);
     }
 
-    /// <summary>[WRITES FILE] M2's cut-occurrence preservation (reverse break-off): when a Start move forward drops repeated occurrences from this goal's own earmark patterns AND a predecessor segment has just stretched to cover the days this segment no longer reaches, those occurrences survive as a new earmark pattern under that predecessor rather than being let go — the user's own conscious contribution schedule for those dates. Only ever fires for a FUTURE in-place Start move (a Critical, past-touching one breaks off instead), so the earmark patterns hold no accumulated real money yet: the migrated one starts at 0m and simply re-generates the dropped occurrences under the predecessor's finance_id. A dropped stretch with no occurrence is let go (nothing to preserve). ASSUMPTION (M2 piece 2, to compose with later pieces): the predecessor's OWN earmark pattern is not also stretched over those days (piece 3 — extend-outward), so the migrated one sits contiguously after it with no overlap to merge (M1); once those land this joins them. Reads the original (pre-clamp) earmark patterns from _frontTruncations, captured before any save, and runs last so the predecessor's own stretched row is already persisted (the migrated one must validate against it).</summary>
+    /// <summary>[WRITES FILE] The cut-occurrence preservation (reverse break-off): when a Start move forward drops repeated occurrences from this goal's own earmark patterns AND a predecessor segment has just stretched to cover the days this segment no longer reaches, those occurrences survive as a new earmark pattern under that predecessor rather than being let go — the user's own conscious contribution schedule for those dates. Only ever fires for a FUTURE in-place Start move (a Critical, past-touching one breaks off instead), so the earmark patterns hold no accumulated real money yet: the migrated one starts at 0m and simply re-generates the dropped occurrences under the predecessor's finance_id. A dropped stretch with no occurrence is let go (nothing to preserve). ASSUMPTION: the predecessor's OWN earmark pattern is not also stretched over those days (the extend-outward step), so the migrated one sits contiguously after it with no overlap to merge; once those land this joins them. Reads the original (pre-clamp) earmark patterns from _frontTruncations, captured before any save, and runs last so the predecessor's own stretched row is already persisted (the migrated one must validate against it).</summary>
     /// <param name="predecessor">The predecessor segment, freshly stretched to cover the days this segment no longer reaches.</param>
     private void PreserveDroppedOccurrencesUnderPredecessor(FinancialPattern predecessor)
     {
@@ -2116,7 +2116,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] M1's silent join (#6), applied to one goal: folds any two earmark patterns under it that can merge with no visible change (EarMarkPattern.CanJoinWithoutConsequence — same amount, same cadence, their occurrences a clean union) into one, repeating until none remain. Runs after a stretch has grown or re-homed plans under this goal (#5 + the reverse-break-off), where the neighbor's own grown plan and a migrated one can end up identical and covering the same span. A genuine difference (different amount or cadence) is left as two separate plans — a valid concurrent earmark patterns shape, not folded behind the user's back.</summary>
+    /// <summary>[WRITES FILE] The silent join, applied to one goal: folds any two earmark patterns under it that can merge with no visible change (EarMarkPattern.CanJoinWithoutConsequence — same amount, same cadence, their occurrences a clean union) into one, repeating until none remain. Runs after a stretch has grown or re-homed plans under this goal (the reverse-break-off), where the neighbor's own grown plan and a migrated one can end up identical and covering the same span. A genuine difference (different amount or cadence) is left as two separate plans — a valid concurrent earmark patterns shape, not folded behind the user's back.</summary>
     /// <param name="goal">The goal whose earmark patterns to fold.</param>
     private void JoinMergeableEarmarkPatterns(FinancialPattern goal)
     {

@@ -105,7 +105,7 @@ public sealed class RecurrenceRule
         && ByDay.SequenceEqual(other.ByDay)
         && ByMonthDay.SequenceEqual(other.ByMonthDay);
 
-    /// <summary>[CALC] Whether a single rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences — nothing shifted, added, or dropped. Needs the same recurrence shape (Frequency/Interval/ByDay/ByMonthDay), the same cadence, and no gap between them a merged rule would fill in. The rrule half of EarMarkPattern.CanJoinWithoutConsequence (M1's silent join); a pair whose merge WOULD move a date is a genuine difference, left for a with-consequence consolidation instead.</summary>
+    /// <summary>[CALC] Whether a single rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences — nothing shifted, added, or dropped. Needs the same recurrence shape (Frequency/Interval/ByDay/ByMonthDay), the same cadence, and no gap between them a merged rule would fill in. The rrule half of EarMarkPattern.CanJoinWithoutConsequence (the silent join); a pair whose merge WOULD move a date is a genuine difference, left for a with-consequence consolidation instead.</summary>
     /// <param name="other">The rule to test merging with.</param>
     public bool CanMergeWith(RecurrenceRule other)
     {

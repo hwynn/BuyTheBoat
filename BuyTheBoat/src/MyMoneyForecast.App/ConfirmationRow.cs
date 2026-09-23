@@ -99,7 +99,7 @@ public static class ConfirmationRowIds
     // skip the next contribution, skip a stretch, or don't skip — using up the
     // surplus by pausing contributions rather than lowering the rate.
     public const string GoalHealthSkip = "goal-health-skip";
-    // Plain heads-up that the plan is worth a look (the former post-save MessageBox).
+    // Plain heads-up that the plan is worth a look.
     public const string ConcerningPlan = "concerning-plan";
     // Heads-up that moving a boundary outward grew a plan — "[bill] occurs N more times".
     public const string BoundaryExtension = "boundary-extension";
@@ -115,7 +115,7 @@ public static class ConfirmationRowIds
 
     // One combine-or-keep-separate question per later finance pattern the edited
     // finance pattern's amount change is carried forward onto that's funded by
-    // more than one earmark pattern (cross-boundary Q6). The id carries the later
+    // more than one earmark pattern (cross-boundary). The id carries the later
     // finance pattern's finance_id, since there can be several at once —
     // deliberately its own row kind, never the break-off Consolidation above, so
     // the two never share behavior (the break-off folds into a new segment; this

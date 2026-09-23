@@ -62,16 +62,12 @@ public partial class EarmarkFormPanel : UserControl
     // ActiveStart so a moved Start date doesn't leave the old entry orphaned.
     private DateOnly? _loadedActiveStart;
 
-    // The plan's own literal Start as it's actually saved today, or null for
-    // a brand-new plan (LoadForNewPattern/LoadForMaterialize — no existing
-    // row to speak of yet). Distinct from _loadedActiveStart above: that one
-    // tracks ActiveStart, for the isolated-starting-earmark's own key; this
-    // one tracks Start itself, since Start is one of the two fields
-    // FinancePatternSaveConfirmation's chain-boundary question can move, and
-    // PatternSaved needs the ORIGINAL value to find the right row — the
-    // proposed EarMarkPattern handed to PatternSaved only ever carries
-    // whatever Start the form currently shows, which is the NEW value once
-    // the user has changed it.
+    // The plan's literal Start as saved today, or null for a brand-new plan. Distinct
+    // from _loadedActiveStart above (which tracks ActiveStart for the starting-earmark's
+    // key): this tracks Start itself, one of the two fields the chain-boundary question
+    // can move. PatternSaved needs this ORIGINAL to find the right row — the proposed
+    // pattern it's handed carries only whatever Start the form now shows (the NEW value
+    // once the user changed it).
     private DateOnly? _loadedPlanStart;
 
     // Guards against SavingsPlanRadio's XAML-declared IsChecked="True"
@@ -109,14 +105,11 @@ public partial class EarmarkFormPanel : UserControl
         _initialized = true;
     }
 
-    // MainWindow persists whatever comes back through these — this panel
-    // owns no repository itself. PatternSaved's second parameter is the
-    // plan's own Start as it's actually saved today (or the same as the
-    // proposed pattern's own Start for a brand-new plan) — see
-    // _loadedPlanStart's own field comment for why this can't just be read
-    // off the pattern parameter itself. It returns whether the save went
-    // through (false when the user cancels the confirmation), so SaveSavingsPlan
-    // can leave the form as-is rather than clearing it.
+    // MainWindow persists whatever comes back through these — this panel owns no
+    // repository. PatternSaved's second parameter is the plan's Start as saved today
+    // (see _loadedPlanStart for why it can't be read off the pattern parameter). Returns
+    // whether the save went through (false when the user cancels the confirmation), so
+    // SaveSavingsPlan can leave the form as-is rather than clearing it.
     public Func<EarMarkPattern, DateOnly, bool>? PatternSaved { get; set; }
     public Action<IReadOnlyList<ManualEarmark>, IReadOnlyList<(int FinanceId, DateOnly Date)>>? ManualEarmarksSaved { get; set; }
 
@@ -170,12 +163,10 @@ public partial class EarmarkFormPanel : UserControl
     {
         _goals = goals;
 
-        // A goal can have more than one EarMarkPattern (concurrent earmark patterns,
-        // or a break-off/restructure chain), so this groups and keeps each
-        // goal's most-recently-started one rather than a plain ToDictionary,
-        // which throws on the duplicate key. A disambiguation picker for the
-        // true-concurrent case isn't built yet — this is the single answer
-        // used until then.
+        // A goal can have more than one EarMarkPattern (concurrent, or a break-off/
+        // restructure chain), so this keeps each goal's most-recently-started one rather
+        // than a plain ToDictionary (which throws on the duplicate key). A disambiguation
+        // picker for the true-concurrent case isn't built yet.
         _patternsByFinanceId = patterns
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.ActiveStart).First());
@@ -590,24 +581,14 @@ public partial class EarmarkFormPanel : UserControl
             return; // fires while InitializeComponent is mid-parse
         }
 
-        // The date field never locks — a user should be able to look around
-        // freely without getting stuck editing whatever they clicked out of
-        // curiosity. Guarded to EarmarkDatePicker specifically, since this
-        // one handler also backs ActionComboBox and OneOffAmountTextBox.
-        //
-        // "Editing the date of the loaded entry" was never actually an
-        // option in the first place — (FinanceId, Date) is that row's own
-        // key — so there was nothing a locked control was protecting
-        // against. Every date change already resolves unambiguously to one
-        // of two things: land on a different day that already has an entry
-        // (load it), or land anywhere else (that's a fresh, unrelated
-        // entry now — never a rename of whatever was loaded before).
-        //
-        // isSwitch is false — no reload, no confirm, just a plain field
-        // change — for the common case of nudging the date while building a
-        // brand-new entry (blank before, blank after: nothing to lose).
-        // It's only ever true when we're actually landing somewhere
-        // different from what's currently loaded.
+        // The date field never locks — a user should be able to look around freely.
+        // Guarded to EarmarkDatePicker specifically, since this handler also backs
+        // ActionComboBox and OneOffAmountTextBox. Editing the loaded entry's date was
+        // never an option — (FinanceId, Date) is that row's key — so a date change
+        // resolves unambiguously: land on a day that already has an entry (load it), or
+        // land anywhere else (a fresh, unrelated entry). isSwitch is true only when
+        // landing somewhere different from what's currently loaded; false for the common
+        // case of nudging the date while building a brand-new entry (nothing to lose).
         if (ReferenceEquals(sender, EarmarkDatePicker) && EarmarkDatePicker.SelectedDate is { } picked)
         {
             var date = DateOnly.FromDateTime(picked);
@@ -830,14 +811,10 @@ public partial class EarmarkFormPanel : UserControl
                 pattern));
         }
 
-        // If a starting earmark exists and the Start date gets moved, the
-        // old one must be deleted too. _loadedActiveStart is whatever
-        // ActiveStart was in effect when this plan was loaded — if the
-        // Start date has
-        // since moved, whatever was sitting at that OLD date no longer
-        // means anything (it isn't "at the start" of this schedule anymore)
-        // and would otherwise sit there forever, orphaned. Skipped when the
-        // two dates match — already handled by the block above in that case.
+        // If a starting earmark exists and the Start date moved, delete the old one too.
+        // _loadedActiveStart is the ActiveStart in effect when this plan loaded; once Start
+        // moves, whatever sat at that OLD date isn't "at the start" anymore and would sit
+        // orphaned forever. Skipped when the two dates match (handled by the block above).
         if (_loadedActiveStart is { } oldActiveStart && oldActiveStart != newActiveStart)
         {
             var existingAtOldStart = _existingManualEarmarks.FirstOrDefault(
@@ -1294,13 +1271,10 @@ public partial class EarmarkFormPanel : UserControl
         var trajectory = GetJarTrajectory(goal.FinanceId, chartEnd);
         var jar = trajectory.Count > 0 ? trajectory[0].Jar : null;
 
-        // Every EarMarkPattern sharing this FinanceId (a goal can have more than
-        // one — concurrent earmark patterns, or a break-off chain). Only used below
-        // to detect whether a concurrent plan exists; the chart's forward line is
-        // the LIVE proposed line built from the typed fields (proposedTrajectory,
-        // below), so there's no longer a separate frozen "committed plan" milestone
-        // line drawn from these saved patterns — the one milestone line always
-        // reflects what the user has currently typed.
+        // Every EarMarkPattern sharing this FinanceId (concurrent, or a break-off chain).
+        // Only used below to detect whether a concurrent plan exists; the chart's forward
+        // line is the LIVE proposed line built from the typed fields (proposedTrajectory
+        // below), not one drawn from these saved patterns.
         var patternsForMilestone = _forecast?.Accounts
             .SelectMany(account => account.Page.EarmarkPatterns)
             .Where(p => p.FinanceId == goal.FinanceId)
@@ -1435,15 +1409,12 @@ public partial class EarmarkFormPanel : UserControl
                     .ToList();
             }
 
-            // Fold the typed-but-unsaved plan into a throwaway what-if forecast and
-            // read the goal's REAL health + jar off it, so the aside's TEXT updates
-            // live as you type — not just the chart. This matters most for a
-            // MANDATORY bill (a mortgage, say): it already carries an auto-earmark
-            // health, so the aside has to track the what-if reading rather than
-            // sitting frozen on that while you design the plan. Falls back to the
-            // saved health, then to pure pattern math, when no what-if source is
-            // wired. (The starting-point warning runs its own copy of this same
-            // forecast; sharing one pass between them is a possible later tidy-up.)
+            // Fold the typed-but-unsaved plan into a throwaway what-if forecast and read
+            // the goal's REAL health + jar off it, so the aside's TEXT updates live as you
+            // type — not just the chart. Matters most for a MANDATORY bill, which already
+            // carries an auto-earmark health the aside would otherwise sit frozen on while
+            // you design the plan. Falls back to saved health, then pure pattern math, when
+            // no what-if source is wired.
             var liveHealth = health;
             var liveJar = jar;
             try
@@ -1508,22 +1479,14 @@ public partial class EarmarkFormPanel : UserControl
             }
         }
 
-        // TODO: the narrative above, and the chart's own
-        // "actual"/"proposed" lines, only ever describe THIS ONE
-        // EarMarkPattern (plan) — but the aside (jarStateLine/
-        // firstPaymentLine) and the health figures behind it
-        // (IsChronicShortfall/IsChronicOverfund, GoalShortfall) are summed
-        // across every plan sharing this finance_id, concurrent earmark patterns
-        // included (patternsForMilestone, right above). Found via Storage
-        // Unit Rental in the field: two concurrent plans ($35 + $25) against
-        // a $50 bill — this one plan's own $35 narrative sat right next to a
-        // health verdict ("Consistently ahead") that only makes sense once
-        // you know a SECOND plan exists, which nothing here ever mentioned.
-        // Long-term handling undecided — showing every plan somehow, a
-        // combined chart, a plan picker, something else entirely — not
-        // scoped or designed yet. Short-term mitigation only, below: flag
-        // that another plan exists at all, without trying to describe or
-        // total what it's doing.
+        // TODO: the narrative above and the chart's "actual"/"proposed" lines only
+        // describe THIS ONE EarMarkPattern (plan), but the aside (jarStateLine/
+        // firstPaymentLine) and its health figures (IsChronicShortfall/IsChronicOverfund,
+        // GoalShortfall) are summed across every plan sharing this finance_id, concurrent
+        // ones included (patternsForMilestone above). So one plan's narrative can sit next
+        // to a health verdict that only makes sense once you know a second plan exists.
+        // Long-term handling undecided (show every plan, a combined chart, a plan picker?);
+        // short-term mitigation below just flags that another plan exists.
         var hasConcurrentPlan = patternsForMilestone.Any(other =>
             other.DatePattern.ActiveStart != plan.DatePattern.ActiveStart && // a different row, not this same plan read back
             // Overlaps this plan's own active span — the "concurrent

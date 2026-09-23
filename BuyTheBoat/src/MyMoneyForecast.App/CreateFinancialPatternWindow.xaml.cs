@@ -268,7 +268,7 @@ public partial class CreateFinancialPatternWindow : Window
             StopEndDatePicker.SelectedDate is { } date ? DateOnly.FromDateTime(date) : null);
     }
 
-    /// <summary>[UI] Works out the loan's payoff date from the owed amount, the payment, and the schedule, shows it as a floor, and hands it to the editor. The owed amount is entry-only — only the resulting date is kept (W3).</summary>
+    /// <summary>[UI] Works out the loan's payoff date from the owed amount, the payment, and the schedule, shows it as a floor, and hands it to the editor. The owed amount is entry-only — only the resulting date is kept.</summary>
     private void UpdatePayoffEnd()
     {
         try

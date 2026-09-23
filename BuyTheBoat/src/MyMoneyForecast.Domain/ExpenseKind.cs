@@ -1,6 +1,6 @@
 namespace MyMoneyForecast.Domain;
 
-// The shape Q3 ("am I on track?") takes differs per kind of expense
+// The shape "am I on track?" takes differs per kind of expense
 // (shown in the selected-day region): a one-time optional
 // goal cares about the milestone and a relative due date; a regular bill cares
 // about "can I pay it in full right now"; a paycheck just gives money. This is
@@ -27,7 +27,7 @@ public enum ExpenseKind
 
 public static class ExpenseKindClassifier
 {
-    /// <summary>[CALC] Classifies a pattern as a Paycheck, Bill, OneTimeGoal, RepeatingGoal, or Discretionary expense — the vocabulary the forecast display branches its Q3 "am I on track?" treatment on.</summary>
+    /// <summary>[CALC] Classifies a pattern as a Paycheck, Bill, OneTimeGoal, RepeatingGoal, or Discretionary expense — the vocabulary the forecast display branches its "am I on track?" treatment on.</summary>
     /// <param name="pattern">The pattern to classify.</param>
     /// <param name="hasEarmark">Whether an EarMarkPattern exists for this pattern's finance id. The safety cushion has no FinancialPattern at all (finance_id = null), so callers handle it before classifying.</param>
     public static ExpenseKind Classify(FinancialPattern pattern, bool hasEarmark)

@@ -31,10 +31,9 @@ public partial class AccountFormPanel : UserControl
     private bool _suppressEvents;
     private bool _isDirty;
 
-    // Guards against TextChanged firing while still under construction — no
-    // field currently has an XAML default value that would trigger this, but
-    // matching the same defensive convention every other panel uses costs
-    // nothing and heads off the exact bug class two of them already hit.
+    // Guards against TextChanged firing while still under construction. No field
+    // currently has an XAML default that would trigger it, but matching every
+    // other panel's defensive convention costs nothing.
     private bool _initialized;
 
     public AccountFormPanel()
@@ -135,8 +134,7 @@ public partial class AccountFormPanel : UserControl
             return;
         }
 
-        // Ported from MainWindow's old post-ShowDialog check — a rename
-        // must not collide with a different account's name either.
+        // A rename must not collide with a different account's name either.
         if (_existingAccounts.Any(account => account.Id != _id && string.Equals(account.Name, name, StringComparison.Ordinal)))
         {
             ErrorText.Text = $"There's already an account called \"{name}\".";

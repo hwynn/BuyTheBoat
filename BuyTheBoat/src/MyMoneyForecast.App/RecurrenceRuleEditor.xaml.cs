@@ -22,11 +22,10 @@ public partial class RecurrenceRuleEditor : UserControl
     private bool _hostControlsEnd;
     private DateOnly? _hostUntil;
 
-    // A host form can mark specific occurrences with an altered highlight
-    // color and show a short caption below the list (e.g. "Projected
-    // short," with the short occurrences highlighted). Both default to
-    // "nothing to flag," so every existing caller that never calls
-    // SetHighlight is unaffected.
+    // A host form can mark specific occurrences with an altered highlight color
+    // and show a short caption below the list (e.g. "Projected short"). Both
+    // default to "nothing to flag," so a caller that never calls SetHighlight
+    // is unaffected.
     private IReadOnlyCollection<DateOnly> _highlightedDates = [];
     private string? _caption;
     private string? _legendText;
@@ -41,11 +40,10 @@ public partial class RecurrenceRuleEditor : UserControl
     private IReadOnlyList<DateOnly> _allOccurrences = [];
     private bool _showAllOccurrences;
 
-    // RFC 5545 EXDATE — dates skipped even though the schedule would
-    // otherwise land on them ("the glut case,"
-    // mechanism C). Maintained here regardless of whether
-    // ExcludedDatesSection is actually visible, same as every other schedule
-    // field — only the section's own Visibility is host-gated.
+    // RFC 5545 EXDATE — dates skipped even though the schedule would otherwise
+    // land on them (the glut case). Maintained here regardless of whether
+    // ExcludedDatesSection is visible, same as every other schedule field —
+    // only the section's own Visibility is host-gated.
     private List<DateOnly> _excludedDates = [];
 
     // The enclosing span a host has capped the pickers to (LimitSelectableDates),

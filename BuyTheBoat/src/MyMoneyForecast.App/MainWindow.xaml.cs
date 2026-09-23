@@ -75,9 +75,9 @@ public partial class MainWindow : Window
 
         Log($"Immediately after construction — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, EarMarkPatterns.GetAll().Count: {_earMarkPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
 
-        // Item 6 migration: there is always at least one account. On the first
-        // run after accounts landed, the old single balance/cushion becomes the
-        // "primary" account, so nothing the user already entered is lost.
+        // Migration: there is always at least one account. On the first run after
+        // accounts were added, the old single balance/cushion becomes the "primary"
+        // account, so nothing the user already entered is lost.
         var legacy = _currentBalance.GetCurrent();
         _accounts.EnsureDefaultAccount(legacy?.Balance ?? 0m, legacy?.IdealSafetyCushion ?? 0m);
 
@@ -151,10 +151,9 @@ public partial class MainWindow : Window
             return ProposeAllocationPlanFor(goal, accountId, asOf);
         };
 
-        // The permanent Transfer tab, replacing the
-        // old CreateTransferWindow popup. Create-only for now (see
-        // TransferFormPanel) — the panel collects from/to/amount/schedule, this
-        // callback does the id assignment, paired-pattern expansion, and save.
+        // The permanent Transfer tab. Create-only for now (see TransferFormPanel) —
+        // the panel collects from/to/amount/schedule, this callback does the id
+        // assignment, paired-pattern expansion, and save.
         TransferForm.TransferSaved = OnTransferSaved;
         TransferForm.RequestForecast = EnsureForecast;
 
@@ -1663,10 +1662,9 @@ public partial class MainWindow : Window
             {
                 // No plan to open yet, but the user asked to plan — propose one,
                 // the same affordability-capped proposal a brand-new outflow gets.
-                // This covers two cases with one path: a brand-new pattern (the
-                // plan doesn't exist until AutoCreateAllocationPlan makes it right
-                // here), and an EXISTING plan-less outflow the user is now planning
-                // for (previously this dropped the user on a blank, goal-less form).
+                // Covers two cases with one path: a brand-new pattern (the plan
+                // doesn't exist until AutoCreateAllocationPlan makes it right here),
+                // and an EXISTING plan-less outflow the user is now planning for.
                 // AutoCreateAllocationPlan no-ops for income (Amount >= 0), so
                 // running it unconditionally when plan is null is safe — plan just
                 // stays null and the income branch below handles it. Re-read rather
