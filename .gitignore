@@ -1,0 +1,31 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# IDE / editor
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+
+# Test results & coverage
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+# Local SQLite runtime scratch (the real database lives in LocalAppData, not the repo)
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Portable demo build artifacts (large binaries, not source)
+BuyTheBoatDemo/
+BuyTheBoatDemo.zip
+
+# OS cruft
+.DS_Store
+Thumbs.db
+Desktop.ini
