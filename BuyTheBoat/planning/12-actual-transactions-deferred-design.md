@@ -37,7 +37,7 @@ design pass — not the design itself.
 
 ## Status today
 
-- [`ActualTransaction.cs`](../src/MyMoneyForecast.Domain/ActualTransaction.cs)
+- [`ActualTransaction.cs`](../src/BuyTheBoat.Domain/ActualTransaction.cs)
   exists as a **pure stub**: a `sealed record` with the documented property set,
   which nothing constructs. It exists only to mark where import lands and what
   pairing will key on.
@@ -81,7 +81,7 @@ transactions stand in as that trigger.
 Every code site leaning on this is tagged. **Regenerate the live list with:**
 
 ```bash
-grep -rn "ASSUMED-PAIRING\|DIVERGENCE" redesign/MyMoneyForecast/src/
+grep -rn "ASSUMED-PAIRING\|DIVERGENCE" BuyTheBoat/src/
 ```
 
 Tags as of this writing, all of which are revisit sites for import

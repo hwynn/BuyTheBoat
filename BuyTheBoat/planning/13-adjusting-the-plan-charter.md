@@ -1,9 +1,10 @@
 # 13 — "Adjusting the Plan": phase charter
 
-The map and tracker for the **"Adjusting the Plan"** phase — the work answering
-[Q4](../../04-project-goals-and-user-questions.md): *the user (or reality) changed their mind, and the
-plan has to change with them.* Stages 0–6 are **design-complete**; what remains is UI wiring (see the
-backlog at the end). Each stage has its own doc (14–19); this file holds only what spans them.
+The map and surviving record for the **"Adjusting the Plan"** phase — the work answering
+[Q4](04-project-goals-and-user-questions.md): *the user (or reality) changed their mind, and the
+plan has to change with them.* **The phase's capabilities are built** — every change mechanism is
+reachable through ordinary form editing. The per-stage design docs (14–17, 19) are retired; their
+design lives in the code, and this charter is the record that spans them.
 
 ## Vocabulary
 
@@ -26,8 +27,8 @@ Frame every problem in the class model (`FinancialPattern` / `EarMarkPattern` / 
 `FundJar` / `BalanceSnapshot`) and in assumption IDs, not a category invented for the conversation —
 **the documented dependency order is design guidance, not just validation.** New abstractions are
 allowed (philosophy 3a) as a recorded `DIVERGENCE(...)` on top of the model, never as the language the
-design is thought in. Read [03](../../03-assumptions-glossary.md) and
-[06](../../06-assumption-dependency-graph.md); don't grep them. Full rationale:
+design is thought in. Read [03](03-assumptions-glossary.md) and
+[06](06-assumption-dependency-graph.md); don't grep them. Full rationale:
 `memory/feedback_design_in_class_documentation_terms.md`.
 
 ## The two standing constraints — the walls this phase designs against
@@ -36,8 +37,8 @@ design is thought in. Read [03](../../03-assumptions-glossary.md) and
    one `Amount` and one `RecurrenceRule` (frequency / interval / start / until — no curve, step, gap,
    or per-occurrence override). Any change regenerates its occurrences wholesale, so every feature is
    composed from: splitting patterns, adding patterns, one-off manual earmarks, or values computed
-   rather than stored. Each sanctioned workaround, with its cost, is an entry in
-   [13a](13a-linearity-workaround-registry.md).
+   rather than stored. Each sanctioned workaround, with its cost, is in the **Linearity workarounds**
+   section below.
 2. **Every rrule must terminate.** `RecurrenceRule` accepts `Count` only as entry sugar and resolves
    it to an `Until`; there is no representable "forever." This is the mechanical root of the
    "when does this stop?" question (Stage 2).
@@ -49,43 +50,57 @@ design is thought in. Read [03](../../03-assumptions-glossary.md) and
 - Any departure from the original design gets a `DIVERGENCE(<topic>)` tag at the code site
   (`grep -rn DIVERGENCE src/` is the live registry; [12](12-actual-transactions-deferred-design.md)
   summarizes the actuals-relevant ones).
-- Any new Constraint-1 workaround gets a costed entry in [13a](13a-linearity-workaround-registry.md);
-  every user action is a row in [13b](13b-user-action-catalog.md).
+- Any new Constraint-1 workaround gets a costed entry in the **Linearity workarounds** section below,
+  plus a `DIVERGENCE(<topic>)` tag at its code site.
 - **UI-change budget:** the Forecast tab is settled (changes need a strong reason); every other tab is
   open and due for a rework, so adding a control there is cheap.
 
-## Status
+## Status — what each stage delivered (all built; design in the code)
 
-| Stage | State |
+| Stage | Delivered, and where it lives |
 |---|---|
-| 0 — Charter, constraints, catalog skeleton | **DONE.** This doc + [13a](13a-linearity-workaround-registry.md) (W1–W9) + [13b](13b-user-action-catalog.md). |
-| 1 — Allocation model | **BUILT** — [14](14-stage1-allocation-model.md). Allocation Plans, income-never-a-jar, skippability, "thin". Open: the goal-creation flow isn't unified onto the proposer, and "Set Up Savings Plan…" still opens the old popup. |
-| 2 — Pattern lifetime & form family | **BUILT** — [15](15-stage2-pattern-lifetime.md). "When does this stop?", `ActiveFrom`, `AutoRenew`/`Renew`, payoff helper. Open: the decline-a-plan UI; item D's form uncertainties. |
-| 3 — Change a pattern at a point | **DOMAIN BUILT** — [16](16-stage3-break-off.md). Break-off / truncation / delete / transfer break-off / renewal. Open: 4-D confirm screen + entry points (backlog below). |
-| 4 — Change an allocation alone | **OPEN, mostly built** — [17](17-stage4-allocation-only-changes.md). F27 relaxed (multiple plans per `finance_id`); items 8/9/22 and 24's detection built (`RestructureFactory`). Open: item 24's nudge + all UI wiring. |
-| 5 — Action catalog audit | **DONE** — folded into [13b](13b-user-action-catalog.md); the UI/wiring backlog it produced is below. |
-| 6 — Warnings, levers, shortcuts | **OPEN** — [19](19-stage6-warnings-levers-shortcuts.md). Policies settled (button-sanity via one "Change this…" entry point; cushion-not-whole wording ◑). Open: per-state levers, shortcut inventory, and the "Change this…" wording — deferred to a dedicated UI stage. |
+| 0 — Charter, constraints, catalog | This doc — the **Linearity workarounds** and **What the system does on its own** sections below absorbed the former 13a/13b registries. |
+| 1 — Allocation model | Allocation Plans, income-never-a-jar, skippability, the "thin"/cushion-not-whole state — `AllocationPlanProposer`, `EarMarkPattern`. |
+| 2 — Pattern lifetime & form family | "When does this stop?" (keeps-going / ends-on-a-date / paid-off), `RecurrenceRule.ActiveFrom`, `AutoRenew` + forecast-time renewal, the loan-payoff helper — `PayoffEstimator`, `BreakOffFactory.Renew`, `MainWindow.RenewOngoingPatternsToHorizon`. |
+| 3 — Change a pattern at a point | Break-off, truncation, deletion, transfer break-off, periodic renewal — `BreakOffFactory`, `PatternTruncation`, `TransferBreakOffFactory`, `TransferTruncation`. Reached by editing a pattern and saving: the save-confirmation performs the break-off/truncation. |
+| 4 — Change an allocation alone | Multiple `EarMarkPattern`s per one `finance_id` (the F27 relaxation of `3.11.1.a1`), restructure a plan, stop contributing, overfunded detection — `RestructureFactory`, `GoalShortfall.OverfundedAmount`. Reached by editing an earmark plan and saving. |
+| 5 — Action catalog audit | Complete — every action reached a built stage or an explicit deferral; the running app is the live record of what the UI does. |
+| 6 — Warnings, levers, shortcuts | **DROPPED.** The Stage 1–4 change mechanisms are all reachable through ordinary form editing, so a dedicated shortcut/lever/warning layer (a "Change this…" entry point, per-state levers, warning wording) was judged optional polish and dropped. Re-plan from scratch if user testing shows a need. |
 
-## The UI/wiring backlog
+---
 
-Every stage from 1–4 built and tested a mechanism, then deferred its screen. This is the running total
-— none are design gaps (the data each screen needs is settled), just screens nobody has drawn yet.
-**Snapshot from the Stage-5 audit; some rows have since been built during the form / save-confirmation
-work (docs 21–28, [24](24-app-layer-known-gaps.md)) — verify a row against the code before acting on it.**
+## Linearity workarounds
 
-| # | What's missing | What it needs |
+**The constraint (Constraint 1 above):** a pattern carries one amount and one recurrence rule — no
+curve, step, gap, or per-occurrence override; any change regenerates its occurrences wholesale. The
+sanctioned tricks the phase composes features from, and what each **costs** (the cost is the point —
+these are all trades):
+
+| Workaround | How | Cost |
 |---|---|---|
-| 1 | "Change starting on a date" (break-off, item 4) | an entry point on a bill/paycheck row + a confirm screen (cut date, pre-filled successor plan, carried-over balance) — [16](16-stage3-break-off.md) 4-D |
-| 2 | "Stop this on a date" (truncate, item 16) | an entry point + the schedule-driven end-date input already built for loan-payoff |
-| 3 | "Restructure the plan" (item 8) | an entry point on an earmark-pattern row + a cut-date / new-rate dialog — [17](17-stage4-allocation-only-changes.md) |
-| 4 | "Stop contributing" (item 22, `RestructureFactory.StopContributing`) | likely the same dialog as #3 with a "stop entirely" option |
-| 5 | Declining a proposed Allocation Plan (`ProposeEmpty` consumer) | a "remove this plan" affordance landing on the empty-plan-plus-jar shape, not a hard delete |
-| 6 | Scheduled trigger for pattern renewal (S7, `BreakOffFactory.Renew`) | an app-layer background check ("has `SegmentYears` passed and is `AutoRenew` set?") that calls `Renew`; covers transfers via `TransferBreakOffFactory.Renew` |
-| 7 | Stale-pattern edit redirect (`FindCurrentSegment`) | **built — see [24](24-app-layer-known-gaps.md)** (wire "Edit" to resolve to the current segment) |
-| 8 | Surfacing `OverfundedAmount` (item 24) | an active nudge once it crosses a threshold (proposed 10% of `AmountNeeded`, unconfirmed) with the "stop contributing" lever |
-| 9 | Item D's loan-payoff form | confirmed too tall for a laptop; smaller uncertainties in [15](15-stage2-pattern-lifetime.md) |
-| 10 | B12's creation-time "it just keeps going" checkbox | set `AutoRenew = true` on save (the marker exists; the checkbox is a stub) |
-| 11 | Transfer create-flow + transfer-factory entry points | a dedicated 3-tier "Create Transfer…" form, and entry points for `TransferBreakOffFactory` / `TransferTruncation` — [21](21-form-architecture.md) |
+| Compose one concept from several patterns | one action creates + links patterns, shown as one thing (`OneTimeGoalFactory`, `TransferFactory`) | the pieces must be kept consistent and hidden from raw lists; per-pattern engine behavior (priority, mandatory, account filing) still applies to each separately |
+| Single-occurrence rrule as "a one-time thing" | `Count = 1` — an ordinary pattern with one occurrence | ~none (the documented model's own approach); everything still needs a synthesized `finance_id` |
+| `Count` resolved to `Until` at construction | entered as a count, stored as the equivalent end date | the user's intent isn't retained — if the start later moves, the count doesn't re-derive |
+| Compute per day instead of storing | the whole onion is rebuilt in memory each run; only patterns, balances, and manual earmarks persist | no history, nothing frozen; `Expired` is permanently false; every edit is retroactive by default. Buys clean account-moves, no-stale recompute, and byte-copy import/export |
+| Implicit isolated earmark (the escape hatch) | a one-off `EarMarkEvent` no pattern generates — deallocation (negative) and the positive auto-funding (`DIVERGENCE(positive-implicit)`) | invisible as a plan (money moves with no editable schedule); two writers to the same jar/day merge silently |
+| User-authored one-offs on a pattern | manual earmarks (Add / Withdraw / Move) deviate on a single day without touching the pattern (`ManualEarmark`) | bounded to the pattern's span; jars floored at 0; a drifted plan can leave a stored withdrawal oversized (floored + flagged in place) |
+| Split-and-continue ("break off") | cut the rrule at a date and continue in a new pattern, handing the jar balance across (`BreakOffFactory`) | identity splits — one real-world bill becomes two `finance_id`s that must be re-joined to reason about it over time |
+| Internal auto-renewal of an open-ended rule | `AutoRenew` keeps a real `Until` rolled forward to the horizon each run (`BreakOffFactory.Renew`) | the stored `Until` must never be shown raw; a plan on an ongoing pattern must be ongoing too |
 
-Everything above is domain/engine-complete and tested; it is blocked on a UI pass (layout, wording,
-entry-point placement), not a design decision.
+## What the system does on its own
+
+The non-obvious automatic behaviors (everything else the app does is ordinary CRUD, embodied in the app
+itself):
+
+- **Reserve toward any outflow** via a proposed Allocation Plan at creation, then that plan's scheduled
+  contributions — editable, or removable (the outflow then just shows short).
+- **Deallocation:** when spending overdraws free funds, drain the cushion, then skippable jars, then
+  unskippable ones, by priority within each group. Priority and skippable/unskippable are user-set and
+  decide the order.
+- **Release** a goal's jar on its due date (the balance drops toward zero as the goal is paid).
+- **Floor** a jar at zero on any day it would go negative (flagged in place).
+- **Merge** an implicit earmark into a manual one on the same jar/day — `ExplicitAmount` keeps what the
+  user actually entered underneath.
+- **Hand a jar balance across a break-off**, shown and editable on the confirm screen.
+- **Auto-renew** an open-ended pattern's rule every `SegmentYears` — silent, with a "(renewed *date*)"
+  trace appended to the description.

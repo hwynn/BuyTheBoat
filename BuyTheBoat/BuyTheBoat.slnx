@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BuyTheBoat.App/BuyTheBoat.App.csproj" />
+    <Project Path="src/BuyTheBoat.Domain/BuyTheBoat.Domain.csproj" />
+    <Project Path="src/BuyTheBoat.Persistence/BuyTheBoat.Persistence.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BuyTheBoat.App.Tests/BuyTheBoat.App.Tests.csproj" />
+    <Project Path="tests/BuyTheBoat.Domain.Tests/BuyTheBoat.Domain.Tests.csproj" />
+    <Project Path="tests/BuyTheBoat.Scenario.Tests/BuyTheBoat.Scenario.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/SeedData/SeedData.csproj" />
+  </Folder>
+</Solution>

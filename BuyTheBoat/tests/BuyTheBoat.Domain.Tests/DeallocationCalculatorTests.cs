@@ -324,8 +324,8 @@ public class DeallocationCalculatorTests
         result.Jars.Single(jar => jar.FinanceId == 1).RemainingBalance.ShouldBe(300m);
     }
 
-    // sensible allocation == 1 AND Deallocation == 1). Regenerate with
-    // redesign/extract_deallocation_vectors.py if the workbook changes.
+    // sensible allocation == 1 AND Deallocation == 1). Mined by
+    // extract_deallocation_vectors.py, a one-off script not kept in this repo.
     private static readonly ProofVector[] MinedVectors =
     [
         new(Col: 2, C: 268m, F: [200m, 40m, 0m, 0m], Existing: [0m, 0m, 0m, 0m], Ap: [0m, 0m, 0m, 0m], Au: -80m, P: [0m, 0m, 0m, 0m], B: [-52m, 0m, 0m, 0m], Fb: [148m, 40m, 0m, 0m], DebtRemainder: 0m, InDebt: false),

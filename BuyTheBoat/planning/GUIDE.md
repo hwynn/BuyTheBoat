@@ -2,13 +2,13 @@
 
 A map of every design/planning document in this rework, in **descending order of importance for understanding the project**. For each file: what it explains, and *when* you would want to read it — based on how fresh you are to the project, or the specific task you are doing. Read the top tiers to orient; jump straight to a file when a task calls for it. You will not need all of this at once.
 
-**The one distinction that prevents confusion** — there are three doc families here, and the numbers in two of them overlap:
+**The one distinction that prevents confusion** — there are three doc families, and the numbers in the first two overlap (both live here in `planning/`):
 
-- `redesign/00–06` + `design-philosophies.md` — the reconstructed **original** design (what the 2020–2022 source docs specified) plus forward-looking principles. Backward-looking, *except* `design-philosophies.md`.
-- `redesign/MyMoneyForecast/planning/` (docs 06, 12, 13, 21, 26, 28) — the **new C# implementation's** planning and design. Forward-looking.
-- `redesign/memory/` — portable session memory, loaded as context each session; `MEMORY.md` is its index.
+- `00–06` + `design-philosophies.md` — the reconstructed **original** design (what the 2020–2022 source docs specified) plus forward-looking principles. Backward-looking, *except* `design-philosophies.md`.
+- `06-deallocation-math.md`, `12`, `13`, `21` — the **new C# implementation's** planning and design. Forward-looking.
+- `memory/` (at the repo root) — portable session memory, loaded as context each session; `MEMORY.md` is its index.
 
-So "06" means two different documents depending on the folder (`redesign/06-assumption-dependency-graph.md` vs `planning/06-deallocation-math.md`) — **always mind the path.**
+So "06" means two different documents (`06-assumption-dependency-graph.md` vs `06-deallocation-math.md`) — **always mind the full name.**
 
 **Before touching any form's UI** — the settled design for the forms and the forecast tab (each
 region's goals, the standing UI + form-behavior rules, the plan-health content) lives in
@@ -35,8 +35,8 @@ themselves live in the code and `planning/mockups/settled-designs.html`.
 
 ## Tier 3 — Current & recent design work (read before touching these areas)
 
-- **[MyMoneyForecast/planning/13-adjusting-the-plan-charter.md](13-adjusting-the-plan-charter.md)** — the **"Adjusting the Plan"** phase record (answers Q4: the plan has to change when the user or reality does). **The phase's capabilities are built** — every change mechanism is reachable through ordinary form editing. Self-contained: what each stage delivered and where it lives in code, the linearity-workaround costs and the automatic-behavior list (the former 13a/13b registries, folded in), and the deferred/declined items. The former per-stage/editing docs (14–17, 19, 25, 27) are gone — their design is in the code and summarized here. Read it first for anything about changing a saved bill, paycheck, goal, or plan.
-- **[MyMoneyForecast/planning/21-forms-and-ui.md](21-forms-and-ui.md)** — the durable design reasoning for the forms **and** the forecast tab (consolidates the former 11/21/22/23): the three-form system + region layout, the forecast-tab region goals/non-goals + the multi-account rule, the standing UI principles, the form-behavior rules (Downward-only editing, Forced/Suggested, Saved/Working state, break-off-vs-alter), and the Earmark plan-health content (the `IsWorthWarningAbout` rules, the shortfall ladder). **Read before any form or forecast-tab UI change.** The built forms and regions themselves live in the code (`ExpenseFormPanel`/`AccountFormPanel`/`EarmarkFormPanel`/`TransferFormPanel`, `RecurrenceRuleEditor`, `SummaryRegion`, `PlanHealthMessages`) and `planning/mockups/settled-designs.html`.
+- **[planning/13-adjusting-the-plan-charter.md](13-adjusting-the-plan-charter.md)** — the **"Adjusting the Plan"** phase record (answers Q4: the plan has to change when the user or reality does). **The phase's capabilities are built** — every change mechanism is reachable through ordinary form editing. Self-contained: what each stage delivered and where it lives in code, the linearity-workaround costs and the automatic-behavior list (the former 13a/13b registries, folded in), and the deferred/declined items. The former per-stage/editing docs (14–17, 19, 25, 27) are gone — their design is in the code and summarized here. Read it first for anything about changing a saved bill, paycheck, goal, or plan.
+- **[planning/21-forms-and-ui.md](21-forms-and-ui.md)** — the durable design reasoning for the forms **and** the forecast tab (consolidates the former 11/21/22/23): the three-form system + region layout, the forecast-tab region goals/non-goals + the multi-account rule, the standing UI principles, the form-behavior rules (Downward-only editing, Forced/Suggested, Saved/Working state, break-off-vs-alter), and the Earmark plan-health content (the `IsWorthWarningAbout` rules, the shortfall ladder). **Read before any form or forecast-tab UI change.** The built forms and regions themselves live in the code (`ExpenseFormPanel`/`AccountFormPanel`/`EarmarkFormPanel`/`TransferFormPanel`, `RecurrenceRuleEditor`, `SummaryRegion`, `PlanHealthMessages`) and `planning/mockups/settled-designs.html`.
 - **Accounts & transfers** *(retired to the code)* — the per-account "silo" model, transfers-as-paired-patterns, and the engine partition live in the code: `Account`, `Transfer`, `TransferFactory`, and the per-account pages built in `TransactionLogBookFactory`.
 - **The forecast engine** *(retired to the code)* — the `TransactionLogBookFactory` "onion," the assumed-pairing philosophy, and the divergence registry now live in the code; regenerate the registry with `grep -rn "ASSUMED-PAIRING\|DIVERGENCE" src/`. Read `TransactionLogBookFactory` before touching the engine/cascade.
 
@@ -49,7 +49,7 @@ themselves live in the code and `planning/mockups/settled-designs.html`.
 
 ## Tier 5 — Feature & engine deep-dives (read for that specific feature)
 
-- **[MyMoneyForecast/planning/06-deallocation-math.md](06-deallocation-math.md)** — the deallocation distribution math (Step A/B, verbatim formulas, worked examples, reusable test oracles). Read before touching deallocation, the safety cushion, or priority reallocation.
+- **[planning/06-deallocation-math.md](06-deallocation-math.md)** — the deallocation distribution math (Step A/B, verbatim formulas, worked examples, reusable test oracles). Read before touching deallocation, the safety cushion, or priority reallocation.
 
 The other feature deep-dives were retired once their content moved into the code's own doc comments —
 read the relevant class/method docs in `src/` (and the tests, the behavioral oracles): the deallocation
@@ -60,13 +60,9 @@ The C#-vs-SQLite / pure-domain-no-ORM stack decision is simply the shape of `src
 
 ## Tier 6 — Mockups & live memory
 
-- **[MyMoneyForecast/planning/mockups/](mockups/)** — HTML/PNG layout explorations plus a `README.md` recording the chosen directions. Open the `.html` files in a browser to see the UI options; read the README for what was picked and why. (Multi-account rounds: `*-multiaccount-*.html`.)
+- **[planning/mockups/](mockups/)** — HTML/PNG layout explorations plus a `README.md` recording the chosen directions. Open the `.html` files in a browser to see the UI options; read the README for what was picked and why. (Multi-account rounds: `*-multiaccount-*.html`.)
 - **[memory/MEMORY.md](../../memory/MEMORY.md)** — the index of portable memory files (project facts, user feedback, references). Skim it when starting fresh; it points to the detail files. Memory reflects what was true when written — verify a named file/flag still exists before relying on it.
 
 ## The code
 
-- **`redesign/MyMoneyForecast/src/`** — the C# implementation: `.Domain` (pure model, no persistence), `.Persistence` (SQLite repositories), `.App` (WPF UI). Read the code when a doc's claim needs confirming against reality, or before editing a specific class. **The tests in `redesign/MyMoneyForecast/tests/` are the behavioral oracles** — the truest statement of what the engine actually does.
-
----
-
-*Housekeeping note:* a few stray `*-squid.md` / `*-pumpkin.md` / `*-wren*.md` files at the `redesign/` root are archived plan-mode snapshots from past sessions — historical, not needed for current work.
+- **`src/`** — the C# implementation: `.Domain` (pure model, no persistence), `.Persistence` (SQLite repositories), `.App` (WPF UI). Read the code when a doc's claim needs confirming against reality, or before editing a specific class. **The tests in `tests/` are the behavioral oracles** — the truest statement of what the engine actually does.

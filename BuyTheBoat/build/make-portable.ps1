@@ -2,12 +2,12 @@
 <#
   make-portable.ps1
 
-  Builds the self-contained "BuyTheBoat" portable copy of MyMoneyForecast into
-  redesign\BuyTheBoatDemo. It publishes as a SINGLE bulky .exe — the whole .NET
+  Builds the self-contained portable copy of BuyTheBoat into BuyTheBoatDemo\ at
+  the repository root. It publishes as a SINGLE bulky .exe — the whole .NET
   runtime is bundled inside the one executable, so there's no loose pile of DLLs
   to keep together and nothing to install on the machine that runs it. The
   folder ends up holding:
-    - MyMoneyForecast.App.exe (the one big self-contained executable),
+    - BuyTheBoat.App.exe (the one big self-contained executable),
     - the labeled data\ / logs\ / backups\ / exports\ subfolders, and
     - portable.marker, the file that tells the app to keep its data here.
 
@@ -30,11 +30,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 # --- Locate everything relative to this script -----------------------------
-$buildDir     = $PSScriptRoot                                    # ...\redesign\MyMoneyForecast\build
-$projectRoot  = Split-Path $buildDir -Parent                    # ...\redesign\MyMoneyForecast
-$redesignRoot = Split-Path $projectRoot -Parent                 # ...\redesign
-$appProject   = Join-Path $projectRoot "src\MyMoneyForecast.App\MyMoneyForecast.App.csproj"
-$demoDir      = Join-Path $redesignRoot "BuyTheBoatDemo"
+$buildDir     = $PSScriptRoot                                    # ...\BuyTheBoat\BuyTheBoat\build
+$projectRoot  = Split-Path $buildDir -Parent                    # ...\BuyTheBoat\BuyTheBoat
+$repoRoot     = Split-Path $projectRoot -Parent                 # ...\BuyTheBoat (repository root)
+$appProject   = Join-Path $projectRoot "src\BuyTheBoat.App\BuyTheBoat.App.csproj"
+$demoDir      = Join-Path $repoRoot "BuyTheBoatDemo"
 
 Write-Host "Portable build target: $demoDir"
 
@@ -63,7 +63,7 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)." }
 foreach ($sub in "data", "logs", "backups", "exports") {
     New-Item -ItemType Directory -Path (Join-Path $demoDir $sub) -Force | Out-Null
 }
-$markerText = "This file tells MyMoneyForecast to run in portable mode, keeping its data in this folder. Leave it here."
+$markerText = "This file tells BuyTheBoat to run in portable mode, keeping its data in this folder. Leave it here."
 Set-Content -Path (Join-Path $demoDir "portable.marker") -Value $markerText -Encoding utf8
 
 # --- A short note for whoever runs it --------------------------------------
@@ -72,7 +72,7 @@ Buy The Boat Demo - portable
 ==========================
 
 How to run this:
-  Just double click the MyMoneyForecast.App.exe file. You don't have to install anything.
+  Just double click the BuyTheBoat.App.exe file. You don't have to install anything.
 
 What are all these folders?:
   This demo of the program is self contained inside this folder. 
@@ -98,7 +98,7 @@ Set-Content -Path (Join-Path $demoDir "README.txt") -Value $readme -Encoding utf
 
 # --- Optional zip ----------------------------------------------------------
 if ($Zip) {
-    $zipPath = Join-Path $redesignRoot "BuyTheBoatDemo.zip"
+    $zipPath = Join-Path $repoRoot "BuyTheBoatDemo.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Write-Host "Zipping to $zipPath ..."
     Compress-Archive -Path $demoDir -DestinationPath $zipPath

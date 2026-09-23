@@ -13,7 +13,7 @@ public enum RecurrenceFrequency
 }
 
 // Everything an EarMarkPattern/FinancialPattern's date_pattern needs, per
-// redesign/01-glossary-of-terms.md. Deliberately mirrors the RRULE fields used
+// planning/01-glossary-of-terms.md. Deliberately mirrors the RRULE fields used
 // throughout mini_fund_project/goals.xlsx (freq, dstart, interval, byday,
 // bymonthday, count, until) rather than exposing the full RFC 5545 surface.
 public sealed record RecurrenceRuleOptions
@@ -52,7 +52,7 @@ public sealed record RecurrenceRuleOptions
     public IReadOnlyList<DateOnly> ExcludedDates { get; init; } = [];
 }
 
-// The chart-only rule found in redesign/05-assumption-dependency-graph.md
+// The chart-only rule found in planning/05-assumption-chart-full-text.md
 // ("self.date_pattern rrule must have until property, not count property")
 // is enforced here structurally: Count is accepted as input but Until is the
 // only thing that exists on a constructed RecurrenceRule. Mirrors

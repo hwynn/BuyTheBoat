@@ -1,7 +1,7 @@
 namespace BuyTheBoat.Domain;
 
 // A bill or a paycheck are the same thing here, distinguished only by the sign
-// of Amount — see redesign/01-glossary-of-terms.md#financialpattern. One-time
+// of Amount — see planning/01-glossary-of-terms.md#financialpattern. One-time
 // goals (e.g. "trip to Japan") are also a FinancialPattern, just with a
 // DatePattern that has a single occurrence.
 public sealed record FinancialPatternOptions

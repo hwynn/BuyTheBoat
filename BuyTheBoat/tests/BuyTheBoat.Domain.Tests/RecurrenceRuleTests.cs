@@ -124,7 +124,7 @@ public class RecurrenceRuleTests
     public void Count_is_resolved_to_an_equivalent_until_date_and_never_survives_construction()
     {
         // Mirrors mini_fund_project/MmfUtility.py's count_to_until_rrule, and the
-        // chart-only rule in redesign/05-assumption-dependency-graph.md requiring
+        // chart-only rule in planning/05-assumption-chart-full-text.md requiring
         // date_pattern to use `until`, never `count`.
         var rule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
