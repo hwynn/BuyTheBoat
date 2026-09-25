@@ -26,24 +26,29 @@ step 2's script never used Visual Studio in the first place.
 
 ### What you need
 
-- **Windows 10 or 11.** Mac and Linux won't work: the app is WPF (a Windows-only UI
-  framework), so you couldn't run or test what you built. Windows 7 and 8.1 won't work
-  either — .NET dropped them — and the finished portable copy won't run on them.
-  (Windows 10 Home/Pro is no longer on Microsoft's official .NET 10 support list, since
-  Windows 10 support ended in October 2025, but it builds and runs fine.)
+- **Windows 10 or 11.** Sorry, I haven't started porting this to Mac or Linux yet. 
+	Windows 7 and 8.1 won't work either since .NET dropped them.
 - **The .NET 10 SDK** — step 1 below. It has to be version 10; an older SDK (8 or 9)
   can't build this project.
 - **An internet connection the first time.** The first build downloads the project's
   packages, and the first portable build downloads the .NET runtime it packs into the exe.
 - **Windows PowerShell 5.1** for the portable script — already built into Windows 10 and 11.
-- **Optional:** Git, to clone the repo. **Visual Studio 2026**, if you want an editor —
-  Visual Studio 2022 can't build for .NET 10.
+- **Optional:** Git, to clone the repo. **Visual Studio 2026**, if you want to edit this program for yourself
 
 ### Steps
 
 1. **Install the .NET 10 SDK** from <https://dotnet.microsoft.com/download/dotnet/10.0>.
-   Pick the **SDK**, not just the Runtime. To check it worked, open a new terminal and run
-   `dotnet --list-sdks` — a line starting with `10.` should appear.
+   Pick the **SDK**, not just the Runtime. To check it worked, open a **new** terminal
+   (one opened before the install won't find it) and run:
+   ```
+   dotnet --list-sdks
+   ```
+   It prints one line per .NET SDK installed. You're set if one of them starts with `10.`,
+   like this:
+   ```
+   10.0.401 [C:\Program Files\dotnet\sdk]
+   ```
+   If it says `'dotnet' is not recognized`, the SDK isn't installed yet.
 2. **Get the code** — `git clone` the repo, or download it as a zip and unzip it.
 3. **Build it** (from the repo root). This replaces Quick step 1's Ctrl+Shift+B:
    ```
