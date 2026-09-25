@@ -36,8 +36,8 @@ public class FundJarTests
     [Fact]
     public void HasGlut_is_false_when_no_earmark_pattern_drives_the_jar()
     {
-        // The safety cushion, and auto-reserved bills — no schedule means no
-        // milestone to be ahead of, regardless of how much is banked.
+        // The safety cushion — no schedule means no milestone to be ahead
+        // of, regardless of how much is banked.
         Jar(expected: 500m, milestone: null).HasGlut.ShouldBeFalse();
     }
 

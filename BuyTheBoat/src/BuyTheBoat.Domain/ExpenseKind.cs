@@ -10,8 +10,8 @@ public enum ExpenseKind
     // Amount > 0 — money in. Nothing to save toward.
     Paycheck,
 
-    // Mandatory — a bill you have to pay (automatically funded when it has no
-    // explicit earmark; the same kind either way).
+    // Mandatory — a bill you have to pay (the same kind whether or not it
+    // has a savings plan).
     Bill,
 
     // Non-mandatory, single occurrence, with a savings plan — the

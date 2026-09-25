@@ -255,7 +255,7 @@ public partial class EarmarkFormPanel : UserControl
         }
     }
 
-    /// <summary>[STEP] Turns an automatically-filled jar into a savings plan the user owns. Goal fixed, starting allocation pre-filled from what the jar already holds so pressing Save never moves money — it only changes what governs the jar from here on.</summary>
+    /// <summary>[STEP] Sets up a savings plan for an outflow that has none yet. Goal fixed, starting allocation pre-filled from whatever its jar already holds, so pressing Save never moves money.</summary>
     /// <param name="goal">The outflow this savings plan is being created for.</param>
     /// <param name="alreadySaved">What the jar already holds, pre-filled as the starting allocation.</param>
     public void LoadForMaterialize(FinancialPattern goal, decimal alreadySaved)
@@ -270,8 +270,7 @@ public partial class EarmarkFormPanel : UserControl
 
         AmountTextBox.Text = string.Empty;
         _startingAllocation = alreadySaved;
-        // No EarMarkPattern exists yet to have an isolated earmark on —
-        // this jar's balance came from automatic reservation, not a plan.
+        // No EarMarkPattern exists yet to have an isolated earmark on.
         _startingEarmarkAmount = 0m;
         StartingEarmarkAmountTextBox.Text = string.Empty;
         _loadedActiveStart = null;

@@ -24,8 +24,9 @@ public sealed record TransferRequest
 // positive and files under the TO account. The filing itself happens at
 // save time (the patterns, like every FinancialPattern, carry no account of
 // their own). Both patterns carry the transfer's schedule and are
-// non-mandatory: moving your own money is not a bill, so it never
-// auto-reserves.
+// non-mandatory: moving your own money is not a bill. (The withdrawal
+// still reserves, through a plain, immediate savings plan made when the
+// transfer is saved.)
 public sealed record TransferResult
 {
     public required Transfer Transfer { get; init; }

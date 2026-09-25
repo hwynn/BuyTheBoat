@@ -81,7 +81,7 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
             .Where(jar => jar.ExpectedAmount > 0m)
             .Select(jar => $"{JarLabel(jar.FinanceId, jarLabels)} {jar.ExpectedAmount:C}"));
 
-    /// <summary>[CALC] The at-a-glance column shows the day's scheduled events (expected transactions and planned allocation installments) — the same set the pre-restructure grid showed. System-generated implicit events (bill automatically fund steps, goal releases) appear in the selected-day detail pane instead, where there's room to label what they are.</summary>
+    /// <summary>[CALC] The at-a-glance column shows the day's scheduled events (expected transactions and planned allocation installments) — the same set the pre-restructure grid showed. System-generated implicit events (cushion refills, deallocation give-backs, goal releases) appear in the selected-day detail pane instead, where there's room to label what they are.</summary>
     /// <param name="snapshot">The day's balance snapshot, for its transactions and earmark events.</param>
     /// <param name="jarLabels">Finance id → display label, for naming each event.</param>
     internal static string FormatEvents(BalanceSnapshot snapshot, IReadOnlyDictionary<int, string> jarLabels)
@@ -379,8 +379,8 @@ public sealed class JarDetailRow
         }
         else
         {
-            // Auto-reserved bills track their accrual target by construction;
-            // explicitly-earmarked ones land here when at/above milestone.
+            // At or above the savings plan's milestone, though not yet the
+            // full amount.
             (statusKind, statusText) = ("OnTrack", "On track");
         }
 

@@ -32,9 +32,10 @@ public sealed record EarMarkEvent
     // DIVERGENCE(positive-implicit): the original design only ever created
     // implicit isolated earmarks with NEGATIVE amounts — deallocation-day
     // give-backs triggered by actual transactions. It also creates
-    // POSITIVE implicit events to auto-reserve mandatory bills ahead of
-    // their due dates (a mandatory expense must get funds set aside
-    // implicitly if not already).
+    // POSITIVE implicit events to refill the safety cushion toward its
+    // target. (Mandatory bills were once auto-reserved this way too; they
+    // now reserve through their own savings plan, created when the bill is
+    // saved.)
     public required decimal? ExplicitAmount { get; init; }
 
     // How much actually moved once the day occurred — computable only from

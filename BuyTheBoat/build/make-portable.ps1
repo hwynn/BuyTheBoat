@@ -86,10 +86,7 @@ What are all these folders?:
 Where should I put this?
   You can copy this entire folder anywhere. You can even run it on a USB stick.
   Don't do anything weird like stick it in Program Files.
-  Just put it somewhere convenient. 
-  Copy this whole folder anywhere - another PC, a USB stick - and it keeps
-  working, data and all. Keep it somewhere you can write to (Desktop, Downloads,
-  a USB drive), not inside Program Files.
+  Just put it somewhere convenient.
   
 So how do I actually use this program to manage my budget?
   By the grace of God and human curiosity. Good luck!

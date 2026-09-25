@@ -2676,7 +2676,7 @@ public class TransactionLogBookFactoryTests
     }
 
     // A one-off NON-mandatory expense: has an ExpectedTransaction but no
-    // automatic funding jar, so it lands as pure unpaired spending (`au`).
+    // savings plan, so no jar — it lands as pure unpaired spending (`au`).
     private static FinancialPattern Discretionary(int financeId, decimal amount, DateOnly date, string label) =>
         FinancialPattern.Create(new FinancialPatternOptions
         {

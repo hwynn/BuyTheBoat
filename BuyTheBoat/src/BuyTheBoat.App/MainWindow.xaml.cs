@@ -659,7 +659,7 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>[WRITES FILE] Appends one renewal segment to an ongoing pattern's chain — a fresh, identical successor (new FinanceId, "(renewed …)" label) reaching a cycle past the horizon, CONTINUING each existing earmark pattern at the same amount and cadence rather than proposing a new one. A self-funding bill (no explicit earmark) gains none — its automatic reservation just carries on. A single bad pattern is logged and skipped rather than breaking the whole forecast.</summary>
+    /// <summary>[WRITES FILE] Appends one renewal segment to an ongoing pattern's chain — a fresh, identical successor (new FinanceId, "(renewed …)" label) reaching a cycle past the horizon, CONTINUING each existing earmark pattern at the same amount and cadence rather than proposing a new one. A pattern with no savings plan gains none — it just keeps coming out of free money on its due date. A single bad pattern is logged and skipped rather than breaking the whole forecast.</summary>
     /// <param name="segment">The ongoing pattern's current segment, due to reach further out.</param>
     /// <param name="horizon">The forecast horizon the successor must clear.</param>
     private void RenewOngoingSegment(FinancialPattern segment, DateOnly horizon)
@@ -679,7 +679,7 @@ public partial class MainWindow : Window
 
             // A renewal changes nothing, so the successor is built directly and the
             // pattern simply continues — no break-off-style fresh plan proposal (which
-            // would also invent an earmark for a bill that funds itself automatically).
+            // would also invent a savings plan for a bill that has none).
             // The predecessor already ends the day before renewalDate, so it needs no
             // change. Mirrors BreakOffFactory.Renew's successor + "(renewed …)" label,
             // minus the proposal.
@@ -704,10 +704,10 @@ public partial class MainWindow : Window
             });
             _financialPatterns.Save(successor, accountId);
 
-            // Continue each explicit earmark pattern unchanged: same amount and cadence,
+            // Continue each earmark pattern unchanged: same amount and cadence,
             // its span re-anchored onto the new segment (ReanchoredToStartOn keeps the
             // contribution days; WithUntil reaches the successor's border). No rows here
-            // means a self-funding bill — nothing to carry, the auto-reservation covers it.
+            // means the pattern has no savings plan — nothing to carry.
             foreach (var existing in _earMarkPatterns.GetAll().Where(plan => plan.FinanceId == segment.FinanceId))
             {
                 var continued = EarMarkPattern.Create(
@@ -952,7 +952,7 @@ public partial class MainWindow : Window
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => (group.First().Priority, Name: group.First().Description ?? group.First().Source));
 
-        /// <summary>[CALC] An event the USER would count: a transaction, a scheduled allocation, or a manual adjustment. System-generated reservation steps (automatically funded expense accrual, cushion fills, deallocation give-backs) are mechanism, not events, so they are not counted.</summary>
+        /// <summary>[CALC] An event the USER would count: a transaction, a scheduled allocation, or a manual adjustment. System-generated reservation steps (cushion fills, deallocation give-backs, goal releases) are mechanism, not events, so they are not counted.</summary>
         /// <param name="snapshot">The day's balance snapshot to count events in.</param>
         static int CountEvents(BalanceSnapshot snapshot) =>
             snapshot.ExpectedTransactions.Count(transaction => !transaction.Cancelled)
@@ -2026,7 +2026,7 @@ public partial class MainWindow : Window
         SwitchToTab("Earmark");
     }
 
-    /// <summary>[CALC] What this jar holds as of the forecast's own start date, so a new savings plan can pick up exactly where the automatic filling left off. Zero when there is no forecast on screen yet, or the jar doesn't exist in it.</summary>
+    /// <summary>[CALC] What this jar holds as of the forecast's own start date, so a new savings plan starts from whatever is already set aside. Zero when there is no forecast on screen yet, or the jar doesn't exist in it (an outflow with no savings plan has no jar).</summary>
     /// <param name="financeId">Which jar to read.</param>
     private decimal CurrentJarAmount(int financeId)
     {

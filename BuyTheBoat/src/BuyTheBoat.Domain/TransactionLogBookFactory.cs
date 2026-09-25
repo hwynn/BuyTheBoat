@@ -556,9 +556,8 @@ public static class TransactionLogBookFactory
             if (!isPageStartDate)
             {
                 // The safety cushion refills toward its standing target each day
-                // via a positive isolated null-id earmark — the automatically funded expense
-                // reservation pattern above, but toward a fixed target with no
-                // due date and no reset (delta is 0 once at target). After a
+                // via a positive isolated null-id earmark, toward a fixed target with
+                // no due date and no reset (delta is 0 once at target). After a
                 // deallocation drained it, this steps it back up.
                 var cushionFill = cushionTarget - cushionValue;
                 if (cushionFill != 0m)
@@ -574,8 +573,8 @@ public static class TransactionLogBookFactory
                 }
 
                 // At this point earMarkEvents holds exactly the day's SCHEDULED
-                // earmarks (er + ei): repeated goal contributions + automatically funded expense and
-                // cushion reservation deltas. jarValues + cushionValue still hold
+                // earmarks (er + ei): repeated savings-plan contributions, manual
+                // earmarks, and the cushion refill delta. jarValues + cushionValue still hold
                 // the PREVIOUS day's balances (f) — the floor loop below applies
                 // today's events. Deallocation runs first and appends its
                 // give-backs (the cushion, priority 0, is drained before any real
@@ -895,8 +894,8 @@ public static class TransactionLogBookFactory
                 // on the seed snapshot; null for future dates per the docs.
                 CurrentAmount = currentIsKnown ? value : null,
                 ExpectedAmount = value,
-                // null milestone = no savings plan drives this jar (an
-                // automatically funded expense) — nothing to be "behind" on.
+                // null milestone = no savings plan drives this jar — nothing to
+                // be "behind" on.
                 MilestoneAmount = milestones.TryGetValue(financeId, out var milestone) ? milestone : null,
             });
         }
