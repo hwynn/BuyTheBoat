@@ -1,7 +1,7 @@
 # Making the portable build (BuyTheBoat)
 
 Produces a single, self-contained copy of BuyTheBoat that runs on any 64-bit
-Windows PC with nothing installed. It ships **empty** — the app makes its own blank
+Windows 10 or 11 PC with nothing installed. It ships **empty** — the app makes its own blank
 database on first launch — and keeps all its data inside its own folder.
 
 ## Quick steps
@@ -18,6 +18,48 @@ database on first launch — and keeps all its data inside its own folder.
 That's it. Step 2 does everything — builds the single .exe, creates the empty
 `data\ logs\ backups\ exports\` folders, and drops the `portable.marker` file. There is
 no separate folder-setup script to run.
+
+## Building without Visual Studio
+
+Visual Studio is optional. Everything above runs on the free **.NET 10 SDK** alone —
+step 2's script never used Visual Studio in the first place.
+
+### What you need
+
+- **Windows 10 or 11.** Mac and Linux won't work: the app is WPF (a Windows-only UI
+  framework), so you couldn't run or test what you built. Windows 7 and 8.1 won't work
+  either — .NET dropped them — and the finished portable copy won't run on them.
+  (Windows 10 Home/Pro is no longer on Microsoft's official .NET 10 support list, since
+  Windows 10 support ended in October 2025, but it builds and runs fine.)
+- **The .NET 10 SDK** — step 1 below. It has to be version 10; an older SDK (8 or 9)
+  can't build this project.
+- **An internet connection the first time.** The first build downloads the project's
+  packages, and the first portable build downloads the .NET runtime it packs into the exe.
+- **Windows PowerShell 5.1** for the portable script — already built into Windows 10 and 11.
+- **Optional:** Git, to clone the repo. **Visual Studio 2026**, if you want an editor —
+  Visual Studio 2022 can't build for .NET 10.
+
+### Steps
+
+1. **Install the .NET 10 SDK** from <https://dotnet.microsoft.com/download/dotnet/10.0>.
+   Pick the **SDK**, not just the Runtime. To check it worked, open a new terminal and run
+   `dotnet --list-sdks` — a line starting with `10.` should appear.
+2. **Get the code** — `git clone` the repo, or download it as a zip and unzip it.
+3. **Build it** (from the repo root). This replaces Quick step 1's Ctrl+Shift+B:
+   ```
+   dotnet build BuyTheBoat\BuyTheBoat.slnx
+   ```
+4. **Make the portable copy** — same command as Quick step 2:
+   ```
+   powershell -ExecutionPolicy Bypass -File BuyTheBoat\build\make-portable.ps1
+   ```
+
+Other handy commands, also from the repo root:
+
+| Command | What it does |
+| --- | --- |
+| `dotnet run --project BuyTheBoat\src\BuyTheBoat.App` | Runs the app straight from source, like F5 in Visual Studio. Uses the hidden AppData folder, not a portable one. |
+| `dotnet test BuyTheBoat\BuyTheBoat.slnx` | Runs all the tests. |
 
 ---
 
@@ -109,5 +151,5 @@ Inside `BuyTheBoatDemo\`:
 
 - `BuyTheBoatDemo\` (at the repo root) is a ~150 MB build output. It's regenerated on every run, so it's
   kept out of git: the repo's `.gitignore` already excludes it and the zip.
-- Requires the **.NET 10 SDK** installed to build (Visual Studio 2022 with the .NET 10 workload
-  covers this).
+- Requires the **.NET 10 SDK** installed to build (Visual Studio 2026 covers this; Visual
+  Studio 2022 can't build for .NET 10). See "What you need" above for the full list.
