@@ -10,8 +10,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <!-- Semantic palette shared by the calendar + selected-day templates.
-             Green = good, amber = watch, red = short/raided; the indigo accent
-             (today frame, selection) stays separate from the semantic colors. -->
+             Green = good, amber = watch, red = short/raided; the indigo accent (today frame, selection) stays separate from the semantic colors. -->
         <SolidColorBrush x:Key="AccentBrush" Color="#FF1E66D0"/>
         <SolidColorBrush x:Key="SelectionBrush" Color="#FFE3EDFB"/>
         <SolidColorBrush x:Key="GoodTextBrush" Color="#FF1E7B45"/>
@@ -46,14 +45,11 @@
 
         <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
             <TabItem Header="Forecast">
-                <!-- Three regions with distinct jobs — TOP CONTROLS (forecast range +
-                     a Forecast button that should only look active when the shown
-                     forecast's range differs from the fields), the OVERVIEW timeline
-                     (many days at a glance: totals, allocations, trends, and days worth
-                     a closer look — NOT every allocation or every actual transaction),
-                     and the SELECTED-DAY detail (the full snapshot: every transaction,
-                     every jar, and per-goal health answering "am I on track?"). Whatever element
-                     represents TODAY must be visually distinct from all other days. -->
+                <!-- Three regions with distinct jobs —
+                     TOP CONTROLS (forecast range + a Forecast button that should only look active when the shown forecast's range differs from the fields),
+                     the OVERVIEW timeline (many days at a glance: totals, allocations, trends, and days worth a closer look — NOT every allocation or every actual transaction),
+                     and the SELECTED-DAY detail (the full snapshot: every transaction, every jar, and per-goal health answering "am I on track?").
+                     Whatever element represents TODAY must be visually distinct from all other days. -->
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <StackPanel Margin="0,0,16,0">
@@ -64,17 +60,15 @@
                             <TextBlock Text="Show forecast through" FontSize="11" Foreground="Gray"/>
                             <DatePicker x:Name="HorizonEndDatePicker" Width="130" SelectedDateChanged="OnForecastInputChanged" CalendarOpened="OnHorizonCalendarOpened"/>
                         </StackPanel>
-                        <!-- Balances and cushions are per account now and live on the
-                             Accounts tab; the forecast reads them from there. This is a
-                             read-only summary of exactly what it will use. -->
+                        <!-- Balances and cushions are per account now and live on the Accounts tab; the forecast reads them from there.
+                             This is a read-only summary of exactly what it will use. -->
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="Across all accounts" FontSize="11" Foreground="Gray"/>
                             <TextBlock x:Name="AccountsSummaryText" Text="—" FontWeight="SemiBold" VerticalAlignment="Bottom"
                                        Height="23" Padding="0,4,0,0" MinWidth="230"
                                        AutomationProperties.AutomationId="AccountsSummaryText"/>
                         </StackPanel>
-                        <!-- Pending-state affordance: looks active only
-                             while an input differs from the forecast on screen. -->
+                        <!-- Pending-state affordance: looks active only while an input differs from the forecast on screen. -->
                         <Button x:Name="ForecastButton" Content="Forecast" Padding="16,5" VerticalAlignment="Bottom" Click="OnForecastClick"/>
                         <Button x:Name="ExportForecastSpreadsheetButton" Content="Export as Spreadsheet..." Padding="16,5" Margin="8,0,0,0"
                                 VerticalAlignment="Bottom" IsEnabled="False" Click="OnExportForecastSpreadsheetClick"/>
@@ -82,9 +76,8 @@
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,12" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                Text="Forecast only — assumes every bill and paycheck happens exactly as scheduled. No real transactions are tracked yet. Select a day in the calendar to see everything that day holds."/>
 
-                    <!-- SELECTED DAY: the full snapshot. Two panes,
-                         "What happened today" LEFT and fund jars RIGHT (the author's
-                         chosen direction). -->
+                    <!-- SELECTED DAY: the full snapshot.
+                         Two panes, "What happened today" LEFT and fund jars RIGHT (the author's chosen direction). -->
                     <Grid DockPanel.Dock="Bottom" Height="205" Margin="0,10,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -100,9 +93,9 @@
                                         <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
                                     </StackPanel>
-                                    <!-- Rung-1 nudge: spare cash on hand, but nothing the user set
-                                         aside is reserved, so "free" is really just the balance. A reminder, not
-                                         per-expense math. Set from code-behind; hidden when it doesn't apply. -->
+                                    <!-- Rung-1 nudge: spare cash on hand, but nothing the user set aside is reserved, so "free" is really just the balance.
+                                         A reminder, not per-expense math.
+                                         Set from code-behind; hidden when it doesn't apply. -->
                                     <TextBlock x:Name="FreeNudgeText" HorizontalAlignment="Right" TextAlignment="Right" MaxWidth="300"
                                                TextWrapping="Wrap" FontSize="10" FontStyle="Italic" Foreground="Gray" Margin="0,2,0,0"
                                                Visibility="Collapsed" AutomationProperties.AutomationId="FreeNudgeText"/>
@@ -195,9 +188,8 @@
                                     <ItemsControl x:Name="JarDetailList" AutomationProperties.AutomationId="JarDetailList">
                                         <ItemsControl.GroupStyle>
                                             <GroupStyle>
-                                                <!-- The header's labels live inside a GroupItem header, which is
-                                                     invisible to screen readers; announce the whole account story
-                                                     through the GroupItem's own Name instead (AccountGroupKey.AccessibleSummary). -->
+                                                <!-- The header's labels live inside a GroupItem header, which is invisible to screen readers;
+                                                     announce the whole account story through the GroupItem's own Name instead (AccountGroupKey.AccessibleSummary). -->
                                                 <GroupStyle.ContainerStyle>
                                                     <Style TargetType="GroupItem">
                                                         <Setter Property="AutomationProperties.Name" Value="{Binding Name.AccessibleSummary}"/>
@@ -205,13 +197,10 @@
                                                 </GroupStyle.ContainerStyle>
                                                 <GroupStyle.HeaderTemplate>
                                                     <DataTemplate>
-                                                        <!-- A group header tells the whole story here: line one is the
-                                                             account, its balance ("how much money is in the account"), and —
-                                                             when short — the "Short $X" warning to the right of it; line two is
-                                                             which rung it's on (money in another account, or none can cover it),
-                                                             and the lever pre-fills a transfer into it (the shortfall
-                                                             ladder). Every account always appears in this
-                                                             pane, so the balance, narrative, and lever can never go missing. -->
+                                                        <!-- A group header tells the whole story here:
+                                                             line one is the account, its balance ("how much money is in the account"), and — when short — the "Short $X" warning to the right of it;
+                                                             line two is which rung it's on (money in another account, or none can cover it), and the lever pre-fills a transfer into it (the shortfall ladder).
+                                                             Every account always appears in this pane, so the balance, narrative, and lever can never go missing. -->
                                                         <StackPanel Margin="0,8,0,3">
                                                             <DockPanel>
                                                                 <Button DockPanel.Dock="Right" Content="{Binding Name.MoveInText}"
@@ -228,8 +217,7 @@
                                                                                VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource RedTextBrush}"
                                                                                Visibility="{Binding Name.IsShort, Converter={StaticResource BoolToVis}}"/>
                                                                     <!-- "Funds running low": the free-funds warning a step below "short".
-                                                                         Also stands in for a dipped safety cushion, which
-                                                                         always co-occurs with thin, so it's folded into this one warning. -->
+                                                                         Also stands in for a dipped safety cushion, which always co-occurs with thin, so it's folded into this one warning. -->
                                                                     <TextBlock Text="Funds running low" FontWeight="SemiBold" FontSize="11"
                                                                                VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource WatchTextBrush}"
                                                                                Visibility="{Binding Name.IsThin, Converter={StaticResource BoolToVis}}"
@@ -318,20 +306,16 @@
                         </Grid>
                     </Grid>
 
-                    <!-- OVERVIEW: the chosen calendar direction — month
-                         sections of day cells; per-day free + total set aside; every day
-                         in range present; attention tints; TODAY framed. Outer
-                         ListBox = virtualization + ScrollIntoView; months themselves are
-                         not selectable (bare item template) — day-cell Buttons are the
-                         interactive unit, selection handled manually in code-behind. -->
+                    <!-- OVERVIEW: the chosen calendar direction — month sections of day cells; per-day free + total set aside; every day in range present; attention tints; TODAY framed.
+                         Outer ListBox = virtualization + ScrollIntoView;
+                         months themselves are not selectable (bare item template) — day-cell Buttons are the interactive unit, selection handled manually in code-behind. -->
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <DockPanel Margin="0,0,0,4">
-                            <!-- Account filter: All = the household roll-up;
-                                 picking an account re-scopes every number below. -->
+                            <!-- Account filter: All = the household roll-up; picking an account re-scopes every number below. -->
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <TextBlock Text="Show" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <ComboBox x:Name="AccountFilterComboBox" Width="170" DisplayMemberPath="Name"
@@ -438,8 +422,7 @@
                                                                         </StackPanel>
 
                                                                         <!-- Two LABELED numbers, so neither has to be guessed.
-                                                                             Hidden entirely on an event-less day — bare labels with no
-                                                                             figures under them are just noise. -->
+                                                                             Hidden entirely on an event-less day — bare labels with no figures under them are just noise. -->
                                                                         <Grid Margin="0,2,0,0" Visibility="{Binding HasSnapshot, Converter={StaticResource BoolToVis}}">
                                                                             <Grid.ColumnDefinitions>
                                                                                 <ColumnDefinition Width="*"/>
