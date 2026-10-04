@@ -10,9 +10,8 @@ using BuyTheBoat.Persistence;
 
 namespace BuyTheBoat.App;
 
-// The app's one main window: the Forecast tab, a list tab for each kind of
-// thing (Accounts, Transfers, Bills & Paychecks, Allocations), and a form tab
-// for creating or editing each (Account, Transfer, Expense, Earmark).
+// The app's one main window: the Forecast tab, a list tab for each kind of thing (Accounts, Transfers, Bills & Paychecks, Allocations), 
+// and a form tab for creating or editing each (Account, Transfer, Expense, Earmark).
 public partial class MainWindow : Window
 {
     private readonly FinancialPatternRepository _financialPatterns;
@@ -22,25 +21,20 @@ public partial class MainWindow : Window
     private readonly TransferRepository _transfers;
     private readonly ManualEarmarkRepository _manualEarmarks;
 
-    // Backs the spreadsheet export button and the selected-day detail pane —
-    // both only make sense once a forecast has actually been computed.
+    // Backs the spreadsheet export button and the selected-day detail pane — both only make sense once a forecast has actually been computed.
     private ForecastResult? _lastForecast;
 
-    // The non-date inputs the shown forecast was computed from (dates live on
-    // _lastForecast itself) — the Forecast button's pending-state compares the
-    // fields against these.
+    // The non-date inputs the shown forecast was computed from (dates live on _lastForecast itself) — the Forecast button's pending-state compares the fields against these.
     private decimal? _shownBalance;
     private decimal? _shownCushion;
 
-    // Calendar selection is manual (day cells are Buttons): exactly one cell
-    // is selected at a time, tracked here and flagged on the row itself so the
-    // cell template's trigger re-renders it — recycling-safe, cross-month.
+    // Calendar selection is manual (day cells are Buttons): 
+    //   exactly one cell is selected at a time, tracked here and flagged on the row itself so the cell template's trigger re-renders it — recycling-safe, cross-month.
     private DayCellRow? _selectedDayCell;
     private Dictionary<DateOnly, DayCellRow> _dayCellsByDate = [];
 
     // Which account the overview is scoped to; null = the household roll-up.
-    // Filtering re-renders the calendar only — the forecast
-    // itself is unchanged, so there is nothing to recompute.
+    // Filtering re-renders the calendar only — the forecast itself is unchanged, so there is nothing to recompute.
     private int? _accountFilter;
     private bool _updatingAccountFilter;
 
@@ -48,20 +42,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-
-        // launch report is resolved. File-based (not MessageBox) so this can
-        // be launched and inspected non-interactively. Logs at every step
-        // between opening the database and RefreshGrids populating the
-        // grids, to find exactly where a fresh read stops matching what's on
-        // disk.
+        // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-launch report is resolved.
+        // File-based (not MessageBox) so this can be launched and inspected non-interactively.
+        // Logs at every step between opening the database and RefreshGrids populating the grids, to find exactly where a fresh read stops matching what's on disk.
         Log("=== MainWindow constructor start ===");
         Log($"PID: {Environment.ProcessId}, UserName: {Environment.UserName}");
         var diagnosticPath = PatternDatabase.DefaultDatabasePath();
         Log($"Resolved path: {diagnosticPath}, Exists: {File.Exists(diagnosticPath)}, Size: {(File.Exists(diagnosticPath) ? new FileInfo(diagnosticPath).Length : -1)}");
 
-        // In the portable demo, make the labeled data\/logs\/backups\/exports\
-        // folders exist from first launch so the tester can see where things
-        // live; a no-op on a normal LocalAppData run.
+        // In the portable demo, make the labeled data\/logs\/backups\/exports\ folders exist from first launch so the tester can see where things live; a no-op on a normal LocalAppData run.
         AppPaths.EnsurePortableFoldersExist();
 
         var database = new PatternDatabase();
@@ -74,17 +63,14 @@ public partial class MainWindow : Window
 
         Log($"Immediately after construction — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, EarMarkPatterns.GetAll().Count: {_earMarkPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
 
-        // Migration: there is always at least one account. On the first run after
-        // accounts were added, the old single balance/cushion becomes the "primary"
-        // account, so nothing the user already entered is lost.
+        // Migration: there is always at least one account.
+        // On the first run after accounts were added, the old single balance/cushion becomes the "primary" account, so nothing the user already entered is lost.
         var legacy = _currentBalance.GetCurrent();
         _accounts.EnsureDefaultAccount(legacy?.Balance ?? 0m, legacy?.IdealSafetyCushion ?? 0m);
 
         Log($"After EnsureDefaultAccount — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
 
-        // The permanent Earmark tab persists
-        // through these callbacks instead of a ShowDialog() == true check —
-        // this panel owns no repository itself.
+        // The permanent Earmark tab persists through these callbacks instead of a ShowDialog() == true check — this panel owns no repository itself.
         EarmarkForm.PatternSaved = OnEarmarkPatternSaved;
         EarmarkForm.ManualEarmarksSaved = (saved, deleted) =>
         {
@@ -102,23 +88,17 @@ public partial class MainWindow : Window
             RefreshEarmarkFormContext();
             RefreshShownForecast();
 
-            // Same settled rule as the Savings-plan save path above — one
-            // plain save button for the whole Earmark form, one destination,
-            // regardless of which mode was active.
+            // Same settled rule as the Savings-plan save path above — one plain save button for the whole Earmark form, one destination, regardless of which mode was active.
             SwitchToTab("Forecast");
         };
 
-        // Same standing-tab treatment as Earmark
-        // above. Each panel does its own validation (AccountFormPanel's
-        // uniqueness check included) — these callbacks are purely "persist
-        // what came back, then refresh." Both now recompute the shown forecast
-        // after saving (an account's own starting balance feeds it), matching
-        // Earmark's save.
+        // Same standing-tab treatment as Earmark above.
+        // Each panel does its own validation (AccountFormPanel's uniqueness check included) — these callbacks are purely "persist what came back, then refresh."
+        // Both now recompute the shown forecast after saving (an account's own starting balance feeds it), matching Earmark's save.
         AccountForm.AccountSaved = account =>
         {
             _accounts.Save(account);
-            // The saved account changed the world; recompute so the Forecast tab
-            // we're switching to reflects it, not the pre-save snapshot.
+            // The saved account changed the world; recompute so the Forecast tab we're switching to reflects it, not the pre-save snapshot.
             if (_lastForecast is { } shown)
             {
                 RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
@@ -136,12 +116,8 @@ public partial class MainWindow : Window
         EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
         EarmarkForm.RequestForecastWithProposedPlan = ForecastWithProposedPlan;
 
-        // Picking a plan-less goal in the Earmark form proposes a real,
-        // affordability-capped plan (the same one "Save and Plan" would create)
-        // as unsaved draft values to edit — not a bare monthly skeleton. Paced
-        // from the goal's own start when that's still in the future, so the
-        // proposed plan fits the goal's span without the proposer stretching the
-        // goal (which a draft can't persist).
+        // Picking a plan-less goal in the Earmark form proposes a real, affordability-capped plan (the same one "Save and Plan" would create) as unsaved draft values to edit — not a bare monthly skeleton.
+        // Paced from the goal's own start when that's still in the future, so the proposed plan fits the goal's span without the proposer stretching the goal (which a draft can't persist).
         EarmarkForm.RequestProposedPlan = goal =>
         {
             var accountId = _financialPatterns.GetAccountId(goal.FinanceId) ?? DefaultAccountId();
@@ -150,16 +126,12 @@ public partial class MainWindow : Window
             return ProposeAllocationPlanFor(goal, accountId, asOf);
         };
 
-        // The permanent Transfer tab. Create-only for now (see TransferFormPanel) —
-        // the panel collects from/to/amount/schedule, this callback does the id
-        // assignment, paired-pattern expansion, and save.
+        // The permanent Transfer tab.
+        // Create-only for now (see TransferFormPanel) — the panel collects from/to/amount/schedule, this callback does the id assignment, paired-pattern expansion, and save.
         TransferForm.TransferSaved = OnTransferSaved;
         TransferForm.RequestForecast = EnsureForecast;
 
-        // Tab-header styling stays live, not just at save/load: each panel
-        // raises StateChanged on every field edit (via MarkDirty/ClearDirty),
-        // not only when its own Load*/Save runs, so the header updates while
-        // the user is still typing.
+        // Tab-header styling stays live, not just at save/load: each panel raises StateChanged on every field edit (via MarkDirty/ClearDirty), not only when its own Load*/Save runs, so the header updates while the user is still typing.
         AccountForm.StateChanged += (_, _) => UpdateTabHeaderStyle(AccountTabHeaderText, AccountsTabHeaderText, AccountForm.IsPopulated, AccountForm.IsDirty);
         ExpenseForm.StateChanged += (_, _) => UpdateTabHeaderStyle(ExpenseTabHeaderText, BillsAndPaychecksTabHeaderText, ExpenseForm.IsPopulated, ExpenseForm.IsDirty);
         EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, AllocationsTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
@@ -171,8 +143,7 @@ public partial class MainWindow : Window
         Log("=== MainWindow constructor end ===");
     }
 
-    // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-
-    // launch report is resolved.
+    // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-launch report is resolved.
     private static readonly string DiagnosticLogPath = Path.Combine(Path.GetTempPath(), "mmf-diagnostic.log");
 
     private static void Log(string message)
@@ -197,9 +168,7 @@ public partial class MainWindow : Window
 
     private void RefreshExpenseFormContext()
     {
-        // Same accountId-by-financeId shape RefreshGrids() already builds for
-        // the grid's own account-name column — reused here so the instance
-        // picker knows which account each existing Expense is filed under.
+        // Same accountId-by-financeId shape RefreshGrids() already builds for the grid's own account-name column — reused here so the instance picker knows which account each existing Expense is filed under.
         var accountIdByFinanceId = _financialPatterns.GetAllByAccount()
             .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
             .ToDictionary(pair => pair.FinanceId, pair => pair.AccountId);
@@ -311,8 +280,7 @@ public partial class MainWindow : Window
         AsOfDatePicker.SelectedDate = saved.AsOfDate.ToDateTime(TimeOnly.MinValue);
         HorizonEndDatePicker.SelectedDate = saved.HorizonEndDate.ToDateTime(TimeOnly.MinValue);
 
-        // Balance and cushion come from the accounts themselves now (the engine
-        // reads them per account), so nothing else to pass here.
+        // Balance and cushion come from the accounts themselves now (the engine reads them per account), so nothing else to pass here.
         RefreshForecast(saved.AsOfDate, saved.HorizonEndDate);
     }
 
@@ -343,7 +311,10 @@ public partial class MainWindow : Window
         SwitchToTab("Transfer");
     }
 
-    /// <summary>[STEP] The Transfers list tab's "Edit Selected..." button: loads the chosen transfer into the permanent Transfer form tab so the same form that creates a transfer also edits it. Saving rewrites that transfer in place.</summary>
+    /// <summary>
+    /// [STEP] The Transfers list tab's "Edit Selected..." button: loads the chosen transfer into the permanent Transfer form tab so the same form that creates a transfer also edits it.
+    /// Saving rewrites that transfer in place.
+    /// </summary>
     private void OnEditTransferClick(object sender, RoutedEventArgs e)
     {
         if (TransfersGrid.SelectedItem is not TransferRow row)
@@ -352,15 +323,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        // "Keeps going" lives on the legs, not the Transfer record, so read it
-        // off the withdrawal (the negative leg) to set the form's toggle.
+        // "Keeps going" lives on the legs, not the Transfer record, so read it off the withdrawal (the negative leg) to set the form's toggle.
         var withdrawal = _financialPatterns.GetByTransferId(row.Transfer.Id).FirstOrDefault(pattern => pattern.Amount < 0m);
         RefreshTransferFormContext();
         TransferForm.LoadForEdit(row.Transfer, withdrawal?.AutoRenew ?? false);
         SwitchToTab("Transfer");
     }
 
-    /// <summary>[STEP] The selected day's lever for a short account: opens the Transfer form tab already pointed at that account for what it is short. The user still confirms — we surface the problem and make the fix easy, we don't move their money for them.</summary>
+    /// <summary>
+    /// [STEP] The selected day's lever for a short account: opens the Transfer form tab already pointed at that account for what it is short.
+    /// The user still confirms — we surface the problem and make the fix easy, we don't move their money for them.
+    /// </summary>
     private void OnCoverShortfallClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: System.Windows.Data.CollectionViewGroup group }
@@ -389,18 +362,18 @@ public partial class MainWindow : Window
         return false;
     }
 
-    /// <summary>[WRITES FILE] Persists a transfer the Transfer form tab handed back — new or edited: turns from/to/amount/schedule into a Transfer plus its paired patterns, reserves for the withdrawal, saves, and returns the user to the Forecast tab. An edit rewrites the same transfer's legs in place; a new transfer gets fresh ids. The panel already validated the inputs and cleared itself.</summary>
+    /// <summary>
+    /// [WRITES FILE] Persists a transfer the Transfer form tab handed back — new or edited: turns from/to/amount/schedule into a Transfer plus its paired patterns, reserves for the withdrawal, saves, and returns the user to the Forecast tab.
+    /// An edit rewrites the same transfer's legs in place; a new transfer gets fresh ids.
+    /// The panel already validated the inputs and cleared itself.
+    /// </summary>
     /// <param name="inputs">The from/to/amount/schedule the Transfer form collected, plus the id of the transfer being edited (null for a new one).</param>
     private void OnTransferSaved(TransferFormInputs inputs)
     {
         var namesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
 
-        // Editing rewrites the existing transfer in place — same transfer id and
-        // the same withdrawal/deposit finance ids, so the saved patterns and plan
-        // are updated rather than a second set minted (the withdrawal is the
-        // negative leg, the deposit the positive). A new transfer gets a fresh
-        // transfer id and two fresh finance ids, which must not collide with any
-        // existing pattern's, transfer legs included.
+        // Editing rewrites the existing transfer in place — same transfer id and the same withdrawal/deposit finance ids, so the saved patterns and plan are updated rather than a second set minted (the withdrawal is the negative leg, the deposit the positive).
+        // A new transfer gets a fresh transfer id and two fresh finance ids, which must not collide with any existing pattern's, transfer legs included.
         int transferId, withdrawalFinanceId, depositFinanceId;
         if (inputs.EditingTransferId is { } editingId)
         {
@@ -431,31 +404,19 @@ public partial class MainWindow : Window
             AutoRenew = inputs.AutoRenew,
         });
 
-        // The transfer reserves in the account it leaves, through a
-        // front-loaded Allocation Plan on the withdrawal — no income pacing
-        // (a transfer isn't a recurring bill), so the no-income shape reserves the full
-        // amount from the as-of date. spreadEvenlyWithNoIncome: false — a
-        // transfer stays plain and immediate, not spread like a one-time
-        // goal; a deliberate ruling against adaptive
-        // behavior for transfers. Propose first: the proposer may stretch
-        // the withdrawal's active span back to the as-of date (its
-        // ActiveFrom) so its plan fits, and that prepared withdrawal is what
-        // must be persisted (via the transfer) for the plan to resolve.
+        // The transfer reserves in the account it leaves, through a front-loaded Allocation Plan on the withdrawal — no income pacing (a transfer isn't a recurring bill), so the no-income shape reserves the full amount from the as-of date.
+        // spreadEvenlyWithNoIncome: false — a transfer stays plain and immediate, not spread like a one-time goal; a deliberate ruling against adaptive behavior for transfers.
+        // Propose first: the proposer may stretch the withdrawal's active span back to the as-of date (its ActiveFrom) so its plan fits, and that prepared withdrawal is what must be persisted (via the transfer) for the plan to resolve.
         var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate(), spreadEvenlyWithNoIncome: false);
         _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
-        // Clear any existing withdrawal plan before saving the freshly-proposed
-        // one. Plans are keyed on (FinanceId, StartDate), so an edit whose new
-        // schedule moves the plan's start would otherwise leave the old plan
-        // behind as a duplicate reservation (a no-op for a brand-new transfer,
-        // whose withdrawal id is fresh; the renewal pass clears it the same way).
+        // Clear any existing withdrawal plan before saving the freshly-proposed one.
+        // Plans are keyed on (FinanceId, StartDate), so an edit whose new schedule moves the plan's start would otherwise leave the old plan behind as a duplicate reservation (a no-op for a brand-new transfer, whose withdrawal id is fresh; the renewal pass clears it the same way).
         _earMarkPatterns.Delete(withdrawalFinanceId);
         _earMarkPatterns.Save(withdrawalPlan.Plan);
 
         RefreshGrids();
 
-        // The transfer's patterns change the cascade, so re-run the forecast, then
-        // land on the Forecast tab (matching the other form saves) — that view is
-        // what actually shows the shortfall the lever was offered for now cleared.
+        // The transfer's patterns change the cascade, so re-run the forecast, then land on the Forecast tab (matching the other form saves) — that view is what actually shows the shortfall the lever was offered for now cleared.
         RefreshShownForecast();
         SwitchToTab("Forecast");
     }
@@ -499,7 +460,10 @@ public partial class MainWindow : Window
         UpdateForecastButtonState();
     }
 
-    /// <summary>[STEP] Populates and switches to the permanent Account tab instead of opening AccountWindow. Validation (including the name-uniqueness check) lives in AccountFormPanel itself — see its own class comment.</summary>
+    /// <summary>
+    /// [STEP] Populates and switches to the permanent Account tab instead of opening AccountWindow.
+    /// Validation (including the name-uniqueness check) lives in AccountFormPanel itself — see its own class comment.
+    /// </summary>
     private void OnAddAccountClick(object sender, RoutedEventArgs e)
     {
         RefreshAccountFormContext();
@@ -592,19 +556,20 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Balance and cushion are per account now, validated as each account is
-        // saved — so there is nothing to parse here; AccountTotals() is just the
-        // household sum the legacy CurrentBalance row below still wants.
+        // Balance and cushion are per account now, validated as each account is saved — so there is nothing to parse here; AccountTotals() is just the household sum the legacy CurrentBalance row below still wants.
         var (balance, idealSafetyCushion) = AccountTotals();
 
-        // CurrentBalance is superseded by the per-account model but still holds
-        // the global as-of/horizon dates — kept in step here so the row stays
-        // coherent until that settings data moves onto TransactionLogBook itself.
+        // CurrentBalance is superseded by the per-account model but still holds the global as-of/horizon dates — kept in step here so the row stays coherent until that settings data moves onto TransactionLogBook itself.
         _currentBalance.Save(balance, asOfDate, horizonEndDate, idealSafetyCushion);
         RefreshForecast(asOfDate, horizonEndDate);
     }
 
-    /// <summary>[CALC] No upper bound on the horizon by design — years out is a legitimate request (long-term goals, mortgage-length planning), so this is left to whatever the user picks rather than an app-imposed ceiling. The calendar stays cheap at that scale because the outer ListBox virtualizes months. One AccountForecastInput per account: its own balance/cushion, and the patterns/earmarks/manuals filed under it (an earmark or manual reaches its account through its finance id). A transfer's two patterns are patterns filed under an account too, so they ride along and feed its cascade.</summary>
+    /// <summary>
+    /// [CALC] No upper bound on the horizon by design — years out is a legitimate request (long-term goals, mortgage-length planning), so this is left to whatever the user picks rather than an app-imposed ceiling.
+    /// The calendar stays cheap at that scale because the outer ListBox virtualizes months.
+    /// One AccountForecastInput per account: its own balance/cushion, and the patterns/earmarks/manuals filed under it (an earmark or manual reaches its account through its finance id).
+    /// A transfer's two patterns are patterns filed under an account too, so they ride along and feed its cascade.
+    /// </summary>
     private IReadOnlyList<AccountForecastInput> BuildAccountInputs()
     {
         var patternsByAccount = _financialPatterns.GetAllByAccount();
@@ -634,14 +599,9 @@ public partial class MainWindow : Window
 
     private void RefreshForecast(DateOnly asOfDate, DateOnly horizonEndDate)
     {
-        // "It just keeps going": ongoing bills/paychecks and transfers
-        // are stored with a real, bounded end date, so before showing a forecast we
-        // extend them forward to reach the horizon. Bills renew as fresh chain
-        // segments; transfers just extend their end date in place (they have no
-        // distinctive chain identity — see ExtendOngoingTransfersToHorizon). Only the
-        // shown forecast does this — the what-if forecasts (ForecastOmitting/
-        // WithOneOff/WithProposedPlan) build straight from BuildForecastOptions and
-        // stay read-only.
+        // "It just keeps going": ongoing bills/paychecks and transfers are stored with a real, bounded end date, so before showing a forecast we extend them forward to reach the horizon.
+        // Bills renew as fresh chain segments; transfers just extend their end date in place (they have no distinctive chain identity — see ExtendOngoingTransfersToHorizon).
+        // Only the shown forecast does this — the what-if forecasts (ForecastOmitting/WithOneOff/WithProposedPlan) build straight from BuildForecastOptions and stay read-only.
         RenewOngoingPatternsToHorizon(horizonEndDate);
         ExtendOngoingTransfersToHorizon(horizonEndDate);
 
@@ -659,19 +619,18 @@ public partial class MainWindow : Window
         UpdateForecastButtonState();
     }
 
-    /// <summary>[WRITES FILE] Extends every ongoing (AutoRenew) bill/paycheck forward with fresh renewal segments until its chain reaches the horizon, so "it just keeps going" actually keeps going however far you forecast. A no-op — and no writes — when every ongoing pattern already reaches the horizon, so re-forecasting the same window is idempotent.</summary>
+    /// <summary>
+    /// [WRITES FILE] Extends every ongoing (AutoRenew) bill/paycheck forward with fresh renewal segments until its chain reaches the horizon, so "it just keeps going" actually keeps going however far you forecast.
+    /// A no-op — and no writes — when every ongoing pattern already reaches the horizon, so re-forecasting the same window is idempotent.
+    /// </summary>
     /// <param name="horizon">The forecast horizon the ongoing patterns must reach.</param>
     private void RenewOngoingPatternsToHorizon(DateOnly horizon)
     {
-        // Each renewal pushes a chain a cycle-plus past the horizon, so one pass
-        // usually settles it; the guarded loop only re-runs if a segment length
-        // somehow lands short, and stops rather than spinning.
+        // Each renewal pushes a chain a cycle-plus past the horizon, so one pass usually settles it; the guarded loop only re-runs if a segment length somehow lands short, and stops rather than spinning.
         for (var guard = 0; guard < 200; guard++)
         {
             var all = _financialPatterns.GetAll();
-            // Transfer legs can be AutoRenew too, but they renew as a linked pair
-            // through ExtendOngoingTransfersToHorizon — never here, where the
-            // single-pattern chain logic would break the pairing.
+            // Transfer legs can be AutoRenew too, but they renew as a linked pair through ExtendOngoingTransfersToHorizon — never here, where the single-pattern chain logic would break the pairing.
             var transferFinanceIds = _financialPatterns.GetTransferFinanceIds();
             var dueForRenewal = all
                 .Where(pattern => pattern.AutoRenew && !transferFinanceIds.Contains(pattern.FinanceId))
@@ -692,30 +651,29 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>[WRITES FILE] Appends one renewal segment to an ongoing pattern's chain — a fresh, identical successor (new FinanceId, "(renewed …)" label) reaching a cycle past the horizon, CONTINUING each existing earmark pattern at the same amount and cadence rather than proposing a new one. A pattern with no savings plan gains none — it just keeps coming out of free money on its due date. A single bad pattern is logged and skipped rather than breaking the whole forecast.</summary>
+    /// <summary>
+    /// [WRITES FILE] Appends one renewal segment to an ongoing pattern's chain — a fresh, identical successor (new FinanceId, "(renewed …)" label) reaching a cycle past the horizon, CONTINUING each existing earmark pattern at the same amount and cadence rather than proposing a new one.
+    /// A pattern with no savings plan gains none — it just keeps coming out of free money on its due date.
+    /// A single bad pattern is logged and skipped rather than breaking the whole forecast.
+    /// </summary>
     /// <param name="segment">The ongoing pattern's current segment, due to reach further out.</param>
     /// <param name="horizon">The forecast horizon the successor must clear.</param>
     private void RenewOngoingSegment(FinancialPattern segment, DateOnly horizon)
     {
         try
         {
-            // Fetched live (not from the caller's snapshot) so ids stay current
-            // across a multi-pattern batch.
+            // Fetched live (not from the caller's snapshot) so ids stay current across a multi-pattern batch.
             var all = _financialPatterns.GetAll();
             var accountId = _financialPatterns.GetAccountId(segment.FinanceId) ?? DefaultAccountId();
             var renewalDate = segment.DatePattern.Until.AddDays(1);
 
-            // Whole years reaching a cycle-plus past the horizon, so one renewal
-            // covers the current view and won't re-fire until the horizon moves out.
+            // Whole years reaching a cycle-plus past the horizon, so one renewal covers the current view and won't re-fire until the horizon moves out.
             var segmentYears = Math.Max(1, (horizon.DayNumber - renewalDate.DayNumber) / 365 + 2);
             var successorFinanceId = all.Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max() + 1;
 
-            // A renewal changes nothing, so the successor is built directly and the
-            // pattern simply continues — no break-off-style fresh plan proposal (which
-            // would also invent a savings plan for a bill that has none).
-            // The predecessor already ends the day before renewalDate, so it needs no
-            // change. Mirrors BreakOffFactory.Renew's successor + "(renewed …)" label,
-            // minus the proposal.
+            // A renewal changes nothing, so the successor is built directly and the pattern simply continues — no break-off-style fresh plan proposal (which would also invent a savings plan for a bill that has none).
+            // The predecessor already ends the day before renewalDate, so it needs no change.
+            // Mirrors BreakOffFactory.Renew's successor + "(renewed …)" label, minus the proposal.
             var successor = FinancialPattern.Create(new FinancialPatternOptions
             {
                 FinanceId = successorFinanceId,
@@ -737,10 +695,8 @@ public partial class MainWindow : Window
             });
             _financialPatterns.Save(successor, accountId);
 
-            // Continue each earmark pattern unchanged: same amount and cadence,
-            // its span re-anchored onto the new segment (ReanchoredToStartOn keeps the
-            // contribution days; WithUntil reaches the successor's border). No rows here
-            // means the pattern has no savings plan — nothing to carry.
+            // Continue each earmark pattern unchanged: same amount and cadence, its span re-anchored onto the new segment (ReanchoredToStartOn keeps the contribution days; WithUntil reaches the successor's border).
+            // No rows here means the pattern has no savings plan — nothing to carry.
             foreach (var existing in _earMarkPatterns.GetAll().Where(plan => plan.FinanceId == segment.FinanceId))
             {
                 var continued = EarMarkPattern.Create(
@@ -750,9 +706,7 @@ public partial class MainWindow : Window
                         DatePattern = existing.DatePattern.ReanchoredToStartOn(renewalDate).WithUntil(successor.DatePattern.Until),
                         Amount = existing.Amount,
                         StartingAllocation = 0m,
-                        // An automatic renewal takes no user input, so the continuing
-                        // plan inherits the existing plan's standing — a dummy that
-                        // keeps going stays a dummy (EarMarkPattern.ExplicitlyCreated).
+                        // An automatic renewal takes no user input, so the continuing plan inherits the existing plan's standing — a dummy that keeps going stays a dummy (EarMarkPattern.ExplicitlyCreated).
                         ExplicitlyCreated = existing.ExplicitlyCreated,
                     },
                     successor);
@@ -774,7 +728,11 @@ public partial class MainWindow : Window
         return markerIndex < 0 ? label : label[..markerIndex];
     }
 
-    /// <summary>[WRITES FILE] Extends every ongoing (AutoRenew) transfer's end date out past the horizon so it keeps going however far you forecast. Transfers use extend-in-place rather than the bill's chain-of-segments: they have no distinctive identity to chain on (every "Transfer to Savings" leg looks alike), so the transfer and both legs are rebuilt at the same ids with a later end date, and the withdrawal's reservation is re-fitted to the longer span. A no-op — no writes — when every ongoing transfer already reaches the horizon.</summary>
+    /// <summary>
+    /// [WRITES FILE] Extends every ongoing (AutoRenew) transfer's end date out past the horizon so it keeps going however far you forecast.
+    /// Transfers use extend-in-place rather than the bill's chain-of-segments: they have no distinctive identity to chain on (every "Transfer to Savings" leg looks alike), so the transfer and both legs are rebuilt at the same ids with a later end date, and the withdrawal's reservation is re-fitted to the longer span.
+    /// A no-op — no writes — when every ongoing transfer already reaches the horizon.
+    /// </summary>
     /// <param name="horizon">The forecast horizon the ongoing transfers must reach.</param>
     private void ExtendOngoingTransfersToHorizon(DateOnly horizon)
     {
@@ -793,8 +751,7 @@ public partial class MainWindow : Window
                 var withdrawal = legs.FirstOrDefault(leg => leg.Amount < 0m);
                 var deposit = legs.FirstOrDefault(leg => leg.Amount > 0m);
 
-                // Ongoing only (the withdrawal leg carries the flag), and only a
-                // well-formed pair whose accounts still exist — otherwise leave it be.
+                // Ongoing only (the withdrawal leg carries the flag), and only a well-formed pair whose accounts still exist — otherwise leave it be.
                 if (withdrawal is not { AutoRenew: true } || deposit is null
                     || !namesById.ContainsKey(transfer.FromAccountId) || !namesById.ContainsKey(transfer.ToAccountId))
                 {
@@ -816,11 +773,8 @@ public partial class MainWindow : Window
                     AutoRenew = true,
                 });
 
-                // Clear the old withdrawal reservation before re-fitting it to the
-                // longer span, so a re-proposed plan on a different key can't leave a
-                // stale duplicate behind. A transfer's reservation is mechanical (never
-                // a user-designed plan), so re-proposing it — as the create flow does —
-                // is fine here.
+                // Clear the old withdrawal reservation before re-fitting it to the longer span, so a re-proposed plan on a different key can't leave a stale duplicate behind.
+                // A transfer's reservation is mechanical (never a user-designed plan), so re-proposing it — as the create flow does — is fine here.
                 var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate(), spreadEvenlyWithNoIncome: false);
                 _earMarkPatterns.Delete(withdrawal.FinanceId);
                 _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
@@ -856,8 +810,7 @@ public partial class MainWindow : Window
     /// <param name="horizonEndDate">The horizon end date.</param>
     private ForecastOptions BuildForecastOptions(DateOnly asOfDate, DateOnly horizonEndDate) => new()
     {
-        // Ignored when Accounts is set (there is always at least one account),
-        // but still required by the record.
+        // Ignored when Accounts is set (there is always at least one account), but still required by the record.
         FinancialPatterns = [],
         EarMarkPatterns = [],
         StartingBalance = 0m,
@@ -866,7 +819,10 @@ public partial class MainWindow : Window
         Accounts = BuildAccountInputs(),
     };
 
-    /// <summary>[CALC] Re-runs the forecast with the given goals' savings plans omitted — the "room for these plans" view the save-confirmation's affordability ceiling sizes suggestions against. Same inputs and window as the shown forecast, just filtered; deliberately does NOT touch _lastForecast (a throwaway calculation, not the shown forecast).</summary>
+    /// <summary>
+    /// [CALC] Re-runs the forecast with the given goals' savings plans omitted — the "room for these plans" view the save-confirmation's affordability ceiling sizes suggestions against.
+    /// Same inputs and window as the shown forecast, just filtered; deliberately does NOT touch _lastForecast (a throwaway calculation, not the shown forecast).
+    /// </summary>
     /// <param name="omitFinanceIds">The goals whose EarMarkPatterns to leave out.</param>
     private ForecastResult ForecastOmitting(IReadOnlySet<int> omitFinanceIds)
     {
@@ -876,7 +832,10 @@ public partial class MainWindow : Window
             BuildForecastOptions(asOfDate, horizonEnd).WithoutPlansFor(omitFinanceIds));
     }
 
-    /// <summary>[CALC] Re-runs the forecast with one not-yet-saved one-off earmark folded in — the live "what if I saved this one-off" preview the Earmark form's summary reads its jar off. Same inputs and window as the shown forecast, just with the proposed earmark added; a throwaway calculation, never stored on _lastForecast.</summary>
+    /// <summary>
+    /// [CALC] Re-runs the forecast with one not-yet-saved one-off earmark folded in — the live "what if I saved this one-off" preview the Earmark form's summary reads its jar off.
+    /// Same inputs and window as the shown forecast, just with the proposed earmark added; a throwaway calculation, never stored on _lastForecast.
+    /// </summary>
     /// <param name="oneOff">The proposed one-off earmark to include.</param>
     private ForecastResult ForecastWithOneOff(ManualEarmark oneOff)
     {
@@ -886,7 +845,10 @@ public partial class MainWindow : Window
             BuildForecastOptions(asOfDate, horizonEnd).WithManualEarmark(oneOff));
     }
 
-    /// <summary>[CALC] Re-runs the forecast with a not-yet-saved savings plan substituted in (plus any proposed manual earmarks that go with it, e.g. a starting earmark) — the live "what if I saved this plan" preview the Earmark form's first-payment warning reads its free-funds figure off. Same inputs and window as the shown forecast; a throwaway calculation, never stored on _lastForecast.</summary>
+    /// <summary>
+    /// [CALC] Re-runs the forecast with a not-yet-saved savings plan substituted in (plus any proposed manual earmarks that go with it, e.g. a starting earmark) — the live "what if I saved this plan" preview the Earmark form's first-payment warning reads its free-funds figure off.
+    /// Same inputs and window as the shown forecast; a throwaway calculation, never stored on _lastForecast.
+    /// </summary>
     /// <param name="proposed">The proposed plan to substitute in.</param>
     /// <param name="replacedActiveStart">The saved segment it replaces, or null for a brand-new plan.</param>
     /// <param name="proposedManualEarmarks">Any proposed manual earmarks to fold in alongside it.</param>
@@ -904,7 +866,10 @@ public partial class MainWindow : Window
         return TransactionLogBookFactory.CreateForecast(options);
     }
 
-    /// <summary>[UI] "All accounts" plus one entry per account. Kept in step with the forecast so a renamed or deleted account can't linger in the filter.</summary>
+    /// <summary>
+    /// [UI] "All accounts" plus one entry per account.
+    /// Kept in step with the forecast so a renamed or deleted account can't linger in the filter.
+    /// </summary>
     /// <param name="forecast">The just-computed forecast, for its current account list.</param>
     private void PopulateAccountFilter(ForecastResult forecast)
     {
@@ -950,17 +915,15 @@ public partial class MainWindow : Window
         _selectedDayCell = null;
         TimelineCalendar.ItemsSource = months;
 
-        // Never leave the detail pane blank: fall back to the as-of day if the
-        // day that was selected has no cell under the current filter.
+        // Never leave the detail pane blank: fall back to the as-of day if the day that was selected has no cell under the current filter.
         if (_dayCellsByDate.TryGetValue(selectDate, out var cell)
             || _dayCellsByDate.TryGetValue(forecast.AsOfDate, out cell))
         {
             SelectDay(cell);
         }
 
-        // Land the viewport on today's month when today is in range;
-        // otherwise start at the top. Deferred to Loaded priority because the
-        // virtualizing panel hasn't measured at the moment ItemsSource is set.
+        // Land the viewport on today's month when today is in range; otherwise start at the top.
+        // Deferred to Loaded priority because the virtualizing panel hasn't measured at the moment ItemsSource is set.
         var today = DateOnly.FromDateTime(DateTime.Today);
         var targetMonth = today >= forecast.AsOfDate && today <= forecast.HorizonEndDate
             ? months.FirstOrDefault(month => month.MonthAutomationId == $"Month_{today:yyyy-MM}") ?? months[0]
@@ -968,7 +931,10 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => TimelineCalendar.ScrollIntoView(targetMonth));
     }
 
-    /// <summary>[CALC] The rich month calendar. Each active day shows two LABELED numbers (Total + Free), the day's top event by name, an explicit event count, a per-account flow strip, and a ⚠ + words warning when an account is short.</summary>
+    /// <summary>
+    /// [CALC] The rich month calendar.
+    /// Each active day shows two LABELED numbers (Total + Free), the day's top event by name, an explicit event count, a per-account flow strip, and a ⚠ + words warning when an account is short.
+    /// </summary>
     /// <param name="forecast">The forecast to render.</param>
     /// <param name="accountFilter">Re-scopes every number to one account; null means the household roll-up.</param>
     private static List<MonthRow> BuildCalendarMonths(ForecastResult forecast, int? accountFilter)
@@ -985,7 +951,10 @@ public partial class MainWindow : Window
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => (group.First().Priority, Name: group.First().Description ?? group.First().Source));
 
-        /// <summary>[CALC] An event the USER would count: a transaction, a scheduled allocation, or a manual adjustment. System-generated reservation steps (cushion fills, deallocation give-backs, goal releases) are mechanism, not events, so they are not counted.</summary>
+        /// <summary>
+        /// [CALC] An event the USER would count: a transaction, a scheduled allocation, or a manual adjustment.
+        /// System-generated reservation steps (cushion fills, deallocation give-backs, goal releases) are mechanism, not events, so they are not counted.
+        /// </summary>
         /// <param name="snapshot">The day's balance snapshot to count events in.</param>
         static int CountEvents(BalanceSnapshot snapshot) =>
             snapshot.ExpectedTransactions.Count(transaction => !transaction.Cancelled)
@@ -1025,8 +994,7 @@ public partial class MainWindow : Window
 
                 foreach (var account in scope)
                 {
-                    // On the as-of day every account reports its settled seed;
-                    // otherwise carry forward its latest snapshot.
+                    // On the as-of day every account reports its settled seed; otherwise carry forward its latest snapshot.
                     var sampled = isAsOf ? account.Page.InitialSnapshot : SnapshotAsOf(account.Page, date);
                     total += sampled.ExpectedAmount ?? 0m;
                     var accountFree = AccountFreeOn(account, date, forecast.AsOfDate);
@@ -1036,8 +1004,7 @@ public partial class MainWindow : Window
                         shortNames.Add(account.Name);
                     }
 
-                    // Events (and therefore flow) only exist on the account's own
-                    // event dates — never on the settled as-of day.
+                    // Events (and therefore flow) only exist on the account's own event dates — never on the settled as-of day.
                     var onThisDay = isAsOf ? null : account.Page.BalanceRecord.GetValueOrDefault(date);
                     var net = 0m;
                     if (onThisDay is not null)
@@ -1066,8 +1033,8 @@ public partial class MainWindow : Window
                     .Select(candidate => candidate.Name)
                     .FirstOrDefault() ?? string.Empty;
 
-                // ⚠ + words, never color alone. "Thin" has no defined
-                // threshold yet, so only the definite "short" case is worded.
+                // ⚠ + words, never color alone.
+                // "Thin" has no defined threshold yet, so only the definite "short" case is worded.
                 var warning = shortNames.Count switch
                 {
                     0 => string.Empty,
@@ -1119,11 +1086,14 @@ public partial class MainWindow : Window
         ShowDayDetail(cell.Date!.Value);
     }
 
-    // How thin free funds may get before we warn, as a multiple of the account's
-    // safety-cushion target: 1.0 = warn once free drops below one cushion's worth.
+    // How thin free funds may get before we warn, as a multiple of the account's safety-cushion target: 1.0 = warn once free drops below one cushion's worth.
     private const decimal ThinnessMultiplier = 1.0m;
 
-    /// <summary>[UI] The detail pane is the inner layer of the display onion: the cell IS a BalanceSnapshot, and selecting it shows everything the day holds — every event ("what happened today", left) and every fund jar with its per-type health (right), plus the day's free amount. Account-first (grouped two-pane): both panes group by account so each account's story — its events (left) and its jars (right) — stays together. The header shows the household free to spend and names any short account, so a positive total never hides a locally-short one.</summary>
+    /// <summary>
+    /// [UI] The detail pane is the inner layer of the display onion: the cell IS a BalanceSnapshot, and selecting it shows everything the day holds — every event ("what happened today", left) and every fund jar with its per-type health (right), plus the day's free amount.
+    /// Account-first (grouped two-pane): both panes group by account so each account's story — its events (left) and its jars (right) — stays together.
+    /// The header shows the household free to spend and names any short account, so a positive total never hides a locally-short one.
+    /// </summary>
     /// <param name="date">The day to show detail for.</param>
     private void ShowDayDetail(DateOnly date)
     {
@@ -1132,23 +1102,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        // The pane shows whatever the calendar's own account filter is showing:
-        // one account when filtered, every account otherwise. Scoping here keeps
-        // the header, events, and jars about the same accounts as the cell the
-        // user clicked — so the free figures can't disagree.
+        // The pane shows whatever the calendar's own account filter is showing: one account when filtered, every account otherwise.
+        // Scoping here keeps the header, events, and jars about the same accounts as the cell the user clicked — so the free figures can't disagree.
         var scopedAccounts = _accountFilter is { } scopeId
             ? forecast.Accounts.Where(account => account.AccountId == scopeId).ToList()
             : forecast.Accounts.ToList();
 
         var householdDay = forecast.Household.Days.FirstOrDefault(day => day.Date == date);
-        // Free to spend, summed the same way the calendar cell does and over the
-        // same accounts, so the header and the cell always agree for the same day.
+        // Free to spend, summed the same way the calendar cell does and over the same accounts, so the header and the cell always agree for the same day.
         var householdFree = scopedAccounts.Sum(account => AccountFreeOn(account, date, forecast.AsOfDate));
         var shortAccounts = householdDay?.ShortAccounts ?? [];
         if (_accountFilter is { } filteredId)
         {
-            // Filtered to one account: the pane is about it alone, so the header
-            // names it as short only when it is the account that's short.
+            // Filtered to one account: the pane is about it alone, so the header names it as short only when it is the account that's short.
             var filteredName = forecast.Accounts.FirstOrDefault(account => account.AccountId == filteredId)?.Name;
             shortAccounts = shortAccounts.Where(name => name == filteredName).ToList();
         }
@@ -1164,11 +1130,8 @@ public partial class MainWindow : Window
             ? (Brush)FindResource("RedTextBrush")
             : Brushes.Black;
 
-        // Each account's free on this day, computed up front so a short account's
-        // gap can be classified as coverable-by-transfer (rung 2, name the donor)
-        // vs. genuinely short household-wide (rung 3) — the ladder.
-        // Deliberately over EVERY account, not just the scoped one: a filtered
-        // account that's short can still be told which other account could cover it.
+        // Each account's free on this day, computed up front so a short account's gap can be classified as coverable-by-transfer (rung 2, name the donor) vs. genuinely short household-wide (rung 3) — the ladder.
+        // Deliberately over EVERY account, not just the scoped one: a filtered account that's short can still be told which other account could cover it.
         var freeByAccount = forecast.Accounts.ToDictionary(
             account => account.AccountId,
             account => (account.Page.BalanceRecord.GetValueOrDefault(date) ?? SnapshotAsOf(account.Page, date)).ExpectedFreeAmount ?? 0m);
@@ -1186,15 +1149,13 @@ public partial class MainWindow : Window
 
             var earmarkedIds = page.EarmarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
 
-            // The user has funded a savings plan of their own when a jar tied to one
-            // of their earmark patterns holds money — auto-reserved mandatory bills
-            // don't count. Its absence (with cash to spare) is the rung-1 nudge's cue.
+            // The user has funded a savings plan of their own when a jar tied to one of their earmark patterns holds money — auto-reserved mandatory bills don't count.
+            // Its absence (with cash to spare) is the rung-1 nudge's cue.
             anyUserSetAside |= snapshot.FundJars.Any(jar =>
                 jar.FinanceId is { } fundedId && jar.ExpectedAmount > 0m && earmarkedIds.Contains(fundedId));
 
-            // How short this account is on this day, and — when short — whether other
-            // accounts hold enough free cash to cover it (rung 2, naming a single-
-            // account donor) or not (rung 3). Drives the header narrative + lever.
+            // How short this account is on this day, and — when short — whether other accounts hold enough free cash to cover it (rung 2, naming a single-account donor) or not (rung 3).
+            // Drives the header narrative + lever.
             var accountBalance = snapshot.ExpectedAmount ?? 0m;
             var accountFree = freeByAccount[account.AccountId];
             var shortfall = accountFree < 0m ? -accountFree : 0m;
@@ -1209,8 +1170,7 @@ public partial class MainWindow : Window
                 canCoverElsewhere = donors.Sum(donor => donor.Free) >= shortfall;
                 if (canCoverElsewhere)
                 {
-                    // Name the donor only when one account alone covers the whole gap;
-                    // otherwise the cash is spread and the line stays generic.
+                    // Name the donor only when one account alone covers the whole gap; otherwise the cash is spread and the line stays generic.
                     donorName = donors
                         .Where(donor => donor.Free >= shortfall)
                         .OrderByDescending(donor => donor.Free)
@@ -1218,13 +1178,9 @@ public partial class MainWindow : Window
                         .FirstOrDefault();
                 }
             }
-            // "Funds running low": free funds have fallen toward the reserve but not
-            // gone negative (negative is "short", the harsher state on the same axis).
-            // Skipped when no cushion is set — nothing to be thin against. This also
-            // covers a dipped safety cushion: the cushion only drops below target when
-            // a deallocation drains it to avoid going short, which leaves free near
-            // zero, so a reserve dip always reads as thin anyway (folded in here rather
-            // than shown as its own warning).
+            // "Funds running low": free funds have fallen toward the reserve but not gone negative (negative is "short", the harsher state on the same axis).
+            // Skipped when no cushion is set — nothing to be thin against.
+            // This also covers a dipped safety cushion: the cushion only drops below target when a deallocation drains it to avoid going short, which leaves free near zero, so a reserve dip always reads as thin anyway (folded in here rather than shown as its own warning).
             var cushionTarget = page.IdealSafetyCushion;
             var isThin = cushionTarget > 0m && accountFree >= 0m && accountFree < ThinnessMultiplier * cushionTarget;
 
@@ -1244,8 +1200,7 @@ public partial class MainWindow : Window
                     .ToHashSet(),
             };
 
-            // Events land only on an account's own event dates; jars carry
-            // forward, so every account shows its current jars on any selected day.
+            // Events land only on an account's own event dates; jars carry forward, so every account shows its current jars on any selected day.
             if (page.BalanceRecord.ContainsKey(date))
             {
                 foreach (var eventRow in DayEventRow.From(snapshot, context))
@@ -1257,8 +1212,7 @@ public partial class MainWindow : Window
 
             foreach (var jar in snapshot.FundJars)
             {
-                // Omit the safety-cushion row when the account has no cushion set —
-                // don't spend the pane's height on a jar the user never opted into.
+                // Omit the safety-cushion row when the account has no cushion set — don't spend the pane's height on a jar the user never opted into.
                 if (jar.FinanceId is null && page.IdealSafetyCushion <= 0m)
                 {
                     continue;
@@ -1269,8 +1223,7 @@ public partial class MainWindow : Window
             }
         }
 
-        // Rung-1 nudge: spare cash on hand, but the user hasn't funded any goal of
-        // their own, so the free figure is really just the balance.
+        // Rung-1 nudge: spare cash on hand, but the user hasn't funded any goal of their own, so the free figure is really just the balance.
         var showFreeNudge = householdFree > 0m && !anyUserSetAside;
         FreeNudgeText.Text = showFreeNudge
             ? "Set money aside for your goals so this reflects what's really spare."
@@ -1282,7 +1235,10 @@ public partial class MainWindow : Window
         JarDetailList.ItemsSource = GroupByAccount(jarRows);
     }
 
-    /// <summary>[CALC] Both selected-day panes group their rows under an account header. The rows expose an Account property the group description reads.</summary>
+    /// <summary>
+    /// [CALC] Both selected-day panes group their rows under an account header.
+    /// The rows expose an Account property the group description reads.
+    /// </summary>
     /// <param name="rows">The event or jar rows to group.</param>
     private static System.ComponentModel.ICollectionView GroupByAccount(System.Collections.IList rows)
     {
@@ -1309,17 +1265,26 @@ public partial class MainWindow : Window
         return snapshot;
     }
 
-    /// <summary>[CALC] One account's free-to-spend on a date: its ExpectedFreeAmount — the settled seed on the as-of day, else its carried-forward snapshot. The single definition the calendar cell and the selected-day header both sum, so the two views can never show different free figures for the same day.</summary>
+    /// <summary>
+    /// [CALC] One account's free-to-spend on a date: its ExpectedFreeAmount — the settled seed on the as-of day, else its carried-forward snapshot.
+    /// The single definition the calendar cell and the selected-day header both sum, so the two views can never show different free figures for the same day.
+    /// </summary>
     /// <param name="account">The account to read free funds from.</param>
     /// <param name="date">The day to read as of.</param>
     /// <param name="asOfDate">The forecast's as-of date, which reads its settled seed rather than a carried-forward snapshot.</param>
     private static decimal AccountFreeOn(AccountForecast account, DateOnly date, DateOnly asOfDate) =>
         (date == asOfDate ? account.Page.InitialSnapshot : SnapshotAsOf(account.Page, date)).ExpectedFreeAmount ?? 0m;
 
-    /// <summary>[UI] The Forecast button reads as actionable only while an input (range, balance, or cushion) differs from the forecast on screen. Wired to every input's change event; unparseable text counts as "differs" so the button stays live and the click handler can explain what's wrong.</summary>
+    /// <summary>
+    /// [UI] The Forecast button reads as actionable only while an input (range, balance, or cushion) differs from the forecast on screen.
+    /// Wired to every input's change event; unparseable text counts as "differs" so the button stays live and the click handler can explain what's wrong.
+    /// </summary>
     private void OnForecastInputChanged(object sender, RoutedEventArgs e) => UpdateForecastButtonState();
 
-    /// <summary>[UI] When the "As of" field is empty, opens its calendar on the current month rather than wherever it was last left — so returning to today isn't a long scroll back after forecasting years out. A WPF DatePicker keeps its DisplayDate on the last month shown once its date is cleared; this resets it each time the picker opens with no date.</summary>
+    /// <summary>
+    /// [UI] When the "As of" field is empty, opens its calendar on the current month rather than wherever it was last left — so returning to today isn't a long scroll back after forecasting years out.
+    /// A WPF DatePicker keeps its DisplayDate on the last month shown once its date is cleared; this resets it each time the picker opens with no date.
+    /// </summary>
     private void OnAsOfCalendarOpened(object sender, RoutedEventArgs e)
     {
         if (AsOfDatePicker.SelectedDate is null)
@@ -1355,8 +1320,7 @@ public partial class MainWindow : Window
             AsOfDatePicker.SelectedDate is { } asOf && DateOnly.FromDateTime(asOf) == shown.AsOfDate
             && HorizonEndDatePicker.SelectedDate is { } horizon && DateOnly.FromDateTime(horizon) == shown.HorizonEndDate;
 
-        // Editing an account changes the totals the shown forecast was built
-        // from, so the button lights up exactly as a changed date does.
+        // Editing an account changes the totals the shown forecast was built from, so the button lights up exactly as a changed date does.
         var (balance, cushion) = AccountTotals();
         ForecastButton.IsEnabled = !(datesMatch && balance == _shownBalance && cushion == _shownCushion);
     }
@@ -1431,7 +1395,10 @@ public partial class MainWindow : Window
         SwitchToTab("Earmark");
     }
 
-    /// <summary>[WRITES FILE] Output-only snapshot of whatever forecast is currently on screen — not to be confused with Export Data above, which copies the raw db file for backup/transfer. See ForecastSpreadsheetExporter.</summary>
+    /// <summary>
+    /// [WRITES FILE] Output-only snapshot of whatever forecast is currently on screen — not to be confused with Export Data above, which copies the raw db file for backup/transfer.
+    /// See ForecastSpreadsheetExporter.
+    /// </summary>
     private void OnExportForecastSpreadsheetClick(object sender, RoutedEventArgs e)
     {
         if (_lastForecast is not { } forecast)
@@ -1476,33 +1443,25 @@ public partial class MainWindow : Window
         var financialPatterns = _financialPatterns.GetAll();
         var earMarkPatterns = _earMarkPatterns.GetAll();
 
-        // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-
-        // launch report is resolved.
+        // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-launch report is resolved.
         Log($"RefreshGrids — financialPatterns.Count: {financialPatterns.Count}, earMarkPatterns.Count: {earMarkPatterns.Count}");
 
-        // financeId -> the name of the account it's filed under, so the grid
-        // can show where each bill/paycheck/goal lives — never a mystery.
+        // financeId -> the name of the account it's filed under, so the grid can show where each bill/paycheck/goal lives — never a mystery.
         var accountNamesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
         var accountNameByFinanceId = _financialPatterns.GetAllByAccount()
             .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
             .ToDictionary(pair => pair.FinanceId, pair => accountNamesById.GetValueOrDefault(pair.AccountId, "(unknown)"));
 
-        // A transfer's two patterns are hidden from this list — a transfer
-        // shows on its own tab as one thing, not as its two underlying
-        // patterns. The engine still reads every pattern when forecasting.
+        // A transfer's two patterns are hidden from this list — a transfer shows on its own tab as one thing, not as its two underlying patterns.
+        // The engine still reads every pattern when forecasting.
         FinancialPatternsGrid.ItemsSource = _financialPatterns.GetAllExcludingTransferPatterns()
             .Select(pattern => new FinancialPatternRow(pattern, accountNameByFinanceId.GetValueOrDefault(pattern.FinanceId, "(unknown)")))
             .ToList();
 
         RefreshTransfersGrid();
 
-        // Every outflow that reserves has its own Allocation Plan (an
-        // EarMarkPattern, per the allocation model), so
-        // the grid just shows those; nothing here is a synthesized "automatic"
-        // row. A transfer's withdrawal reserves through a plan too, but it's
-        // hidden here for the same reason its patterns are: a transfer is
-        // shown as one thing on its own tab, not as its underlying
-        // reservation machinery.
+        // Every outflow that reserves has its own Allocation Plan (an EarMarkPattern, per the allocation model), so the grid just shows those; nothing here is a synthesized "automatic" row.
+        // A transfer's withdrawal reserves through a plan too, but it's hidden here for the same reason its patterns are: a transfer is shown as one thing on its own tab, not as its underlying reservation machinery.
         var transferWithdrawalIds = _financialPatterns.GetTransferWithdrawalFinanceIds();
         EarMarkPatternsGrid.ItemsSource = earMarkPatterns
             .Where(pattern => !transferWithdrawalIds.Contains(pattern.FinanceId))
@@ -1584,9 +1543,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Deeper than the table-presence check above: confirm the file actually LOADS (migrations run,
-        // every row re-validates) before touching the live database, so an incompatible or corrupted
-        // export is rejected here rather than crashing the app on the restart below.
+        // Deeper than the table-presence check above: confirm the file actually LOADS (migrations run, every row re-validates) before touching the live database, so an incompatible or corrupted export is rejected here rather than crashing the app on the restart below.
         if (PatternDatabase.DescribeLoadFailure(dialog.FileName) is { } loadFailure)
         {
             ErrorLog.Record("validating a database import", new InvalidOperationException(loadFailure));
@@ -1620,15 +1577,12 @@ public partial class MainWindow : Window
 
             if (File.Exists(liveDatabasePath))
             {
-                // A safety net taken before the overwrite. In the demo this is a
-                // timestamped copy in backups\ (older ones are kept); off-demo it's
-                // the single "<db>.bak" beside the database, exactly as before.
+                // A safety net taken before the overwrite.
+                // In the demo this is a timestamped copy in backups\ (older ones are kept); off-demo it's the single "<db>.bak" beside the database, exactly as before.
                 File.Copy(liveDatabasePath, AppPaths.NextImportBackupPath(), overwrite: true);
             }
 
-            // Overwrites the live file AND removes its leftover -wal/-shm/-journal
-            // scratch files, so no stale journal can be rolled back into the
-            // imported data the next time it opens.
+            // Overwrites the live file AND removes its leftover -wal/-shm/-journal scratch files, so no stale journal can be rolled back into the imported data the next time it opens.
             PatternDatabase.ReplaceDatabaseFile(dialog.FileName, liveDatabasePath);
         }
         catch (IOException ex)
@@ -1653,7 +1607,10 @@ public partial class MainWindow : Window
         Application.Current.Shutdown();
     }
 
-    /// <summary>[STEP] Populates and switches to the permanent Expense tab instead of opening CreateFinancialPatternWindow. Persistence + AutoCreateAllocationPlan now happen in ExpenseForm.PatternSaved (wired in the constructor), matching Earmark's shape.</summary>
+    /// <summary>
+    /// [STEP] Populates and switches to the permanent Expense tab instead of opening CreateFinancialPatternWindow.
+    /// Persistence + AutoCreateAllocationPlan now happen in ExpenseForm.PatternSaved (wired in the constructor), matching Earmark's shape.
+    /// </summary>
     private void OnAddFinancialPatternClick(object sender, RoutedEventArgs e)
     {
         RefreshExpenseFormContext();
@@ -1668,7 +1625,10 @@ public partial class MainWindow : Window
         SwitchToTab("Expense");
     }
 
-    /// <summary>[STEP] What ExpenseForm.PatternSaved calls (wired in the constructor) — the migration target, now resolved: routes every Expense save through FinancePatternSaveConfirmation instead of a plain repository save, so a Critical edit against existing history goes through EditingHistoryConfirmationWindow first. AutoCreateAllocationPlan (an older concern — a brand-new outflow always gets a proposed plan, regardless of the history-aware confirmations) has to be called from two places below rather than once: Run()'s own NavigateToEarmarkForm callback fires before this method regains control, so for a new pattern going straight to Earmark, the plan has to be created inside that callback (and the plan this method was handed — computed before the plan existed — re-read afterward); for "Save and Skip planning," it happens here instead, after Run() returns.</summary>
+    /// <summary>
+    /// [STEP] What ExpenseForm.PatternSaved calls (wired in the constructor) — the migration target, now resolved: routes every Expense save through FinancePatternSaveConfirmation instead of a plain repository save, so a Critical edit against existing history goes through EditingHistoryConfirmationWindow first.
+    /// AutoCreateAllocationPlan (an older concern — a brand-new outflow always gets a proposed plan, regardless of the history-aware confirmations) has to be called from two places below rather than once: Run()'s own NavigateToEarmarkForm callback fires before this method regains control, so for a new pattern going straight to Earmark, the plan has to be created inside that callback (and the plan this method was handed — computed before the plan existed — re-read afterward); for "Save and Skip planning," it happens here instead, after Run() returns.
+    /// </summary>
     /// <param name="pattern">The form's current field values — what the user typed, before any implicit break-off/correction Run() might apply.</param>
     /// <param name="accountId">Which account the pattern is filed under.</param>
     /// <param name="isNew">Whether this is a brand-new pattern (the proposer should run) or an edit to an existing one.</param>
@@ -1693,28 +1653,19 @@ public partial class MainWindow : Window
             PickEarmarkPattern = PickEarmarkPatternToOpen,
             NavigateToEarmarkForm = (plan, suggestedOverrides) =>
             {
-                // No plan to open yet, but the user asked to plan — propose one,
-                // the same affordability-capped proposal a brand-new outflow gets.
-                // Covers two cases with one path: a brand-new pattern (the plan
-                // doesn't exist until AutoCreateAllocationPlan makes it right here),
-                // and an EXISTING plan-less outflow the user is now planning for.
-                // AutoCreateAllocationPlan no-ops for income (Amount >= 0), so
-                // running it unconditionally when plan is null is safe — plan just
-                // stays null and the income branch below handles it. Re-read rather
-                // than trusting the now-stale (null) plan parameter above.
+                // No plan to open yet, but the user asked to plan — propose one, the same affordability-capped proposal a brand-new outflow gets.
+                // Covers two cases with one path: a brand-new pattern (the plan doesn't exist until AutoCreateAllocationPlan makes it right here), and an EXISTING plan-less outflow the user is now planning for.
+                // AutoCreateAllocationPlan no-ops for income (Amount >= 0), so running it unconditionally when plan is null is safe — plan just stays null and the income branch below handles it.
+                // Re-read rather than trusting the now-stale (null) plan parameter above.
                 if (plan is null)
                 {
                     AutoCreateAllocationPlan(pattern, accountId);
                     plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
                 }
 
-                // The save (and any AutoCreateAllocationPlan just above) changed
-                // the data, but _lastForecast is still the pre-save snapshot the
-                // confirmation ran against. Recompute it BEFORE refreshing the form
-                // contexts, so the Earmark Summary we're about to land on shows the
-                // post-save state rather than a stale reading. Guarded on there being a
-                // forecast to re-run at all —
-                // with none, the Summary already shows its own no-forecast state.
+                // The save (and any AutoCreateAllocationPlan just above) changed the data, but _lastForecast is still the pre-save snapshot the confirmation ran against.
+                // Recompute it BEFORE refreshing the form contexts, so the Earmark Summary we're about to land on shows the post-save state rather than a stale reading.
+                // Guarded on there being a forecast to re-run at all — with none, the Summary already shows its own no-forecast state.
                 if (_lastForecast is { } shown)
                 {
                     RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
@@ -1726,29 +1677,20 @@ public partial class MainWindow : Window
 
                 if (plan is not null)
                 {
-                    // Looked up by the PLAN's own FinanceId, not pattern's —
-                    // after a break-off, plan belongs to the new successor,
-                    // and pattern is still the original, now-superseded values.
+                    // Looked up by the PLAN's own FinanceId, not pattern's — after a break-off, plan belongs to the new successor, and pattern is still the original, now-superseded values.
                     var goal = _financialPatterns.GetByFinanceId(plan.FinanceId) ?? pattern;
                     EarmarkForm.LoadPattern(plan, goal, suggestedOverrides);
                     SwitchToTab("Earmark");
                 }
                 else if (pattern.Amount < 0m)
                 {
-                    // Defensive fallback: an outflow should have a plan by now
-                    // (AutoCreateAllocationPlan above always saves one for
-                    // Amount < 0), but if the proposal somehow produced none,
-                    // open a blank Earmark form so the user can still create one
-                    // by hand rather than landing nowhere.
+                    // Defensive fallback: an outflow should have a plan by now (AutoCreateAllocationPlan above always saves one for Amount < 0), but if the proposal somehow produced none, open a blank Earmark form so the user can still create one by hand rather than landing nowhere.
                     EarmarkForm.LoadForNewPattern();
                     SwitchToTab("Earmark");
                 }
                 else
                 {
-                    // Income never gets a savings plan of its own, so there's
-                    // nothing to open on the Earmark tab — "Save and Plan" lands
-                    // back on the Forecast tab, the same as "Save and Skip
-                    // planning" already does.
+                    // Income never gets a savings plan of its own, so there's nothing to open on the Earmark tab — "Save and Plan" lands back on the Forecast tab, the same as "Save and Skip planning" already does.
                     SwitchToTab("Forecast");
                 }
             },
@@ -1761,19 +1703,13 @@ public partial class MainWindow : Window
 
         if (!jumpToEarmark)
         {
-            // The NavigateToEarmarkForm callback above never fires for "Save
-            // and Skip planning" (Run() only invokes it when planning wasn't
-            // skipped) — same AutoCreateAllocationPlan-then-refresh sequence,
-            // just without any Earmark-tab navigation at the end.
+            // The NavigateToEarmarkForm callback above never fires for "Save and Skip planning" (Run() only invokes it when planning wasn't skipped) — same AutoCreateAllocationPlan-then-refresh sequence, just without any Earmark-tab navigation at the end.
             if (isNew)
             {
                 AutoCreateAllocationPlan(pattern, accountId);
             }
 
-            // Recompute the forecast before switching to it, so the Forecast tab
-            // reflects the just-saved edit rather than the pre-save snapshot — the
-            // same refresh the "Save and Plan" path (NavigateToEarmarkForm) already
-            // does, closing a gap for this branch too.
+            // Recompute the forecast before switching to it, so the Forecast tab reflects the just-saved edit rather than the pre-save snapshot — the same refresh the "Save and Plan" path (NavigateToEarmarkForm) already does, closing a gap for this branch too.
             if (_lastForecast is { } shown)
             {
                 RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
@@ -1824,14 +1760,17 @@ public partial class MainWindow : Window
             RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
         }
 
-        // Earmark's own save "returns to the Forecast tab —
-        // no onward hop from there to anywhere else."
+        // Earmark's own save "returns to the Forecast tab — no onward hop from there to anywhere else."
         SwitchToTab("Forecast");
 
         return true;
     }
 
-    /// <summary>[STEP] Shows the save-confirmation popup and returns the raw selections it reports — shared by both the Expense and Earmark save paths' ConfirmImplicitChanges wiring. When a save's rows are too tall for one screen it splits them into height-based pages, shown one after another; selections accumulate into one outcome and a cancel on any page aborts the whole save. A save whose rows fit one page is unchanged.</summary>
+    /// <summary>
+    /// [STEP] Shows the save-confirmation popup and returns the raw selections it reports — shared by both the Expense and Earmark save paths' ConfirmImplicitChanges wiring.
+    /// When a save's rows are too tall for one screen it splits them into height-based pages, shown one after another; selections accumulate into one outcome and a cancel on any page aborts the whole save.
+    /// A save whose rows fit one page is unchanged.
+    /// </summary>
     private ConfirmationOutcome ShowEditingHistoryConfirmation(ImplicitChangeConfirmationRequest request)
     {
         var pages = ConfirmationPaginator.Paginate(
@@ -1840,9 +1779,8 @@ public partial class MainWindow : Window
         var chosenOptionIndex = new Dictionary<string, int>();
         EarMarkPattern? chosenPlanShape = null;
 
-        // One dialog per page; each row lives on exactly one page, so their ids
-        // never collide as their selections accumulate. A cancel on any page
-        // returns a non-proceeding outcome, which aborts the save.
+        // One dialog per page; each row lives on exactly one page, so their ids never collide as their selections accumulate.
+        // A cancel on any page returns a non-proceeding outcome, which aborts the save.
         for (var pageNumber = 1; pageNumber <= pages.Count; pageNumber++)
         {
             var isFinalPage = pageNumber == pages.Count;
@@ -1870,11 +1808,17 @@ public partial class MainWindow : Window
         };
     }
 
-    /// <summary>[CALC] The comfortable height budget for one confirmation page's rows — the usable screen height less room for the window's title bar, description, page indicator, button row, and margins, floored so a small screen still makes progress. Feeds ConfirmationPaginator.Paginate.</summary>
+    /// <summary>
+    /// [CALC] The comfortable height budget for one confirmation page's rows — the usable screen height less room for the window's title bar, description, page indicator, button row, and margins, floored so a small screen still makes progress.
+    /// Feeds ConfirmationPaginator.Paginate.
+    /// </summary>
     private static double MaxComfortableConfirmationHeight() =>
         System.Math.Max(300, SystemParameters.WorkArea.Height - 260);
 
-    /// <summary>[UI] AskWhichEarmarkPatternToOpen's own real disambiguation — shows EarmarkPatternPickerWindow and returns whichever plan the user picked. Cancelling the picker returns null, which AskWhichEarmarkPatternToOpen reads as "don't navigate" — the save has already committed, so the user simply stays on their current tab rather than being dropped onto a plan they didn't choose.</summary>
+    /// <summary>
+    /// [UI] AskWhichEarmarkPatternToOpen's own real disambiguation — shows EarmarkPatternPickerWindow and returns whichever plan the user picked.
+    /// Cancelling the picker returns null, which AskWhichEarmarkPatternToOpen reads as "don't navigate" — the save has already committed, so the user simply stays on their current tab rather than being dropped onto a plan they didn't choose.
+    /// </summary>
     /// <param name="plans">Every EarMarkPattern surviving for the goal — always more than one; AskWhichEarmarkPatternToOpen's own gate never calls this otherwise.</param>
     private EarMarkPattern? PickEarmarkPatternToOpen(IReadOnlyList<EarMarkPattern> plans)
     {
@@ -1882,7 +1826,10 @@ public partial class MainWindow : Window
         return picker.ShowDialog() == true ? picker.SelectedPlan : null;
     }
 
-    /// <summary>[UI] What ExpenseForm.PickChainSegment calls (wired in the constructor) — shows ChainSegmentPickerWindow so the user can choose which segment of a break-off chain to open. Returns the chosen segment, or null on Cancel (ExpenseFormPanel then keeps the current segment).</summary>
+    /// <summary>
+    /// [UI] What ExpenseForm.PickChainSegment calls (wired in the constructor) — shows ChainSegmentPickerWindow so the user can choose which segment of a break-off chain to open.
+    /// Returns the chosen segment, or null on Cancel (ExpenseFormPanel then keeps the current segment).
+    /// </summary>
     /// <param name="segments">Every FinancialPattern in the chain (same Source) — always more than one; ExpenseFormPanel only calls this when there's a real choice.</param>
     private FinancialPattern? PickChainSegmentToEdit(IReadOnlyList<FinancialPattern> segments)
     {
@@ -1890,7 +1837,12 @@ public partial class MainWindow : Window
         return picker.ShowDialog() == true ? picker.SelectedSegment : null;
     }
 
-    /// <summary>[CALC] Every scheduled outflow reserves through its own Allocation Plan (the allocation model), proposed at creation from the current as-of date and the user's income. Income never gets one. The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed. Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this outflow's own account — a paycheck filed under a different account never actually funds this one.</summary>
+    /// <summary>
+    /// [CALC] Every scheduled outflow reserves through its own Allocation Plan (the allocation model), proposed at creation from the current as-of date and the user's income.
+    /// Income never gets one.
+    /// The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed.
+    /// Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this outflow's own account — a paycheck filed under a different account never actually funds this one.
+    /// </summary>
     /// <param name="pattern">The newly-created outflow to propose an allocation plan for.</param>
     /// <param name="accountId">Which account the outflow is filed under — scopes the income scan.</param>
     private void AutoCreateAllocationPlan(FinancialPattern pattern, int accountId)
@@ -1900,10 +1852,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // The proposer may stretch the outflow's active span back to the as-of
-        // date (its ActiveFrom) so its plan fits — persist that prepared
-        // outflow, not the original, or the plan reads short against a goal whose
-        // own Start is later.
+        // The proposer may stretch the outflow's active span back to the as-of date (its ActiveFrom) so its plan fits — persist that prepared outflow, not the original, or the plan reads short against a goal whose own Start is later.
         _financialPatterns.Save(proposal.Outflow, accountId);
         _earMarkPatterns.Save(proposal.Plan);
         if (proposal.StartingEarmark is { } starting)
@@ -1912,7 +1861,11 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>[CALC] Builds the affordability-capped default plan for an outflow WITHOUT saving anything — shared by AutoCreateAllocationPlan (which persists it) and the Earmark form's own plan-less-goal draft (which loads its values for the user to edit). Null for income (no plan to propose). The front-load and ongoing rate are each capped at what the funds can spare (the affordability ceiling), measured on a re-forecast with this outflow's own plans omitted so they aren't counted against themselves — the single-date ceiling for the front-load, the range ceiling for the per-cycle rate.</summary>
+    /// <summary>
+    /// [CALC] Builds the affordability-capped default plan for an outflow WITHOUT saving anything — shared by AutoCreateAllocationPlan (which persists it) and the Earmark form's own plan-less-goal draft (which loads its values for the user to edit).
+    /// Null for income (no plan to propose).
+    /// The front-load and ongoing rate are each capped at what the funds can spare (the affordability ceiling), measured on a re-forecast with this outflow's own plans omitted so they aren't counted against themselves — the single-date ceiling for the front-load, the range ceiling for the per-cycle rate.
+    /// </summary>
     /// <param name="pattern">The outflow to propose a plan for.</param>
     /// <param name="accountId">Which account the outflow is filed under.</param>
     /// <param name="asOf">The date the proposal is paced from — today for a live outflow, or the goal's own future start so the plan fits its span without the proposer having to stretch it.</param>
@@ -1938,7 +1891,10 @@ public partial class MainWindow : Window
             ? DateOnly.FromDateTime(asOf)
             : DateOnly.FromDateTime(DateTime.Today);
 
-    /// <summary>[CALC] What ExpenseForm.RequestForecast calls (wired in the constructor): a feature that needs a forecast to work (FinancialPatternPickerWindow's own data source) should just compute one using whatever's on the As-Of/Horizon pickers right now, not tell the user to go press the Forecast button first. RefreshForecast always assigns _lastForecast when it returns (or a real computation error propagates, which is the honest outcome, not something to swallow) — so the null-forgiving return below is never actually lying.</summary>
+    /// <summary>
+    /// [CALC] What ExpenseForm.RequestForecast calls (wired in the constructor): a feature that needs a forecast to work (FinancialPatternPickerWindow's own data source) should just compute one using whatever's on the As-Of/Horizon pickers right now, not tell the user to go press the Forecast button first.
+    /// RefreshForecast always assigns _lastForecast when it returns (or a real computation error propagates, which is the honest outcome, not something to swallow) — so the null-forgiving return below is never actually lying.
+    /// </summary>
     private ForecastResult EnsureForecast()
     {
         if (_lastForecast is { } existing)
@@ -1961,9 +1917,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // The form opens on whichever account the pattern is already filed
-        // under, so an unchanged pick preserves the filing and a changed one
-        // deliberately moves it.
+        // The form opens on whichever account the pattern is already filed under, so an unchanged pick preserves the filing and a changed one deliberately moves it.
         var currentAccountId = _financialPatterns.GetAccountId(row.FinanceId) ?? DefaultAccountId();
         RefreshExpenseFormContext();
         ExpenseForm.LoadPattern(row.Pattern, currentAccountId);
@@ -1980,18 +1934,12 @@ public partial class MainWindow : Window
 
         var label = row.Description is { Length: > 0 } description ? description : row.Source;
 
-        // A savings plan whose goal no longer exists is invalid by 3.10.a3,
-        // not merely untidy, so deleting a pattern removes its linked plan
-        // too — we still say what is about to happen rather than doing it
-        // silently.
+        // A savings plan whose goal no longer exists is invalid by 3.10.a3, not merely untidy, so deleting a pattern removes its linked plan too — we still say what is about to happen rather than doing it silently.
         var hasSavingsPlan = _financialPatterns.HasLinkedEarMarkPattern(row.FinanceId);
         if (hasSavingsPlan)
         {
-            // Nothing is actually moved by this — a jar was
-            // never a real transfer of money (FundJar's own class doc), so once
-            // its plan is gone the amount simply reads as free again on the next
-            // forecast. Naming it here says what "continue" actually does,
-            // rather than leaving the user to notice their free funds went up.
+            // Nothing is actually moved by this — a jar was never a real transfer of money (FundJar's own class doc), so once its plan is gone the amount simply reads as free again on the next forecast.
+            // Naming it here says what "continue" actually does, rather than leaving the user to notice their free funds went up.
             var freed = CurrentJarAmount(row.FinanceId);
             var freedNote = freed > 0m
                 ? $" and free up {freed:C} currently set aside"
@@ -2023,7 +1971,10 @@ public partial class MainWindow : Window
         RefreshEarmarkFormContext();
     }
 
-    /// <summary>[STEP] An outflow with no savings plan has its jar filled by the standing automatic rule; this hands that jar over to a plan the user owns. Seeded from what the jar already holds, so pressing it moves no money — it only changes what governs the jar from here on.</summary>
+    /// <summary>
+    /// [STEP] An outflow with no savings plan has its jar filled by the standing automatic rule; this hands that jar over to a plan the user owns.
+    /// Seeded from what the jar already holds, so pressing it moves no money — it only changes what governs the jar from here on.
+    /// </summary>
     private void OnSetUpSavingsPlanClick(object sender, RoutedEventArgs e)
     {
         if (FinancialPatternsGrid.SelectedItem is not FinancialPatternRow row)
@@ -2059,7 +2010,10 @@ public partial class MainWindow : Window
         SwitchToTab("Earmark");
     }
 
-    /// <summary>[CALC] What this jar holds as of the forecast's own start date, so a new savings plan starts from whatever is already set aside. Zero when there is no forecast on screen yet, or the jar doesn't exist in it (an outflow with no savings plan has no jar).</summary>
+    /// <summary>
+    /// [CALC] What this jar holds as of the forecast's own start date, so a new savings plan starts from whatever is already set aside.
+    /// Zero when there is no forecast on screen yet, or the jar doesn't exist in it (an outflow with no savings plan has no jar).
+    /// </summary>
     /// <param name="financeId">Which jar to read.</param>
     private decimal CurrentJarAmount(int financeId)
     {
@@ -2159,8 +2113,7 @@ public partial class MainWindow : Window
         var window = new CreateOneTimeGoalWindow(_financialPatterns.GetAll(), _accounts.GetAll()) { Owner = this };
         if (window.ShowDialog() == true && window.CreatedGoal is { } goal && window.CreatedEarMarkPattern is { } earmark)
         {
-            // The goal (a finance pattern) is filed under the chosen account;
-            // its earmark reaches the same account through finance_id.
+            // The goal (a finance pattern) is filed under the chosen account; its earmark reaches the same account through finance_id.
             _financialPatterns.Save(goal, window.SelectedAccountId);
             _earMarkPatterns.Save(earmark);
             RefreshGrids();
