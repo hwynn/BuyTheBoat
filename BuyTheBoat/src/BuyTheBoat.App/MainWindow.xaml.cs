@@ -160,10 +160,10 @@ public partial class MainWindow : Window
         // raises StateChanged on every field edit (via MarkDirty/ClearDirty),
         // not only when its own Load*/Save runs, so the header updates while
         // the user is still typing.
-        AccountForm.StateChanged += (_, _) => UpdateTabHeaderStyle(AccountTabHeaderText, AccountForm.IsPopulated, AccountForm.IsDirty);
-        ExpenseForm.StateChanged += (_, _) => UpdateTabHeaderStyle(ExpenseTabHeaderText, ExpenseForm.IsPopulated, ExpenseForm.IsDirty);
-        EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
-        TransferForm.StateChanged += (_, _) => UpdateTabHeaderStyle(TransferTabHeaderText, TransferForm.IsPopulated, TransferForm.IsDirty);
+        AccountForm.StateChanged += (_, _) => UpdateTabHeaderStyle(AccountTabHeaderText, AccountsTabHeaderText, AccountForm.IsPopulated, AccountForm.IsDirty);
+        ExpenseForm.StateChanged += (_, _) => UpdateTabHeaderStyle(ExpenseTabHeaderText, BillsAndPaychecksTabHeaderText, ExpenseForm.IsPopulated, ExpenseForm.IsDirty);
+        EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, AllocationsTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
+        TransferForm.StateChanged += (_, _) => UpdateTabHeaderStyle(TransferTabHeaderText, TransfersTabHeaderText, TransferForm.IsPopulated, TransferForm.IsDirty);
 
         RefreshGrids();
         RefreshAccountsGrid();
@@ -206,30 +206,55 @@ public partial class MainWindow : Window
         ExpenseForm.SetContext(accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll(), _financialPatterns.GetAll());
     }
 
-    /// <summary>[STEP] Matches either a plain string Header (Forecast) or Tag (Account/Expense/Earmark, whose Header is a styled TextBlock — see MainWindow.xaml's own comment on why Tag carries the stable name).</summary>
-    /// <param name="header">The tab's Header text or Tag to switch to.</param>
+    /// <summary>[STEP] Jumps to a main tab (by plain Header like "Forecast", or Tag) or to a Form subtab by its Tag (Account/Transfer/Expense/Earmark), selecting the main tab that holds it too.</summary>
+    /// <param name="header">The main tab's Header text or Tag, or a subtab's Tag.</param>
     private void SwitchToTab(string header)
     {
-        foreach (System.Windows.Controls.TabItem item in MainTabControl.Items)
+        foreach (TabItem item in MainTabControl.Items)
         {
             if (item.Header as string == header || item.Tag as string == header)
             {
                 MainTabControl.SelectedItem = item;
                 return;
             }
+
+            if (item.Content is not TabControl subTabs)
+            {
+                continue;
+            }
+
+            foreach (TabItem subItem in subTabs.Items)
+            {
+                if (subItem.Tag as string == header)
+                {
+                    subTabs.SelectedItem = subItem;
+                    MainTabControl.SelectedItem = item;
+                    return;
+                }
+            }
         }
     }
 
-    /// <summary>[UI] Refreshes each permanent tab's background reference data on every selection, not only when reached through a save/plan button — SetContext only ever replaces reference data (available goals, their plans), never a form's own in-progress fields, so this can't discard unsaved edits.</summary>
-    /// <param name="e">SelectionChanged bubbles up from any Selector inside a tab's own content (every ComboBox in Expense/Earmark's forms included) — e.Source must be checked, or picking an item in one of those would also re-fire this.</param>
-    private void OnMainTabControlSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    /// <summary>
+    /// [UI] Refreshes a form's background reference data whenever its Form subtab comes into view — by switching main tabs or subtabs, not only through a save/plan button.
+    /// SetContext only ever replaces reference data (available goals, their plans), never a form's own in-progress fields, so this can't discard unsaved edits.
+    /// </summary>
+    /// <param name="e">
+    /// SelectionChanged bubbles up from any Selector inside a tab's own content (every ComboBox and DataGrid included).
+    /// e.Source must be the main tab strip or a subtab strip, or picking an item in one of those would also re-fire this.
+    /// </param>
+    private void OnMainTabControlSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (e.Source != MainTabControl || MainTabControl.SelectedItem is not System.Windows.Controls.TabItem selected)
+        var fromTabStrip = e.Source == MainTabControl
+            || (e.Source is TabControl { Parent: TabItem { Parent: var owner } } && owner == MainTabControl);
+        if (!fromTabStrip
+            || MainTabControl.SelectedItem is not TabItem { Content: TabControl subTabs }
+            || subTabs.SelectedItem is not TabItem visibleSubTab)
         {
             return;
         }
 
-        switch (selected.Tag as string)
+        switch (visibleSubTab.Tag as string)
         {
             case "Account":
                 RefreshAccountFormContext();
@@ -246,10 +271,19 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>[UI] Bold when the form has an existing instance loaded (IsPopulated), plus an accent color on top when it also has unsaved changes (IsDirty). ClearValue rather than a hardcoded "normal" color/weight so the not-dirty/not-populated state just inherits whatever the tab strip's own default look is.</summary>
-    /// <param name="headerText">The tab header's TextBlock to restyle.</param>
+    /// <summary>
+    /// [UI] Restyles a form's Form subtab and its main tab alike: bold when the form has an existing instance loaded (IsPopulated), plus an accent color on top when it also has unsaved changes (IsDirty).
+    /// ClearValue rather than a hardcoded "normal" color/weight so the not-dirty/not-populated state just inherits whatever the tab strip's own default look is.
+    /// </summary>
     /// <param name="hasContent">Whether the form has an existing instance loaded.</param>
     /// <param name="isDirty">Whether the form has unsaved changes.</param>
+    private static void UpdateTabHeaderStyle(TextBlock formHeaderText, TextBlock mainHeaderText, bool hasContent, bool isDirty)
+    {
+        UpdateTabHeaderStyle(formHeaderText, hasContent, isDirty);
+        UpdateTabHeaderStyle(mainHeaderText, hasContent, isDirty);
+    }
+
+    /// <summary>[UI] Applies the bold/accent "editing" look to one tab header.</summary>
     private static void UpdateTabHeaderStyle(TextBlock headerText, bool hasContent, bool isDirty)
     {
         headerText.FontWeight = hasContent ? FontWeights.Bold : FontWeights.Normal;

@@ -500,170 +500,180 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- ACCOUNTS: each account is its own silo with
-                 its own balance and its own optional cushion. Editing happens in a
-                 popup, matching every other entity in this app. -->
-            <TabItem Header="Accounts">
-                <DockPanel Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Button Content="Add Account..." Padding="12,5" Click="OnAddAccountClick"
-                                AutomationProperties.AutomationId="AddAccountButton"/>
-                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditAccountClick"
-                                AutomationProperties.AutomationId="EditAccountButton"/>
-                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteAccountClick"
-                                AutomationProperties.AutomationId="DeleteAccountButton"/>
-                    </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
-                               Text="Your real accounts, each with its own balance and its own optional safety cushion. Enter what each one holds right now — the forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
-                    <DataGrid x:Name="AccountsGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                              AutomationProperties.AutomationId="AccountsGrid">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
-                            <DataGridTextColumn Header="Current balance" Binding="{Binding Balance, StringFormat={}{0:C}}" Width="170"/>
-                            <DataGridTextColumn Header="Safety cushion" Binding="{Binding Cushion}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </TabItem>
+            <!-- Accounts, Transfers, Bills & Paychecks and Allocations each hold a List subtab and a Form subtab.
+                 The list's Add/Edit buttons fill the Form subtab and switch to it (MainWindow.SwitchToTab, matched on the Form subtab's Tag: Account/Transfer/Expense/Earmark).
+                 Headers are TextBlocks so MainWindow.UpdateTabHeaderStyle can restyle both the Form subtab and its main tab:
+                 bold when an existing item is loaded, accent color on top when it has unsaved changes. -->
 
-            <!-- TRANSFERS: moving money between accounts,
-                 shown as one thing but stored as a paired withdrawal and deposit. -->
-            <TabItem Header="Transfers">
-                <DockPanel Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Button Content="Schedule Transfer..." Padding="12,5" Click="OnAddTransferClick"
-                                AutomationProperties.AutomationId="AddTransferButton"/>
-                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditTransferClick"
-                                AutomationProperties.AutomationId="EditTransferButton"/>
-                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteTransferClick"
-                                AutomationProperties.AutomationId="DeleteTransferButton"/>
-                    </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
-                               Text="Money you move between your own accounts, once or on a schedule. Each transfer takes from one account and adds the same amount to another — it never changes your household total, only which account the money sits in."/>
-                    <DataGrid x:Name="TransfersGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                              AutomationProperties.AutomationId="TransfersGrid">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="From" Binding="{Binding From}" Width="220"/>
-                            <DataGridTextColumn Header="To" Binding="{Binding To}" Width="220"/>
-                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="130"/>
-                            <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </TabItem>
-
-            <TabItem Header="Bills &amp; Paychecks">
-                <DockPanel Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Button Content="Create Bill..." Padding="12,5" Click="OnCreateBillClick"/>
-                        <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddFinancialPatternClick"/>
-                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditFinancialPatternClick"/>
-                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteFinancialPatternClick"/>
-                        <!-- The lever that sets up a savings plan for a
-                             pattern that has none yet. Lives on the pattern,
-                             not in the create form. -->
-                        <Button Content="Set Up Savings Plan..." Padding="12,5" Margin="20,0,0,0"
-                                Click="OnSetUpSavingsPlanClick"
-                                AutomationProperties.AutomationId="SetUpSavingsPlanButton"/>
-                    </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
-                               Text="A bill and a paycheck are the same kind of thing here — just a negative vs. positive amount. &quot;Create Bill&quot; is the simple path for a recurring expense you're obligated to pay; &quot;Add New (advanced)&quot; also covers paychecks, one-time goals, and anything discretionary."/>
-                    <DataGrid x:Name="FinancialPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Finance ID" Binding="{Binding FinanceId}" Width="80"/>
-                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160"/>
-                            <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="200"/>
-                            <DataGridTextColumn Header="Account" Binding="{Binding Account}" Width="120"/>
-                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="110"/>
-                            <DataGridTextColumn Header="Mandatory" Binding="{Binding Mandatory}" Width="80"/>
-                            <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="70"/>
-                            <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </TabItem>
-
-            <TabItem Header="Allocations (Earmark Patterns)">
-                <DockPanel Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Button Content="Create One-Time Goal..." Padding="12,5" Click="OnCreateOneTimeGoalClick"/>
-                        <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddEarMarkPatternClick"/>
-                        <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditEarMarkPatternClick"/>
-                        <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteEarMarkPatternClick"/>
-                    </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
-                               Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills and one-time goals alike. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Every new expense gets an allocation here automatically when you save it — edit it to change how money is set aside, or delete it and the expense just comes out of your free balance on its due date."/>
-
-                    <!-- Manual adjustments: one-off, user-made jar
-                         changes on top of the automatic plans above. Also
-                         creatable from the Forecast tab's selected-day pane. -->
-                    <DockPanel DockPanel.Dock="Bottom" Height="170" Margin="0,10,0,0">
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
-                            <TextBlock Text="Manual adjustments" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                            <Button Content="Add..." Padding="10,3" Click="OnAddManualEarmarkClick"/>
-                            <Button Content="Edit Selected..." Padding="10,3" Margin="6,0,0,0" Click="OnEditManualEarmarkClick"/>
-                            <Button Content="Delete Selected" Padding="10,3" Margin="6,0,0,0" Click="OnDeleteManualEarmarkClick"/>
-                        </StackPanel>
-                        <DataGrid x:Name="ManualEarmarksGrid" AutoGenerateColumns="False" IsReadOnly="True">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="110"/>
-                                <DataGridTextColumn Header="Fund" Binding="{Binding Target}" Width="260"/>
-                                <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="120"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-
-                    <DataGrid x:Name="EarMarkPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Allocation target" Binding="{Binding Goal}" Width="280"/>
-                            <DataGridTextColumn Header="Amount per occurrence" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="160"/>
-                            <DataGridTextColumn Header="Already Saved" Binding="{Binding StartingAllocation, StringFormat={}{0:C}}" Width="120"/>
-                            <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </TabItem>
-
-            <!-- ACCOUNT / EXPENSE / EARMARK: the
-                 permanent form tabs, one per list tab above (Accounts, Bills &
-                 Paychecks, Allocations), in the same left-to-right order —
-                 replacing the AccountWindow/CreateFinancialPatternWindow/
-                 CreateEarMarkPatternWindow/ManualEarmarkWindow popups. Each
-                 list tab's Add/Edit buttons populate the matching form tab and
-                 switch to it, rather than opening a dialog. -->
-            <!-- Header is a TextBlock, not a plain string, on these three
-                 (wired 2026-08-06) — MainWindow.UpdateTabHeaderStyle sets its
-                 FontWeight/Foreground from the panel's own IsPopulated/IsDirty:
-                 bold when a form has an existing instance loaded, plus an
-                 accent color on top of that when it has unsaved changes.
-                 Tag carries the stable name SwitchToTab still matches on,
-                 since Header is no longer a plain string here. -->
-            <TabItem Tag="Account">
+            <!-- ACCOUNTS: each account is its own silo with its own balance and its own optional cushion. -->
+            <TabItem Tag="Accounts">
                 <TabItem.Header>
-                    <TextBlock x:Name="AccountTabHeaderText" Text="Account"/>
+                    <TextBlock x:Name="AccountsTabHeaderText" Text="Accounts"/>
                 </TabItem.Header>
-                <local:AccountFormPanel x:Name="AccountForm"/>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Add Account..." Padding="12,5" Click="OnAddAccountClick"
+                                        AutomationProperties.AutomationId="AddAccountButton"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditAccountClick"
+                                        AutomationProperties.AutomationId="EditAccountButton"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteAccountClick"
+                                        AutomationProperties.AutomationId="DeleteAccountButton"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="Your real accounts, each with its own balance and its own optional safety cushion. Enter what each one holds right now — the forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
+                            <DataGrid x:Name="AccountsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                                      AutomationProperties.AutomationId="AccountsGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
+                                    <DataGridTextColumn Header="Current balance" Binding="{Binding Balance, StringFormat={}{0:C}}" Width="170"/>
+                                    <DataGridTextColumn Header="Safety cushion" Binding="{Binding Cushion}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Tag="Account">
+                        <TabItem.Header>
+                            <TextBlock x:Name="AccountTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:AccountFormPanel x:Name="AccountForm"/>
+                    </TabItem>
+                </TabControl>
             </TabItem>
 
-            <TabItem Tag="Transfer">
+            <!-- TRANSFERS: moving money between accounts, shown as one thing but stored as a paired withdrawal and deposit. -->
+            <TabItem Tag="Transfers">
                 <TabItem.Header>
-                    <TextBlock x:Name="TransferTabHeaderText" Text="Transfer"/>
+                    <TextBlock x:Name="TransfersTabHeaderText" Text="Transfers"/>
                 </TabItem.Header>
-                <local:TransferFormPanel x:Name="TransferForm"/>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Schedule Transfer..." Padding="12,5" Click="OnAddTransferClick"
+                                        AutomationProperties.AutomationId="AddTransferButton"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditTransferClick"
+                                        AutomationProperties.AutomationId="EditTransferButton"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteTransferClick"
+                                        AutomationProperties.AutomationId="DeleteTransferButton"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="Money you move between your own accounts, once or on a schedule. Each transfer takes from one account and adds the same amount to another — it never changes your household total, only which account the money sits in."/>
+                            <DataGrid x:Name="TransfersGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                                      AutomationProperties.AutomationId="TransfersGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="From" Binding="{Binding From}" Width="220"/>
+                                    <DataGridTextColumn Header="To" Binding="{Binding To}" Width="220"/>
+                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="130"/>
+                                    <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Tag="Transfer">
+                        <TabItem.Header>
+                            <TextBlock x:Name="TransferTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:TransferFormPanel x:Name="TransferForm"/>
+                    </TabItem>
+                </TabControl>
             </TabItem>
 
-            <TabItem Tag="Expense">
+            <TabItem Tag="Bills &amp; Paychecks">
                 <TabItem.Header>
-                    <TextBlock x:Name="ExpenseTabHeaderText" Text="Expense"/>
+                    <TextBlock x:Name="BillsAndPaychecksTabHeaderText" Text="Bills &amp; Paychecks"/>
                 </TabItem.Header>
-                <local:ExpenseFormPanel x:Name="ExpenseForm"/>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Create Bill..." Padding="12,5" Click="OnCreateBillClick"/>
+                                <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddFinancialPatternClick"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditFinancialPatternClick"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteFinancialPatternClick"/>
+                                <!-- The lever that sets up a savings plan for a pattern that has none yet.
+                                     Lives on the pattern, not in the create form. -->
+                                <Button Content="Set Up Savings Plan..." Padding="12,5" Margin="20,0,0,0"
+                                        Click="OnSetUpSavingsPlanClick"
+                                        AutomationProperties.AutomationId="SetUpSavingsPlanButton"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="A bill and a paycheck are the same kind of thing here — just a negative vs. positive amount. &quot;Create Bill&quot; is the simple path for a recurring expense you're obligated to pay; &quot;Add New (advanced)&quot; also covers paychecks, one-time goals, and anything discretionary."/>
+                            <DataGrid x:Name="FinancialPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Finance ID" Binding="{Binding FinanceId}" Width="80"/>
+                                    <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160"/>
+                                    <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="200"/>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding Account}" Width="120"/>
+                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="110"/>
+                                    <DataGridTextColumn Header="Mandatory" Binding="{Binding Mandatory}" Width="80"/>
+                                    <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="70"/>
+                                    <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Tag="Expense">
+                        <TabItem.Header>
+                            <TextBlock x:Name="ExpenseTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:ExpenseFormPanel x:Name="ExpenseForm"/>
+                    </TabItem>
+                </TabControl>
             </TabItem>
 
-            <TabItem Tag="Earmark">
+            <TabItem Tag="Allocations">
                 <TabItem.Header>
-                    <TextBlock x:Name="EarmarkTabHeaderText" Text="Earmark"/>
+                    <TextBlock x:Name="AllocationsTabHeaderText" Text="Allocations"/>
                 </TabItem.Header>
-                <local:EarmarkFormPanel x:Name="EarmarkForm"/>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Create One-Time Goal..." Padding="12,5" Click="OnCreateOneTimeGoalClick"/>
+                                <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddEarMarkPatternClick"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditEarMarkPatternClick"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteEarMarkPatternClick"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills and one-time goals alike. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Every new expense gets an allocation here automatically when you save it — edit it to change how money is set aside, or delete it and the expense just comes out of your free balance on its due date."/>
+
+                            <!-- Manual adjustments: one-off, user-made jar changes on top of the automatic plans above.
+                                 Also creatable from the Forecast tab's selected-day pane. -->
+                            <DockPanel DockPanel.Dock="Bottom" Height="170" Margin="0,10,0,0">
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="Manual adjustments" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                    <Button Content="Add..." Padding="10,3" Click="OnAddManualEarmarkClick"/>
+                                    <Button Content="Edit Selected..." Padding="10,3" Margin="6,0,0,0" Click="OnEditManualEarmarkClick"/>
+                                    <Button Content="Delete Selected" Padding="10,3" Margin="6,0,0,0" Click="OnDeleteManualEarmarkClick"/>
+                                </StackPanel>
+                                <DataGrid x:Name="ManualEarmarksGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="110"/>
+                                        <DataGridTextColumn Header="Fund" Binding="{Binding Target}" Width="260"/>
+                                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="120"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+
+                            <DataGrid x:Name="EarMarkPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Allocation target" Binding="{Binding Goal}" Width="280"/>
+                                    <DataGridTextColumn Header="Amount per occurrence" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="160"/>
+                                    <DataGridTextColumn Header="Already Saved" Binding="{Binding StartingAllocation, StringFormat={}{0:C}}" Width="120"/>
+                                    <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Tag="Earmark">
+                        <TabItem.Header>
+                            <TextBlock x:Name="EarmarkTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:EarmarkFormPanel x:Name="EarmarkForm"/>
+                    </TabItem>
+                </TabControl>
             </TabItem>
         </TabControl>
     </Grid>
