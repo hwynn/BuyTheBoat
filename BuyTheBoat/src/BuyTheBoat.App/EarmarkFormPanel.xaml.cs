@@ -8,10 +8,8 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// The Earmark tab: pick a goal (loads its savings plan if one exists), or
-// switch into a One-off adjustment on the same goal instead of opening a
-// separate window. Replaces the old CreateEarMarkPatternWindow and
-// ManualEarmarkWindow popups as MainWindow's entry points.
+// The Earmark form (Allocations › Form): pick a goal (loads its savings plan if one exists), or switch into a One-off adjustment on the same goal.
+// MainWindow's only way to create or edit savings plans and manual adjustments.
 //
 // TODO: the merged "what can I allocate today" region isn't built yet —
 // this still uses the older, simpler BalanceInfoText.
@@ -251,37 +249,6 @@ public partial class EarmarkFormPanel : UserControl
         {
             RuleEditor.SetExcludedDates(excludedDates);
         }
-    }
-
-    /// <summary>[STEP] Sets up a savings plan for an outflow that has none yet. Goal fixed, starting allocation pre-filled from whatever its jar already holds, so pressing Save never moves money.</summary>
-    /// <param name="goal">The outflow this savings plan is being created for.</param>
-    /// <param name="alreadySaved">What the jar already holds, pre-filled as the starting allocation.</param>
-    public void LoadForMaterialize(FinancialPattern goal, decimal alreadySaved)
-    {
-        _suppressEvents = true;
-        ErrorText.Text = string.Empty;
-        _oneOffEditTarget = null;
-        SavingsPlanRadio.IsChecked = true;
-
-        SetGoal(goal);
-        ChangeGoalButton.IsEnabled = false;
-
-        AmountTextBox.Text = string.Empty;
-        _startingAllocation = alreadySaved;
-        // No EarMarkPattern exists yet to have an isolated earmark on.
-        _startingEarmarkAmount = 0m;
-        StartingEarmarkAmountTextBox.Text = string.Empty;
-        _loadedActiveStart = null;
-        _loadedPlanStart = null;
-        // Materializing a jar carries no schedule of its own to size against, so the
-        // user picks the amount; matching starts off.
-        MatchGoalCheckBox.IsChecked = false;
-        ApplyMatchState();
-
-        _suppressEvents = false;
-        UpdateModeVisibility();
-        UpdateSummary();
-        ClearDirty();
     }
 
     /// <summary>[STEP] One-off adjustment mode, blank (add, with an optional goal preselected) or pre-filled (edit). A withdrawal or move exceeding what the fund holds is blocked; an add exceeding free balance warns but is allowed.</summary>
@@ -847,7 +814,10 @@ public partial class EarmarkFormPanel : UserControl
         }
     }
 
-    /// <summary>[CALC] Ported from ManualEarmarkWindow verbatim (Merge/RequireFundsCover/WarnIfOverFree/BalancesOn below) — same validation policy, just reading the source fund from this panel's own goal picker instead of a separate JarComboBox, since the goal is already chosen at the top of this same form.</summary>
+    /// <summary>
+    /// [CALC] Checks and builds a one-off adjustment (add, withdraw, or move to another fund) for the goal picked at the top of this form, then hands it back to be saved.
+    /// A withdrawal or move larger than what the fund holds is blocked (RequireFundsCover); an add larger than the free balance only warns (WarnIfOverFree).
+    /// </summary>
     private void SaveOneOff()
     {
         if (_selectedGoal is not { } goal || !_patternsByFinanceId.TryGetValue(goal.FinanceId, out var sourcePattern))

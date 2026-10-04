@@ -158,7 +158,7 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>[UI] Snapshots the panel needs before every Load* call — repeated rather than held live, matching how CreateEarMarkPatternWindow/ManualEarmarkWindow always took a fresh snapshot at construction too.</summary>
+    /// <summary>[UI] Snapshots the panel needs before every Load* call — repeated rather than held live.</summary>
     private void RefreshEarmarkFormContext() =>
         EarmarkForm.SetContext(_financialPatterns.GetAll(), _earMarkPatterns.GetAll(), _manualEarmarks.GetAll(), _financialPatterns.GetTransferFinanceIds(), _lastForecast);
 
@@ -461,7 +461,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// [STEP] Populates and switches to the permanent Account tab instead of opening AccountWindow.
+    /// [STEP] Opens a blank Accounts › Form for a new account.
     /// Validation (including the name-uniqueness check) lives in AccountFormPanel itself — see its own class comment.
     /// </summary>
     private void OnAddAccountClick(object sender, RoutedEventArgs e)
@@ -1376,7 +1376,10 @@ public partial class MainWindow : Window
         RefreshShownForecast();
     }
 
-    /// <summary>[STEP] The permanent Earmark tab replaces ManualEarmarkWindow's popup — same "no funds yet" guard as before, then populates the tab's One-off mode instead of opening a dialog.</summary>
+    /// <summary>
+    /// [STEP] Opens Allocations › Form in One-off mode, blank or loaded with the adjustment being edited.
+    /// Refuses with a "no funds yet" message when there is no savings plan to adjust.
+    /// </summary>
     /// <param name="initialDate">Day to pre-select, if any.</param>
     /// <param name="editTarget">The existing manual earmark being edited, or null to add a new one.</param>
     private void ShowManualEarmarkForm(DateOnly? initialDate, ManualEarmark? editTarget)
@@ -1608,8 +1611,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// [STEP] Populates and switches to the permanent Expense tab instead of opening CreateFinancialPatternWindow.
-    /// Persistence + AutoCreateAllocationPlan now happen in ExpenseForm.PatternSaved (wired in the constructor), matching Earmark's shape.
+    /// [STEP] Opens a blank Bills & Paychecks › Form for a new bill, paycheck or goal.
+    /// Persistence + AutoCreateAllocationPlan happen in ExpenseForm.PatternSaved (wired in the constructor), matching Earmark's shape.
     /// </summary>
     private void OnAddFinancialPatternClick(object sender, RoutedEventArgs e)
     {
@@ -1972,46 +1975,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// [STEP] An outflow with no savings plan has its jar filled by the standing automatic rule; this hands that jar over to a plan the user owns.
-    /// Seeded from what the jar already holds, so pressing it moves no money — it only changes what governs the jar from here on.
-    /// </summary>
-    private void OnSetUpSavingsPlanClick(object sender, RoutedEventArgs e)
-    {
-        if (FinancialPatternsGrid.SelectedItem is not FinancialPatternRow row)
-        {
-            ShowNothingSelected();
-            return;
-        }
-
-        if (row.Amount >= 0m)
-        {
-            MessageBox.Show(
-                this,
-                "Money coming in doesn't need a savings plan — there's nothing to set aside for it.",
-                "Nothing to save toward",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            return;
-        }
-
-        if (_financialPatterns.HasLinkedEarMarkPattern(row.FinanceId))
-        {
-            MessageBox.Show(
-                this,
-                "This already has a savings plan. Edit it on the Allocations tab.",
-                "Already has a plan",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            return;
-        }
-
-        RefreshEarmarkFormContext();
-        EarmarkForm.LoadForMaterialize(row.Pattern, CurrentJarAmount(row.FinanceId));
-        SwitchToTab("Earmark");
-    }
-
-    /// <summary>
-    /// [CALC] What this jar holds as of the forecast's own start date, so a new savings plan starts from whatever is already set aside.
+    /// [CALC] What this jar holds as of the forecast's own start date — the amount the delete warning says will be freed up.
     /// Zero when there is no forecast on screen yet, or the jar doesn't exist in it (an outflow with no savings plan has no jar).
     /// </summary>
     /// <param name="financeId">Which jar to read.</param>
