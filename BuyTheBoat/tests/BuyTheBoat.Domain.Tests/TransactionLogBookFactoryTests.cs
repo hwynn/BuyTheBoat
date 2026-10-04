@@ -1345,7 +1345,7 @@ public class TransactionLogBookFactoryTests
         state.CurrentShortfallAmount.ShouldBe(0m);
         state.Shortfall.ShortfallAmount.ShouldBeGreaterThan(0m);
         state.MostImportantHealthState.ShouldBe(PlanHealthCategory.WillMiss);
-        // Stub: defaults to the due date itself until the real per-occurrence walk exists.
+        // The due date is past the horizon, so the walk finds no short release and falls back to it.
         state.ProjectedShortfallStartDate.ShouldBe(new DateOnly(2026, 6, 1));
     }
 

@@ -14,9 +14,7 @@ namespace BuyTheBoat.App;
 // ManualEarmarkWindow popups as MainWindow's entry points.
 //
 // TODO: the merged "what can I allocate today" region isn't built yet —
-// this still uses the older, simpler BalanceInfoText. The date-picker-as-
-// selector (click a day that already has an entry to load it) isn't built
-// either.
+// this still uses the older, simpler BalanceInfoText.
 public partial class EarmarkFormPanel : UserControl
 {
     private sealed class GoalOption(FinancialPattern pattern)
@@ -493,7 +491,7 @@ public partial class EarmarkFormPanel : UserControl
         LoadForNewPattern();
     }
 
-    /// <summary>[UI] Switching modes by hand (not via "+ Add manual earmark," which calls LoadOneOff itself) only toggles which panel shows — it doesn't reload data, so an in-progress edit in the panel being hidden isn't lost.</summary>
+    /// <summary>[UI] Switching modes by hand (not via MainWindow's one-off buttons, which call LoadOneOff) only toggles which panel shows — it doesn't reload data, so an in-progress edit in the panel being hidden isn't lost.</summary>
     private void OnModeChanged(object sender, RoutedEventArgs e)
     {
         if (!_initialized || _suppressEvents)
@@ -611,8 +609,8 @@ public partial class EarmarkFormPanel : UserControl
                 else
                 {
                     // A blank start on whichever date was actually clicked —
-                    // same shape "+ New Earmark" already builds, just landing
-                    // here instead of always defaulting to today. Goal must
+                    // same shape the Allocations tab's "Add..." builds, just
+                    // landing here instead of defaulting to today. Goal must
                     // be passed explicitly: LoadOneOff(null) with no
                     // preselect falls back to the first goal with a plan,
                     // which would silently swap goals out from under the user.

@@ -13,7 +13,7 @@ namespace BuyTheBoat.App;
 // jar, and every transaction — with the full amount due + due date shown for
 // EVERY expense type (unlike the tailored on-screen views), and colors/clear
 // headers/grouped columns doing the work of communicating good-vs-bad at a
-// glance. (Today it's a two-sheet mirror of the on-screen grids; a richer
+// glance. (Today it's two sheets — a day-by-day Timeline and a Goals list; a richer
 // layout is the target it should grow toward, and one day may offer multiple layouts.)
 public static class ForecastSpreadsheetExporter
 {

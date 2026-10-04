@@ -298,7 +298,7 @@ public class RestructureFactoryTests
     }
 
     // SpansOverlap itself — extracted from FindCurrentPlan's own pairwise
-    // check above, so FinancePatternSaveConfirmation.RunForPlan
+    // check above, so EarmarkPatternSaveConfirmation
     // can rule out a concurrent plan before ever treating it as a chain
     // predecessor/successor, found necessary while grounding the UI-wiring
     // work: without it, a concurrent plan with a later Start than the one

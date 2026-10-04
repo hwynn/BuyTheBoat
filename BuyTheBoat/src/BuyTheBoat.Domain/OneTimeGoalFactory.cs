@@ -17,16 +17,14 @@ public sealed record OneTimeGoalRequest
 
     // Per FinancialPattern's documented convention: 1 = lowest priority,
     // higher numbers = higher priority. This is what actually decides which
-    // goals get funded first when money is short — not the timing below,
-    // which is provisional at best once deallocation-driven reallocation
-    // exists.
+    // goals get funded first when money is short — deallocation drains the
+    // least important jars first, whatever the timing below.
     public int Priority { get; init; } = 3;
 
     // Only meant to be user-controlled behind an "advanced" opt-in. The
-    // default case shouldn't ask about this at all: exactly when allocation
-    // happens is expected to be reorganized dynamically by priority once
-    // deallocation logic exists, so picking a cadence here is provisional,
-    // not a real schedule the user needs to get right.
+    // default case shouldn't ask about this at all: when money runs short,
+    // deallocation drains jars by priority whatever the cadence, so this isn't
+    // a schedule the user needs to get exactly right.
     public SavingsFrequency Frequency { get; init; } = SavingsFrequency.Monthly;
 }
 

@@ -10,10 +10,9 @@ using BuyTheBoat.Persistence;
 
 namespace BuyTheBoat.App;
 
-// The real startup window — a list of every defined pattern, since this is
-// what the finished application will actually open to first. Pattern
-// creation itself happens in separate popups so this stays a pure
-// "here's what exists, edit/delete it here" view.
+// The app's one main window: the Forecast tab, a list tab for each kind of
+// thing (Accounts, Transfers, Bills & Paychecks, Allocations), and a form tab
+// for creating or editing each (Account, Transfer, Expense, Earmark).
 public partial class MainWindow : Window
 {
     private readonly FinancialPatternRepository _financialPatterns;
@@ -1679,8 +1678,8 @@ public partial class MainWindow : Window
                 // the data, but _lastForecast is still the pre-save snapshot the
                 // confirmation ran against. Recompute it BEFORE refreshing the form
                 // contexts, so the Earmark Summary we're about to land on shows the
-                // post-save state rather than a stale reading (EarmarkFormPanel.UpdateSummary's
-                // own TODO). Guarded on there being a forecast to re-run at all —
+                // post-save state rather than a stale reading. Guarded on there being a
+                // forecast to re-run at all —
                 // with none, the Summary already shows its own no-forecast state.
                 if (_lastForecast is { } shown)
                 {

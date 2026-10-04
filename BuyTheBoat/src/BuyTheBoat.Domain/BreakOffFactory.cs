@@ -6,8 +6,8 @@ namespace BuyTheBoat.Domain;
 // CarriedOverJarBalance is supplied by the caller because a pure domain
 // factory has no forecast of its own to read a jar's value from; the caller
 // reads it off the current forecast at CutDate before calling this (the
-// same "read a jar's balance on a chosen day" the manual-earmark dialog
-// already does).
+// same "read a jar's balance on a chosen day" the Earmark tab's one-off
+// mode already does).
 public sealed record BreakOffRequest
 {
     public required FinancialPattern Predecessor { get; init; }

@@ -9,7 +9,8 @@ using BuyTheBoat.Domain;
 namespace BuyTheBoat.App;
 
 // A dumb renderer over request.Rows. Each row is one question or
-// announcement FinancePatternSaveConfirmation decided to raise on a single
+// announcement FinancePatternSaveConfirmation or EarmarkPatternSaveConfirmation
+// decided to raise on a single
 // save; this window draws them top-to-bottom and reports the raw selections
 // back as a ConfirmationOutcome (one option index per ChoiceRow it drew). It
 // never decides which rows exist, what they mean, or that one answer might

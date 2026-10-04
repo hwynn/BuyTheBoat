@@ -94,7 +94,7 @@ public partial class SummaryRegion : UserControl
         DrawChart();
     }
 
-    /// <summary>[UI] Simple, honest chart: a flat goal line, a straight line from the starting point to today (see the class-level TODO for why it isn't the real stepped trajectory yet), and a dashed "today" marker. Coordinates scale to whatever size the Canvas actually gets laid out at, so this re-runs on every SizeChanged, not just on Load.</summary>
+    /// <summary>[UI] Draws the chart: a flat goal line, the fund jar's actual line (straight before today, stepped from today on — see the class header), the proposed-plan or one-off line when there is one, the date markers and the legend. Coordinates scale to whatever size the Canvas actually gets laid out at, so this re-runs on every SizeChanged, not just on Load.</summary>
     private void DrawChart()
     {
         ChartCanvas.Children.Clear();
@@ -185,9 +185,8 @@ public partial class SummaryRegion : UserControl
         // One-off mode's extra line — the ActualTrajectory shape shifted by the typed
         // one-off's amount, from Today onward. A plain parallel shift, not a recomputation
         // through the floor/deallocation rules (changing the plan is a different action from
-        // adding a one-off). AdditionAmount already carries GetOneOffLiveDelta's scope limit
-        // (0 for a backdated date before the goal's most recent release), so it simply won't
-        // offset in that case rather than draw something wrong.
+        // adding a one-off). AdditionAmount is the one-off's effect on today's jar, from a what-if
+        // forecast; it's null when there's none (e.g. a release already used it up), so nothing's drawn.
         if (chart.AdditionAmount is { } addition && chart.ActualTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline
@@ -270,7 +269,7 @@ public partial class SummaryRegion : UserControl
         return stepped;
     }
 
-    /// <summary>[UI] TODO: approximates right-alignment from string length instead of measuring the rendered TextBlock — see the class-level TODO. Both branches clamp to [0, canvasWidth - the text's own estimated width], so neither edge can run off the canvas regardless of where x falls — "Today" in particular sits at the chart's own left edge for any freshly-created plan (Start == today), where an unclamped left coordinate would go negative and WPF simply wouldn't draw it.</summary>
+    /// <summary>[UI] Approximates right-alignment from string length instead of measuring the rendered TextBlock — a known gap, see the class header. Both branches clamp to [0, canvasWidth - the text's own estimated width], so neither edge can run off the canvas regardless of where x falls — "Today" in particular sits at the chart's own left edge for any freshly-created plan (Start == today), where an unclamped left coordinate would go negative and WPF simply wouldn't draw it.</summary>
     /// <param name="text">The label text to place.</param>
     /// <param name="x">The anchor x-coordinate.</param>
     /// <param name="y">The top y-coordinate.</param>

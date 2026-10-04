@@ -6,8 +6,8 @@ using Shouldly;
 namespace BuyTheBoat.App.Tests;
 
 // The FinancialPattern-chain mirror of
-// FinancePatternSaveConfirmationEarmarkTests, driving Run()'s own
-// FinancialPattern-editing path (not RunForPlan) against real chain
+// EarmarkPatternSaveConfirmationTests, driving Run()'s own
+// FinancialPattern-editing path against real chain
 // neighbors. Every scenario keeps the pattern being edited starting AFTER
 // AsOf, deliberately — a past occurrence would make the edit IsChangeCritical
 // too, and DetermineChainConditionsIfApplicable's own gate suppresses every

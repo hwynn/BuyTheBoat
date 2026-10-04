@@ -109,8 +109,8 @@ public sealed class FinancePatternSaveConfirmation
     // What ApplyBackTruncationsIfNeeded needs to keep every plan's Until inside the
     // goal's (3.11.2.a2), worked out before anything is saved. Null when every plan
     // already fits (most edits; always so for a brand-new pattern). NOT gated on
-    // IsChangeCritical/HasMultipleEarmarkPatterns — see the "Back-boundary invariant"
-    // header note. Mirrored on the Start side by _frontTruncations below.
+    // IsChangeCritical/HasMultipleEarmarkPatterns — see the boundary-invariants note
+    // in the class header. Mirrored on the Start side by _frontTruncations below.
     private BackTruncationPlan? _backTruncations;
 
     private sealed record BackTruncationPlan(
@@ -457,7 +457,7 @@ public sealed class FinancePatternSaveConfirmation
     // still completes end to end without a live UI.
     public Func<ImplicitChangeConfirmationRequest, ConfirmationOutcome>? ConfirmImplicitChanges { get; set; }
 
-    /// <summary>[STEP] The single entry point: works out whether anything needs asking, shows the confirmation if so, saves the FinancialPattern, performs whatever implicit EarMarkPattern/EarMarkEvent changes were decided, and (on Save and Plan) calls NavigateToEarmarkForm. See the class's own STATUS note for exactly which of PerformImplicitEarmarkChanges' branches are real versus still TODO.</summary>
+    /// <summary>[STEP] The single entry point: works out whether anything needs asking, shows the confirmation if so, saves the FinancialPattern, performs whatever implicit EarMarkPattern/EarMarkEvent changes were decided, and (on Save and Plan) calls NavigateToEarmarkForm.</summary>
     /// <returns>False if the user cancelled out of the confirmation — nothing was saved, exactly as if Save had never been clicked. True otherwise, including every case where nothing needed asking at all.</returns>
     public bool Run()
     {
@@ -716,7 +716,7 @@ public sealed class FinancePatternSaveConfirmation
         // a shape or start change forces the combine (PerformMultiPlanBreakOff)
         // rather than keeping them separate (PerformMultiPlanKeepSeparateBreakOff).
         // Letting the user keep plans unconsolidated even then is a still-open
-        // design goal (STATUS note 2 in this class's header), declined for now.
+        // design goal (see "Open items" in this class's header), declined for now.
         ConsolidationNeeded = HasMultipleEarmarkPatterns && (_recurrenceShapeChanged || _startChanged);
 
         ChangeWarrantsSuggestions = forecast.PlanHealthStates
@@ -834,7 +834,7 @@ public sealed class FinancePatternSaveConfirmation
         PacedBillsCanCascade = true;
     }
 
-    /// <summary>[READS FILE] Works out which alternative plan shapes — beyond AllocationPlanProposer.Propose's own default — are genuinely available for this break-off's successor, stored in _planShapeCandidates for BuildConfirmationRequest to show and PerformSingleSuccessorBreakOff/PerformMultiPlanBreakOff to apply whichever gets chosen. Computed eagerly here, applied conditionally by PerformSingleSuccessorBreakOff/PerformMultiPlanBreakOff — the same "compute eagerly, apply conditionally" shape DetermineConsolidationPlanIfApplicable already uses. internal for the same reason its siblings are — so a test can call this directly ahead of PerformSingleSuccessorBreakOff.</summary>
+    /// <summary>[READS FILE] Works out which alternative plan shapes — beyond AllocationPlanProposer.Propose's own default — are genuinely available for this break-off's successor, stored in _planShapeCandidates for BuildConfirmationRequest to show and PerformSingleSuccessorBreakOff/PerformMultiPlanBreakOff to apply whichever gets chosen. Computed eagerly here, applied conditionally by PerformSingleSuccessorBreakOff/PerformMultiPlanBreakOff — the same "compute eagerly, apply conditionally" shape its sibling Determine* methods use. internal for the same reason its siblings are — so a test can call this directly ahead of PerformSingleSuccessorBreakOff.</summary>
     internal void DeterminePlanShapeCandidatesIfApplicable()
     {
         // Don't propose break-off shapes unless the edit is Critical with no successor:
@@ -1651,7 +1651,7 @@ public sealed class FinancePatternSaveConfirmation
         ApplyBoundaryExtensionsIfNeeded();
     }
 
-    /// <summary>[WRITES FILE] Carries out the fix DetermineBackTruncationsIfApplicable already worked out (before anything was saved): deletes any ManualEarmark now dated after the goal's own new Until, then brings every EarMarkPattern that still exceeds it back in line — truncated via PatternTruncation.EndOn (the same domain primitive a plain stop/break-off already uses to keep a plan's Until from exceeding its goal's) when it still has some active span left inside the new range, or deleted outright when its own Start is already past the new Until (EndOn can't shorten a plan to end before it begins — that plan was never going to contribute anything under the new range at all). A no-op whenever _backTruncations is null — every existing plan already fit, or DetermineBackTruncationsIfApplicable was never called. Called from inside PerformSave, right after the FinancialPattern save it depends on — see this class's own "Back-boundary invariant" header note for why this runs unconditionally rather than only alongside Items B/E/F's own confirmation.</summary>
+    /// <summary>[WRITES FILE] Carries out the fix DetermineBackTruncationsIfApplicable already worked out (before anything was saved): deletes any ManualEarmark now dated after the goal's own new Until, then brings every EarMarkPattern that still exceeds it back in line — truncated via PatternTruncation.EndOn (the same domain primitive a plain stop/break-off already uses to keep a plan's Until from exceeding its goal's) when it still has some active span left inside the new range, or deleted outright when its own Start is already past the new Until (EndOn can't shorten a plan to end before it begins — that plan was never going to contribute anything under the new range at all). A no-op whenever _backTruncations is null — every existing plan already fit, or DetermineBackTruncationsIfApplicable was never called. Called from inside PerformSave, right after the FinancialPattern save it depends on — see the boundary-invariants note in this class's header for why this runs unconditionally rather than only alongside Items B/E/F's own confirmation.</summary>
     private void ApplyBackTruncationsIfNeeded()
     {
         if (_backTruncations is not { } fix)
@@ -2380,7 +2380,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[WRITES FILE] The more-than-one-existing-plan case of the break-off, when the consolidation question resolves to consolidating them (forced by ConsolidationNeeded, or chosen via UserChooseConsolidation): every surviving plan is truncated, and the successor still gets exactly one freshly-proposed plan (or the user's own chosen shape, when one was offered), seeded from the finance_id's one combined jar balance. Otherwise identical to PerformSingleSuccessorBreakOff — see that method for the cut-date note.</summary>
+    /// <summary>[WRITES FILE] The more-than-one-existing-plan case of the break-off, when the consolidation question resolves to consolidating them (forced by ConsolidationNeeded, or chosen via UserChoseCombinePlans): every surviving plan is truncated, and the successor still gets exactly one freshly-proposed plan (or the user's own chosen shape, when one was offered), seeded from the finance_id's one combined jar balance. Otherwise identical to PerformSingleSuccessorBreakOff — see that method for the cut-date note.</summary>
     private void PerformMultiPlanBreakOff()
     {
         var saved = GetSavedPatternOrThrow();
@@ -2490,7 +2490,7 @@ public sealed class FinancePatternSaveConfirmation
         }
     }
 
-    /// <summary>[READS FILE] Reads a fund jar's own ExpectedAmount as of a chosen day off the live forecast — the same "read a jar's balance on a chosen day" ManualEarmarkWindow/EarmarkFormPanel already do (BalancesOn/GetLiveJarAmounts), reused here rather than re-derived.</summary>
+    /// <summary>[READS FILE] Reads a fund jar's own ExpectedAmount as of a chosen day off the live forecast — the same "read a jar's balance on a chosen day" EarmarkFormPanel already does (BalancesOn/GetLiveJarAmounts), reused here rather than re-derived.</summary>
     /// <param name="date">The day to read the balance as of.</param>
     /// <param name="financeId">Which fund's balance to read.</param>
     /// <returns>The jar's ExpectedAmount on that day, or 0m for a day before the forecast's own timeline starts, or a FinanceId with no jar at all.</returns>

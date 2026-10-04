@@ -54,7 +54,7 @@ public static class PlanHealthMessages
             _ => null,
         };
 
-    /// <summary>[CALC] Flags *that* a repeating goal's shortfall or overfund recurs, gated on IsChronicShortfall/IsChronicOverfund plus the matching already-showing state — a modifier on an existing warning, not an independent announcement. Fills the second line of Summary's aside (AsideSecondaryText); the first line (AsideText) is what CurrentJarStateLine/LiveJarStateLine populate, so "consistently ahead" for a CurrentlyOverfunded plan lives here, not in the RRule preview caption.</summary>
+    /// <summary>[CALC] Flags *that* a repeating goal's shortfall or overfund recurs, gated on IsChronicShortfall/IsChronicOverfund plus the matching already-showing state — a modifier on an existing warning, not an independent announcement. Fills the Summary aside's "Toward the goal" line when SummaryFutureLine has nothing to say; the jar line above it comes from JarStateLine, so "consistently ahead" for a CurrentlyOverfunded plan lives here, not in the RRule preview caption.</summary>
     /// <param name="state">The plan's current health state.</param>
     public static string? SummaryRecurringPhrase(PlanHealthState state)
     {

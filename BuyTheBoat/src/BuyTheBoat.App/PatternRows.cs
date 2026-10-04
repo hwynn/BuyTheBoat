@@ -303,7 +303,7 @@ public sealed class JarDetailRow
     public bool Floored { get; init; }
 
     // The readjustment on-ramp: a behind goal invites restructuring its plan.
-    // Inert affordance for now — the restructure flow is future design work.
+    // Inert for now — clicking it doesn't open the plan on the Earmark tab yet.
     public bool ShowAdjustNudge { get; init; }
 
     public static JarDetailRow From(FundJar jar, BalanceSnapshot snapshot, DayDetailContext context)

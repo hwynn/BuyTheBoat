@@ -268,7 +268,7 @@
                                                                 <Border Background="{StaticResource WatchBgBrush}" CornerRadius="8" Padding="7,1" Margin="6,0,0,0"
                                                                         VerticalAlignment="Center"
                                                                         Visibility="{Binding ShowAdjustNudge, Converter={StaticResource BoolToVis}}">
-                                                                    <!-- The readjustment on-ramp: inert for now, the restructure flow is future work. -->
+                                                                    <!-- The readjustment on-ramp: inert for now — clicking it doesn't open the plan on the Earmark tab yet. -->
                                                                     <TextBlock Text="Adjust the plan →" FontSize="10" Foreground="{StaticResource WatchTextBrush}"/>
                                                                 </Border>
                                                             </StackPanel>
@@ -592,7 +592,7 @@
                         <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteEarMarkPatternClick"/>
                     </StackPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
-                               Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills, one-time goals, and eventually the safety cushion. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Every new expense gets an allocation here automatically when you save it — edit it to change how money is set aside, or delete it and the expense just comes out of your free balance on its due date."/>
+                               Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills and one-time goals alike. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Every new expense gets an allocation here automatically when you save it — edit it to change how money is set aside, or delete it and the expense just comes out of your free balance on its due date."/>
 
                     <!-- Manual adjustments: one-off, user-made jar
                          changes on top of the automatic plans above. Also

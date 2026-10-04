@@ -16,8 +16,8 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 // logic (billOccurrences = 1). The proposer only ever fills in a DatePattern
 // and an Amount; everything downstream (the FundJar, its MilestoneAmount,
 // the shortfall) is identical no matter which case fires, so the two shapes
-// add no new machinery. Supersedes OneTimeGoalFactory's fixed-Monthly
-// installment default.
+// add no new machinery. (The "Create One-Time Goal" window doesn't use this;
+// it keeps OneTimeGoalFactory's even installments.)
 //
 // Two shapes:
 //   A (single periodic income) — align contributions to the income's rhythm,
@@ -52,8 +52,8 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 //
 // ProposeSameSchedule/ProposeSameAmount: two further methods for
 // re-proposing a plan against an EXISTING EarMarkPattern rather than
-// building one from scratch — the goal-health suggestion picker offers
-// these alongside Propose's own default. Deliberately narrower
+// building one from scratch — the save confirmation offers these on a
+// break-off, alongside Propose's own default. Deliberately narrower
 // freedom than a user's own edits get: these should always
 // still be genuinely ideal, so both return null — "don't offer this" —
 // whenever their own result wouldn't be, or would be indistinguishable from
@@ -71,11 +71,8 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 // Propose-based successor (BreakOffRequest.CarriedOverJarBalance) — these
 // two methods expect the same real number from their own caller.
 //
-// TODO: multi-option strategy picker for a goal-health suggestion. The
-// candidate machinery is built — ProposeSameSchedule/ProposeSameAmount give
-// the two alternatives alongside Propose's own default — but there is no UI
-// letting the user pick between them; a suggestion just takes the default.
-// Only the picker is unbuilt. Deferred.
+// TODO: the goal-health suggestion doesn't offer these alternatives yet —
+// only the break-off's plan-shape picker does.
 //
 // IsPacedAgainst/FindPlansPacedAgainst: a DETECTION-ONLY
 // piece of the "loose association" work — finding which of a

@@ -6,9 +6,6 @@ namespace BuyTheBoat.Domain;
 // chunk of the calendar showing every account inside that range; this class
 // is a SINGLE account inside that chunk; and BalanceRecord maps each
 // event-date to the BalanceSnapshot holding that day's complete picture.
-// Users will eventually have multiple accounts (checking/savings, with
-// transfers between them) — this layer exists now, single-account, so that
-// feature slots in without reshaping anything.
 public sealed record AccountTransactionPage
 {
     // "This is the name of the account. It should match the account name

@@ -7,8 +7,8 @@ using BuyTheBoat.Domain;
 namespace BuyTheBoat.App;
 
 // A self-contained "build me a recurrence rule" form + live calendar preview,
-// meant to be embedded wherever something needs a date_pattern — pattern
-// creation popups, eventually. Exposes the computed RecurrenceRule (or null,
+// embedded wherever something needs a date_pattern (the Expense, Earmark and
+// Transfer tabs). Exposes the computed RecurrenceRule (or null,
 // while the form is in an invalid state) rather than owning a window itself.
 public partial class RecurrenceRuleEditor : UserControl
 {

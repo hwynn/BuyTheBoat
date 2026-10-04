@@ -38,13 +38,13 @@ Governing assumptions: `3.13.5.4.a1` (milestone calculation), plus `10.4.a1`/`10
 
 ### Q4 — If I buy X anyway, how do I readjust my goals?
 
-**This is the weakest-documented of the four**, worth being upfront about rather than papering over. `planning2simple.txt`'s "Plan" section names the problem directly but doesn't resolve it into assumptions the way Q1-Q3 got resolved:
+**Built.** The "Adjusting the Plan" phase answers this: changing a bill or paycheck starting on a date, ending it early, restructuring a savings plan, stopping contributions to a goal already met, and spotting an over-funded goal. Each is reached by editing the pattern or savings plan on its form and saving. [13-adjusting-the-plan-charter.md](13-adjusting-the-plan-charter.md) records what each piece does and where it lives in the code.
+
+The original docs never resolved this question into assumptions, so the design was new work rather than reconstruction. `planning2simple.txt`'s "Plan" section names the problem:
 
 > "Okay if we have little pools of money set aside for several different things. But then some sudden expense occurs out of nowhere. And all that money we had record as 'set aside' is now gone. What things do we need to do? 1. We will need to change our money allocation plan for this goal. 2. We could also move our goal back if it's not mandatory."
 
 The only concrete mechanism sketched anywhere is in `planning.txt`'s "Unsorted Notes": *replanning* an earmark pattern gives the user a choice between starting a goal's savings over from zero, or keeping the existing fund jar balance and wiping/regenerating the future repeated earmarks around it. That's a real design idea, but it never got turned into numbered assumptions the way, say, deallocation days did (`3.13c.a6` through `3.13c.a10` — see [03-assumptions-glossary.md, Chapter 11](03-assumptions-glossary.md#chapter-11-balance-record)).
-
-**Practical implication:** there is no rich cluster of assumptions answering Q4 the way there is for Q1/Q3. Making the program actually answer "how do I readjust" is new design work, not buried documentation — most likely starting from the deallocation-day mechanism, since deallocation is the *forced, automatic* version of the same problem (money got taken out of a jar unexpectedly; Q4 asks the user to make the same call deallocation makes automatically).
 
 ## The secondary goal: tracking regular expenses & upcoming bills
 
