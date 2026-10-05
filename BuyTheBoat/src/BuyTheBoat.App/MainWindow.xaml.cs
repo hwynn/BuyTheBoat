@@ -98,7 +98,7 @@ public partial class MainWindow : Window
         AccountForm.AccountSaved = account =>
         {
             _accounts.Save(account);
-            // The saved account changed the world; recompute so the Forecast tab we're switching to reflects it, not the pre-save snapshot.
+            // The saved account changed the world; recompute so the Forecast tab reflects it, not the pre-save snapshot.
             if (_lastForecast is { } shown)
             {
                 RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
@@ -106,7 +106,10 @@ public partial class MainWindow : Window
 
             RefreshAccountsGrid();
             RefreshExpenseFormContext();
-            SwitchToTab("Forecast");
+
+            // Land on the accounts list, so the saved account shows in it.
+            AccountsListTab.IsSelected = true;
+            SwitchToTab("Accounts");
         };
         ExpenseForm.RequestForecast = EnsureForecast;
         ExpenseForm.PatternSaved = OnExpensePatternSaved;
