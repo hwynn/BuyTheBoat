@@ -15,9 +15,9 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO FinancialPatterns
-                (FinanceId, Source, Amount, Priority, Mandatory, Description, AccountId, TransferId, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, AutoRenew, ExcludedDates)
+                (FinanceId, Source, Amount, Priority, Mandatory, Description, AccountId, TransferId, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, AutoRenew, ExcludedDates, Notes)
             VALUES
-                ($FinanceId, $Source, $Amount, $Priority, $Mandatory, $Description, $AccountId, $TransferId, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $AutoRenew, $ExcludedDates)
+                ($FinanceId, $Source, $Amount, $Priority, $Mandatory, $Description, $AccountId, $TransferId, $Frequency, $IntervalValue, $ByDay, $ByMonthDay, $StartDate, $UntilDate, $ActiveFrom, $AutoRenew, $ExcludedDates, $Notes)
             ON CONFLICT(FinanceId) DO UPDATE SET
                 Source = excluded.Source,
                 Amount = excluded.Amount,
@@ -34,7 +34,8 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
                 UntilDate = excluded.UntilDate,
                 ActiveFrom = excluded.ActiveFrom,
                 AutoRenew = excluded.AutoRenew,
-                ExcludedDates = excluded.ExcludedDates;
+                ExcludedDates = excluded.ExcludedDates,
+                Notes = excluded.Notes;
             """;
 
         command.Parameters.AddWithValue("$AccountId", accountId);
@@ -45,6 +46,7 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
         command.Parameters.AddWithValue("$Priority", pattern.Priority);
         command.Parameters.AddWithValue("$Mandatory", pattern.Mandatory ? 1 : 0);
         command.Parameters.AddWithValue("$Description", (object?)pattern.Description ?? DBNull.Value);
+        command.Parameters.AddWithValue("$Notes", (object?)pattern.Notes ?? DBNull.Value);
         command.Parameters.AddWithValue("$AutoRenew", pattern.AutoRenew ? 1 : 0);
         RecurrenceRuleColumns.AddParameters(command, pattern.DatePattern);
 
@@ -293,6 +295,9 @@ public sealed class FinancialPatternRepository(PatternDatabase database)
             Description = reader.IsDBNull(reader.GetOrdinal("Description"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("Description")),
+            Notes = reader.IsDBNull(reader.GetOrdinal("Notes"))
+                ? null
+                : reader.GetString(reader.GetOrdinal("Notes")),
             AutoRenew = reader.GetInt32(reader.GetOrdinal("AutoRenew")) != 0,
             DatePattern = RecurrenceRuleColumns.Read(reader),
         });

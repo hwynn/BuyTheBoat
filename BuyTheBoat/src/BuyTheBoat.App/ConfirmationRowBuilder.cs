@@ -348,13 +348,13 @@ internal static class ConfirmationRowBuilder
         }
 
         // The trivial-fields cascade (Priority/Mandatory/Description/
-        // AutoRenew) — no EarMarkPattern equivalent. Defaults to "just this
+        // Notes/AutoRenew) — no EarMarkPattern equivalent. Defaults to "just this
         // segment" (index 0), the one place this doesn't mirror Amount/shape's
         // own default.
         if (r.TrivialFieldsCanCascade)
         {
             rows.Add(new ChoiceRow(ConfirmationRowIds.TrivialFieldsCascade,
-                "This also changes details like priority, mandatory, or description. Update later segments too?",
+                "This also changes details like priority, mandatory, description, or notes. Update later segments too?",
                 [
                     new ChoiceOption("Only this segment", "", r.TrivialFieldsCascadeDescription),
                     new ChoiceOption("Apply it going forward too", "", r.TrivialFieldsCascadeDescription),

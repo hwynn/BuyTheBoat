@@ -16,6 +16,9 @@ public sealed record FinancialPatternOptions
     public bool? Mandatory { get; init; }
     public string? Description { get; init; }
 
+    // Free-form text the user types on the Expense form. Never read by the forecast.
+    public string? Notes { get; init; }
+
     // DIVERGENCE(auto-renew): a marker set invisibly when the user answers
     // "it just keeps going" at creation. It never affects the rrule, the math,
     // or occurrence generation — the pattern still ends on its stored Until.
@@ -36,6 +39,7 @@ public sealed class FinancialPattern
     public int Priority { get; }
     public bool Mandatory { get; }
     public string? Description { get; }
+    public string? Notes { get; }
     public bool AutoRenew { get; }
 
     /// <summary>[CALC] Builds a FinancialPattern from already-validated options.</summary>
@@ -50,6 +54,7 @@ public sealed class FinancialPattern
         Priority = options.Priority;
         Mandatory = mandatory;
         Description = options.Description;
+        Notes = options.Notes;
         AutoRenew = options.AutoRenew;
     }
 
@@ -78,6 +83,7 @@ public sealed class FinancialPattern
         Priority = Priority,
         Mandatory = Mandatory,
         Description = Description,
+        Notes = Notes,
         AutoRenew = AutoRenew,
     });
 
@@ -92,6 +98,7 @@ public sealed class FinancialPattern
         Priority = Priority,
         Mandatory = Mandatory,
         Description = Description,
+        Notes = Notes,
         AutoRenew = AutoRenew,
     });
 
@@ -106,6 +113,7 @@ public sealed class FinancialPattern
         Priority = Priority,
         Mandatory = Mandatory,
         Description = Description,
+        Notes = Notes,
         AutoRenew = AutoRenew,
     });
 
@@ -120,6 +128,7 @@ public sealed class FinancialPattern
         Priority = Priority,
         Mandatory = Mandatory,
         Description = Description,
+        Notes = Notes,
         AutoRenew = AutoRenew,
     });
 }

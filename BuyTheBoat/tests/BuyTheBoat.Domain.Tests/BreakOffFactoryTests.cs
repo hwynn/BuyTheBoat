@@ -1230,4 +1230,23 @@ public class BreakOffFactoryTests
         result[0].DatePattern.ActiveStart.ShouldBe(new DateOnly(2025, 7, 1)); // its own, untouched
         result[0].DatePattern.Until.ShouldBe(new DateOnly(2025, 12, 31)); // its own, untouched
     }
+
+    [Fact]
+    public void CascadeTrivialFieldsForward_applies_notes()
+    {
+        var bill = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 30), id: 1, source: "Rent");
+        var edited = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = bill.FinanceId,
+            Source = bill.Source,
+            DatePattern = bill.DatePattern,
+            Amount = bill.Amount,
+            Notes = "Pay by check",
+        });
+        var successor = MonthlyBill(-1_800m, 1, new DateOnly(2025, 7, 1), new DateOnly(2025, 12, 31), id: 2, source: "Rent");
+
+        var result = BreakOffFactory.CascadeTrivialFieldsForward(edited, [successor]);
+
+        result.ShouldHaveSingleItem().Notes.ShouldBe("Pay by check");
+    }
 }

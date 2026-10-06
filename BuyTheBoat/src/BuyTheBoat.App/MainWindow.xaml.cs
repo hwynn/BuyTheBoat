@@ -962,6 +962,7 @@ public partial class MainWindow : Window
                 FinanceId = successorFinanceId,
                 Source = segment.Source,
                 Description = $"{StripRenewalMarker(segment.Description ?? segment.Source)} (renewed {renewalDate:yyyy-MM-dd})",
+                Notes = segment.Notes,
                 DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
                 {
                     Frequency = segment.DatePattern.Frequency,

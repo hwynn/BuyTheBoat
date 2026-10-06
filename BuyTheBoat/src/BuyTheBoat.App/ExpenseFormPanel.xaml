@@ -205,6 +205,15 @@
                 <TextBlock x:Name="PredecessorNoteText" Margin="0,0,0,4" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
                 <TextBlock x:Name="SuccessorNoteText" Margin="0,0,0,10" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
 
+                <!-- Free-form notes. No MaxHeight, so the box grows with each new
+                     line and the outer ScrollViewer scrolls instead. -->
+                <StackPanel Margin="0,0,0,10">
+                    <TextBlock Text="Notes (optional)"/>
+                    <TextBox x:Name="NotesTextBox" Margin="0,2,0,0" MinHeight="54" AcceptsReturn="True" AcceptsTab="False"
+                             TextWrapping="Wrap" VerticalContentAlignment="Top" TextChanged="OnFieldChanged"
+                             AutomationProperties.AutomationId="NotesTextBox"/>
+                </StackPanel>
+
                 <!-- The author's own call, 2026-08-06: this Expense's linked savings
                      plan, shown the same way Earmark shows its own — present even in
                      the plain healthy state, not only surfaced through a warning.

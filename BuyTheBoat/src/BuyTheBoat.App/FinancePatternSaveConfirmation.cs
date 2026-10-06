@@ -303,7 +303,7 @@ public sealed class FinancePatternSaveConfirmation
     private bool ChangeCanCascade { get; set; }
 
     // The trivial-fields question, with no EarMarkPattern equivalent
-    // (Priority/Mandatory/Description/AutoRenew have no analog there). These are asked too
+    // (Priority/Mandatory/Description/Notes/AutoRenew have no analog there). These are asked too
     // because the row-based page makes asking nearly free. Unlike Amount/shape, defaults to
     // NOT cascading (see UserChoseCascadeTrivialFields) — the one place this doesn't mirror
     // Amount/shape's default.
@@ -627,7 +627,7 @@ public sealed class FinancePatternSaveConfirmation
     /// <summary>[CALC] Whether to apply the change forward to the rest of the chain (option 0) rather than to this segment only (option 1); applying forward is the default when the row wasn't answered.</summary>
     private static bool ChoseCascadeForward(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.Cascade) != 1;
 
-    /// <summary>[CALC] Whether to cascade the trivial-field edits (Priority/Mandatory/Description/AutoRenew) forward to the rest of the chain (option 1) rather than to this segment only (option 0, the default when the row wasn't answered).</summary>
+    /// <summary>[CALC] Whether to cascade the trivial-field edits (Priority/Mandatory/Description/Notes/AutoRenew) forward to the rest of the chain (option 1) rather than to this segment only (option 0, the default when the row wasn't answered).</summary>
     private static bool ChoseCascadeTrivialFields(ConfirmationOutcome outcome) => Chosen(outcome, ConfirmationRowIds.TrivialFieldsCascade) == 1;
 
     /// <summary>[CALC] Whether to re-pace the associated bills onto the new schedule (option 0, the popup's pre-selection) rather than leave them (option 1); an unanswered row reads as leave, so nothing re-paces money when no popup asked.</summary>
@@ -724,7 +724,7 @@ public sealed class FinancePatternSaveConfirmation
             ?.IsWorthWarningAbout ?? false;
     }
 
-    /// <summary>[READS FILE] Works out the chain-condition checks — does this edit touch a chain boundary (Start/Until reaching a predecessor/successor), can Amount/shape cascade forward, can the trivial fields (Priority/Mandatory/Description/AutoRenew) cascade forward, and does a Source change disconnect this segment from its own chain. Same "read before anything is saved" timing as DetermineConditions' own sibling Determine* methods below — stores _chainContext (the saved pattern plus every other same-Source pattern) so PerformChainChangesIfApplicable can act on it later without re-reading, the same reasoning as _backTruncations and the other pre-save Determine* fields: PerformSave writes _proposedPattern under _financeId, and a read after that would see the NEW pattern, not the one this method needs to diff against. A no-op for a brand-new pattern (DetermineConditions' own early return already left _amountChanged/_recurrenceShapeChanged at their defaults too). internal for the same reason DetermineConditions is.</summary>
+    /// <summary>[READS FILE] Works out the chain-condition checks — does this edit touch a chain boundary (Start/Until reaching a predecessor/successor), can Amount/shape cascade forward, can the trivial fields (Priority/Mandatory/Description/Notes/AutoRenew) cascade forward, and does a Source change disconnect this segment from its own chain. Same "read before anything is saved" timing as DetermineConditions' own sibling Determine* methods below — stores _chainContext (the saved pattern plus every other same-Source pattern) so PerformChainChangesIfApplicable can act on it later without re-reading, the same reasoning as _backTruncations and the other pre-save Determine* fields: PerformSave writes _proposedPattern under _financeId, and a read after that would see the NEW pattern, not the one this method needs to diff against. A no-op for a brand-new pattern (DetermineConditions' own early return already left _amountChanged/_recurrenceShapeChanged at their defaults too). internal for the same reason DetermineConditions is.</summary>
     internal void DetermineChainConditionsIfApplicable()
     {
         var saved = _repositories.FinancialPatterns.GetByFinanceId(_financeId);
@@ -760,6 +760,7 @@ public sealed class FinancePatternSaveConfirmation
         var trivialFieldsChanged = saved.Priority != _proposedPattern.Priority
             || saved.Mandatory != _proposedPattern.Mandatory
             || saved.Description != _proposedPattern.Description
+            || saved.Notes != _proposedPattern.Notes
             || saved.AutoRenew != _proposedPattern.AutoRenew;
 
         _chainHasSuccessor = hasSuccessor;
@@ -857,7 +858,7 @@ public sealed class FinancePatternSaveConfirmation
 
         // The same successor shape PerformSingleSuccessorBreakOff will build
         // independently later, via the very same BuildSuccessorSchedule —
-        // identity fields (Source/Description/Priority/Mandatory/AutoRenew)
+        // identity fields (Source/Description/Notes/Priority/Mandatory/AutoRenew)
         // carried over from the SAVED pattern, only Amount/schedule from the
         // proposed edit. NextFinanceId() is safe to call again here: nothing
         // gets saved between this and PerformSingleSuccessorBreakOff's own
@@ -867,6 +868,7 @@ public sealed class FinancePatternSaveConfirmation
             FinanceId = forecast.Book.NextFinanceId(),
             Source = saved.Source,
             Description = saved.Description,
+            Notes = saved.Notes,
             DatePattern = RecurrenceRule.Create(BuildSuccessorSchedule(cutDate)),
             Amount = _proposedPattern.Amount,
             Priority = saved.Priority,
@@ -1475,7 +1477,7 @@ public sealed class FinancePatternSaveConfirmation
             : $"This edit covers {_proposedPattern.DatePattern.ActiveStart:MMM d, yyyy} – {_proposedPattern.DatePattern.Until:MMM d, yyyy}. Cascading forward would also update {successors.Count} later segments, through {furthest:MMM d, yyyy}.";
     }
 
-    /// <summary>[CALC] Names how many later segments the trivial-fields cascade (Priority/Mandatory/Description/AutoRenew) would reach — the trivial-fields question, with no EarMarkPattern equivalent. Simpler than DescribeChainCascadeConsequence's own text since there's no "date range" concept for fields that don't affect timing at all.</summary>
+    /// <summary>[CALC] Names how many later segments the trivial-fields cascade (Priority/Mandatory/Description/Notes/AutoRenew) would reach — the trivial-fields question, with no EarMarkPattern equivalent. Simpler than DescribeChainCascadeConsequence's own text since there's no "date range" concept for fields that don't affect timing at all.</summary>
     private string DescribeChainTrivialFieldsCascadeConsequence()
     {
         if (_chainContext is not { } context)

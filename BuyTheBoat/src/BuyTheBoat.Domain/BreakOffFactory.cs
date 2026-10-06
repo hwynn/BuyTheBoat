@@ -186,6 +186,7 @@ public static class BreakOffFactory
             FinanceId = request.SuccessorFinanceId,
             Source = request.Predecessor.Source,
             Description = request.Predecessor.Description,
+            Notes = request.Predecessor.Notes,
             DatePattern = RecurrenceRule.Create(request.SuccessorSchedule),
             Amount = request.SuccessorAmount,
             Priority = request.Predecessor.Priority,
@@ -262,6 +263,7 @@ public static class BreakOffFactory
             FinanceId = request.SuccessorFinanceId,
             Source = request.Predecessor.Source,
             Description = request.Predecessor.Description,
+            Notes = request.Predecessor.Notes,
             DatePattern = RecurrenceRule.Create(request.SuccessorSchedule),
             Amount = request.SuccessorAmount,
             Priority = request.Predecessor.Priority,
@@ -326,6 +328,7 @@ public static class BreakOffFactory
             FinanceId = request.SuccessorFinanceId,
             Source = request.Predecessor.Source,
             Description = request.Predecessor.Description,
+            Notes = request.Predecessor.Notes,
             DatePattern = RecurrenceRule.Create(request.SuccessorSchedule),
             Amount = request.SuccessorAmount,
             Priority = request.Predecessor.Priority,
@@ -399,6 +402,7 @@ public static class BreakOffFactory
             FinanceId = result.Successor.FinanceId,
             Source = result.Successor.Source,
             Description = $"{label} (renewed {request.RenewalDate:yyyy-MM-dd})",
+            Notes = result.Successor.Notes,
             DatePattern = result.Successor.DatePattern,
             Amount = result.Successor.Amount,
             Priority = result.Successor.Priority,
@@ -589,7 +593,7 @@ public static class BreakOffFactory
         return new FinancialChainBoundaryResult { Current = current.WithStart(newStart), Absorbed = absorbed, AdjustedNeighbor = neighbor };
     }
 
-    /// <summary>[CALC] Applies a segment's own newly-edited Amount and recurrence shape to every later same-Source segment — the "cascade forward" choice for a FinancialPattern chain, the default when Amount or shape changes. Each later segment keeps its own Start/Until/Priority/Mandatory/Description/AutoRenew; only Amount and shape (Frequency/Interval/ByDay/ByMonthDay) change. Mirrors RestructureFactory.CascadeForward exactly, one level up.</summary>
+    /// <summary>[CALC] Applies a segment's own newly-edited Amount and recurrence shape to every later same-Source segment — the "cascade forward" choice for a FinancialPattern chain, the default when Amount or shape changes. Each later segment keeps its own Start/Until/Priority/Mandatory/Description/Notes/AutoRenew; only Amount and shape (Frequency/Interval/ByDay/ByMonthDay) change. Mirrors RestructureFactory.CascadeForward exactly, one level up.</summary>
     /// <param name="newShape">The edited segment's own new recurrence shape — only Frequency/Interval/ByDay/ByMonthDay are read from it, not its Start/Until.</param>
     /// <param name="newAmount">The edited segment's own new Amount.</param>
     /// <param name="laterPatterns">Every later segment in the same chain (Start after the segment being edited).</param>
@@ -605,12 +609,13 @@ public static class BreakOffFactory
                 Priority = pattern.Priority,
                 Mandatory = pattern.Mandatory,
                 Description = pattern.Description,
+                Notes = pattern.Notes,
                 AutoRenew = pattern.AutoRenew,
             }))
             .ToList();
 
-    /// <summary>[CALC] Applies a segment's own newly-edited Priority/Mandatory/Description/AutoRenew to every later same-Source segment — the "trivial fields" cascade, a FinancialPattern-only mechanism with no EarMarkPattern equivalent (EarMarkPattern has none of these fields). Structurally the same shape as CascadeForward, but for the OTHER field group — Amount/shape/Start/Until all stay each later segment's own.</summary>
-    /// <param name="current">The edited segment — its own new Priority/Mandatory/Description/AutoRenew are what gets copied forward.</param>
+    /// <summary>[CALC] Applies a segment's own newly-edited Priority/Mandatory/Description/Notes/AutoRenew to every later same-Source segment — the "trivial fields" cascade, a FinancialPattern-only mechanism with no EarMarkPattern equivalent (EarMarkPattern has none of these fields). Structurally the same shape as CascadeForward, but for the OTHER field group — Amount/shape/Start/Until all stay each later segment's own.</summary>
+    /// <param name="current">The edited segment — its own new Priority/Mandatory/Description/Notes/AutoRenew are what gets copied forward.</param>
     /// <param name="laterPatterns">Every later segment in the same chain.</param>
     /// <returns>One freshly-built segment per entry in laterPatterns, in the same order, each carrying the new trivial-field values forward.</returns>
     public static IReadOnlyList<FinancialPattern> CascadeTrivialFieldsForward(FinancialPattern current, IReadOnlyList<FinancialPattern> laterPatterns) =>
@@ -624,6 +629,7 @@ public static class BreakOffFactory
                 Priority = current.Priority,
                 Mandatory = current.Mandatory,
                 Description = current.Description,
+                Notes = current.Notes,
                 AutoRenew = current.AutoRenew,
             }))
             .ToList();

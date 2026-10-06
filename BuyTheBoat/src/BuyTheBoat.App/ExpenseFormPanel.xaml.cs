@@ -275,6 +275,7 @@ public partial class ExpenseFormPanel : UserControl
         ResetSharedFields(selectedAccountId: currentAccountId);
         SourceTextBox.Text = current.Source;
         DescriptionTextBox.Text = current.Description;
+        NotesTextBox.Text = current.Notes;
         PriorityTextBox.Text = current.Priority.ToString();
         AmountTextBox.Text = Math.Abs(current.Amount).ToString(CultureInfo.InvariantCulture);
 
@@ -333,6 +334,7 @@ public partial class ExpenseFormPanel : UserControl
         ErrorText.Text = string.Empty;
         SourceTextBox.Text = string.Empty;
         DescriptionTextBox.Text = string.Empty;
+        NotesTextBox.Text = string.Empty;
         AmountTextBox.Text = string.Empty;
         PriorityTextBox.Text = "5";
         DueDatePicker.SelectedDate = null;
@@ -878,6 +880,7 @@ public partial class ExpenseFormPanel : UserControl
             // it, so don't let a stale radio state leak into the saved pattern.
             Mandatory = ExpenseRadioButton.IsChecked == true && UnskippableRadioButton.IsChecked == true,
             Description = string.IsNullOrWhiteSpace(DescriptionTextBox.Text) ? null : DescriptionTextBox.Text,
+            Notes = string.IsNullOrWhiteSpace(NotesTextBox.Text) ? null : NotesTextBox.Text,
             // "It just keeps going" — an invisible marker. Only a
             // repeating pattern can be ongoing; the Stops… question is hidden for
             // one-time. Its end date rides on the rule (SetHostEndDate → horizon +

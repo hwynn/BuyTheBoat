@@ -150,7 +150,8 @@ public sealed class PatternDatabase
                 UntilDate TEXT NOT NULL,
                 ActiveFrom TEXT NULL,
                 AutoRenew INTEGER NOT NULL DEFAULT 0,
-                ExcludedDates TEXT NULL
+                ExcludedDates TEXT NULL,
+                Notes TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS EarMarkPatterns (
@@ -262,6 +263,10 @@ public sealed class PatternDatabase
         // plan their own. Pre-existing rows predate the distinction, so they
         // migrate as 1 (explicit);
         EnsureColumn(connection, "EarMarkPatterns", "ExplicitlyCreated", "INTEGER NOT NULL DEFAULT 1");
+
+        // FinancialPattern.Notes — the user's free-form notes. NULL for every
+        // pre-existing pattern, meaning no notes.
+        EnsureColumn(connection, "FinancialPatterns", "Notes", "TEXT NULL");
 
         // More than one EarMarkPattern may now share a finance_id, so
         // FinanceId alone can no longer be the table's key. Run after the

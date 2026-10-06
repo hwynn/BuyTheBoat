@@ -688,6 +688,57 @@ public class PatternRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void A_pattern_with_multi_line_notes_round_trips_through_sqlite()
+    {
+        var rent = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Rent",
+            DatePattern = Bill(1, "Rent").DatePattern,
+            Amount = -1_600m,
+            Notes = "Landlord: Pat\r\nLease renews in March.",
+        });
+        _financialPatterns.Save(rent, accountId: 1);
+
+        _financialPatterns.GetAll().Single().Notes.ShouldBe("Landlord: Pat\r\nLease renews in March.");
+    }
+
+    [Fact]
+    public void A_pattern_with_no_notes_round_trips_as_null()
+    {
+        _financialPatterns.Save(Bill(1, "Rent"), accountId: 1);
+
+        _financialPatterns.GetAll().Single().Notes.ShouldBeNull();
+    }
+
+    [Fact]
+    public void An_existing_database_from_before_notes_gets_the_column_added_on_load()
+    {
+        _financialPatterns.Save(Bill(1, "Rent"), accountId: 1);
+        using (var connection = new PatternDatabase(_databasePath).OpenConnection())
+        using (var dropNotes = connection.CreateCommand())
+        {
+            dropNotes.CommandText = "ALTER TABLE FinancialPatterns DROP COLUMN Notes;";
+            dropNotes.ExecuteNonQuery();
+        }
+        PatternDatabase.ReleasePooledConnections();
+
+        var reopened = new FinancialPatternRepository(new PatternDatabase(_databasePath));
+        var loaded = reopened.GetAll().Single();
+        loaded.Notes.ShouldBeNull();
+
+        reopened.Save(FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = loaded.FinanceId,
+            Source = loaded.Source,
+            DatePattern = loaded.DatePattern,
+            Amount = loaded.Amount,
+            Notes = "Added after the upgrade",
+        }), accountId: 1);
+        reopened.GetAll().Single().Notes.ShouldBe("Added after the upgrade");
+    }
+
+    [Fact]
     public void An_existing_goal_whose_plan_predates_it_gets_active_from_backfilled_on_load()
     {
         // Simulates pre-ActiveFrom data: a goal plus a save-in-advance plan that
