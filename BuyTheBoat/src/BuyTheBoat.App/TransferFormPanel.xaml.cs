@@ -63,6 +63,9 @@ public partial class TransferFormPanel : UserControl
     /// <summary>[CALC] True while an existing transfer is loaded for editing — lets MainWindow style this tab header with the bold "editing" weight, the same UpdateTabHeaderStyle call the other forms use.</summary>
     public bool IsPopulated => _editingTransferId is not null;
 
+    /// <summary>[CALC] Id of the existing transfer open in this form, or null for a new one — lets the Transfers list mark that row.</summary>
+    public int? EditingTransferId => _editingTransferId;
+
     /// <summary>[UI] Supplies the accounts the From/To pickers list. Called before every Load and again on each tab switch, so it preserves the current selections rather than resetting them — an account list rarely changes, and a tab switch must never discard an in-progress transfer.</summary>
     /// <param name="accounts">Every account currently saved.</param>
     public void SetContext(IReadOnlyList<Account> accounts)

@@ -103,6 +103,9 @@ public partial class ExpenseFormPanel : UserControl
     /// <summary>[CALC] Whether an existing Expense is currently loaded (not a blank new one) — the instance-information-block's own definition of "populated."</summary>
     public bool IsPopulated => _loadedExisting is not null;
 
+    /// <summary>[CALC] Finance id of the existing bill/paycheck/goal open in this form, or null for a new one — lets the Bills &amp; Paychecks list mark that row.</summary>
+    public int? LoadedFinanceId => _loadedExisting?.FinanceId;
+
     /// <summary>[CALC] Whether this form's own Advanced mode checkbox is on — a view preference, not part of what gets saved.</summary>
     public bool IsAdvancedMode => AdvancedModeCheckBox.IsChecked == true;
 

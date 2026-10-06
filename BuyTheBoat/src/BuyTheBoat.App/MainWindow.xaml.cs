@@ -140,6 +140,12 @@ public partial class MainWindow : Window
         EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, AllocationsTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
         TransferForm.StateChanged += (_, _) => UpdateTabHeaderStyle(TransferTabHeaderText, TransfersTabHeaderText, TransferForm.IsPopulated, TransferForm.IsDirty);
 
+        // Same live trigger for the list rows: loading a different item, or switching the Earmark form's mode, moves the highlight; an edit turns it orange.
+        AccountForm.StateChanged += (_, _) => MarkRowsOpenInForms();
+        ExpenseForm.StateChanged += (_, _) => MarkRowsOpenInForms();
+        EarmarkForm.StateChanged += (_, _) => MarkRowsOpenInForms();
+        TransferForm.StateChanged += (_, _) => MarkRowsOpenInForms();
+
         RefreshGrids();
         RefreshAccountsGrid();
         LoadSavedBalance();
@@ -269,6 +275,123 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>[UI] Highlights, in each List subtab, the row whose item is currently open in that tab's Form subtab — and un-highlights the rest.</summary>
+    private void MarkRowsOpenInForms()
+    {
+        MarkRows<AccountRow>(AccountsGrid, AccountForm.IsDirty, row => row.Account.Id == AccountForm.LoadedAccountId);
+        MarkRows<TransferRow>(TransfersGrid, TransferForm.IsDirty, row => row.Transfer.Id == TransferForm.EditingTransferId);
+        MarkRows<FinancialPatternRow>(FinancialPatternsGrid, ExpenseForm.IsDirty, row => row.FinanceId == ExpenseForm.LoadedFinanceId);
+        MarkRows<EarMarkPatternRow>(EarMarkPatternsGrid, EarmarkForm.IsDirty, row => row.Pattern.FinanceId == EarmarkForm.LoadedPlanFinanceId);
+        MarkRows<ManualEarmarkRow>(ManualEarmarksGrid, EarmarkForm.IsDirty, row => EarmarkForm.EditingOneOff is { } oneOff
+            && row.Earmark.FinanceId == oneOff.FinanceId
+            && row.Earmark.Date == oneOff.Date);
+    }
+
+    /// <summary>[UI] Sets the open-in-form highlight, and its unsaved-changes color, on each of one grid's rows.</summary>
+    private static void MarkRows<TRow>(DataGrid grid, bool formIsDirty, Func<TRow, bool> isOpenInForm) where TRow : FormListRow
+    {
+        foreach (var row in grid.ItemsSource?.OfType<TRow>() ?? [])
+        {
+            row.IsOpenInForm = isOpenInForm(row);
+            row.IsDirty = row.IsOpenInForm && formIsDirty;
+        }
+    }
+
+    /// <summary>
+    /// [UI] Picking a row other than the one open in the form, while the form has unsaved changes, asks whether to load the picked row (discarding the changes) or go back to the changes.
+    /// Without unsaved changes, picking a row only selects it, as before.
+    /// </summary>
+    private void OnListRowSelected(object sender, SelectionChangedEventArgs e)
+    {
+        // A rebuilt list clears its selection (nothing added), and putting the selection back on the open row lands here too — neither asks.
+        if (sender is not DataGrid grid
+            || e.OriginalSource != grid
+            || e.AddedItems.Count != 1
+            || e.AddedItems[0] is not FormListRow picked
+            || picked.IsOpenInForm)
+        {
+            return;
+        }
+
+        var (formIsDirty, formName, formTab, loadPicked) = grid.Name switch
+        {
+            nameof(AccountsGrid) => (AccountForm.IsDirty, "Account", "Account", (Action)(() => OnEditAccountClick(grid, e))),
+            nameof(TransfersGrid) => (TransferForm.IsDirty, "Transfer", "Transfer", () => OnEditTransferClick(grid, e)),
+            nameof(FinancialPatternsGrid) => (ExpenseForm.IsDirty, "Bills & Paychecks", "Expense", () => OnEditFinancialPatternClick(grid, e)),
+            nameof(EarMarkPatternsGrid) => (EarmarkForm.IsDirty, "Allocations", "Earmark", () => OnEditEarMarkPatternClick(grid, e)),
+            nameof(ManualEarmarksGrid) => (EarmarkForm.IsDirty, "Allocations", "Earmark", () => OnEditManualEarmarkClick(grid, e)),
+            _ => (false, string.Empty, string.Empty, () => { }),
+        };
+        if (!formIsDirty)
+        {
+            return;
+        }
+
+        // Deferred until the click finishes: a modal popup opened mid-mouse-down leaves the DataGrid holding mouse capture.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (grid.SelectedItem != picked)
+            {
+                return;
+            }
+
+            if (ConfirmLeavingUnsavedChanges(formIsDirty, formName, formTab))
+            {
+                loadPicked();
+                return;
+            }
+
+            // Kept the changes (or closed the popup): the selection goes back to the row open in the form, so a later "Edit Selected..." can't discard them by surprise.
+            grid.SelectedItem = grid.ItemsSource.OfType<FormListRow>().FirstOrDefault(row => row.IsOpenInForm);
+        });
+    }
+
+    /// <summary>[CALC] Names the item open in a Form subtab for the unsaved-changes popup: its list name in quotes, or "a new …" when it isn't saved yet.</summary>
+    private string DescribeItemInForm(string formTab) => formTab switch
+    {
+        "Account" => OpenRowName(AccountsGrid) ?? "a new account",
+        "Transfer" => OpenRowName(TransfersGrid) ?? "a new transfer",
+        "Expense" => OpenRowName(FinancialPatternsGrid) ?? "a new bill or paycheck",
+        // In one-off mode the form has no plan picked, so an unmatched item there is a new manual adjustment.
+        "Earmark" => OpenRowName(EarMarkPatternsGrid) ?? OpenRowName(ManualEarmarksGrid)
+            ?? (EarmarkForm.LoadedPlanFinanceId is null ? "a new manual adjustment" : "a new allocation"),
+        _ => "this item",
+    };
+
+    /// <summary>[CALC] The quoted list name of a grid's row that's open in the form, or null when none is.</summary>
+    private static string? OpenRowName(DataGrid grid) =>
+        grid.ItemsSource?.OfType<FormListRow>().FirstOrDefault(row => row.IsOpenInForm) switch
+        {
+            AccountRow row => $"“{row.Name}”",
+            TransferRow row => $"the {row.Amount:C} transfer from {row.From} to {row.To}",
+            FinancialPatternRow row => $"“{(row.Description is { Length: > 0 } description ? description : row.Source)}”",
+            EarMarkPatternRow row => $"the allocation for “{row.Goal}”",
+            ManualEarmarkRow row => $"the {row.Target} adjustment on {row.Date}",
+            _ => null,
+        };
+
+    /// <summary>
+    /// [UI] Before a list row or button replaces a form's unsaved changes, asks whether to continue (true: go ahead and load the new item) or go to the unsaved changes (switches to the form, returns false).
+    /// Closing the popup also returns false, staying where the user was.
+    /// Returns true without asking when the form has no unsaved changes.
+    /// </summary>
+    private bool ConfirmLeavingUnsavedChanges(bool formIsDirty, string formName, string formTab)
+    {
+        if (!formIsDirty)
+        {
+            return true;
+        }
+
+        var popup = new UnsavedChangesWindow(formName, DescribeItemInForm(formTab)) { Owner = this };
+        popup.ShowDialog();
+        if (popup.ContinueToSelection == false)
+        {
+            SwitchToTab(formTab);
+        }
+
+        return popup.ContinueToSelection == true;
+    }
+
     /// <summary>[STEP] Pre-fills from whatever was entered last time (Forecast tab's own state is meant to persist across launches, unlike a one-off what-if input) — and, if there's something to show, forecasts immediately so the tab isn't blank on a normal relaunch.</summary>
     private void LoadSavedBalance()
     {
@@ -304,7 +427,8 @@ public partial class MainWindow : Window
     /// <summary>[STEP] The Transfers list tab's "Schedule Transfer..." button — now opens the permanent Transfer form tab on a blank new transfer instead of a popup.</summary>
     private void OnAddTransferClick(object sender, RoutedEventArgs e)
     {
-        if (!EnsureTwoAccountsForTransfer())
+        if (!EnsureTwoAccountsForTransfer()
+            || !ConfirmLeavingUnsavedChanges(TransferForm.IsDirty, "Transfer", "Transfer"))
         {
             return;
         }
@@ -460,6 +584,7 @@ public partial class MainWindow : Window
             : $"{total:C} in {accounts.Count} account{(accounts.Count == 1 ? string.Empty : "s")}"
                 + (cushion > 0m ? $" · {cushion:C} cushion" : string.Empty);
 
+        MarkRowsOpenInForms();
         UpdateForecastButtonState();
     }
 
@@ -469,6 +594,11 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnAddAccountClick(object sender, RoutedEventArgs e)
     {
+        if (!ConfirmLeavingUnsavedChanges(AccountForm.IsDirty, "Account", "Account"))
+        {
+            return;
+        }
+
         RefreshAccountFormContext();
         AccountForm.LoadForNew();
         SwitchToTab("Account");
@@ -1347,8 +1477,15 @@ public partial class MainWindow : Window
     private void OnAdjustFundsClick(object sender, RoutedEventArgs e) =>
         ShowManualEarmarkForm(initialDate: _selectedDayCell?.Date, editTarget: null);
 
-    private void OnAddManualEarmarkClick(object sender, RoutedEventArgs e) =>
+    private void OnAddManualEarmarkClick(object sender, RoutedEventArgs e)
+    {
+        if (!ConfirmLeavingUnsavedChanges(EarmarkForm.IsDirty, "Allocations", "Earmark"))
+        {
+            return;
+        }
+
         ShowManualEarmarkForm(initialDate: null, editTarget: null);
+    }
 
     private void OnEditManualEarmarkClick(object sender, RoutedEventArgs e)
     {
@@ -1483,6 +1620,8 @@ public partial class MainWindow : Window
                     ? owner.Description ?? owner.Source
                     : $"(finance id {earmark.FinanceId})"))
             .ToList();
+
+        MarkRowsOpenInForms();
     }
 
     /// <summary>[WRITES FILE] Export/Import move the raw SQLite file rather than any intermediate format (XML, CSV, etc.) — it's already the single source of truth, so copying it byte-for-byte is both the simplest option and the only one that can't lose or misrepresent data in translation.</summary>
@@ -1619,6 +1758,11 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnAddFinancialPatternClick(object sender, RoutedEventArgs e)
     {
+        if (!ConfirmLeavingUnsavedChanges(ExpenseForm.IsDirty, "Bills & Paychecks", "Expense"))
+        {
+            return;
+        }
+
         RefreshExpenseFormContext();
         ExpenseForm.LoadForNewPattern();
         SwitchToTab("Expense");
@@ -1626,6 +1770,11 @@ public partial class MainWindow : Window
 
     private void OnCreateBillClick(object sender, RoutedEventArgs e)
     {
+        if (!ConfirmLeavingUnsavedChanges(ExpenseForm.IsDirty, "Bills & Paychecks", "Expense"))
+        {
+            return;
+        }
+
         RefreshExpenseFormContext();
         ExpenseForm.LoadForNewBill();
         SwitchToTab("Expense");
@@ -2013,6 +2162,11 @@ public partial class MainWindow : Window
                 "No goals yet",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
+            return;
+        }
+
+        if (!ConfirmLeavingUnsavedChanges(EarmarkForm.IsDirty, "Allocations", "Earmark"))
+        {
             return;
         }
 

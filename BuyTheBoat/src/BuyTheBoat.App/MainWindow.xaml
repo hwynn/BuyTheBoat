@@ -24,6 +24,19 @@
         <SolidColorBrush x:Key="CellBorderBrush" Color="#FFE3E3E8"/>
         <SolidColorBrush x:Key="ManualBgBrush" Color="#FFEDE4F7"/>
         <SolidColorBrush x:Key="ManualTextBrush" Color="#FF6A3FA0"/>
+
+        <!-- List subtab rows: the item currently open in the Form subtab is bold on the selection tint, plus orange text while it has unsaved changes, matching the Form tab header (MainWindow.MarkRowsOpenInForms sets IsOpenInForm/IsDirty). -->
+        <Style x:Key="OpenInFormRowStyle" TargetType="DataGridRow">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsOpenInForm}" Value="True">
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                    <Setter Property="Foreground" Value="DarkOrange"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <Grid Margin="14">
         <Grid.RowDefinitions>
@@ -506,7 +519,7 @@
                             </StackPanel>
                             <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                        Text="Your real accounts, each with its own balance and its own optional safety cushion. Enter what each one holds right now — the forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
-                            <DataGrid x:Name="AccountsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                            <DataGrid x:Name="AccountsGrid" SelectionChanged="OnListRowSelected" AutoGenerateColumns="False" IsReadOnly="True" RowStyle="{StaticResource OpenInFormRowStyle}"
                                       AutomationProperties.AutomationId="AccountsGrid">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
@@ -543,7 +556,7 @@
                             </StackPanel>
                             <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                        Text="Money you move between your own accounts, once or on a schedule. Each transfer takes from one account and adds the same amount to another — it never changes your household total, only which account the money sits in."/>
-                            <DataGrid x:Name="TransfersGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                            <DataGrid x:Name="TransfersGrid" SelectionChanged="OnListRowSelected" AutoGenerateColumns="False" IsReadOnly="True" RowStyle="{StaticResource OpenInFormRowStyle}"
                                       AutomationProperties.AutomationId="TransfersGrid">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="From" Binding="{Binding From}" Width="220"/>
@@ -578,7 +591,7 @@
                             </StackPanel>
                             <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
                                        Text="A bill and a paycheck are the same kind of thing here — just a negative vs. positive amount. &quot;Create Bill&quot; is the simple path for a recurring expense you're obligated to pay; &quot;Add New (advanced)&quot; also covers paychecks, one-time goals, and anything discretionary."/>
-                            <DataGrid x:Name="FinancialPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid x:Name="FinancialPatternsGrid" SelectionChanged="OnListRowSelected" AutoGenerateColumns="False" IsReadOnly="True" RowStyle="{StaticResource OpenInFormRowStyle}">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Finance ID" Binding="{Binding FinanceId}" Width="80"/>
                                     <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160"/>
@@ -626,7 +639,7 @@
                                     <Button Content="Edit Selected..." Padding="10,3" Margin="6,0,0,0" Click="OnEditManualEarmarkClick"/>
                                     <Button Content="Delete Selected" Padding="10,3" Margin="6,0,0,0" Click="OnDeleteManualEarmarkClick"/>
                                 </StackPanel>
-                                <DataGrid x:Name="ManualEarmarksGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid x:Name="ManualEarmarksGrid" SelectionChanged="OnListRowSelected" AutoGenerateColumns="False" IsReadOnly="True" RowStyle="{StaticResource OpenInFormRowStyle}">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="110"/>
                                         <DataGridTextColumn Header="Fund" Binding="{Binding Target}" Width="260"/>
@@ -635,7 +648,7 @@
                                 </DataGrid>
                             </DockPanel>
 
-                            <DataGrid x:Name="EarMarkPatternsGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid x:Name="EarMarkPatternsGrid" SelectionChanged="OnListRowSelected" AutoGenerateColumns="False" IsReadOnly="True" RowStyle="{StaticResource OpenInFormRowStyle}">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Allocation target" Binding="{Binding Goal}" Width="280"/>
                                     <DataGridTextColumn Header="Amount per occurrence" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="160"/>

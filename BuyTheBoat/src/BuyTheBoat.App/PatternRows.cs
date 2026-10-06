@@ -5,7 +5,49 @@ namespace BuyTheBoat.App;
 // Flattened, display-only shapes for the grids in MainWindow — kept out of
 // BuyTheBoat.Domain deliberately, since "how a goal's description should
 // read in a list" is a UI concern, not a domain one.
-public sealed class FinancialPatternRow(FinancialPattern pattern, string accountName)
+
+// A List subtab row that can be the item currently open in its Form subtab.
+// Unlike the otherwise-immutable rows here, IsOpenInForm and IsDirty change after creation
+// (the form loads a different item, or gets edited, without the list being rebuilt), so they
+// raise PropertyChanged for the row style's DataTriggers.
+public abstract class FormListRow : System.ComponentModel.INotifyPropertyChanged
+{
+    private bool _isOpenInForm;
+    public bool IsOpenInForm
+    {
+        get => _isOpenInForm;
+        set
+        {
+            if (value == _isOpenInForm)
+            {
+                return;
+            }
+
+            _isOpenInForm = value;
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsOpenInForm)));
+        }
+    }
+
+    // True only while this row is open in the form and the form has unsaved changes.
+    private bool _isDirty;
+    public bool IsDirty
+    {
+        get => _isDirty;
+        set
+        {
+            if (value == _isDirty)
+            {
+                return;
+            }
+
+            _isDirty = value;
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDirty)));
+        }
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+}
+public sealed class FinancialPatternRow(FinancialPattern pattern, string accountName) : FormListRow
 {
     public FinancialPattern Pattern { get; } = pattern;
     public int FinanceId => Pattern.FinanceId;
@@ -20,7 +62,7 @@ public sealed class FinancialPatternRow(FinancialPattern pattern, string account
     public string Repeats => Pattern.DatePattern.ToRruleString();
 }
 
-public sealed class EarMarkPatternRow(EarMarkPattern pattern, FinancialPattern? goal)
+public sealed class EarMarkPatternRow(EarMarkPattern pattern, FinancialPattern? goal) : FormListRow
 {
     public EarMarkPattern Pattern { get; } = pattern;
     public string Goal => goal?.Description is { Length: > 0 } description
@@ -687,7 +729,7 @@ public sealed class DayEventRow
 }
 
 // One row of the Allocations tab's "Manual adjustments" grid.
-public sealed class ManualEarmarkRow(ManualEarmark earmark, string target)
+public sealed class ManualEarmarkRow(ManualEarmark earmark, string target) : FormListRow
 {
     public ManualEarmark Earmark { get; } = earmark;
     public DateOnly Date => Earmark.Date;
@@ -713,7 +755,7 @@ public sealed class GoalStatusRow(GoalShortfall status)
 // One row of the Accounts tab. Cushion is shown blank rather than "$0.00" when
 // the user hasn't given the account one — don't surface an
 // internal zero as if it were a setting they chose.
-public sealed class AccountRow(Account account)
+public sealed class AccountRow(Account account) : FormListRow
 {
     public Account Account { get; } = account;
     public string Name => Account.Name;
@@ -726,7 +768,7 @@ public sealed class AccountRow(Account account)
 // One row of the Transfers tab. From/To are account names (resolved by the
 // caller); the two underlying patterns never appear here — a transfer reads as one
 // thing.
-public sealed class TransferRow(Transfer transfer, string fromName, string toName)
+public sealed class TransferRow(Transfer transfer, string fromName, string toName) : FormListRow
 {
     public Transfer Transfer { get; } = transfer;
     public string From { get; } = fromName;

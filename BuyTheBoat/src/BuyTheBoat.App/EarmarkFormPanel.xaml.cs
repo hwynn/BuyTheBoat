@@ -141,6 +141,12 @@ public partial class EarmarkFormPanel : UserControl
     // loaded" — it doesn't have a full instance-information-block yet.
     public bool IsPopulated => _selectedGoal is not null;
 
+    /// <summary>[CALC] Finance id of the goal whose savings plan this form would save over, or null in one-off mode — lets the Allocations list mark that plan's row.</summary>
+    public int? LoadedPlanFinanceId => SavingsPlanRadio.IsChecked == true ? _selectedGoal?.FinanceId : null;
+
+    /// <summary>[CALC] The existing manual adjustment open for editing, or null when adding one or in savings-plan mode — lets the Manual adjustments list mark that row.</summary>
+    public ManualEarmark? EditingOneOff => OneOffRadio.IsChecked == true ? _oneOffEditTarget : null;
+
     /// <summary>[CALC] Whether this form's own Advanced mode checkbox is on — a view preference, not part of what gets saved.</summary>
     public bool IsAdvancedMode => AdvancedModeCheckBox.IsChecked == true;
 

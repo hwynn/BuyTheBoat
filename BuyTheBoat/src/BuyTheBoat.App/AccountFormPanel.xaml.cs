@@ -59,6 +59,9 @@ public partial class AccountFormPanel : UserControl
     /// <summary>[CALC] Whether an existing account is currently loaded — this form's version of "an instance is loaded," since it has no separate instance-picker.</summary>
     public bool IsPopulated => _loadedExisting is not null;
 
+    /// <summary>[CALC] Id of the existing account open in this form, or null for a new one — lets the Accounts list mark that row.</summary>
+    public int? LoadedAccountId => _loadedExisting?.Id;
+
     /// <summary>[CALC] Whether this form's own Advanced mode checkbox is on. Not wired to anything yet — Account has no content that Advanced mode currently reveals.</summary>
     public bool IsAdvancedMode => AdvancedModeCheckBox.IsChecked == true;
 
