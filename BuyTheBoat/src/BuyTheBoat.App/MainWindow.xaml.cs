@@ -2,6 +2,8 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -304,7 +306,9 @@ public partial class MainWindow : Window
     private void OnListRowSelected(object sender, SelectionChangedEventArgs e)
     {
         // A rebuilt list clears its selection (nothing added), and putting the selection back on the open row lands here too — neither asks.
+        // Clicking into an Accounts balance box selects its row too, but typing a balance loads nothing into the Form, so that doesn't ask either.
         if (sender is not DataGrid grid
+            || Keyboard.FocusedElement is TextBox { DataContext: AccountRow }
             || e.OriginalSource != grid
             || e.AddedItems.Count != 1
             || e.AddedItems[0] is not FormListRow picked
@@ -574,18 +578,164 @@ public partial class MainWindow : Window
 
     private void RefreshAccountsGrid()
     {
-        var accounts = _accounts.GetAll();
-        AccountsGrid.ItemsSource = accounts.Select(account => new AccountRow(account)).ToList();
+        AccountsGrid.ItemsSource = _accounts.GetAll().Select(account => new AccountRow(account)).ToList();
+        RefreshAccountsSummary();
+        MarkRowsOpenInForms();
+        UpdateForecastButtonState();
+    }
 
+    /// <summary>[UI] Updates the Forecast tab's "Across all accounts" total and cushion line.</summary>
+    private void RefreshAccountsSummary()
+    {
+        var accounts = _accounts.GetAll();
         var total = accounts.Sum(account => account.Balance);
         var cushion = accounts.Sum(account => account.IdealSafetyCushion);
         AccountsSummaryText.Text = accounts.Count == 0
             ? "—"
             : $"{total:C} in {accounts.Count} account{(accounts.Count == 1 ? string.Empty : "s")}"
                 + (cushion > 0m ? $" · {cushion:C} cushion" : string.Empty);
+    }
 
-        MarkRowsOpenInForms();
+    /// <summary>[UI] Selects the whole balance on entering its box, so typing replaces it.</summary>
+    private void OnAccountBalanceGotFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            box.SelectAll();
+        }
+    }
+
+    /// <summary>[WRITES FILE] Saves a balance typed into the Accounts list when the user clicks or tabs away from its box.</summary>
+    private void OnAccountBalanceLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            CommitAccountBalance(box);
+        }
+    }
+
+    /// <summary>[WRITES FILE] Enter/Tab in an Accounts balance box saves it and moves to the next account's box (Shift goes back); Esc puts the saved balance back.</summary>
+    private void OnAccountBalanceKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox box || box.DataContext is not AccountRow row)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            ResetAccountBalanceBox(box);
+            box.SelectAll();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key is not (Key.Enter or Key.Tab))
+        {
+            return;
+        }
+
+        // Handled either way, so the DataGrid's own Enter/Tab cell-hopping doesn't also run.
+        e.Handled = true;
+
+        // An unreadable entry stays put, flagged, for the user to fix.
+        if (!CommitAccountBalance(box))
+        {
+            return;
+        }
+
+        var step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : 1;
+        var rows = AccountsGrid.Items;
+        var nextIndex = rows.IndexOf(row) + step;
+        if (nextIndex < 0 || nextIndex >= rows.Count)
+        {
+            box.SelectAll();
+            return;
+        }
+
+        AccountsGrid.ScrollIntoView(rows[nextIndex]);
+        AccountsGrid.UpdateLayout();
+        if (AccountsGrid.ItemContainerGenerator.ContainerFromIndex(nextIndex) is DataGridRow nextRow
+            && FindVisualChild<TextBox>(nextRow) is { } nextBox
+            && nextBox.IsEnabled)
+        {
+            nextBox.Focus();
+        }
+    }
+
+    /// <summary>
+    /// [WRITES FILE] Saves the balance typed into an Accounts list box, then refreshes the forecast and the summary line.
+    /// Returns false, flagging the box red, when the text isn't a number.
+    /// </summary>
+    private bool CommitAccountBalance(TextBox box)
+    {
+        if (box.DataContext is not AccountRow row)
+        {
+            return true;
+        }
+
+        if (!decimal.TryParse(box.Text, NumberStyles.Currency, CultureInfo.CurrentCulture, out var balance))
+        {
+            box.BorderBrush = (Brush)FindResource("RedTextBrush");
+            box.ToolTip = "Enter an amount like 1234.56 — or press Esc to put the saved balance back.";
+            return false;
+        }
+
+        box.ClearValue(Control.BorderBrushProperty);
+        box.ClearValue(FrameworkElement.ToolTipProperty);
+
+        if (balance == row.Account.Balance)
+        {
+            // Re-shows "500" as "$500.00".
+            ResetAccountBalanceBox(box);
+            return true;
+        }
+
+        var saved = Account.Create(new AccountOptions
+        {
+            Id = row.Account.Id,
+            Name = row.Account.Name,
+            Balance = balance,
+            IdealSafetyCushion = row.Account.IdealSafetyCushion,
+        });
+        _accounts.Save(saved);
+        row.ReplaceAccount(saved);
+
+        // The Form still holding the old balance would put it back on its next Save.
+        // Its unsaved-changes case can't reach here: that row's box is disabled.
+        if (AccountForm.LoadedAccountId == saved.Id && !AccountForm.IsDirty)
+        {
+            AccountForm.LoadExisting(saved);
+        }
+
+        RefreshAccountsSummary();
+        RefreshShownForecast();
         UpdateForecastButtonState();
+        return true;
+    }
+
+    /// <summary>[UI] Puts an Accounts balance box back to showing the saved balance, clearing any red "not a number" flag.</summary>
+    private static void ResetAccountBalanceBox(TextBox box)
+    {
+        box.ClearValue(Control.BorderBrushProperty);
+        box.ClearValue(FrameworkElement.ToolTipProperty);
+        BindingOperations.GetBindingExpression(box, TextBox.TextProperty)?.UpdateTarget();
+    }
+
+    /// <summary>[CALC] The first element of the given type inside a row or other on-screen element, or null.</summary>
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            var found = child as T ?? FindVisualChild<T>(child);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

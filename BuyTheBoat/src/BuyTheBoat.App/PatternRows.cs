@@ -24,7 +24,7 @@ public abstract class FormListRow : System.ComponentModel.INotifyPropertyChanged
             }
 
             _isOpenInForm = value;
-            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsOpenInForm)));
+            RaisePropertyChanged(nameof(IsOpenInForm));
         }
     }
 
@@ -41,11 +41,15 @@ public abstract class FormListRow : System.ComponentModel.INotifyPropertyChanged
             }
 
             _isDirty = value;
-            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsDirty)));
+            RaisePropertyChanged(nameof(IsDirty));
         }
     }
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>[UI] Tells the grid one of this row's shown values changed, so the cell redraws without rebuilding the list.</summary>
+    protected void RaisePropertyChanged(string propertyName) =>
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
 }
 public sealed class FinancialPatternRow(FinancialPattern pattern, string accountName) : FormListRow
 {
@@ -755,11 +759,22 @@ public sealed class GoalStatusRow(GoalShortfall status)
 // One row of the Accounts tab. Cushion is shown blank rather than "$0.00" when
 // the user hasn't given the account one — don't surface an
 // internal zero as if it were a setting they chose.
+// The balance is typed straight into the list, so a row swaps in the re-saved Account in place (ReplaceAccount) rather than the list being rebuilt under the box being typed in.
 public sealed class AccountRow(Account account) : FormListRow
 {
-    public Account Account { get; } = account;
+    public Account Account { get; private set; } = account;
     public string Name => Account.Name;
     public decimal Balance => Account.Balance;
+    public string BalanceText => Account.Balance.ToString("C");
+
+    /// <summary>[UI] Shows the account's newly saved balance in this row.</summary>
+    public void ReplaceAccount(Account saved)
+    {
+        Account = saved;
+        RaisePropertyChanged(nameof(Balance));
+        RaisePropertyChanged(nameof(BalanceText));
+    }
+
     public string Cushion => Account.IdealSafetyCushion == 0m
         ? "—"
         : Account.IdealSafetyCushion.ToString("C");

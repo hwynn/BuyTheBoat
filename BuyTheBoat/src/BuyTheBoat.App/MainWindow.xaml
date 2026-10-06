@@ -518,12 +518,38 @@
                                         AutomationProperties.AutomationId="DeleteAccountButton"/>
                             </StackPanel>
                             <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
-                                       Text="Your real accounts, each with its own balance and its own optional safety cushion. Enter what each one holds right now — the forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
+                                       Text="Your real accounts, each with its own balance and its own optional safety cushion. Type what each one holds right now straight into its Current balance box — Enter saves it and jumps to the next account. The forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
                             <DataGrid x:Name="AccountsGrid" SelectionChanged="OnListRowSelected" AutoGenerateColumns="False" IsReadOnly="True" RowStyle="{StaticResource OpenInFormRowStyle}"
                                       AutomationProperties.AutomationId="AccountsGrid">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
-                                    <DataGridTextColumn Header="Current balance" Binding="{Binding Balance, StringFormat={}{0:C}}" Width="170"/>
+                                    <!-- Unlike every other list, this one column is edited right in the list: balances get re-entered on every run, so it skips the Form.
+                                         Saves on Enter/Tab or leaving the box (MainWindow.CommitAccountBalance); Esc puts the saved value back. -->
+                                    <DataGridTemplateColumn Header="Current balance" Width="170">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBox Text="{Binding BalanceText, Mode=OneWay}" Padding="2,1"
+                                                         PreviewKeyDown="OnAccountBalanceKeyDown"
+                                                         GotKeyboardFocus="OnAccountBalanceGotFocus"
+                                                         LostKeyboardFocus="OnAccountBalanceLostFocus"
+                                                         AutomationProperties.AutomationId="AccountBalanceBox"
+                                                         AutomationProperties.Name="{Binding Name, StringFormat='Current balance of {0}'}">
+                                                    <TextBox.Style>
+                                                        <Style TargetType="TextBox">
+                                                            <!-- The Form has this account open with unsaved changes; saving it there would overwrite a balance typed here. -->
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                                    <Setter Property="ToolTip" Value="This account has unsaved changes in the Form tab — save or clear them there first."/>
+                                                                    <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBox.Style>
+                                                </TextBox>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Safety cushion" Binding="{Binding Cushion}" Width="*"/>
                                 </DataGrid.Columns>
                             </DataGrid>
