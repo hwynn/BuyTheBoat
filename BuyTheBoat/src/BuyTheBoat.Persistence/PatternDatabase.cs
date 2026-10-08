@@ -106,6 +106,7 @@ public sealed class PatternDatabase
             _ = new ManualEarmarkRepository(database, earMarkPatterns).GetAll();
             _ = new AccountRepository(database).GetAll();
             _ = new TransferRepository(database, financialPatterns).GetAll();
+            _ = new DraftRowRepository(database).GetAll();
             return null;
         }
         catch (Exception error)
@@ -205,6 +206,22 @@ public sealed class PatternDatabase
                 UntilDate TEXT NOT NULL,
                 ActiveFrom TEXT NULL,
                 ExcludedDates TEXT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS DraftPatterns (
+                Id INTEGER PRIMARY KEY,
+                Source TEXT NOT NULL DEFAULT '',
+                Description TEXT NOT NULL DEFAULT '',
+                Account TEXT NOT NULL DEFAULT '',
+                Amount TEXT NOT NULL DEFAULT '',
+                Priority TEXT NOT NULL DEFAULT '',
+                Frequency TEXT NOT NULL DEFAULT '',
+                Every TEXT NOT NULL DEFAULT '',
+                DaysOfWeek TEXT NOT NULL DEFAULT '',
+                DaysOfMonth TEXT NOT NULL DEFAULT '',
+                Starts TEXT NOT NULL DEFAULT '',
+                Ends TEXT NOT NULL DEFAULT '',
+                Notes TEXT NOT NULL DEFAULT ''
             );
             """;
         command.ExecuteNonQuery();

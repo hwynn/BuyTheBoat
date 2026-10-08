@@ -631,6 +631,9 @@
                             </DataGrid>
                         </DockPanel>
                     </TabItem>
+                    <TabItem Header="Spreadsheet" Tag="Spreadsheet">
+                        <local:SpreadsheetPanel x:Name="Spreadsheet"/>
+                    </TabItem>
                     <TabItem Tag="Expense">
                         <TabItem.Header>
                             <TextBlock x:Name="ExpenseTabHeaderText" Text="Form"/>

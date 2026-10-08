@@ -1,0 +1,68 @@
+<UserControl x:Class="BuyTheBoat.App.SpreadsheetPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="DraftRowBrush" Color="#FFEAF2FD"/>
+        <SolidColorBrush x:Key="DraftBorderBrush" Color="#FF7FA8E0"/>
+        <SolidColorBrush x:Key="InvalidTextBrush" Color="#FFB00020"/>
+        <SolidColorBrush x:Key="InvalidBgBrush" Color="#FFF6E0E0"/>
+
+        <!-- Draft rows are tinted; saved rows keep the grid's plain white. -->
+        <Style x:Key="SpreadsheetRowStyle" TargetType="DataGridRow">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsDraft}" Value="True">
+                    <Setter Property="Background" Value="{StaticResource DraftRowBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel Margin="8">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6" LastChildFill="False">
+            <Button x:Name="AddDraftButton" Content="Add draft row" Padding="12,5" Click="OnAddDraftClick"/>
+            <Button x:Name="OpenInFormButton" Content="Open selected in form" Padding="12,5" Margin="8,0,0,0" IsEnabled="False" Click="OnOpenInFormClick"/>
+            <Button x:Name="DeleteDraftsButton" Content="Delete selected" Padding="12,5" Margin="8,0,0,0" IsEnabled="False" Click="OnDeleteDraftsClick"/>
+            <Border x:Name="InvalidCounter" Margin="16,0,0,0" Padding="8,2" CornerRadius="3" VerticalAlignment="Center"
+                    Background="{StaticResource InvalidBgBrush}" BorderBrush="{StaticResource InvalidTextBrush}" BorderThickness="1"
+                    Visibility="Collapsed" Cursor="Hand" MouseLeftButtonUp="OnInvalidCounterClick"
+                    ToolTip="Jump to the next red cell">
+                <TextBlock x:Name="InvalidCounterText" Foreground="{StaticResource InvalidTextBrush}"/>
+            </Border>
+            <Button x:Name="NextInvalidButton" Content="Next (F8)" Padding="10,5" Margin="6,0,0,0" Visibility="Collapsed" Click="OnNextInvalidClick"/>
+            <Button DockPanel.Dock="Right" Content="Download as spreadsheet..." Padding="12,5" Click="OnDownloadClick"/>
+        </DockPanel>
+
+        <!-- The legend stays on screen: it's how the two row styles, red text, and the Amount sign get explained. -->
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,2">
+                <Border Width="16" Height="11" Background="White" BorderBrush="Gray" BorderThickness="1" Margin="0,0,5,0"/>
+                <TextBlock Text="Saved bill or paycheck (read-only)" Foreground="DimGray"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,2">
+                <Border Width="16" Height="11" Background="{StaticResource DraftRowBrush}" BorderBrush="{StaticResource DraftBorderBrush}" BorderThickness="1" Margin="0,0,5,0"/>
+                <TextBlock Text="Draft row (editable)" Foreground="DimGray"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,2">
+                <TextBlock Text="red text" Foreground="{StaticResource InvalidTextBrush}" TextDecorations="Underline" Margin="0,0,5,0"/>
+                <TextBlock Text="invalid cell, hover to see why" Foreground="DimGray"/>
+            </StackPanel>
+            <TextBlock Text="Bills are negative amounts. Paychecks are positive." Foreground="DimGray" Margin="0,0,0,2"/>
+        </WrapPanel>
+
+        <!-- What's stopping the one checked draft from opening in the Form. Only shown while exactly one draft is checked and it has red cells. -->
+        <Border x:Name="ProblemStrip" DockPanel.Dock="Bottom" Margin="0,6,0,0" Padding="10,6" CornerRadius="3"
+                Background="{StaticResource InvalidBgBrush}" BorderBrush="{StaticResource InvalidTextBrush}" BorderThickness="1"
+                Visibility="Collapsed">
+            <StackPanel x:Name="ProblemList"/>
+        </Border>
+
+        <DataGrid x:Name="SheetGrid"
+                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False"
+                  SelectionUnit="Cell" SelectionMode="Extended" HeadersVisibility="Column" FrozenColumnCount="1"
+                  ClipboardCopyMode="ExcludeHeader" GridLinesVisibility="All"
+                  HorizontalGridLinesBrush="#FFE3E3E8" VerticalGridLinesBrush="#FFE3E3E8"
+                  RowStyle="{StaticResource SpreadsheetRowStyle}" Background="White"
+                  BeginningEdit="OnBeginningEdit" PreparingCellForEdit="OnPreparingCellForEdit" CellEditEnding="OnCellEditEnding"
+                  PreviewKeyDown="OnGridPreviewKeyDown" PreviewTextInput="OnGridPreviewTextInput"/>
+    </DockPanel>
+</UserControl>

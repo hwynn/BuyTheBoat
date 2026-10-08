@@ -64,6 +64,9 @@ public partial class ExpenseFormPanel : UserControl
     private FinancialPattern? _loadedExisting;
     private int _loadedAccountId;
 
+    // The Spreadsheet subtab's draft row this form was filled from, so a successful save can remove it. Cleared by every other load.
+    private int? _loadedDraftId;
+
     private IReadOnlyDictionary<int, int> _accountIdByFinanceId = new Dictionary<int, int>();
     private IReadOnlyList<Account> _accounts = [];
     private IReadOnlySet<int> _transferFinanceIds = new HashSet<int>();
@@ -105,6 +108,9 @@ public partial class ExpenseFormPanel : UserControl
 
     /// <summary>[CALC] Finance id of the existing bill/paycheck/goal open in this form, or null for a new one — lets the Bills &amp; Paychecks list mark that row.</summary>
     public int? LoadedFinanceId => _loadedExisting?.FinanceId;
+
+    /// <summary>[CALC] Id of the Spreadsheet subtab draft row this form was filled from, or null when it wasn't — lets a successful save remove that draft.</summary>
+    public int? LoadedDraftId => _loadedDraftId;
 
     /// <summary>[CALC] Whether this form's own Advanced mode checkbox is on — a view preference, not part of what gets saved.</summary>
     public bool IsAdvancedMode => AdvancedModeCheckBox.IsChecked == true;
@@ -327,10 +333,94 @@ public partial class ExpenseFormPanel : UserControl
         ClearDirty();
     }
 
+    /// <summary>
+    /// [STEP] Opens a new bill or paycheck filled in from a Spreadsheet subtab draft row, as unsaved changes, so Save is ready to press.
+    /// Blank cells keep the form's usual defaults; the questions the spreadsheet has no column for (skippable, when it stops) are left for the user to answer here.
+    /// Saving removes the draft (MainWindow reads LoadedDraftId); Discard or Clear leaves the draft where it was.
+    /// </summary>
+    /// <param name="values">The draft's cells, already parsed. The spreadsheet only opens a draft with no invalid cells.</param>
+    /// <param name="draftId">Which draft row these came from.</param>
+    public void LoadDraft(DraftFormValues values, int draftId)
+    {
+        LoadForNewPattern();
+        _suppressEvents = true;
+
+        SourceTextBox.Text = values.Source;
+        DescriptionTextBox.Text = values.Description;
+        NotesTextBox.Text = values.Notes;
+        if (values.Priority is { } priority)
+        {
+            PriorityTextBox.Text = priority.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (values.AccountName is { } accountName
+            && _accounts.FirstOrDefault(account => string.Equals(account.Name, accountName, StringComparison.OrdinalIgnoreCase)) is { } account)
+        {
+            AccountComboBox.SelectedValue = account.Id;
+        }
+
+        // The spreadsheet's Amount is signed — negative for a bill — while this form's Amount box is always a magnitude, with Direction carrying the sign.
+        if (values.Amount is { } amount)
+        {
+            AmountTextBox.Text = Math.Abs(amount).ToString(CultureInfo.InvariantCulture);
+            ExpenseRadioButton.IsChecked = amount < 0;
+            IncomeRadioButton.IsChecked = amount >= 0;
+        }
+
+        LoadDraftSchedule(values);
+
+        UpdateDirectionDependentUi();
+        UpdateSummary();
+        _suppressEvents = false;
+        MarkDirty();
+        _loadedDraftId = draftId;
+    }
+
+    /// <summary>[UI] Fills the repeat schedule and end date from a draft's cells, using the form's own defaults (Monthly, every 1, starting today) for any that were blank. Leaves the schedule untouched when every schedule cell was blank.</summary>
+    private void LoadDraftSchedule(DraftFormValues values)
+    {
+        var hasSchedule = values.Frequency is not null || values.Interval is not null || values.Starts is not null
+            || values.Ends is not null || values.ByDay.Count > 0 || values.ByMonthDay.Count > 0;
+        if (!hasSchedule)
+        {
+            return;
+        }
+
+        var start = values.Starts ?? DateOnly.FromDateTime(DateTime.Today);
+        var frequency = values.Frequency ?? RecurrenceFrequency.Monthly;
+        try
+        {
+            // The editor only loads a whole rule, so the end date here is a stand-in; the "When does this stop?" answer below supplies the real one.
+            RuleEditor.LoadFrom(RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = frequency,
+                DtStart = start,
+                Interval = values.Interval ?? 1,
+                ByDay = frequency == RecurrenceFrequency.Weekly ? values.ByDay : [],
+                ByMonthDay = frequency is RecurrenceFrequency.Monthly or RecurrenceFrequency.Yearly ? values.ByMonthDay : [],
+                Until = values.Ends ?? start.AddYears(3),
+            }));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // The cells were each valid but don't make a schedule together; leave the schedule at its defaults for the user to set here.
+            ErrorText.Text = $"Couldn't use the draft's schedule: {ex.Message}";
+        }
+
+        if (values.Ends is { } end)
+        {
+            StopOnDateRadio.IsChecked = true;
+            StopEndDatePicker.SelectedDate = end.ToDateTime(TimeOnly.MinValue);
+        }
+
+        UpdateStopMode();
+    }
+
     /// <summary>[UI] Shared reset every Load* starts with.</summary>
     /// <param name="selectedAccountId">Which account to preselect; defaults to the first when null.</param>
     private void ResetSharedFields(int? selectedAccountId)
     {
+        _loadedDraftId = null;
         ErrorText.Text = string.Empty;
         SourceTextBox.Text = string.Empty;
         DescriptionTextBox.Text = string.Empty;

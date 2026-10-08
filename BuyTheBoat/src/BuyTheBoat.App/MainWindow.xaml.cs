@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private readonly AccountRepository _accounts;
     private readonly TransferRepository _transfers;
     private readonly ManualEarmarkRepository _manualEarmarks;
+    private readonly DraftRowRepository _draftRows;
 
     // Backs the spreadsheet export button and the selected-day detail pane — both only make sense once a forecast has actually been computed.
     private ForecastResult? _lastForecast;
@@ -62,6 +63,7 @@ public partial class MainWindow : Window
         _accounts = new AccountRepository(database);
         _transfers = new TransferRepository(database, _financialPatterns);
         _manualEarmarks = new ManualEarmarkRepository(database, _earMarkPatterns);
+        _draftRows = new DraftRowRepository(database);
 
         Log($"Immediately after construction — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, EarMarkPatterns.GetAll().Count: {_earMarkPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
 
@@ -116,6 +118,18 @@ public partial class MainWindow : Window
         ExpenseForm.RequestForecast = EnsureForecast;
         ExpenseForm.PatternSaved = OnExpensePatternSaved;
         ExpenseForm.PickChainSegment = PickChainSegmentToEdit;
+
+        // The Spreadsheet subtab owns no repository either: drafts are stored and opened in the Form through these.
+        Spreadsheet.AllocateDraftId = _draftRows.NextId;
+        Spreadsheet.DraftSaved = _draftRows.Save;
+        Spreadsheet.DraftsDeleted = ids =>
+        {
+            foreach (var id in ids)
+            {
+                _draftRows.Delete(id);
+            }
+        };
+        Spreadsheet.OpenInFormRequested = OnOpenDraftInForm;
 
         EarmarkForm.RequestForecast = EnsureForecast;
         EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
@@ -582,6 +596,9 @@ public partial class MainWindow : Window
         RefreshAccountsSummary();
         MarkRowsOpenInForms();
         UpdateForecastButtonState();
+
+        // The Spreadsheet's Account column accepts only current account names.
+        RefreshSpreadsheet();
     }
 
     /// <summary>[UI] Updates the Forecast tab's "Across all accounts" total and cushion line.</summary>
@@ -1772,7 +1789,39 @@ public partial class MainWindow : Window
                     : $"(finance id {earmark.FinanceId})"))
             .ToList();
 
+        RefreshSpreadsheet();
         MarkRowsOpenInForms();
+    }
+
+    /// <summary>[READS FILE] Refills the Bills &amp; Paychecks › Spreadsheet subtab: the stored drafts, then every saved bill and paycheck (transfer patterns hidden, as in the List).</summary>
+    private void RefreshSpreadsheet()
+    {
+        var accounts = _accounts.GetAll();
+        var accountNamesById = accounts.ToDictionary(account => account.Id, account => account.Name);
+        var accountIdByFinanceId = _financialPatterns.GetAllByAccount()
+            .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
+            .ToDictionary(pair => pair.FinanceId, pair => pair.AccountId);
+
+        var saved = _financialPatterns.GetAllExcludingTransferPatterns()
+            .Select(pattern => (pattern, accountIdByFinanceId.TryGetValue(pattern.FinanceId, out var accountId)
+                ? accountNamesById.GetValueOrDefault(accountId, "(unknown)")
+                : "(unknown)"))
+            .ToList();
+
+        Spreadsheet.SetContent(_draftRows.GetAll(), saved, accounts.Select(account => account.Name).ToList());
+    }
+
+    /// <summary>[STEP] Opens a Spreadsheet draft row in the Bills &amp; Paychecks › Form as unsaved changes, after the usual unsaved-changes warning if the Form already has some.</summary>
+    private void OnOpenDraftInForm(int draftId, DraftFormValues values)
+    {
+        if (!ConfirmLeavingUnsavedChanges(ExpenseForm.IsDirty, "Bills & Paychecks", "Expense"))
+        {
+            return;
+        }
+
+        RefreshExpenseFormContext();
+        ExpenseForm.LoadDraft(values, draftId);
+        SwitchToTab("Expense");
     }
 
     /// <summary>[WRITES FILE] Export/Import move the raw SQLite file rather than any intermediate format (XML, CSV, etc.) — it's already the single source of truth, so copying it byte-for-byte is both the simplest option and the only one that can't lose or misrepresent data in translation.</summary>
@@ -1941,6 +1990,9 @@ public partial class MainWindow : Window
     /// <param name="jumpToEarmark">True for "Save and Plan," false for "Save and Skip planning."</param>
     private bool OnExpensePatternSaved(FinancialPattern pattern, int accountId, bool isNew, bool jumpToEarmark)
     {
+        // Read now: the form resets itself (clearing this) once the save goes through.
+        var draftId = ExpenseForm.LoadedDraftId;
+
         var confirmation = new FinancePatternSaveConfirmation(
             pattern.FinanceId,
             pattern,
@@ -2005,6 +2057,13 @@ public partial class MainWindow : Window
         if (!confirmation.Run())
         {
             return false; // user cancelled — nothing saved; the form keeps the user's edits and the Expense tab stays as-is
+        }
+
+        // Filled from a Spreadsheet draft: the saved pattern replaces that draft row.
+        if (draftId is { } savedDraftId)
+        {
+            _draftRows.Delete(savedDraftId);
+            RefreshSpreadsheet();
         }
 
         if (!jumpToEarmark)
