@@ -17,7 +17,7 @@ The `{...}` line lists the other assumption IDs (by their bare ID) that must hol
 - **Part I — Foundational class assumptions** *(source: `a02.txt`)*: [Ch.1 TransactionLogPage](#chapter-1-transactionlogpage) · [Ch.2 FinancialPattern](#chapter-2-financialpattern) · [Ch.3 EarMarkPattern](#chapter-3-earmarkpattern) · [Ch.4 ActualTransaction](#chapter-4-actualtransaction) · [Ch.5 ExpectedTransaction](#chapter-5-expectedtransaction) · [Ch.6 EarmarkEvent](#chapter-6-earmarkevent) · [Ch.7 BalanceSnapshot](#chapter-7-balancesnapshot) · [Ch.8 FundJar](#chapter-8-fundjar)
 - **Part II — AccountTransactionPage internal consistency** *(source: `a03.txt`)*: [Ch.9 Identity, bounds & top-level summary](#chapter-9-page-identity-bounds--top-level-maintenance-summary) · [Ch.10 Initial Snapshot](#chapter-10-initial-snapshot) · [Ch.11 Balance Record](#chapter-11-balance-record) · [Ch.12 full_amount & expected amounts](#chapter-12-balance_recordcfull_amount--expected-amounts) · [Ch.13 Fund Jars](#chapter-13-fund-jars) · [Ch.14 Actual Transactions](#chapter-14-actual-transactions) · [Ch.15 Expected Transactions](#chapter-15-expected-transactions) · [Ch.16 Earmarks](#chapter-16-earmarks)
 - **Part III — TransactionLogBook & cross-page consistency** *(source: `a01.txt`)*: [Ch.17 Pattern continuity across pages](#chapter-17-log_pages-finance-pattern--earmark-pattern-continuity-across-pages) · [Ch.18 Derived calcs & initial-snapshot inheritance](#chapter-18-accounttransactionpage-derived-calculations--initial-snapshot-inheritance) · [Ch.19 Expected/Actual pairing completeness](#chapter-19-expectedactual-transaction-pairing-completeness)
-- **Part IV — New assumptions added during the redesign (2026)** *(not verbatim — see its own header note)*: [Ch.20 Editing a finance pattern with existing history](#chapter-20-editing-a-finance-pattern-with-existing-history)
+- **Part IV — New assumptions added during the redesign (2026)** *(not verbatim — see its own header note)*: [Ch.20 Editing a finance pattern with existing history](#chapter-20-editing-a-finance-pattern-with-existing-history) · [Ch.21 Money owed when bills outrun the balance](#chapter-21-money-owed-when-bills-outrun-the-balance)
 - [Appendix A: Reduction & merge candidates](#appendix-a-reduction--merge-candidates)
 - [Appendix B: Use cases](#appendix-b-use-cases)
 - [Appendix C: Formatting quirks preserved as-is](#appendix-c-formatting-quirks-preserved-as-is)
@@ -719,6 +719,27 @@ of history.
 > would orphan already-committed data** (author, 2026-08-11) — the user sees what would be destroyed
 > and decides; the system never removes an option on the user's behalf. See planning/25 for the
 > mechanism and what orphaned data resolves to under each path.
+
+### Chapter 21: Money owed when bills outrun the balance
+
+*(Author, 2026-10-10. Code: `BalanceSnapshot.ExpectedUnpaidAmount`, tagged `DIVERGENCE(expected-unpaid)`.)*
+
+```
+{3.13.3.a1, 1.2.3.6.a1}
+-3.13.4.a2: self.balance_record[i].expected_unpaid_amount = max(0, current_unpaid_expected - self.balance_record[i].expected_amount)
+```
+> **What it means.** Under assumed pairing every expected transaction is paid in full, so a bill the balance
+> can't cover drives `expected_amount` below zero. That shortfall is money the user would owe. Past debt
+> (`current_unpaid_expected`) is owed too, and incoming money pays debt down before anything else — hence one
+> formula for both.
+>
+> **Free funds subtract past debt.** `expected_free_amount` (`3.13.4.a1`) also subtracts
+> `current_unpaid_expected`, mirroring `1.2.3.5.a1`: a bill still owed from before the as-of date isn't free
+> money.
+>
+> **Known gap.** `current_unpaid_expected` is pinned to 0 until actual transactions exist, so debt from bills
+> missed or underpaid *before* the as-of date is dropped (the entered balance can't show money owed to someone
+> else). Until then the program assumes the user starts from a positive balance with nothing owed.
 
 ---
 

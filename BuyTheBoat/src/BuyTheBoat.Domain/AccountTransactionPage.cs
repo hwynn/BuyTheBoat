@@ -52,6 +52,7 @@ public sealed record AccountTransactionPage
     // transaction on or before the as-of date assumed already fulfilled and
     // reflected in the entered balance, this is definitionally 0 for now.
     // Real pairing makes it a real calculation.
+    // Known gap: if the user missed or underpaid a bill before the as-of date, the real value is above 0, and that debt is silently dropped until actual transactions exist.
     public decimal CurrentUnpaidExpected { get; init; }
 
     // 1.2.3.5.a1's value as of the as-of date: with CurrentUnpaidExpected

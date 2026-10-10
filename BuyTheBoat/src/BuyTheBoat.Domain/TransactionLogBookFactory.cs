@@ -518,6 +518,9 @@ public static class TransactionLogBookFactory
         var cushionTarget = input.IdealSafetyCushion;
         var cushionValue = cushionTarget;
 
+        // ASSUMED-PAIRING(unpaid-expected): see AccountTransactionPage.
+        var currentUnpaidExpected = 0m;
+
         var initialSnapshot = new BalanceSnapshot
         {
             SnapshotDate = null,
@@ -526,7 +529,8 @@ public static class TransactionLogBookFactory
             // happened up to and including that day.
             FullAmount = input.StartingBalance,
             ExpectedAmount = input.StartingBalance,
-            ExpectedFreeAmount = input.StartingBalance - jarValues.Values.Sum() - cushionValue,
+            ExpectedFreeAmount = input.StartingBalance - currentUnpaidExpected - jarValues.Values.Sum() - cushionValue,
+            ExpectedUnpaidAmount = Math.Max(0m, currentUnpaidExpected - input.StartingBalance),
             FundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: true),
             ActualTransactions = [],
             ExpectedTransactions = [],
@@ -661,8 +665,8 @@ public static class TransactionLogBookFactory
             }
 
             // 3.13.4.a1: free = expected minus everything sitting in jars,
-            // including the safety cushion.
-            var expectedFree = expected - jarValues.Values.Sum() - cushionValue;
+            // including the safety cushion, and minus bills still owed from before the as-of date (1.2.3.5.a1).
+            var expectedFree = expected - currentUnpaidExpected - jarValues.Values.Sum() - cushionValue;
 
             var fundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: false);
             EnsureJarForEveryActivePlan(date, fundJars, input.EarMarkPatterns);
@@ -675,6 +679,7 @@ public static class TransactionLogBookFactory
                 FullAmount = null, // 10.2: unknowable until the day occurs
                 ExpectedAmount = expected,
                 ExpectedFreeAmount = expectedFree,
+                ExpectedUnpaidAmount = Math.Max(0m, currentUnpaidExpected - expected),
                 FundJars = fundJars,
                 ActualTransactions = [],
                 ExpectedTransactions = expectedTransactions,
@@ -700,8 +705,7 @@ public static class TransactionLogBookFactory
             EarmarkPatterns = input.EarMarkPatterns,
             InitialSnapshot = initialSnapshot,
             BalanceRecord = balanceRecord,
-            // ASSUMED-PAIRING(unpaid-expected): see AccountTransactionPage.
-            CurrentUnpaidExpected = 0m,
+            CurrentUnpaidExpected = currentUnpaidExpected,
             CurrentFreeAmount = initialSnapshot.ExpectedFreeAmount,
         };
 

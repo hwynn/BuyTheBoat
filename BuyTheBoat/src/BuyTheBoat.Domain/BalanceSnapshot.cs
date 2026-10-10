@@ -32,8 +32,14 @@ public sealed record BalanceSnapshot
     public required decimal? ExpectedAmount { get; init; }
 
     // 3.13.4.a1: ExpectedAmount minus the sum of every jar's ExpectedAmount.
+    // Also minus the page's CurrentUnpaidExpected, mirroring 1.2.3.5.a1: bills still owed from before the as-of date aren't free money.
     // This is the day's "free to spend" answer.
     public required decimal? ExpectedFreeAmount { get; init; }
+
+    // DIVERGENCE(expected-unpaid), 3.13.4.a2: how much the user would owe on this day.
+    // Every bill is assumed paid in full, so a bill the balance can't cover drives ExpectedAmount below zero; that shortfall, plus any CurrentUnpaidExpected not yet paid off, is what's owed.
+    // Incoming money pays this down before anything else, so it is max(0, CurrentUnpaidExpected - ExpectedAmount).
+    public decimal ExpectedUnpaidAmount { get; init; }
 
     // Always contains exactly one FinanceId=null jar (9.5.a1 — the safety
     // cushion) and otherwise unique finance ids.

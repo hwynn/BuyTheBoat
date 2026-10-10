@@ -2629,7 +2629,7 @@ public class TransactionLogBookFactoryTests
         {
             // 3.13.4.a1, held on every single day of the timeline.
             entry.Snapshot.ExpectedFreeAmount.ShouldBe(
-                entry.Snapshot.ExpectedAmount!.Value - entry.Snapshot.FundJars.Sum(jar => jar.ExpectedAmount));
+                entry.Snapshot.ExpectedAmount!.Value - result.PrimaryAccountPage.CurrentUnpaidExpected - entry.Snapshot.FundJars.Sum(jar => jar.ExpectedAmount));
         }
     }
 
@@ -3827,6 +3827,61 @@ public class TransactionLogBookFactoryTests
             snapshot.FullAmount.ShouldBeNull();
             snapshot.FundJars.ShouldAllBe(jar => jar.CurrentAmount == null);
         }
+    }
+
+    [Fact]
+    public void The_amount_owed_is_never_negative_and_appears_only_when_the_balance_cannot_cover_past_debt()
+    {
+        // 3.13.4.a2: expected_unpaid_amount = max(0, current_unpaid_expected - expected_amount).
+        var (page, _) = SweepForecast();
+
+        foreach (var snapshot in page.BalanceRecord.Values.Prepend(page.InitialSnapshot))
+        {
+            snapshot.ExpectedUnpaidAmount.ShouldBe(Math.Max(0m, page.CurrentUnpaidExpected - snapshot.ExpectedAmount!.Value));
+        }
+    }
+
+    [Fact]
+    public void Missed_mortgage_payments_build_up_as_money_owed_until_income_pays_them_off()
+    {
+        // 3.13.4.a2: a bill the balance can't cover is owed, and incoming money pays that debt down before anything else.
+        var mortgage = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 6001,
+            Source = "Mortgage",
+            Amount = -800m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [15],
+                DtStart = new DateOnly(2025, 1, 15),
+                Until = new DateOnly(2025, 6, 15),
+            }),
+        });
+        var paycheck = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 6002,
+            Source = "Paycheck",
+            Amount = 500m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [20],
+                DtStart = new DateOnly(2025, 1, 20),
+                Until = new DateOnly(2025, 6, 20),
+            }),
+        });
+        var bonus = OneOffPattern("Bonus", 3000m, new DateOnly(2025, 4, 25));
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 200m, asOfDate: SweepAsOf, horizonEndDate: new DateOnly(2025, 6, 30),
+            financialPatterns: [mortgage, paycheck, bonus]));
+
+        SnapshotOn(result, new DateOnly(2025, 1, 15)).ExpectedUnpaidAmount.ShouldBe(600m);   // 200 on hand, 800 due
+        SnapshotOn(result, new DateOnly(2025, 1, 20)).ExpectedUnpaidAmount.ShouldBe(100m);   // the paycheck pays most of it down
+        SnapshotOn(result, new DateOnly(2025, 4, 20)).ExpectedUnpaidAmount.ShouldBe(1000m);  // three more months 300 short each
+        SnapshotOn(result, new DateOnly(2025, 4, 25)).ExpectedUnpaidAmount.ShouldBe(0m);     // the bonus clears it
+        SnapshotOn(result, new DateOnly(2025, 4, 25)).ExpectedFreeAmount.ShouldBe(2000m);    // only what's left after the debt is free
     }
 
     [Fact]
