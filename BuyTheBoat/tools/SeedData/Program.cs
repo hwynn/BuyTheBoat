@@ -116,29 +116,29 @@ financialPatterns.Save(paycheck, checking.Id);
 
 // ---- Bills (mandatory, repeating) ----------------------------------------
 
-var rent = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Landlord LLC", Description = "Rent", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -1800m, Priority = 10 });
+var rent = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Landlord LLC", Description = "Rent", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -1800m, Priority = 5 });
 financialPatterns.Save(rent, checking.Id);
 
-var electric = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Electric Company", DatePattern = Monthly(new DateOnly(2026, 1, 15)), Amount = -145m, Priority = 8 });
+var electric = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Electric Company", DatePattern = Monthly(new DateOnly(2026, 1, 15)), Amount = -145m, Priority = 4 });
 financialPatterns.Save(electric, checking.Id);
 
-var internet = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Internet Provider", DatePattern = Monthly(new DateOnly(2026, 1, 20)), Amount = -70m, Priority = 7 });
+var internet = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Internet Provider", DatePattern = Monthly(new DateOnly(2026, 1, 20)), Amount = -70m, Priority = 4 });
 financialPatterns.Save(internet, checking.Id);
 
-var carInsurance = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Car Insurance Co", DatePattern = Monthly(new DateOnly(2026, 1, 1), interval: 3), Amount = -300m, Priority = 9 });
+var carInsurance = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Car Insurance Co", DatePattern = Monthly(new DateOnly(2026, 1, 1), interval: 3), Amount = -300m, Priority = 5 });
 financialPatterns.Save(carInsurance, joint.Id);
 
-var streaming = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Streaming Service", DatePattern = Monthly(new DateOnly(2026, 1, 5)), Amount = -15.99m, Priority = 2, Mandatory = false });
+var streaming = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Streaming Service", DatePattern = Monthly(new DateOnly(2026, 1, 5)), Amount = -15.99m, Priority = 1, Mandatory = false });
 financialPatterns.Save(streaming, checking.Id);
 
-var gym = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Gym Membership", DatePattern = Monthly(new DateOnly(2026, 2, 1)), Amount = -45m, Priority = 3, Mandatory = false });
+var gym = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Gym Membership", DatePattern = Monthly(new DateOnly(2026, 2, 1)), Amount = -45m, Priority = 2, Mandatory = false });
 financialPatterns.Save(gym, checking.Id);
 
 // A "keeps going" bill plus a DELIBERATELY thin plan: $45/mo against a
 // $65/mo bill can never catch up on its own rate alone — a structural,
 // chronic shortfall (IsChronicShortfall = true), distinct from Car Repair's
 // one-off gap below that a single catch-up earmark would fully close.
-var phoneBill = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Mobile Carrier", DatePattern = Monthly(new DateOnly(2026, 1, 12)), Amount = -65m, Priority = 6, AutoRenew = true });
+var phoneBill = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Mobile Carrier", DatePattern = Monthly(new DateOnly(2026, 1, 12)), Amount = -65m, Priority = 3, AutoRenew = true });
 financialPatterns.Save(phoneBill, checking.Id);
 var phonePlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = phoneBill.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 12)), Amount = -45m }, phoneBill);
 earMarkPatterns.Save(phonePlan);
@@ -151,7 +151,7 @@ Console.WriteLine("Bill: Mobile Carrier — AutoRenew ('keeps going'), plan deli
 // actually lands before the next paced contribution depends on
 // calendar/payday phase — see the printed report rather than trusting this
 // comment; nudge the day offset here and re-run if it didn't fire.
-var carRegistration = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "DMV Registration", DatePattern = OneTime(asOfDate.AddDays(1)), Amount = -180m, Priority = 8 });
+var carRegistration = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "DMV Registration", DatePattern = OneTime(asOfDate.AddDays(1)), Amount = -180m, Priority = 4 });
 var carRegProposal = AllocationPlanProposer.Propose(carRegistration, financialPatterns.GetAll(), asOfDate);
 financialPatterns.Save(carRegProposal.Outflow, checking.Id);
 earMarkPatterns.Save(carRegProposal.Plan);
@@ -185,7 +185,7 @@ Console.WriteLine("Bill: DMV Registration — starting-earmark shape hand-modele
 // due date," never "has ENOUGH" — this scenario, and the PlanHealthState
 // properties, answer that second question. See the printed report below
 // for the real number, not this comment's guess.
-var propertyTax = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "County Property Tax", DatePattern = Monthly(asOfDate.AddDays(40), interval: 6), Amount = -1200m, Priority = 8 });
+var propertyTax = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "County Property Tax", DatePattern = Monthly(asOfDate.AddDays(40), interval: 6), Amount = -1200m, Priority = 4 });
 var propertyTaxProposal = AllocationPlanProposer.Propose(propertyTax, financialPatterns.GetAll(), asOfDate);
 financialPatterns.Save(propertyTaxProposal.Outflow, checking.Id);
 earMarkPatterns.Save(propertyTaxProposal.Plan);
@@ -203,7 +203,7 @@ Console.WriteLine($"Bill: County Property Tax — real Propose() output, semi-an
 // rather than Property Tax's more dramatic one, so the warning's own
 // scaling (a small gap reads as a small gap, not just "always huge") has a
 // real example too.
-var hoaAssessment = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "HOA Assessment", DatePattern = Monthly(asOfDate.AddDays(35), interval: 3), Amount = -400m, Priority = 7 });
+var hoaAssessment = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "HOA Assessment", DatePattern = Monthly(asOfDate.AddDays(35), interval: 3), Amount = -400m, Priority = 4 });
 var hoaProposal = AllocationPlanProposer.Propose(hoaAssessment, financialPatterns.GetAll(), asOfDate);
 financialPatterns.Save(hoaProposal.Outflow, checking.Id);
 earMarkPatterns.Save(hoaProposal.Plan);
@@ -219,7 +219,7 @@ Console.WriteLine($"Bill: HOA Assessment — real Propose() output, quarterly, f
 // enough — annual bill, biweekly paycheck, due date soon — proportionally
 // even worse than Property Tax despite being a much smaller number, since
 // at most one or two paydays can possibly land before it either way.
-var membershipDues = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Warehouse Club Membership", DatePattern = Monthly(asOfDate.AddDays(22), interval: 12), Amount = -150m, Priority = 3, Mandatory = false });
+var membershipDues = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Warehouse Club Membership", DatePattern = Monthly(asOfDate.AddDays(22), interval: 12), Amount = -150m, Priority = 2, Mandatory = false });
 var membershipProposal = AllocationPlanProposer.Propose(membershipDues, financialPatterns.GetAll(), asOfDate);
 financialPatterns.Save(membershipProposal.Outflow, checking.Id);
 earMarkPatterns.Save(membershipProposal.Plan);
@@ -236,7 +236,7 @@ Console.WriteLine($"Bill: Warehouse Club Membership — real Propose() output, a
 // open-ended (farUntil) on purpose: BreakOff's own PatternTruncation.EndOn
 // is what actually imposes the 2026-06-30 end, the same as a real "Change
 // starting on a date" action would.
-var carLease1 = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Car Lease Payment", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -420m, Priority = 6 });
+var carLease1 = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Car Lease Payment", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -420m, Priority = 3 });
 var carLease1Plan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = carLease1.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -420m }, carLease1);
 
 var carLeaseBreakOff = BreakOffFactory.BreakOff(new BreakOffRequest
@@ -285,15 +285,15 @@ Console.WriteLine($"Financial patterns so far: {financeId - 1} (bills, paycheck)
 
 // ---- One-time goals --------------------------------------------------
 
-var tripToJapan = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Trip to Japan", DatePattern = OneTime(new DateOnly(2026, 12, 1), activeFrom: new DateOnly(2026, 6, 5)), Amount = -3200m, Priority = 5 });
+var tripToJapan = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Trip to Japan", DatePattern = OneTime(new DateOnly(2026, 12, 1), activeFrom: new DateOnly(2026, 6, 5)), Amount = -3200m, Priority = 3 });
 financialPatterns.Save(tripToJapan, savings.Id);
 
-var carRepair = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Emergency: Car repair", DatePattern = OneTime(asOfDate.AddDays(5), activeFrom: asOfDate.AddDays(-11)), Amount = -600m, Priority = 9 });
+var carRepair = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Emergency: Car repair", DatePattern = OneTime(asOfDate.AddDays(5), activeFrom: asOfDate.AddDays(-11)), Amount = -600m, Priority = 5 });
 financialPatterns.Save(carRepair, checking.Id);
 
 // Deliberately left without a savings plan below — the "goal exists, no plan
 // yet" state.
-var newLaptop = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "New Laptop", DatePattern = OneTime(new DateOnly(2026, 10, 15)), Amount = -1400m, Priority = 4 });
+var newLaptop = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "New Laptop", DatePattern = OneTime(new DateOnly(2026, 10, 15)), Amount = -1400m, Priority = 2 });
 financialPatterns.Save(newLaptop, checking.Id);
 
 // A user who DECLINED the proposed plan at creation time — a real,
@@ -301,7 +301,7 @@ financialPatterns.Save(newLaptop, checking.Id);
 // not a hand-set $0 plan. Reads as short from the moment it exists — check
 // the printed report below for which category it actually lands in.
 // Doubles as the "$0, nothing to explain" starting-point control case.
-var homeDownPayment = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Home Down Payment", DatePattern = OneTime(new DateOnly(2027, 4, 1)), Amount = -15000m, Priority = 5 });
+var homeDownPayment = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Home Down Payment", DatePattern = OneTime(new DateOnly(2027, 4, 1)), Amount = -15000m, Priority = 3 });
 var homeProposal = AllocationPlanProposer.ProposeEmpty(homeDownPayment, asOfDate);
 financialPatterns.Save(homeProposal.Outflow, savings.Id);
 earMarkPatterns.Save(homeProposal.Plan);
@@ -311,7 +311,7 @@ earMarkPatterns.Save(homeProposal.Plan);
 // reasoning, added manually with no automatic reason recorded. This is the
 // third starting-point case (the first two are the DMV Registration and Car
 // Lease scenarios above).
-var emergencyFundReserve = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Emergency Fund Reserve", Description = "Emergency fund top-up", DatePattern = Monthly(asOfDate, until: new DateOnly(2027, 8, 1)), Amount = -100m, Priority = 3, Mandatory = false });
+var emergencyFundReserve = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Emergency Fund Reserve", Description = "Emergency fund top-up", DatePattern = Monthly(asOfDate, until: new DateOnly(2027, 8, 1)), Amount = -100m, Priority = 2, Mandatory = false });
 financialPatterns.Save(emergencyFundReserve, checking.Id);
 var emergencyPlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = emergencyFundReserve.FinanceId, DatePattern = Monthly(asOfDate, until: new DateOnly(2027, 8, 1)), Amount = -100m }, emergencyFundReserve);
 earMarkPatterns.Save(emergencyPlan);
@@ -411,7 +411,7 @@ Console.WriteLine("Manual earmarks: +$200 on Trip to Japan (Jul 4), +$50 on Car 
 // the 15th) and save — the schedule itself changing makes ConsolidationNeeded
 // true, so the popup should ANNOUNCE the combine rather than ask, and the
 // two plans should become one under a new finance id once saved.
-var storageUnit = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Storage Unit Rental", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -50m, Priority = 4, Mandatory = false });
+var storageUnit = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Storage Unit Rental", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -50m, Priority = 2, Mandatory = false });
 financialPatterns.Save(storageUnit, checking.Id);
 var storageUnitPlanA = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = storageUnit.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -35m }, storageUnit);
 earMarkPatterns.Save(storageUnitPlanA);
@@ -426,7 +426,7 @@ Console.WriteLine("Bill: Storage Unit Rental — TWO concurrent savings plans, r
 // successor plan can be shaped several ways (Recommended / keep the same
 // schedule / keep the same amount), so the confirmation offers that choice, and
 // the past top-up gives the break-off a real carried-over balance to reflect.
-var cloudStorage = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Cloud Storage Plan", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -12m, Priority = 2, Mandatory = false });
+var cloudStorage = FinancialPattern.Create(new FinancialPatternOptions { FinanceId = NextFinanceId(), Source = "Cloud Storage Plan", DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -12m, Priority = 1, Mandatory = false });
 financialPatterns.Save(cloudStorage, checking.Id);
 var cloudStoragePlan = EarMarkPattern.Create(new EarMarkPatternOptions { FinanceId = cloudStorage.FinanceId, DatePattern = Monthly(new DateOnly(2026, 1, 1)), Amount = -20m }, cloudStorage);
 earMarkPatterns.Save(cloudStoragePlan);
