@@ -128,7 +128,7 @@
                             <StackPanel Margin="0,0,10,0">
                                 <TextBlock Text="Priority"/>
                                 <TextBox x:Name="PriorityTextBox" Text="5" Margin="0,2,0,0" TextChanged="OnFieldChanged"/>
-                                <TextBlock Text="1 = lowest, 5 = highest" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                <TextBlock Text="1 = lowest, 5 = highest       Determines where funds stay when cash is tight" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
                             </StackPanel>
                             <StackPanel/>
                         </UniformGrid>
