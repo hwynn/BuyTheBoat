@@ -613,13 +613,13 @@ public static class TransactionLogBookFactory
 
                     var unfloored = jarValues[financeId] + earMarkEvent.ExpectedAmount;
 
-                    // A clamped event whose user-entered portion is a withdrawal
-                    // means the user's stated intent didn't fully happen — only
-                    // what the jar held actually moved. Reported so the UI can
-                    // flag it in place. System-only events never over-pull
-                    // (deallocation's W = Max(-Fa, N) is bounded), so this
-                    // only fires on manual withdrawals.
-                    if (unfloored < 0m && earMarkEvent.ExplicitAmount is < 0m)
+                    // A manual withdrawal bigger than what the jar held means the
+                    // user's stated intent didn't fully happen — only what the
+                    // jar held actually moved. Reported so the UI can flag it in
+                    // place. Judged on the user-entered portion alone, since a
+                    // release or give-back may be merged into the same event.
+                    if (earMarkEvent.ExplicitAmount is { } explicitAmount && explicitAmount < 0m
+                        && jarValues[financeId] + explicitAmount < 0m)
                     {
                         flooredManualEarmarks.Add((date, financeId));
                     }
@@ -628,10 +628,9 @@ public static class TransactionLogBookFactory
                     // specific finance id's OWN release (its goal/bill
                     // occurrence today, per ReleasedFinanceIds — not some
                     // unrelated jar a deallocation day happened to raid)
-                    // wanted to pay out more than the jar held. A release is
-                    // a system event (ExplicitAmount == 0m), distinguishing
-                    // it from a manual withdrawal above.
-                    if (unfloored < 0m && earMarkEvent.ExplicitAmount is 0m && !earMarkEvent.RepeatedEarmark
+                    // wanted to pay out more than the jar held, including any
+                    // manual earmark merged into the same event.
+                    if (unfloored < 0m && !earMarkEvent.RepeatedEarmark
                         && releaseResult.ReleasedFinanceIds.Contains(financeId))
                     {
                         underfundedReleases.Add((date, financeId));
@@ -672,6 +671,7 @@ public static class TransactionLogBookFactory
             EnsureJarForEveryActivePlan(date, fundJars, input.EarMarkPatterns);
             EnsureOneCushionJar(date, fundJars);
             EnsureOneRepeatedEarmarkPerJar(date, earMarkEvents);
+            EnsureOneIsolatedEarmarkPerJar(date, earMarkEvents);
 
             balanceRecord[date] = new BalanceSnapshot
             {
@@ -803,6 +803,9 @@ public static class TransactionLogBookFactory
                 Skippable: !patternsById[financeId].Mandatory));
         }
 
+        // DIVERGENCE(release-outside-plan): 3.13.8.a2 keeps an earmark inside its earmark pattern's dates, but a savings plan can end before its bill or goal is due.
+        // The isolated earmarks made below (releases and deallocation give-backs) may fall anywhere in the bill or goal's active span instead.
+        // User-entered manual earmarks still stay inside the plan's own dates (ManualEarmark.Create).
         var isDeallocationDay =
             DeallocationCalculator.IsDeallocationDay(previousExpected, jars, pairedTransactions, unpaired);
         if (isDeallocationDay)
@@ -822,14 +825,7 @@ public static class TransactionLogBookFactory
             // full, exactly as before deallocation existed.
             foreach (var paired in pairedTransactions)
             {
-                earMarkEvents.Add(new EarMarkEvent
-                {
-                    FinanceId = paired.FinanceId,
-                    EarmarkDate = date,
-                    RepeatedEarmark = false,
-                    ExpectedAmount = -Math.Abs(paired.Amount),
-                    ExplicitAmount = 0m,
-                });
+                MergeOrAppendIsolatedEarmark(earMarkEvents, paired.FinanceId, -Math.Abs(paired.Amount), date);
             }
         }
 
@@ -933,6 +929,23 @@ public static class TransactionLogBookFactory
             {
                 throw new DuplicateRepeatedEarmarkException(
                     $"Finance id {earMarkEvent.FinanceId} has more than one repeated earmark on {date:MMM d, yyyy}.",
+                    nameof(earMarkEvents));
+            }
+        }
+    }
+
+    /// <summary>[CALC] Stops the forecast if a day has two one-off earmarks for the same jar (the safety cushion included) instead of one merged earmark.</summary>
+    /// <param name="date">The snapshot's day.</param>
+    /// <param name="earMarkEvents">That day's earmark events.</param>
+    internal static void EnsureOneIsolatedEarmarkPerJar(DateOnly date, IReadOnlyList<EarMarkEvent> earMarkEvents)
+    {
+        var seen = new HashSet<int?>();
+        foreach (var earMarkEvent in earMarkEvents)
+        {
+            if (!earMarkEvent.RepeatedEarmark && !seen.Add(earMarkEvent.FinanceId))
+            {
+                throw new DuplicateIsolatedEarmarkException(
+                    $"{(earMarkEvent.FinanceId is { } id ? $"Finance id {id}" : "The safety cushion")} has more than one isolated earmark on {date:MMM d, yyyy}.",
                     nameof(earMarkEvents));
             }
         }

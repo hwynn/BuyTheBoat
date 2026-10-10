@@ -99,8 +99,13 @@ itself):
   decide the order.
 - **Release** a goal's jar on its due date (the balance drops toward zero as the goal is paid).
 - **Floor** a jar at zero on any day it would go negative (flagged in place).
-- **Merge** an implicit earmark into a manual one on the same jar/day — `ExplicitAmount` keeps what the
-  user actually entered underneath.
+- **Merge** an implicit earmark (a release or a deallocation give-back) into a manual one on the same
+  jar/day — `ExplicitAmount` keeps what the user actually entered underneath. The "withdrawal was more than
+  the jar held" and "release came up short" flags judge the user's amount and the release separately.
+- **Track money owed** on each forecast day (`ExpectedUnpaidAmount`) when bills outrun the balance;
+  incoming money pays it down before anything counts as free.
+- **Refuse** a forecast whose end date isn't after its as-of date, and **stop** a forecast with a logged
+  error if any day breaks a checked assumption (see `AssumptionViolationException.cs`).
 - **Hand a jar balance across a break-off**, shown and editable on the confirm screen.
 - **Auto-renew** an open-ended pattern's rule every `SegmentYears` — silent, with a "(renewed *date*)"
   trace appended to the description.

@@ -3583,7 +3583,7 @@ public class TransactionLogBookFactoryTests
         scaledJar.GlutSurplus.ShouldBe(300m); // exactly 2x — proportionally identical, nothing lost or distorted
     }
 
-    [Fact(Skip = "Known bug: a normal-day release is appended instead of merged, leaving two isolated earmarks for one jar (3.13.8.1.a1).")]
+    [Fact]
     public void A_manual_earmark_on_a_bills_due_day_shares_one_isolated_earmark_with_the_release()
     {
         // 3.13.8.1.a1: only one isolated earmark with finance_id x can exist on a single day.
@@ -3625,6 +3625,50 @@ public class TransactionLogBookFactoryTests
         var snapshot = SnapshotOn(result, dueDay);
         snapshot.IsDeallocationDay.ShouldBeFalse();
         snapshot.EarMarkEvents.Count(e => e.FinanceId == bill.FinanceId && !e.RepeatedEarmark).ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData(-30, false)]  // the jar's $100 covers the withdrawal, but not the withdrawal plus the $100 release
+    [InlineData(-150, true)]  // the withdrawal alone is more than the jar's $100
+    public void A_manual_withdrawal_merged_into_a_release_flags_each_shortfall_on_its_own(int withdrawal, bool withdrawalOversized)
+    {
+        // The release merges into the manual earmark (3.13.8.1.a1), so the two flags judge the user's portion and the release separately.
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 4004,
+            Source = "Internet",
+            Amount = -100m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [15],
+                DtStart = new DateOnly(2025, 1, 15),
+                Until = new DateOnly(2025, 12, 15),
+                ActiveFrom = new DateOnly(2025, 1, 1),
+            }),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = bill.FinanceId,
+                Amount = -100m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    DtStart = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 1),
+                }),
+            },
+            bill);
+        var dueDay = new DateOnly(2025, 3, 15); // the jar holds $100 from the Mar 1 contribution
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m, asOfDate: new DateOnly(2025, 1, 1), horizonEndDate: new DateOnly(2025, 4, 30),
+            financialPatterns: [bill], earMarkPatterns: [plan], manualEarmarks: [Manual(plan, dueDay, withdrawal)]));
+
+        result.PlanHealthStates.ShouldHaveSingleItem().UnderfundedReleaseDates.ShouldContain(dueDay);
+        result.FlooredManualEarmarks.Contains((dueDay, bill.FinanceId)).ShouldBe(withdrawalOversized);
     }
 
     // 3.13.5.a1: a real forecast always builds a jar for every plan, so these call the guard directly with a jar list missing one.
@@ -3730,19 +3774,29 @@ public class TransactionLogBookFactoryTests
         }
     }
 
-    [Fact(Skip = "Known gap: when a savings plan ends before its bill or goal, the release still lands on the bill or goal date, outside the plan's dates (3.13.8.a2).")]
-    public void Every_isolated_earmark_falls_inside_its_savings_plans_dates()
+    [Fact]
+    public void Every_isolated_earmark_falls_inside_the_dates_it_is_allowed()
     {
         // 3.13.8.a2: an earmark cannot exist outside the date_pattern of its earmark pattern.
+        // DIVERGENCE(release-outside-plan): the forecast's own releases and give-backs (no user-entered amount) only need to be inside the bill or goal's active span.
+        // The sweep's bill plan ends Dec 1 while the bill is due Dec 15, so its last release exercises the divergence.
         var (page, plans) = SweepForecast();
 
         foreach (var snapshot in page.BalanceRecord.Values)
         {
             foreach (var earmark in IsolatedEarmarksWithAJar(snapshot))
             {
-                plans.ShouldContain(
-                    plan => plan.FinanceId == earmark.FinanceId && plan.DatePattern.ActiveSpanContains(earmark.EarmarkDate),
-                    $"finance id {earmark.FinanceId}, {earmark.ExpectedAmount} on {earmark.EarmarkDate}");
+                var where = $"finance id {earmark.FinanceId}, {earmark.ExpectedAmount} on {earmark.EarmarkDate}";
+                if (earmark.ExplicitAmount is 0m)
+                {
+                    page.FinancePatterns.ShouldContain(
+                        pattern => pattern.FinanceId == earmark.FinanceId && pattern.DatePattern.ActiveSpanContains(earmark.EarmarkDate), where);
+                }
+                else
+                {
+                    plans.ShouldContain(
+                        plan => plan.FinanceId == earmark.FinanceId && plan.DatePattern.ActiveSpanContains(earmark.EarmarkDate), where);
+                }
             }
         }
     }
@@ -3953,5 +4007,24 @@ public class TransactionLogBookFactoryTests
         // A repeated and an isolated earmark on the same jar are allowed together.
         Should.NotThrow(() =>
             TransactionLogBookFactory.EnsureOneRepeatedEarmarkPerJar(new DateOnly(2025, 6, 1), [TestEarmark(1, repeated: true), TestEarmark(1, repeated: false)]));
+    }
+
+    [Fact]
+    public void Two_isolated_earmarks_for_one_jar_on_one_day_are_rejected()
+    {
+        // 3.13.8.1.a1: only one isolated earmark with finance_id x can exist on a single day.
+        var day = new DateOnly(2025, 6, 1);
+        var cushionFill = TestEarmark(1, repeated: false) with { FinanceId = null };
+
+        Should.Throw<DuplicateIsolatedEarmarkException>(() =>
+            TransactionLogBookFactory.EnsureOneIsolatedEarmarkPerJar(day, [TestEarmark(1, repeated: false), TestEarmark(1, repeated: false)]))
+            .AssumptionId.ShouldBe("3.13.8.1.a1");
+
+        Should.Throw<DuplicateIsolatedEarmarkException>(() =>
+            TransactionLogBookFactory.EnsureOneIsolatedEarmarkPerJar(day, [cushionFill, cushionFill]));
+
+        // One isolated earmark per jar, plus a repeated one on the same jar, is fine.
+        Should.NotThrow(() =>
+            TransactionLogBookFactory.EnsureOneIsolatedEarmarkPerJar(day, [TestEarmark(1, repeated: false), TestEarmark(2, repeated: false), TestEarmark(1, repeated: true), cushionFill]));
     }
 }

@@ -90,3 +90,10 @@ public sealed class CushionJarCountException(string message, string? paramName)
 /// </summary>
 public sealed class DuplicateRepeatedEarmarkException(string message, string? paramName)
     : InternalAssumptionViolationException("3.13.8.1.a2", message, paramName);
+
+/// <summary>
+/// 3.13.8.1.a1: only one isolated earmark with finance_id x can exist on a single day.
+/// Checked on every snapshot day of a forecast, safety cushion included.
+/// </summary>
+public sealed class DuplicateIsolatedEarmarkException(string message, string? paramName)
+    : InternalAssumptionViolationException("3.13.8.1.a1", message, paramName);

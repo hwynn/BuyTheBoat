@@ -42,6 +42,8 @@ themselves live in the code and `planning/mockups/settled-designs.html`.
 
 ## Tier 4 — The original assumptions (look things up; don't read cover-to-cover)
 
+- **Assumptions enforced in code** — where a check is cheap and tested, a broken assumption throws its own exception type, listed in `src/BuyTheBoat.Domain/AssumptionViolationException.cs`. Each type's doc line quotes the assumption's full text and its `AssumptionId` names it, which `ErrorLog` writes to the log. Types under `InternalAssumptionViolationException` guard the forecast's own logic (the user sees a generic error line); the others reject bad input (the user sees the message). Most assumptions are instead checked by tests — the day-by-day "assumption sweep" tests in `TransactionLogBookFactoryTests` cite each one by ID — or enforced by the compiler (non-nullable `required` properties).
+
 - **[03-assumptions-glossary.md](03-assumptions-glossary.md)** — every original assumption, verbatim, in 19 chapters. Reference when you need the exact wording or intent of a specific rule (e.g. `3.13.5.4.a1`, the milestone formula).
 - **[06-assumption-dependency-graph.md](06-assumption-dependency-graph.md)** — the assumptions as an acyclic dependency graph plus the cascade "process regions." Use for any *dependency* question ("what must hold before X is valid").
 - **[05-assumption-chart-full-text.md](05-assumption-chart-full-text.md)** — verbatim transcription of the assumption-chart boxes; the source companion to 03 and 06.
