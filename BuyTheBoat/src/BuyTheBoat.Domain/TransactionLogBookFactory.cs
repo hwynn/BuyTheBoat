@@ -32,6 +32,12 @@ public static class TransactionLogBookFactory
     /// <param name="options">The patterns, seed balances, and date range to forecast — either the flat single-account fields, or a per-account breakdown via Accounts.</param>
     public static ForecastResult CreateForecast(ForecastOptions options)
     {
+        if (options.HorizonEndDate <= options.AsOfDate)
+        {
+            throw new ForecastWindowBackwardsException(
+                "The forecast's end date must be after its as-of date.", nameof(options));
+        }
+
         var accountInputs = ResolveAccountInputs(options);
 
         // One page per account, each its own independent cascade.

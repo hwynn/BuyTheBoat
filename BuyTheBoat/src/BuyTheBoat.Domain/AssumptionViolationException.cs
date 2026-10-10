@@ -56,6 +56,14 @@ public sealed class DuplicateFinanceIdException(string message, string? paramNam
     : AssumptionViolationException("3.10.a2", message, paramName);
 
 /// <summary>
+/// 2.1.a1: start_date cannot be None. Must be before end_date.
+/// 3.2.a2: start_date must be a date before end_date
+/// Checked when a forecast is created; a forecast is one page whose start is the as-of date and whose end is the horizon end date.
+/// </summary>
+public sealed class ForecastWindowBackwardsException(string message, string? paramName)
+    : AssumptionViolationException("2.1.a1 / 3.2.a2", message, paramName);
+
+/// <summary>
 /// 3.13.5.a1: if the day exists within EarMarkPattern A's date_patern(any day between start and end), a fund jar with A's finance_id must exist on that day.
 /// Checked on every snapshot day of a forecast; the forecast builds jars from the same plans it checks, so this only fires if that link breaks.
 /// </summary>
