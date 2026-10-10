@@ -106,6 +106,9 @@ itself):
   incoming money pays it down before anything counts as free.
 - **Refuse** a forecast whose end date isn't after its as-of date, and **stop** a forecast with a logged
   error if any day breaks a checked assumption (see `AssumptionViolationException.cs`).
-- **Hand a jar balance across a break-off**, shown and editable on the confirm screen.
+- **Hand a jar balance across a break-off**, shown and editable on the confirm screen. The amount becomes the
+  successor plan's `StartingAllocation`, reserved on the successor's start date as the old jar closes.
+- **Open and close jars** with their bill or goal: a jar opens when the bill or goal becomes active and closes
+  once it ends, its leftover returning to free funds silently (no earmark).
 - **Auto-renew** an open-ended pattern's rule every `SegmentYears` — silent, with a "(renewed *date*)"
   trace appended to the description.

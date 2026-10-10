@@ -97,3 +97,10 @@ public sealed class DuplicateRepeatedEarmarkException(string message, string? pa
 /// </summary>
 public sealed class DuplicateIsolatedEarmarkException(string message, string? paramName)
     : InternalAssumptionViolationException("3.13.8.1.a1", message, paramName);
+
+/// <summary>
+/// 3.13.5.a6: a fund jar can only exist on days that fall within its finance pattern's active span (from the finance pattern's start, or its lead-in if it has one, through its until) (unless the fund jar's finance_id is None)
+/// Checked on the starting snapshot and every snapshot day of a forecast, in place of 3.13.5.a2, which DIVERGENCE(jar-lifetime) relaxes.
+/// </summary>
+public sealed class FundJarOutsideFinancePatternException(string message, string? paramName)
+    : InternalAssumptionViolationException("3.13.5.a6", message, paramName);

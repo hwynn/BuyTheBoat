@@ -2219,13 +2219,15 @@ public class TransactionLogBookFactoryTests
         var result = TransactionLogBookFactory.CreateForecast(Options(
             startingBalance: 20000m,
             asOfDate: new DateOnly(2024, 6, 1), // before the earmark's own Start (2025-01-01)
-            horizonEndDate: new DateOnly(2024, 6, 30),
+            horizonEndDate: new DateOnly(2025, 1, 31),
             financialPatterns: [retirement],
             earMarkPatterns: [earmark]));
 
-        // Before the earmark's own contribution schedule has even started —
-        // the jar already reads the manually-entered $5000, not $0.
-        Jar(SnapshotOn(result, new DateOnly(2024, 6, 1)), 70).ShouldBe(5000m);
+        // DIVERGENCE(jar-lifetime): no jar exists before the goal is active, so the starting allocation isn't reserved yet.
+        SnapshotOn(result, new DateOnly(2024, 6, 1)).FundJars.ShouldNotContain(jar => jar.FinanceId == 70);
+
+        // The jar opens with the starting allocation, not $0, plus that day's first $100 contribution.
+        Jar(SnapshotOn(result, new DateOnly(2025, 1, 1)), 70).ShouldBe(5100m);
 
         var shortfall = result.GoalShortfalls.ShouldHaveSingleItem();
         shortfall.AmountAllocatedByDueDate.ShouldBe(5000m + 100m * 60); // starting + 60 monthly installments
@@ -2639,10 +2641,12 @@ public class TransactionLogBookFactoryTests
     // purchase and the savings schedule are both parked far in the future, so
     // the jar just sits at `alreadySaved` until something drains it. Lets a
     // deallocation scenario start from a known jar balance.
+    // Both are active from 2020 (a lead-in), since a jar can only hold money while its goal is active (DIVERGENCE(jar-lifetime)).
     private static (FinancialPattern Goal, EarMarkPattern Earmark) ParkedGoal(
         int financeId, int priority, decimal alreadySaved, string label)
     {
         var farFuture = new DateOnly(2030, 1, 1);
+        var savingSince = new DateOnly(2020, 1, 1);
         var goal = FinancialPattern.Create(new FinancialPatternOptions
         {
             FinanceId = financeId,
@@ -2655,6 +2659,7 @@ public class TransactionLogBookFactoryTests
             {
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = farFuture,
+                ActiveFrom = savingSince, // the jar has been open since well before any forecast
                 Count = 1,
             }),
         });
@@ -2668,6 +2673,7 @@ public class TransactionLogBookFactoryTests
                 {
                     Frequency = RecurrenceFrequency.Yearly,
                     DtStart = farFuture,
+                    ActiveFrom = savingSince, // the jar has been open since well before any forecast
                     Count = 1,
                 }),
             },
@@ -3936,6 +3942,133 @@ public class TransactionLogBookFactoryTests
         SnapshotOn(result, new DateOnly(2025, 4, 20)).ExpectedUnpaidAmount.ShouldBe(1000m);  // three more months 300 short each
         SnapshotOn(result, new DateOnly(2025, 4, 25)).ExpectedUnpaidAmount.ShouldBe(0m);     // the bonus clears it
         SnapshotOn(result, new DateOnly(2025, 4, 25)).ExpectedFreeAmount.ShouldBe(2000m);    // only what's left after the debt is free
+    }
+
+    [Fact]
+    public void Jars_exist_only_within_their_bill_or_goals_active_dates()
+    {
+        // 3.13.5.a6: a fund jar can only exist within its finance pattern's active span.
+        // The sweep's bill ends Dec 15, 2025 and its goal on Jun 1, 2026, well before the horizon, so both jars have to close.
+        var (page, _) = SweepForecast();
+
+        foreach (var (date, snapshot) in page.BalanceRecord.Prepend(new(SweepAsOf, page.InitialSnapshot)))
+        {
+            foreach (var jar in snapshot.FundJars.Where(jar => jar.FinanceId is not null))
+            {
+                page.FinancePatterns.ShouldContain(
+                    pattern => pattern.FinanceId == jar.FinanceId && pattern.DatePattern.ActiveSpanContains(date),
+                    $"finance id {jar.FinanceId} on {date}");
+            }
+        }
+
+        page.BalanceRecord.Values.Last().FundJars.ShouldHaveSingleItem().FinanceId.ShouldBeNull(); // only the cushion is left
+    }
+
+    private static RecurrenceRule MonthlyOn(int day, DateOnly start, DateOnly until, DateOnly? activeFrom = null) =>
+        RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = RecurrenceFrequency.Monthly,
+            ByMonthDay = [day],
+            DtStart = start,
+            Until = until,
+            ActiveFrom = activeFrom,
+        });
+
+    // A $100 gym bill on the 15th, active Jan 1 – Jun 30, 2025, whose plan saves $150 on the 1st (Jan – Jun).
+    // The jar grows $50 a month and holds $300 after the Jun 15 payment.
+    private static (FinancialPattern Bill, EarMarkPattern Plan) GymThroughJune()
+    {
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 7001,
+            Source = "Gym",
+            Amount = -100m,
+            DatePattern = MonthlyOn(15, new DateOnly(2025, 1, 15), new DateOnly(2025, 6, 30), activeFrom: new DateOnly(2025, 1, 1)),
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = bill.FinanceId,
+                Amount = -150m,
+                DatePattern = MonthlyOn(1, new DateOnly(2025, 1, 1), new DateOnly(2025, 6, 1)),
+            },
+            bill);
+        return (bill, plan);
+    }
+
+    [Fact]
+    public void A_jar_closes_after_its_bill_ends_and_its_leftover_becomes_free()
+    {
+        // DIVERGENCE(jar-lifetime): with no successor, the jar's leftover returns to free funds.
+        var (bill, plan) = GymThroughJune();
+        var paycheck = OneOffPattern("Paycheck", 500m, new DateOnly(2025, 7, 20));
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m, asOfDate: new DateOnly(2025, 1, 1), horizonEndDate: new DateOnly(2025, 7, 31),
+            financialPatterns: [bill, paycheck], earMarkPatterns: [plan]));
+
+        var lastPayment = SnapshotOn(result, new DateOnly(2025, 6, 15));
+        Jar(lastPayment, bill.FinanceId).ShouldBe(300m);
+        lastPayment.ExpectedFreeAmount.ShouldBe(4100m); // 5000 - six $100 payments - $300 still in the jar
+
+        var afterTheEnd = SnapshotOn(result, new DateOnly(2025, 7, 20));
+        afterTheEnd.FundJars.ShouldNotContain(jar => jar.FinanceId == bill.FinanceId);
+        afterTheEnd.EarMarkEvents.ShouldBeEmpty(); // released silently, not as an earmark
+        afterTheEnd.ExpectedFreeAmount.ShouldBe(4900m); // 4100 + the $300 leftover + the $500 paycheck
+    }
+
+    [Fact]
+    public void A_break_off_moves_the_old_jars_balance_to_the_new_jar_instead_of_reserving_it_twice()
+    {
+        // DIVERGENCE(jar-lifetime): the successor's jar opens with its StartingAllocation on its own start date, as the old jar closes.
+        var (bill, plan) = GymThroughJune();
+        var successor = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 7002,
+            Source = "Gym",
+            Amount = -100m,
+            DatePattern = MonthlyOn(15, new DateOnly(2025, 7, 15), new DateOnly(2025, 12, 15), activeFrom: new DateOnly(2025, 7, 1)),
+        });
+        var successorPlan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = successor.FinanceId,
+                Amount = -100m,
+                StartingAllocation = 300m, // the old jar's balance on the cut date
+                DatePattern = MonthlyOn(1, new DateOnly(2025, 8, 1), new DateOnly(2025, 12, 1), activeFrom: new DateOnly(2025, 7, 1)),
+            },
+            successor);
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m, asOfDate: new DateOnly(2025, 1, 1), horizonEndDate: new DateOnly(2025, 7, 31),
+            financialPatterns: [bill, successor], earMarkPatterns: [plan, successorPlan]));
+
+        foreach (var entry in result.GetTimeline().Where(entry => entry.Date < new DateOnly(2025, 7, 1)))
+        {
+            entry.Snapshot.FundJars.ShouldNotContain(jar => jar.FinanceId == successor.FinanceId);
+        }
+
+        SnapshotOn(result, new DateOnly(2025, 6, 15)).ExpectedFreeAmount.ShouldBe(4100m);
+
+        var firstNewPayment = SnapshotOn(result, new DateOnly(2025, 7, 15));
+        firstNewPayment.FundJars.ShouldNotContain(jar => jar.FinanceId == bill.FinanceId);
+        Jar(firstNewPayment, successor.FinanceId).ShouldBe(200m); // opened with $300, then paid $100
+        firstNewPayment.ExpectedFreeAmount.ShouldBe(4100m); // the payment came out of the jar; nothing was reserved twice
+    }
+
+    [Fact]
+    public void A_jar_outside_its_bill_or_goals_active_dates_is_rejected()
+    {
+        // 3.13.5.a6: a real forecast never does this, so this calls the guard directly.
+        var (bill, _) = GymThroughJune();
+        var patternsById = new Dictionary<int, FinancialPattern> { [bill.FinanceId] = bill };
+
+        Should.Throw<FundJarOutsideFinancePatternException>(() =>
+            TransactionLogBookFactory.EnsureJarsOnlyWithinTheirFinancePattern(new DateOnly(2025, 7, 1), [TestJar(bill.FinanceId), TestJar(null)], patternsById))
+            .AssumptionId.ShouldBe("3.13.5.a6");
+
+        Should.NotThrow(() =>
+            TransactionLogBookFactory.EnsureJarsOnlyWithinTheirFinancePattern(new DateOnly(2025, 6, 30), [TestJar(bill.FinanceId), TestJar(null)], patternsById));
     }
 
     [Fact]

@@ -17,7 +17,7 @@ The `{...}` line lists the other assumption IDs (by their bare ID) that must hol
 - **Part I — Foundational class assumptions** *(source: `a02.txt`)*: [Ch.1 TransactionLogPage](#chapter-1-transactionlogpage) · [Ch.2 FinancialPattern](#chapter-2-financialpattern) · [Ch.3 EarMarkPattern](#chapter-3-earmarkpattern) · [Ch.4 ActualTransaction](#chapter-4-actualtransaction) · [Ch.5 ExpectedTransaction](#chapter-5-expectedtransaction) · [Ch.6 EarmarkEvent](#chapter-6-earmarkevent) · [Ch.7 BalanceSnapshot](#chapter-7-balancesnapshot) · [Ch.8 FundJar](#chapter-8-fundjar)
 - **Part II — AccountTransactionPage internal consistency** *(source: `a03.txt`)*: [Ch.9 Identity, bounds & top-level summary](#chapter-9-page-identity-bounds--top-level-maintenance-summary) · [Ch.10 Initial Snapshot](#chapter-10-initial-snapshot) · [Ch.11 Balance Record](#chapter-11-balance-record) · [Ch.12 full_amount & expected amounts](#chapter-12-balance_recordcfull_amount--expected-amounts) · [Ch.13 Fund Jars](#chapter-13-fund-jars) · [Ch.14 Actual Transactions](#chapter-14-actual-transactions) · [Ch.15 Expected Transactions](#chapter-15-expected-transactions) · [Ch.16 Earmarks](#chapter-16-earmarks)
 - **Part III — TransactionLogBook & cross-page consistency** *(source: `a01.txt`)*: [Ch.17 Pattern continuity across pages](#chapter-17-log_pages-finance-pattern--earmark-pattern-continuity-across-pages) · [Ch.18 Derived calcs & initial-snapshot inheritance](#chapter-18-accounttransactionpage-derived-calculations--initial-snapshot-inheritance) · [Ch.19 Expected/Actual pairing completeness](#chapter-19-expectedactual-transaction-pairing-completeness)
-- **Part IV — New assumptions added during the redesign (2026)** *(not verbatim — see its own header note)*: [Ch.20 Editing a finance pattern with existing history](#chapter-20-editing-a-finance-pattern-with-existing-history) · [Ch.21 Money owed when bills outrun the balance](#chapter-21-money-owed-when-bills-outrun-the-balance)
+- **Part IV — New assumptions added during the redesign (2026)** *(not verbatim — see its own header note)*: [Ch.20 Editing a finance pattern with existing history](#chapter-20-editing-a-finance-pattern-with-existing-history) · [Ch.21 Money owed when bills outrun the balance](#chapter-21-money-owed-when-bills-outrun-the-balance) · [Ch.22 A fund jar lives within its own finance pattern](#chapter-22-a-fund-jar-lives-within-its-own-finance-pattern)
 - [Appendix A: Reduction & merge candidates](#appendix-a-reduction--merge-candidates)
 - [Appendix B: Use cases](#appendix-b-use-cases)
 - [Appendix C: Formatting quirks preserved as-is](#appendix-c-formatting-quirks-preserved-as-is)
@@ -740,6 +740,28 @@ of history.
 > **Known gap.** `current_unpaid_expected` is pinned to 0 until actual transactions exist, so debt from bills
 > missed or underpaid *before* the as-of date is dropped (the entered balance can't show money owed to someone
 > else). Until then the program assumes the user starts from a positive balance with nothing owed.
+
+### Chapter 22: A fund jar lives within its own finance pattern
+
+*(Author, 2026-10-10. Code: `TransactionLogBookFactory.OpenAndCloseJars`, tagged `DIVERGENCE(jar-lifetime)`;
+enforced on every snapshot by `FundJarOutsideFinancePatternException`.)*
+
+```
+{1.2.3c.10.a4, 3.10.a3}
+-3.13.5.a6: a fund jar can only exist on days that fall within its finance pattern's active span (from the finance pattern's start, or its lead-in if it has one, through its until) (unless the fund jar's finance_id is None)
+```
+> **Why it's stated outright.** The original design only implied this, through three rules together:
+> `3.13.5.a2` (a jar stays within its earmark pattern's dates), `3.11.2.a2` (an earmark pattern stays within
+> its finance pattern's), and `3.13.5.a3` (obsolete jars are removed). `3.13.5.a2` is relaxed in the code —
+> a jar may outlive its savings plan, so its money can still be released on the bill or goal's own date — which
+> would leave the finance-pattern bound unstated. This assumption states it directly, and the code checks this
+> one in place of `3.13.5.a2`.
+>
+> **Lifetime, both ends.** `3.13.5.a1` says a jar must exist while its earmark pattern is active; this says it
+> may not exist outside its finance pattern. Between the two: a jar opens when its finance pattern becomes
+> active and closes once it ends. Whatever a closing jar still holds returns to free funds (no earmark).
+> A break-off successor is a new finance pattern, so it gets its own new jar, funded by its plan's
+> `StartingAllocation` on the successor's start date.
 
 ---
 

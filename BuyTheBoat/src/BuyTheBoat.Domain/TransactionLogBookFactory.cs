@@ -86,13 +86,14 @@ public static class TransactionLogBookFactory
         // per-occurrence walk and account-level free funds on a future date —
         // both turn out to be the same missing thread: each account's own
         // BalanceRecord already carries both (a jar's day-by-day state, and
-        // ExpectedFreeAmount) by this point in CreateForecast. Same source/
-        // iteration as jarsByFinanceId above, just keyed to the page instead
-        // of one jar, so IsWorthWarningAbout can walk it for any future date.
+        // ExpectedFreeAmount) by this point in CreateForecast. Keyed to the
+        // page holding each savings plan, so IsWorthWarningAbout can walk it
+        // for any future date — even for a goal whose jar isn't open today.
         var pageByFinanceId = accountForecasts
-            .SelectMany(account => account.Page.InitialSnapshot.FundJars
-                .Where(jar => jar.FinanceId is not null)
-                .Select(jar => (FinanceId: jar.FinanceId!.Value, account.Page)))
+            .SelectMany(account => account.Page.EarmarkPatterns
+                .Select(plan => plan.FinanceId)
+                .Distinct()
+                .Select(financeId => (FinanceId: financeId, account.Page)))
             .ToDictionary(pair => pair.FinanceId, pair => pair.Page);
 
         var book = new TransactionLogBook
@@ -451,6 +452,13 @@ public static class TransactionLogBookFactory
         // already partway through its schedule shows a non-zero jar today).
         var jarValues = new Dictionary<int, decimal>();
         var milestones = new Dictionary<int, decimal>();
+
+        // DIVERGENCE(jar-lifetime): 3.13.5.a2 keeps a jar inside its earmark pattern's dates; here a jar lives for its bill or goal's whole active span instead (3.13.5.a6), so it can outlive its savings plan.
+        // A jar is only open while that span covers the day: it opens when the span starts and closes on the first snapshot after the span ends, returning whatever it still holds to free funds.
+        // A break-off successor gets its own new jar, funded by its plan's StartingAllocation.
+        // Each plan's StartingAllocation lands on that plan's own active start, so a plan starting later doesn't reserve its money early.
+        var startingAllocationApplied = new HashSet<EarMarkPattern>(ReferenceEqualityComparer.Instance);
+
         // More than one EarMarkPattern may share a finance_id (a
         // "Restructure" predecessor + successor), so every plan funding a
         // goal is summed here — one jar/milestone value per finance_id, not
@@ -461,8 +469,17 @@ public static class TransactionLogBookFactory
         {
             var financeId = group.Key;
             var goal = patternsById[financeId];
+
+            // The bill or goal hasn't started yet, or has already ended: its jar isn't open on the as-of date.
+            if (!goal.DatePattern.ActiveSpanContains(asOfDate))
+            {
+                continue;
+            }
+
             var plans = group.ToList();
-            var contributed = plans.Sum(earmark =>
+            var startedPlans = plans.Where(plan => plan.DatePattern.ActiveStart <= asOfDate).ToList();
+            startingAllocationApplied.UnionWith(startedPlans);
+            var contributed = startedPlans.Sum(earmark =>
                     earmark.StartingAllocation
                     - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.ActiveStart, asOfDate).Count)
                 // Manual adjustments already made on/before the as-of date
@@ -537,6 +554,7 @@ public static class TransactionLogBookFactory
             EarMarkEvents = [],
         };
         EnsureOneCushionJar(null, initialSnapshot.FundJars);
+        EnsureJarsOnlyWithinTheirFinancePattern(asOfDate, initialSnapshot.FundJars, patternsById);
 
         // === CascadePageBalanceRecord role: the forward value pass ===
 
@@ -566,6 +584,9 @@ public static class TransactionLogBookFactory
             var isDeallocationDay = false;
             if (!isPageStartDate)
             {
+                // DIVERGENCE(jar-lifetime): must run before deallocation and today's events, so a closed jar is never drained and a newly opened one can take today's contributions.
+                OpenAndCloseJars(date, jarValues, milestones, input.EarMarkPatterns, patternsById, startingAllocationApplied);
+
                 // The safety cushion refills toward its standing target each day
                 // via a positive isolated null-id earmark, toward a fixed target with
                 // no due date and no reset (delta is 0 once at target). After a
@@ -669,6 +690,7 @@ public static class TransactionLogBookFactory
 
             var fundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: false);
             EnsureJarForEveryActivePlan(date, fundJars, input.EarMarkPatterns);
+            EnsureJarsOnlyWithinTheirFinancePattern(date, fundJars, patternsById);
             EnsureOneCushionJar(date, fundJars);
             EnsureOneRepeatedEarmarkPerJar(date, earMarkEvents);
             EnsureOneIsolatedEarmarkPerJar(date, earMarkEvents);
@@ -903,6 +925,64 @@ public static class TransactionLogBookFactory
         }
     }
 
+    /// <summary>[CALC] Closes the jars of bills and goals that have ended (their leftover becomes free funds), opens jars for ones that have started, and adds each savings plan's starting balance once its plan has started.</summary>
+    /// <param name="date">The day being processed.</param>
+    /// <param name="jarValues">Every open jar's balance, keyed by finance id; jars are added and removed in place.</param>
+    /// <param name="milestones">Every open jar's milestone accrual, kept in step with jarValues.</param>
+    /// <param name="earMarkPatterns">Every savings plan in the account.</param>
+    /// <param name="patternsById">Every financial pattern, keyed by finance id.</param>
+    /// <param name="startingAllocationApplied">The plans whose starting balance is already in their jar; updated in place.</param>
+    private static void OpenAndCloseJars(
+        DateOnly date,
+        Dictionary<int, decimal> jarValues,
+        Dictionary<int, decimal> milestones,
+        IReadOnlyList<EarMarkPattern> earMarkPatterns,
+        IReadOnlyDictionary<int, FinancialPattern> patternsById,
+        HashSet<EarMarkPattern> startingAllocationApplied)
+    {
+        foreach (var financeId in jarValues.Keys.Where(id => patternsById[id].DatePattern.Until < date).ToList())
+        {
+            jarValues.Remove(financeId);
+            milestones.Remove(financeId);
+        }
+
+        foreach (var plan in earMarkPatterns)
+        {
+            if (!patternsById[plan.FinanceId].DatePattern.ActiveSpanContains(date))
+            {
+                continue;
+            }
+
+            if (!jarValues.ContainsKey(plan.FinanceId))
+            {
+                jarValues[plan.FinanceId] = 0m;
+                milestones[plan.FinanceId] = 0m;
+            }
+
+            if (plan.DatePattern.ActiveStart <= date && startingAllocationApplied.Add(plan))
+            {
+                jarValues[plan.FinanceId] += plan.StartingAllocation;
+            }
+        }
+    }
+
+    /// <summary>[CALC] Stops the forecast if a snapshot holds a jar for a bill or goal whose active span doesn't cover that day.</summary>
+    /// <param name="date">The snapshot's day (the as-of date for the starting snapshot).</param>
+    /// <param name="fundJars">The fund jars that snapshot will hold.</param>
+    /// <param name="patternsById">Every financial pattern, keyed by finance id.</param>
+    internal static void EnsureJarsOnlyWithinTheirFinancePattern(DateOnly date, IReadOnlyList<FundJar> fundJars, IReadOnlyDictionary<int, FinancialPattern> patternsById)
+    {
+        foreach (var jar in fundJars)
+        {
+            if (jar.FinanceId is { } financeId && !patternsById[financeId].DatePattern.ActiveSpanContains(date))
+            {
+                throw new FundJarOutsideFinancePatternException(
+                    $"Finance id {financeId} has a fund jar on {date:MMM d, yyyy}, outside its bill or goal's active dates.",
+                    nameof(fundJars));
+            }
+        }
+    }
+
     /// <summary>[CALC] Stops the forecast if a snapshot doesn't hold exactly one safety cushion jar.</summary>
     /// <param name="date">The snapshot's day; null for the starting snapshot.</param>
     /// <param name="fundJars">The fund jars that snapshot will hold.</param>
@@ -1073,7 +1153,9 @@ public static class TransactionLogBookFactory
         foreach (var shortfall in goalShortfalls)
         {
             var financeId = shortfall.FinanceId;
-            var jar = jarsByFinanceId[financeId];
+            // DIVERGENCE(jar-lifetime): a goal that hasn't started yet, or has already ended, has no jar today; it reads as an empty one.
+            var jar = jarsByFinanceId.GetValueOrDefault(financeId)
+                ?? new FundJar { FinanceId = financeId, CurrentAmount = 0m, ExpectedAmount = 0m, MilestoneAmount = 0m };
 
             // Today's live pace — the same two fields the Earmark form's
             // "current jar state" row already shows, just named from the
