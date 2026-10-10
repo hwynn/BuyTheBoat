@@ -17,6 +17,9 @@ public class SpreadsheetTests
 
     private static SpreadsheetCell Cell(SpreadsheetModel model, SpreadsheetRow row, string key) => row.Cells[Col(model, key)];
 
+    /// <summary>[CALC] The Id source for a paste that shouldn't need new draft rows: fails the test if one is asked for.</summary>
+    private static int NoNewIds() => throw new InvalidOperationException("This paste shouldn't add draft rows.");
+
     /// <summary>[CALC] A model holding the given drafts (Ids 1, 2, …) followed by one saved monthly water bill.</summary>
     private static SpreadsheetModel ModelWith(params DraftRow[] drafts)
     {
@@ -75,7 +78,10 @@ public class SpreadsheetTests
     [InlineData(nameof(DraftRow.Every), "every other", "2")]
     [InlineData(nameof(DraftRow.Amount), "about 140", "140")]
     [InlineData(nameof(DraftRow.Amount), "-15.49ish", "-15.49")]
-    [InlineData(nameof(DraftRow.Priority), "high, 8", "8")]
+    [InlineData(nameof(DraftRow.Priority), "high, 8", "5")]
+    [InlineData(nameof(DraftRow.Priority), "low-ish", "1")]
+    [InlineData(nameof(DraftRow.Priority), "about 3", "3")]
+    [InlineData(nameof(DraftRow.DaysOfWeek), "fri, Thur", "5, 4")]
     [InlineData(nameof(DraftRow.DaysOfMonth), "~15th?", "15")]
     public void A_near_match_stays_as_typed_and_red_with_a_suggestion(string key, string typed, string suggestion)
     {
@@ -90,15 +96,48 @@ public class SpreadsheetTests
         row.HasProblems.ShouldBeTrue();
     }
 
-    [Fact]
-    public void Text_that_matches_nothing_is_red_without_a_suggestion()
+    [Theory]
+    [InlineData(nameof(DraftRow.Frequency), "whenever")]
+    [InlineData(nameof(DraftRow.DaysOfWeek), "sadfads")]
+    [InlineData(nameof(DraftRow.Priority), "8")]
+    [InlineData(nameof(DraftRow.Priority), "0")]
+    public void Text_that_matches_nothing_is_red_without_a_suggestion(string key, string typed)
     {
         var model = ModelWith(new DraftRow { Id = 1 });
         var row = model.Rows[0];
 
-        Type(model, row, nameof(DraftRow.Frequency), "whenever");
+        Type(model, row, key, typed);
 
-        Cell(model, row, nameof(DraftRow.Frequency)).Problem.ShouldNotBeNull().Suggestion.ShouldBeNull();
+        Cell(model, row, key).Problem.ShouldNotBeNull().Suggestion.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Priority_accepts_1_through_5()
+    {
+        var model = ModelWith(new DraftRow { Id = 1 });
+
+        foreach (var priority in new[] { "1", "5" })
+        {
+            Type(model, model.Rows[0], nameof(DraftRow.Priority), priority);
+            Cell(model, model.Rows[0], nameof(DraftRow.Priority)).HasProblem.ShouldBeFalse();
+        }
+    }
+
+    [Fact]
+    public void The_fix_list_covers_every_red_draft_cell_and_a_chosen_fix_writes_exactly_the_text_shown()
+    {
+        var model = ModelWith(
+            new DraftRow { Id = 1, Frequency = "bi-weekly", Priority = "high" },
+            new DraftRow { Id = 2, Amount = "lots" });
+
+        var invalid = model.InvalidCells();
+        invalid.Select(entry => (entry.Row.DraftId, model.Columns[entry.Column].Key)).ShouldBe(
+            [(1, nameof(DraftRow.Priority)), (1, nameof(DraftRow.Frequency)), (2, nameof(DraftRow.Amount))]);
+
+        model.ReplaceText(model.Rows[0], Col(model, nameof(DraftRow.Frequency)), "Weekly");
+
+        Cell(model, model.Rows[0], nameof(DraftRow.Frequency)).Text.ShouldBe("Weekly");
+        model.InvalidCells().Count.ShouldBe(2);
     }
 
     [Theory]
@@ -247,9 +286,102 @@ public class SpreadsheetTests
         values.ByDay.ShouldBe([DayOfWeek.Monday, DayOfWeek.Sunday]);
         values.Starts.ShouldBe(new DateOnly(2026, 3, 1));
         values.Ends.ShouldBeNull();
+        values.KeepsGoing.ShouldBeTrue();
         values.Priority.ShouldBeNull();
         values.Source.ShouldBe("");
         values.Notes.ShouldBe("card ends 4411");
+    }
+
+    [Theory]
+    [InlineData("", "", false)]
+    [InlineData("   ", "", false)]
+    [InlineData("2026-03-01", "  ", true)]
+    [InlineData("2026-03-01", "2027-03-01", false)]
+    public void A_blank_ends_means_keeps_going_only_when_starts_is_filled_in(string starts, string ends, bool keepsGoing)
+    {
+        var model = ModelWith(new DraftRow { Id = 1, Starts = starts, Ends = ends });
+
+        model.ToFormValues(model.Rows[0]).KeepsGoing.ShouldBe(keepsGoing);
+    }
+
+    [Fact]
+    public void Once_is_a_valid_frequency_and_tidies_like_the_others()
+    {
+        var model = ModelWith(new DraftRow { Id = 1 });
+
+        Type(model, model.Rows[0], nameof(DraftRow.Frequency), " once ");
+
+        Cell(model, model.Rows[0], nameof(DraftRow.Frequency)).Text.ShouldBe("Once");
+        model.Rows[0].HasProblems.ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData("one-time")]
+    [InlineData("single payment")]
+    public void One_time_wording_is_suggested_as_once(string typed)
+    {
+        var model = ModelWith(new DraftRow { Id = 1, Frequency = typed });
+
+        Cell(model, model.Rows[0], nameof(DraftRow.Frequency)).Problem.ShouldNotBeNull().Suggestion.ShouldBe("Once");
+    }
+
+    [Theory]
+    [InlineData(nameof(DraftRow.Every), "2")]
+    [InlineData(nameof(DraftRow.Ends), "2026-12-01")]
+    [InlineData(nameof(DraftRow.DaysOfWeek), "1")]
+    [InlineData(nameof(DraftRow.DaysOfMonth), "15")]
+    public void With_once_the_repeat_columns_must_be_blank(string key, string text)
+    {
+        var model = ModelWith(new DraftRow { Id = 1, Frequency = "Once", Starts = "2026-06-01" });
+
+        Type(model, model.Rows[0], key, text);
+
+        Cell(model, model.Rows[0], key).HasProblem.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void A_once_draft_opens_as_one_time_and_never_as_keeps_going()
+    {
+        var model = ModelWith(new DraftRow { Id = 1, Frequency = "Once", Starts = "2026-06-01", Amount = "-900" });
+
+        var values = model.ToFormValues(model.Rows[0]);
+
+        values.IsOneTime.ShouldBeTrue();
+        values.KeepsGoing.ShouldBeFalse();
+        values.Starts.ShouldBe(new DateOnly(2026, 6, 1));
+        values.Frequency.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Turning_an_invalid_draft_into_form_values_throws_naming_the_cell()
+    {
+        var model = ModelWith(new DraftRow { Id = 1, Ends = "keeps going" });
+
+        Should.Throw<InvalidOperationException>(() => model.ToFormValues(model.Rows[0]))
+            .Message.ShouldStartWith("Ends:");
+    }
+
+    [Fact]
+    public void A_saved_bill_with_no_end_date_shows_a_blank_ends()
+    {
+        var model = NewModel();
+        var streaming = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "STREAMING",
+            Amount = -15.49m,
+            AutoRenew = true,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                DtStart = new DateOnly(2026, 1, 15),
+                Until = new DateOnly(2027, 1, 15),
+            }),
+        });
+
+        model.Load([], [(streaming, "Checking")]);
+
+        Cell(model, model.Rows[0], nameof(DraftRow.Ends)).Text.ShouldBe("");
     }
 
     // Pasting ---------------------------------------------------------------
@@ -295,7 +427,7 @@ public class SpreadsheetTests
         var model = ModelWith(new DraftRow { Id = 1 }, new DraftRow { Id = 2 });
         var amount = Col(model, nameof(DraftRow.Amount));
 
-        var touched = model.Paste("-15.49\t\tmonthly\n-40\t3\tbi-weekly", amount, 0);
+        var touched = model.Paste("-15.49\t\tmonthly\n-40\t3\tbi-weekly", amount, 0, NoNewIds);
 
         touched.Select(row => row.DraftId).ShouldBe([1, 2]);
         Cell(model, model.Rows[0], nameof(DraftRow.Amount)).Text.ShouldBe("-15.49");
@@ -305,15 +437,36 @@ public class SpreadsheetTests
     }
 
     [Fact]
-    public void A_range_paste_stops_at_the_saved_rows()
+    public void A_range_paste_longer_than_the_drafts_below_it_adds_drafts_above_the_saved_rows()
     {
         var model = ModelWith(new DraftRow { Id = 1 });
 
-        var touched = model.Paste("Netflix\nGym\nRent", 0, 0);
+        var touched = model.Paste("Netflix\nGym\nRent", 0, 0, () => 2);
 
-        touched.Count.ShouldBe(1);
-        model.Rows[0].Cells[0].Text.ShouldBe("Netflix");
-        model.Rows[1].Cells[0].Text.ShouldBe("CITY WATER");
+        touched.Select(row => row.DraftId).ShouldBe([1, 2, 3]);
+        model.Rows.Select(row => row.Cells[0].Text).ShouldBe(["Netflix", "Gym", "Rent", "CITY WATER"]);
+        model.Rows.Select(row => row.DraftId).ShouldBe([1, 2, 3, null]);
+    }
+
+    [Fact]
+    public void A_range_paste_that_fits_the_drafts_below_it_adds_none()
+    {
+        var model = ModelWith(new DraftRow { Id = 1 }, new DraftRow { Id = 2 });
+
+        model.Paste("Netflix\nGym", 0, 0, NoNewIds);
+
+        model.Rows.Count(row => row.IsDraft).ShouldBe(2);
+    }
+
+    [Fact]
+    public void A_range_paste_started_on_a_saved_row_goes_into_new_drafts()
+    {
+        var model = ModelWith(new DraftRow { Id = 1, Source = "keep me" });
+
+        var touched = model.Paste("Netflix\nGym", 0, 1, () => 5);
+
+        touched.Select(row => row.DraftId).ShouldBe([5, 6]);
+        model.Rows.Select(row => row.Cells[0].Text).ShouldBe(["keep me", "Netflix", "Gym", "CITY WATER"]);
     }
 
     [Fact]
@@ -322,7 +475,7 @@ public class SpreadsheetTests
         var model = ModelWith(new DraftRow { Id = 1 });
         var notes = Col(model, nameof(DraftRow.Notes));
 
-        model.Paste("a note\textra\tmore", notes, 0);
+        model.Paste("a note\textra\tmore", notes, 0, NoNewIds);
 
         model.Rows[0].Cells[notes].Text.ShouldBe("a note");
     }
@@ -333,8 +486,8 @@ public class SpreadsheetTests
         var model = ModelWith(new DraftRow { Id = 1 });
         var notes = Col(model, nameof(DraftRow.Notes));
 
-        model.Paste("card ends 4411, renews ~15th?", notes, 0).Count.ShouldBe(1);
-        model.Paste("overwrite?", notes, 1).ShouldBeEmpty();
+        model.Paste("card ends 4411, renews ~15th?", notes, 0, NoNewIds).Count.ShouldBe(1);
+        model.Paste("overwrite?", notes, 1, NoNewIds).ShouldBeEmpty();
 
         model.Rows[0].Cells[notes].Text.ShouldBe("card ends 4411, renews ~15th?");
         model.Rows[1].Cells[notes].Text.ShouldBe("");

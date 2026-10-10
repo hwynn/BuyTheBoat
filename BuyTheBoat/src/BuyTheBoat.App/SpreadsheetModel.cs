@@ -131,6 +131,12 @@ public sealed record DraftFormValues
     public IReadOnlyList<int> ByMonthDay { get; init; } = [];
     public DateOnly? Starts { get; init; }
     public DateOnly? Ends { get; init; }
+
+    // True when it has no end date: answers the Form's "When does this stop?" with "It just keeps going".
+    public bool KeepsGoing { get; init; }
+
+    // True when Frequency is Once: the Form opens as "One time", with Starts as the due date.
+    public bool IsOneTime { get; init; }
     public string Notes { get; init; } = "";
 }
 
@@ -189,6 +195,21 @@ public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
         Revalidate(row);
     }
 
+    /// <summary>[UI] Replaces a draft cell's text with the given fix, then tidies and re-checks the row as if the user had typed it.</summary>
+    public void ReplaceText(SpreadsheetRow row, int column, string text)
+    {
+        row.Cells[column].Text = text;
+        CommitCell(row, column);
+    }
+
+    /// <summary>[CALC] Every red draft cell, reading left to right then top to bottom.</summary>
+    public IReadOnlyList<(SpreadsheetRow Row, int Column)> InvalidCells() =>
+        Rows.Where(row => row.IsDraft)
+            .SelectMany(row => row.Cells.Select((cell, column) => (Row: row, Column: column, cell.HasProblem)))
+            .Where(entry => entry.HasProblem)
+            .Select(entry => (entry.Row, entry.Column))
+            .ToList();
+
     /// <summary>[UI] Replaces a red cell's text with its suggested fix. Does nothing when the cell has no suggestion.</summary>
     public void AcceptSuggestion(SpreadsheetRow row, int column)
     {
@@ -241,14 +262,39 @@ public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
 
     /// <summary>
     /// [UI] The paste entry point: decides whether the clipboard text is a range or a single cell (PasteParser), and pastes it starting at the given cell.
-    /// A range fills draft cells and stops at the first saved row; columns past the last one are dropped.
-    /// Returns the draft rows that changed, so they can be saved.
+    /// For a range, first adds however many blank drafts the pasted rows need beyond the drafts already below the start, then fills the range.
+    /// Starting on a saved row pastes into the new drafts instead. Columns past the last one are dropped.
+    /// Returns the draft rows that changed or were added, so they can be saved.
     /// </summary>
-    public IReadOnlyList<SpreadsheetRow> Paste(string text, int column, int row)
+    /// <param name="allocateFirstDraftId">Gives the Id for the first added draft; any further ones take the Ids after it.</param>
+    public IReadOnlyList<SpreadsheetRow> Paste(string text, int column, int row, Func<int> allocateFirstDraftId)
     {
-        return PasteParser.Parse(text) is { } grid
-            ? PasteRange(grid, column, row)
-            : PasteIntoCell(text, column, row);
+        if (PasteParser.Parse(text) is not { } grid)
+        {
+            return PasteIntoCell(text, column, row);
+        }
+
+        var startRow = row >= 0 && row < Rows.Count && Rows[row].IsDraft ? row : DraftCount;
+        var added = AddBlankDrafts(grid.Count - DraftRowsFrom(startRow), allocateFirstDraftId);
+        return PasteRange(grid, column, startRow).Union(added).ToList();
+    }
+
+    /// <summary>[CALC] How many draft rows there are.</summary>
+    private int DraftCount => Rows.Count(existing => existing.IsDraft);
+
+    /// <summary>[CALC] How many draft rows a paste starting at this row can fill before reaching the saved rows.</summary>
+    private int DraftRowsFrom(int row) => Math.Max(0, DraftCount - row);
+
+    /// <summary>[UI] Adds the given number of blank drafts at the bottom of the drafts section, with consecutive Ids. Adds nothing for zero or less.</summary>
+    private IReadOnlyList<SpreadsheetRow> AddBlankDrafts(int count, Func<int> allocateFirstDraftId)
+    {
+        if (count <= 0)
+        {
+            return [];
+        }
+
+        var firstId = allocateFirstDraftId();
+        return Enumerable.Range(0, count).Select(offset => AddDraft(firstId + offset)).ToList();
     }
 
     /// <summary>[UI] Puts the whole text into one draft cell. A saved row's cell takes nothing.</summary>
@@ -264,7 +310,7 @@ public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
         return [Rows[row]];
     }
 
-    /// <summary>[UI] Lays a grid of pasted cells over the drafts, top-left at the given cell, then tidies and re-checks every cell it touched.</summary>
+    /// <summary>[UI] Lays a grid of pasted cells over the drafts, top-left at the given cell, then tidies and re-checks every cell it touched. Paste adds any drafts the grid needs before calling this.</summary>
     private IReadOnlyList<SpreadsheetRow> PasteRange(IReadOnlyList<IReadOnlyList<string>> grid, int column, int row)
     {
         var touched = new List<SpreadsheetRow>();
@@ -337,10 +383,23 @@ public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
         };
     }
 
-    /// <summary>[CALC] Parses a draft row into the values the Form loads. Only meaningful for a row with no red cells; a cell that doesn't parse comes through as blank.</summary>
+    /// <summary>
+    /// [CALC] Turns a draft row into the values the Form loads from it.
+    /// Throws InvalidOperationException naming the first invalid cell, re-checked here rather than trusting the row's red marks, so the Form never gets a value it shouldn't have.
+    /// A blank Ends with a filled-in Starts means the bill keeps going (KeepsGoing); Frequency "Once" means a one-time item (IsOneTime).
+    /// </summary>
     public DraftFormValues ToFormValues(SpreadsheetRow row)
     {
         var draft = ToDraftRow(row);
+        string OtherCell(string key) => TextOf(draft, key);
+        foreach (var column in Columns)
+        {
+            if (column.Check(TextOf(draft, column.Key), OtherCell) is { } problem)
+            {
+                throw new InvalidOperationException($"{column.Header}: {problem.Message}");
+            }
+        }
+
         return new DraftFormValues
         {
             Source = draft.Source.Trim(),
@@ -354,6 +413,10 @@ public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
             ByMonthDay = CellParsing.ParseNumberList(draft.DaysOfMonth, 1, 31) ?? [],
             Starts = CellParsing.ParseDate(draft.Starts),
             Ends = CellParsing.ParseDate(draft.Ends),
+
+            // Filling in when it starts but not when it ends reads as a deliberate "no end date" — except for a one-time item, which never has an Ends.
+            IsOneTime = CellParsing.IsOnce(draft.Frequency),
+            KeepsGoing = !CellParsing.IsOnce(draft.Frequency) && string.IsNullOrWhiteSpace(draft.Ends) && !string.IsNullOrWhiteSpace(draft.Starts),
             Notes = draft.Notes,
         };
     }
@@ -389,7 +452,7 @@ public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
         _ => "",
     };
 
-    /// <summary>[CALC] A saved bill or paycheck's text for one column, in the same spellings a draft uses. A one-time item reads "Once" under Frequency; an ongoing one reads "keeps going" under Ends.</summary>
+    /// <summary>[CALC] A saved bill or paycheck's text for one column, in the same spellings a draft uses. A one-time item reads "Once" under Frequency; an ongoing one has a blank Ends, the same way a draft says it.</summary>
     private static string SavedText(FinancialPattern pattern, string accountName, string key)
     {
         var rule = pattern.DatePattern;
@@ -406,7 +469,7 @@ public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
             nameof(DraftRow.DaysOfWeek) => string.Join(", ", rule.ByDay.Select(CellParsing.FromDayOfWeek)),
             nameof(DraftRow.DaysOfMonth) => string.Join(", ", rule.ByMonthDay),
             nameof(DraftRow.Starts) => rule.ActiveStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            nameof(DraftRow.Ends) => pattern.AutoRenew ? "keeps going" : rule.Until.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            nameof(DraftRow.Ends) => pattern.AutoRenew ? "" : rule.Until.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             nameof(DraftRow.Notes) => pattern.Notes ?? "",
             _ => "",
         };

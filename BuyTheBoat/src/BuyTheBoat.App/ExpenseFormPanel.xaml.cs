@@ -335,7 +335,9 @@ public partial class ExpenseFormPanel : UserControl
 
     /// <summary>
     /// [STEP] Opens a new bill or paycheck filled in from a Spreadsheet subtab draft row, as unsaved changes, so Save is ready to press.
-    /// Blank cells keep the form's usual defaults; the questions the spreadsheet has no column for (skippable, when it stops) are left for the user to answer here.
+    /// Blank cells keep the form's usual defaults, except a blank Ends after a filled-in Starts, which answers "When does this stop?" with "It just keeps going".
+    /// Frequency "Once" opens it as "One time", with Starts as the due date.
+    /// Whether it's skippable has no column, so that's left for the user to answer here.
     /// Saving removes the draft (MainWindow reads LoadedDraftId); Discard or Clear leaves the draft where it was.
     /// </summary>
     /// <param name="values">The draft's cells, already parsed. The spreadsheet only opens a draft with no invalid cells.</param>
@@ -367,7 +369,17 @@ public partial class ExpenseFormPanel : UserControl
             IncomeRadioButton.IsChecked = amount >= 0;
         }
 
-        LoadDraftSchedule(values);
+        if (values.IsOneTime)
+        {
+            OneTimeRadioButton.IsChecked = true;
+            RepeatingRadioButton.IsChecked = false;
+            UpdateRepeatsVisibility();
+            DueDatePicker.SelectedDate = values.Starts?.ToDateTime(TimeOnly.MinValue);
+        }
+        else
+        {
+            LoadDraftSchedule(values);
+        }
 
         UpdateDirectionDependentUi();
         UpdateSummary();
@@ -411,6 +423,12 @@ public partial class ExpenseFormPanel : UserControl
         {
             StopOnDateRadio.IsChecked = true;
             StopEndDatePicker.SelectedDate = end.ToDateTime(TimeOnly.MinValue);
+        }
+        else if (values.KeepsGoing)
+        {
+            StopKeepsGoingRadio.IsChecked = true;
+            StopOnDateRadio.IsChecked = false;
+            StopPaidOffRadio.IsChecked = false;
         }
 
         UpdateStopMode();
@@ -957,7 +975,11 @@ public partial class ExpenseFormPanel : UserControl
         var magnitude = Math.Abs(enteredAmount);
         var amount = ExpenseRadioButton.IsChecked == true ? -magnitude : magnitude;
 
-        var priority = int.TryParse(PriorityTextBox.Text, out var parsedPriority) ? parsedPriority : 0;
+        // Same 1–5 scale as the one-time goal window and the Spreadsheet subtab's Priority column.
+        if (!int.TryParse(PriorityTextBox.Text, out var priority) || priority is < 1 or > 5)
+        {
+            throw new InvalidOperationException("Priority must be a whole number from 1 to 5.");
+        }
 
         return FinancialPattern.Create(new FinancialPatternOptions
         {

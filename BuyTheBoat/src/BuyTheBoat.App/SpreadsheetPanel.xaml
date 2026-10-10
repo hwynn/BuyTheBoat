@@ -25,7 +25,7 @@
             <Border x:Name="InvalidCounter" Margin="16,0,0,0" Padding="8,2" CornerRadius="3" VerticalAlignment="Center"
                     Background="{StaticResource InvalidBgBrush}" BorderBrush="{StaticResource InvalidTextBrush}" BorderThickness="1"
                     Visibility="Collapsed" Cursor="Hand" MouseLeftButtonUp="OnInvalidCounterClick"
-                    ToolTip="Jump to the next red cell">
+                    ToolTip="See every red cell and its suggested fix">
                 <TextBlock x:Name="InvalidCounterText" Foreground="{StaticResource InvalidTextBrush}"/>
             </Border>
             <Button x:Name="NextInvalidButton" Content="Next (F8)" Padding="10,5" Margin="6,0,0,0" Visibility="Collapsed" Click="OnNextInvalidClick"/>

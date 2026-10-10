@@ -45,6 +45,15 @@ public static class CellParsing
 {
     public static readonly string[] Frequencies = ["Daily", "Weekly", "Monthly", "Yearly"];
 
+    // The Frequency column's extra value for a one-time bill or paycheck: Starts is its due date, and Every, the day columns and Ends stay blank.
+    public const string Once = "Once";
+
+    // Shown on Every or Ends when Frequency is Once.
+    public static readonly CellProblem BlankWhenOnce = new("Leave this blank when Frequency is Once. Starts is the due date.");
+
+    /// <summary>[CALC] Whether a Frequency cell says Once, ignoring case and spacing.</summary>
+    public static bool IsOnce(string frequencyText) => Squeeze(frequencyText) == "once";
+
     private static readonly string[] DateFormats = ["yyyy-MM-dd", "yyyy/MM/dd", "M/d/yyyy", "M/d/yy", "MMM d yyyy", "MMMM d yyyy", "MMM d, yyyy", "MMMM d, yyyy"];
 
     /// <summary>[CALC] Reads an amount like "-62", "$1,200.50", "(140)", or "−15.49" (typographic minus). Null when it isn't one.</summary>
@@ -191,8 +200,9 @@ public sealed class MoneyColumn(string key, string header, double width, string?
     }
 }
 
-// Priority: a whole number of 1 or more.
-public sealed class WholeNumberColumn(string key, string header, double width, string? headerTip = null) : ISpreadsheetColumn
+// Priority: a whole number in a range (1–5).
+public sealed class WholeNumberColumn(
+    string key, string header, double width, int min, int max, string? headerTip = null, Func<string, int?>? suggestOther = null) : ISpreadsheetColumn
 {
     public string Key => key;
     public string Header => header;
@@ -201,20 +211,25 @@ public sealed class WholeNumberColumn(string key, string header, double width, s
     public CellEditorKind Editor => CellEditorKind.TextBox;
     public IReadOnlyList<string> Choices => [];
 
-    /// <summary>[CALC] Drops leading zeros and spaces from a valid number ("05" → "5"); anything else is unchanged.</summary>
-    public string Tidy(string text) => CellParsing.ParsePositiveWholeNumber(text) is { } number ? number.ToString(CultureInfo.InvariantCulture) : text;
+    /// <summary>[CALC] Drops leading zeros and spaces from an in-range number ("05" → "5"); anything else is unchanged.</summary>
+    public string Tidy(string text) => InRange(text) is { } number ? number.ToString(CultureInfo.InvariantCulture) : text;
 
-    /// <summary>[CALC] Accepts blank or a whole number of 1 or more; suggests the first such number in the text.</summary>
+    /// <summary>[CALC] Accepts blank or a whole number from min to max. Suggests suggestOther's pick first, then the first in-range number in the text; an out-of-range number alone gets no suggestion.</summary>
     public CellProblem? Check(string text, Func<string, string> otherCell)
     {
-        if (string.IsNullOrWhiteSpace(text) || CellParsing.ParsePositiveWholeNumber(text) is not null)
+        if (string.IsNullOrWhiteSpace(text) || InRange(text) is not null)
         {
             return null;
         }
 
-        var suggestion = CellParsing.NumbersIn(text).FirstOrDefault(number => number >= 1);
-        return new CellProblem($"{Header} must be a whole number, 1 or more.", suggestion >= 1 ? suggestion.ToString(CultureInfo.InvariantCulture) : null);
+        var suggestion = suggestOther?.Invoke(text)
+            ?? CellParsing.NumbersIn(text).Where(number => number >= min && number <= max).Cast<int?>().FirstOrDefault();
+        return new CellProblem($"{Header} must be a whole number from {min} to {max}.", suggestion?.ToString(CultureInfo.InvariantCulture));
     }
+
+    /// <summary>[CALC] The text as a whole number from min to max, or null when it isn't one.</summary>
+    private int? InRange(string text) =>
+        CellParsing.ParsePositiveWholeNumber(text) is { } number && number >= min && number <= max ? number : null;
 }
 
 // Account, Frequency and Every: a text box with a dropdown. Any text can be typed and is kept;
@@ -225,15 +240,19 @@ public sealed class PickListColumn : ISpreadsheetColumn
     private readonly string _whatItIs;
     private readonly Func<string, string?>? _acceptOther;
     private readonly Func<string, string?>? _suggestOther;
+    private readonly bool _blankWhenOnce;
 
     /// <param name="choices">The dropdown entries; read fresh each time, so Account can follow the live account list.</param>
     /// <param name="whatItIs">How the problem message names a valid value, e.g. "a frequency".</param>
     /// <param name="acceptOther">Optional: also accepts text outside the list, returning its tidied spelling (Every accepts any whole number, not just the listed 1–12), or null.</param>
     /// <param name="suggestOther">Optional: a column-specific suggestion tried before the generic closest-choice match.</param>
+    /// <param name="blankWhenOnce">Whether a value here is red while Frequency is Once (Every has no meaning for a one-time item).</param>
     public PickListColumn(
         string key, string header, double width, Func<IReadOnlyList<string>> choices, string whatItIs,
-        string? headerTip = null, Func<string, string?>? acceptOther = null, Func<string, string?>? suggestOther = null)
+        string? headerTip = null, Func<string, string?>? acceptOther = null, Func<string, string?>? suggestOther = null,
+        bool blankWhenOnce = false)
     {
+        _blankWhenOnce = blankWhenOnce;
         Key = key;
         Header = header;
         Width = width;
@@ -265,12 +284,17 @@ public sealed class PickListColumn : ISpreadsheetColumn
             ?? text;
     }
 
-    /// <summary>[CALC] Accepts blank, a choice, or what acceptOther allows; otherwise names the problem and suggests the closest choice.</summary>
+    /// <summary>[CALC] Accepts blank, a choice, or what acceptOther allows (unless blankWhenOnce and Frequency is Once); otherwise names the problem and suggests the closest choice.</summary>
     public CellProblem? Check(string text, Func<string, string> otherCell)
     {
-        if (string.IsNullOrWhiteSpace(text) || Choices.Contains(text) || _acceptOther?.Invoke(text) == text)
+        if (string.IsNullOrWhiteSpace(text))
         {
             return null;
+        }
+
+        if (Choices.Contains(text) || _acceptOther?.Invoke(text) == text)
+        {
+            return _blankWhenOnce && CellParsing.IsOnce(otherCell(nameof(Persistence.DraftRow.Frequency))) ? CellParsing.BlankWhenOnce : null;
         }
 
         return new CellProblem($"\"{text.Trim()}\" isn't {_whatItIs}.", _suggestOther?.Invoke(text) ?? ClosestChoice(text));
@@ -333,7 +357,8 @@ public sealed class PickListColumn : ISpreadsheetColumn
 }
 
 // Starts and Ends: a date, with a calendar dropdown to pick one.
-public sealed class DateColumn(string key, string header, double width, string? headerTip = null, string? mustNotPrecedeKey = null) : ISpreadsheetColumn
+public sealed class DateColumn(
+    string key, string header, double width, string? headerTip = null, string? mustNotPrecedeKey = null, bool blankWhenOnce = false) : ISpreadsheetColumn
 {
     public string Key => key;
     public string Header => header;
@@ -364,6 +389,11 @@ public sealed class DateColumn(string key, string header, double width, string? 
             return new CellProblem($"{Header} is before {mustNotPrecedeKey}.");
         }
 
+        if (blankWhenOnce && CellParsing.IsOnce(otherCell(nameof(Persistence.DraftRow.Frequency))))
+        {
+            return CellParsing.BlankWhenOnce;
+        }
+
         return null;
     }
 }
@@ -371,8 +401,8 @@ public sealed class DateColumn(string key, string header, double width, string? 
 // Days of week: 1 (Monday) to 7 (Sunday), comma-separated. Only used when Frequency is Weekly.
 public sealed class DaysOfWeekColumn(string key, string header, double width, string? headerTip = null) : ISpreadsheetColumn
 {
-    private static readonly (string Prefix, int Number)[] DayNames =
-        [("mo", 1), ("tu", 2), ("we", 3), ("th", 4), ("fr", 5), ("sa", 6), ("su", 7)];
+    private static readonly (string Name, int Number)[] DayNames =
+        [("monday", 1), ("tuesday", 2), ("tues", 2), ("wednesday", 3), ("weds", 3), ("thursday", 4), ("thurs", 4), ("friday", 5), ("saturday", 6), ("sunday", 7)];
 
     public string Key => key;
     public string Header => header;
@@ -407,7 +437,8 @@ public sealed class DaysOfWeekColumn(string key, string header, double width, st
     private static string? SuggestFromNames(string text)
     {
         var numbers = Regex.Matches(text.ToLowerInvariant(), "[a-z]+")
-            .Select(word => DayNames.FirstOrDefault(day => word.Value.StartsWith(day.Prefix)).Number)
+            // A word counts only if it's a day's name or the start of one, two letters or more: "fri", "Thur", "sa" — not "sadfads".
+            .Select(word => DayNames.FirstOrDefault(day => word.Value.Length >= 2 && day.Name.StartsWith(word.Value)).Number)
             .Where(number => number > 0)
             .Distinct()
             .ToList();
@@ -460,24 +491,26 @@ public static class SpreadsheetColumns
         new PickListColumn(nameof(Persistence.DraftRow.Account), "Account", 110, accountNames, "one of your accounts"),
         new MoneyColumn(nameof(Persistence.DraftRow.Amount), "Amount (− for bills)", 120,
             "Bills are negative amounts, like -62.00. Paychecks are positive, like 2150."),
-        new WholeNumberColumn(nameof(Persistence.DraftRow.Priority), "Priority", 60, "1 = lowest, higher = higher priority."),
-        new PickListColumn(nameof(Persistence.DraftRow.Frequency), "Frequency", 95, () => CellParsing.Frequencies, "a frequency",
+        new WholeNumberColumn(nameof(Persistence.DraftRow.Priority), "Priority", 60, 1, 5, "1 = lowest, 5 = highest.", SuggestPriority),
+        new PickListColumn(nameof(Persistence.DraftRow.Frequency), "Frequency", 95, () => [CellParsing.Once, .. CellParsing.Frequencies], "a frequency",
+            "Once for a one-time bill or paycheck: Starts is its due date, and Every, the day columns and Ends stay blank.",
             suggestOther: SuggestFrequency),
         new PickListColumn(nameof(Persistence.DraftRow.Every), "Every", 60,
             () => Enumerable.Range(1, 12).Select(n => n.ToString(CultureInfo.InvariantCulture)).ToList(), "a whole number, 1 or more",
             "How many days, weeks, months or years between each one. 2 with Weekly means every other week.",
             acceptOther: text => CellParsing.ParsePositiveWholeNumber(text)?.ToString(CultureInfo.InvariantCulture),
-            suggestOther: SuggestEvery),
+            suggestOther: SuggestEvery, blankWhenOnce: true),
         new DaysOfWeekColumn(nameof(Persistence.DraftRow.DaysOfWeek), "Days of week", 95,
             "1 = Monday … 7 = Sunday (RRULE weeks start on Monday). Separate several with commas. Only used when Frequency is Weekly."),
         new DaysOfMonthColumn(nameof(Persistence.DraftRow.DaysOfMonth), "Days of month", 100,
             "1–31. Separate several with commas. Only used when Frequency is Monthly or Yearly."),
         new DateColumn(nameof(Persistence.DraftRow.Starts), "Starts", 100),
-        new DateColumn(nameof(Persistence.DraftRow.Ends), "Ends", 100, mustNotPrecedeKey: nameof(Persistence.DraftRow.Starts)),
+        new DateColumn(nameof(Persistence.DraftRow.Ends), "Ends", 100, mustNotPrecedeKey: nameof(Persistence.DraftRow.Starts),
+            headerTip: "Leave blank, with Starts filled in, for a bill that keeps going.", blankWhenOnce: true),
         new TextColumn(nameof(Persistence.DraftRow.Notes), "Notes", 300),
     ];
 
-    /// <summary>[CALC] Frequency words the generic closest-match misses: "annual" → Yearly, "fortnightly" → Weekly.</summary>
+    /// <summary>[CALC] Frequency words the generic closest-match misses: "annual" → Yearly, "one-time" → Once, "fortnightly" → Weekly.</summary>
     private static string? SuggestFrequency(string text)
     {
         var squeezed = CellParsing.Squeeze(text);
@@ -486,7 +519,29 @@ public static class SpreadsheetColumns
             return "Yearly";
         }
 
+        if (squeezed.Contains("onetime") || squeezed.Contains("single") || squeezed.Contains("oneoff"))
+        {
+            return CellParsing.Once;
+        }
+
         return squeezed.Contains("fortnight") ? "Weekly" : null;
+    }
+
+    /// <summary>[CALC] A priority from words: "high"/"top"/"urgent" → 5, "medium"/"normal" → 3, "low" → 1. Words win over numbers, so "high, 8" suggests 5. Null when none appear.</summary>
+    private static int? SuggestPriority(string text)
+    {
+        var squeezed = CellParsing.Squeeze(text);
+        if (squeezed.Contains("high") || squeezed.Contains("top") || squeezed.Contains("urgent") || squeezed.Contains("must"))
+        {
+            return 5;
+        }
+
+        if (squeezed.Contains("med") || squeezed.Contains("mid") || squeezed.Contains("normal"))
+        {
+            return 3;
+        }
+
+        return squeezed.Contains("low") ? 1 : null;
     }
 
     /// <summary>[CALC] The first whole number in the text ("2 weeks" → 2), or 2 for "other"/"bi" ("every other", "biweekly").</summary>

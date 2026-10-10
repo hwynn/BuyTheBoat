@@ -1,0 +1,68 @@
+<Window x:Class="BuyTheBoat.App.CellFixesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fix invalid cells" Width="760" Height="460" MinWidth="520" MinHeight="260"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="CanResizeWithGrip">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10"
+                   Text="Every red cell in your drafts. Checked fixes replace the cell's text when you click Apply. Cells with no suggestion have to be fixed by hand — Go to cell takes you there."/>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Cancel" Padding="14,5" IsCancel="True"/>
+            <Button x:Name="ApplyButton" Padding="14,5" Margin="8,0,0,0" IsDefault="True" Click="OnApplyClick"/>
+        </StackPanel>
+
+        <DataGrid x:Name="FixesGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                  CanUserSortColumns="False" HeadersVisibility="Column" SelectionMode="Single" GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="#FFE3E3E8" Background="White">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Fix" Width="40">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding HasSuggestion}"
+                                      Checked="OnCheckChanged" Unchecked="OnCheckChanged"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Draft" Binding="{Binding DraftName}" Width="130" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Column" Binding="{Binding ColumnHeader}" Width="100" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Now" Binding="{Binding CurrentText}" Width="110" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="#FFB00020"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTemplateColumn Header="Fix to" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <TextBlock Text="{Binding Suggestion}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <Button Content="Go to cell" Padding="6,0" HorizontalAlignment="Left" Click="OnGoToCellClick">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasSuggestion}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Why" Binding="{Binding Message}" Width="*" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextWrapping" Value="Wrap"/>
+                            <Setter Property="Foreground" Value="DimGray"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

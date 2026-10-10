@@ -280,19 +280,28 @@ public partial class SpreadsheetPanel : UserControl
         }
 
         e.Handled = true;
-        var typed = e.Text;
+        StartEditingWith(e.Text);
+    }
+
+    /// <summary>[UI] Starts editing the current cell and puts the typed text in its box, cursor at the end. Works for every editor kind: plain, pick-list and date cells all have a text box inside.</summary>
+    private void StartEditingWith(string typed)
+    {
+        var current = SheetGrid.CurrentCell;
         SheetGrid.BeginEdit();
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+
+        // Deferred until the editing control has been laid out, so its text box can be found.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            if (Keyboard.FocusedElement is TextBox box)
+            if (current.Column?.GetCellContent(current.Item) is { } content && FindChild<TextBox>(content) is { } box)
             {
+                box.Focus();
                 box.Text = typed;
                 box.CaretIndex = box.Text.Length;
             }
         });
     }
 
-    /// <summary>[UI] Spreadsheet keys: F8 jumps to the next red cell, Enter on a red cell accepts its suggestion, Delete clears the selected draft cells, and Ctrl+V pastes at the current cell.</summary>
+    /// <summary>[UI] Spreadsheet keys: F8 jumps to the next red cell, Backspace starts editing the current draft cell with it cleared, Delete clears the selected draft cells, and Ctrl+V pastes at the current cell.</summary>
     private void OnGridPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.F8)
@@ -326,13 +335,10 @@ public partial class SpreadsheetPanel : UserControl
             return;
         }
 
-        if (e.Key == Key.Enter && CurrentCell() is { } current
-            && _model.Rows[current.Row].Cells[current.Column].Problem?.Suggestion is not null)
+        if (e.Key == Key.Back && CurrentCellIsEditableDraft())
         {
             e.Handled = true;
-            var row = _model.Rows[current.Row];
-            _model.AcceptSuggestion(row, current.Column);
-            SaveDraft(row);
+            StartEditingWith("");
             return;
         }
 
@@ -343,15 +349,15 @@ public partial class SpreadsheetPanel : UserControl
         }
     }
 
-    /// <summary>[UI] Pastes the clipboard text starting at the current cell, then stores every draft it changed.</summary>
+    /// <summary>[UI] Pastes the clipboard text starting at the current cell, adding draft rows when the paste has more rows than there are drafts below it, then stores every draft it changed or added.</summary>
     private void PasteAtCurrentCell(string text)
     {
-        if (CurrentCell() is not { } current)
+        if (CurrentCell() is not { } current || AllocateDraftId is null)
         {
             return;
         }
 
-        foreach (var row in _model.Paste(text, current.Column, current.Row))
+        foreach (var row in _model.Paste(text, current.Column, current.Row, AllocateDraftId))
         {
             SaveDraft(row);
         }
@@ -416,7 +422,22 @@ public partial class SpreadsheetPanel : UserControl
             return;
         }
 
-        OpenInFormRequested?.Invoke(id, _model.ToFormValues(row));
+        DraftFormValues values;
+        try
+        {
+            values = _model.ToFormValues(row);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Only reachable if a cell went bad without its row being re-checked; the message names the cell.
+            _model.Revalidate(row);
+            RefreshToolbar();
+            MessageBox.Show(Window.GetWindow(this), $"This draft can't open in the form yet. {ex.Message}", "Fix the draft first",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        OpenInFormRequested?.Invoke(id, values);
     }
 
     /// <summary>[DELETES] Permanently removes the checked draft rows after asking first.</summary>
@@ -443,7 +464,53 @@ public partial class SpreadsheetPanel : UserControl
         DraftsDeleted?.Invoke(drafts.Select(row => row.DraftId!.Value).ToList());
     }
 
-    private void OnInvalidCounterClick(object sender, MouseButtonEventArgs e) => JumpToNextInvalidCell();
+    private void OnInvalidCounterClick(object sender, MouseButtonEventArgs e) => ShowFixes();
+
+    /// <summary>[STEP] Opens the fix list for every red cell. Makes the fixes the user left checked, or moves the cursor to the cell they chose to fix by hand.</summary>
+    private void ShowFixes()
+    {
+        SheetGrid.CommitEdit(DataGridEditingUnit.Cell, exitEditingMode: true);
+        var fixes = _model.InvalidCells()
+            .Select(entry =>
+            {
+                var cell = entry.Row.Cells[entry.Column];
+                return new CellFixRow
+                {
+                    Row = entry.Row,
+                    Column = entry.Column,
+                    DraftName = _model.NameOf(entry.Row),
+                    ColumnHeader = _model.Columns[entry.Column].Header,
+                    CurrentText = cell.Text,
+                    Message = cell.Problem!.Message,
+                    Suggestion = cell.Problem.Suggestion,
+                    IsChecked = cell.Problem.Suggestion is not null,
+                };
+            })
+            .ToList();
+        if (fixes.Count == 0)
+        {
+            return;
+        }
+
+        var window = new CellFixesWindow(fixes) { Owner = Window.GetWindow(this) };
+        if (window.ShowDialog() == true)
+        {
+            // Applied as shown, in order: each fix writes the exact text the user saw, even if an earlier fix changed what this cell would now suggest.
+            foreach (var fix in window.ChosenFixes)
+            {
+                _model.ReplaceText(fix.Row, fix.Column, fix.Suggestion!);
+            }
+
+            foreach (var row in window.ChosenFixes.Select(fix => fix.Row).Distinct())
+            {
+                SaveDraft(row);
+            }
+        }
+        else if (window.GoToTarget is { } target)
+        {
+            FocusCell(_model.Rows.IndexOf(target.Row), target.Column);
+        }
+    }
 
     private void OnNextInvalidClick(object sender, RoutedEventArgs e) => JumpToNextInvalidCell();
 
@@ -599,18 +666,21 @@ public partial class SpreadsheetPanel : UserControl
             return match;
         }
 
+        // A Popup draws its content in a separate window, so the date cell's calendar is only reachable through Popup.Child.
+        if (parent is Popup { Child: { } popupContent })
+        {
+            return FindChild<T>(popupContent);
+        }
+
+        // Load-bearing: VisualTreeHelper throws on anything that isn't drawn, like a Grid's ColumnDefinition.
+        if (parent is not Visual and not System.Windows.Media.Media3D.Visual3D)
+        {
+            return null;
+        }
+
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
         {
             if (FindChild<T>(VisualTreeHelper.GetChild(parent, i)) is { } found)
-            {
-                return found;
-            }
-        }
-
-        // Before the editing control is laid out it has no visual children yet, only logical ones.
-        foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
-        {
-            if (FindChild<T>(child) is { } found)
             {
                 return found;
             }
