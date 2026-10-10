@@ -246,7 +246,7 @@ public class RestructureFactoryTests
         var predecessor = Plan(-100m, new DateOnly(2025, 1, 1), new DateOnly(2027, 1, 1), goal);
         var cutDate = new DateOnly(2025, 7, 1);
 
-        Should.Throw<ArgumentException>(() => RestructureFactory.Restructure(new RestructureRequest
+        Should.Throw<EarMarkPatternOutsideGoalSpanException>(() => RestructureFactory.Restructure(new RestructureRequest
         {
             Predecessor = predecessor,
             Goal = goal,

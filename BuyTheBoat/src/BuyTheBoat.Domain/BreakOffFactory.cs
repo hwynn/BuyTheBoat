@@ -439,7 +439,7 @@ public static class BreakOffFactory
 
         if (successorFinanceId == predecessor.FinanceId)
         {
-            throw new ArgumentException(
+            throw new DuplicateFinanceIdException(
                 "The successor needs its own FinanceId — a break-off is a genuinely new identity, not an edit.",
                 nameof(successorFinanceId));
         }

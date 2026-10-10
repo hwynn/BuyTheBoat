@@ -28,7 +28,7 @@ public class EarMarkPatternTests
     {
         var goal = BoatGoal();
 
-        Should.Throw<ArgumentException>(() => EarMarkPattern.Create(
+        Should.Throw<EarMarkPatternGoalMismatchException>(() => EarMarkPattern.Create(
             new EarMarkPatternOptions
             {
                 FinanceId = 999, // does not match goal.FinanceId
@@ -76,7 +76,7 @@ public class EarMarkPatternTests
     {
         var goal = BoatGoal(); // single occurrence on 2025-01-01
 
-        Should.Throw<ArgumentException>(() => EarMarkPattern.Create(
+        Should.Throw<EarMarkPatternOutsideGoalSpanException>(() => EarMarkPattern.Create(
             new EarMarkPatternOptions
             {
                 FinanceId = goal.FinanceId,
@@ -144,7 +144,7 @@ public class EarMarkPatternTests
         // ActiveFrom is 2022-01-01, so an earmark starting in 2021 is too early.
         var goal = BoatGoal();
 
-        Should.Throw<ArgumentException>(() => EarMarkPattern.Create(
+        Should.Throw<EarMarkPatternOutsideGoalSpanException>(() => EarMarkPattern.Create(
             new EarMarkPatternOptions
             {
                 FinanceId = goal.FinanceId,

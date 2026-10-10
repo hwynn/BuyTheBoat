@@ -36,14 +36,14 @@ public sealed class ManualEarmark
     {
         if (options.FinanceId != pattern.FinanceId)
         {
-            throw new ArgumentException(
+            throw new ManualEarmarkPatternMismatchException(
                 $"FinanceId {options.FinanceId} does not match the earmark pattern's FinanceId {pattern.FinanceId}.",
                 nameof(options));
         }
 
         if (options.Amount == 0m)
         {
-            throw new ArgumentException("Amount cannot be zero.", nameof(options));
+            throw new ZeroIsolatedEarmarkException("Amount cannot be zero.", nameof(options));
         }
 
         // ActiveSpanContains (ActiveStart..Until), not the narrower Start..Until:
@@ -55,7 +55,7 @@ public sealed class ManualEarmark
         // widens what validates, never narrows it.
         if (!pattern.DatePattern.ActiveSpanContains(options.Date))
         {
-            throw new ArgumentException(
+            throw new ManualEarmarkOutsidePatternSpanException(
                 "A manual earmark must fall within its earmark pattern's date span — the pattern's timeline is the fund jar's lifetime.",
                 nameof(options));
         }

@@ -59,12 +59,12 @@ public class ManualEarmarkTests
     {
         var (_, pattern) = GoalWithPlan();
 
-        Should.Throw<ArgumentException>(() => ManualEarmark.Create(new ManualEarmarkOptions
+        Should.Throw<ManualEarmarkOutsidePatternSpanException>(() => ManualEarmark.Create(new ManualEarmarkOptions
         {
             FinanceId = 1, Date = new DateOnly(2024, 12, 31), Amount = 300m, // before Start
         }, pattern));
 
-        Should.Throw<ArgumentException>(() => ManualEarmark.Create(new ManualEarmarkOptions
+        Should.Throw<ManualEarmarkOutsidePatternSpanException>(() => ManualEarmark.Create(new ManualEarmarkOptions
         {
             FinanceId = 1, Date = new DateOnly(2025, 12, 2), Amount = 300m, // after Until
         }, pattern));
@@ -75,12 +75,12 @@ public class ManualEarmarkTests
     {
         var (_, pattern) = GoalWithPlan();
 
-        Should.Throw<ArgumentException>(() => ManualEarmark.Create(new ManualEarmarkOptions
+        Should.Throw<ZeroIsolatedEarmarkException>(() => ManualEarmark.Create(new ManualEarmarkOptions
         {
             FinanceId = 1, Date = new DateOnly(2025, 6, 15), Amount = 0m,
         }, pattern));
 
-        Should.Throw<ArgumentException>(() => ManualEarmark.Create(new ManualEarmarkOptions
+        Should.Throw<ManualEarmarkPatternMismatchException>(() => ManualEarmark.Create(new ManualEarmarkOptions
         {
             FinanceId = 2, Date = new DateOnly(2025, 6, 15), Amount = 300m,
         }, pattern));

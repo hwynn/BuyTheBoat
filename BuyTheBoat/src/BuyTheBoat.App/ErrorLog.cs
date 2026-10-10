@@ -1,4 +1,5 @@
 using System.IO;
+using BuyTheBoat.Domain;
 using BuyTheBoat.Persistence;
 
 namespace BuyTheBoat.App;
@@ -37,14 +38,27 @@ public static class ErrorLog
                 Directory.CreateDirectory(directory);
             }
 
-            File.AppendAllText(FilePath,
-                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} — {whatWasHappening}{Environment.NewLine}" +
-                $"{error.GetType().FullName}: {error.Message}{Environment.NewLine}" +
-                $"{error.StackTrace}{Environment.NewLine}{Environment.NewLine}");
+            File.AppendAllText(FilePath, FormatEntry(whatWasHappening, error, DateTime.Now));
         }
         catch
         {
             // A failure to log must never itself surface as an error.
         }
+    }
+
+    /// <summary>[CALC] Builds the text of one log entry; when the error is a failed assumption check, the entry names the assumption's ID so it can be looked up in planning/03-assumptions-glossary.md.</summary>
+    /// <param name="whatWasHappening">A short note on the operation in progress when it broke.</param>
+    /// <param name="error">The exception to describe.</param>
+    /// <param name="at">When it happened.</param>
+    internal static string FormatEntry(string whatWasHappening, Exception error, DateTime at)
+    {
+        var assumptionLine = error is AssumptionViolationException violation
+            ? $"Assumption {violation.AssumptionId} (planning/03-assumptions-glossary.md){Environment.NewLine}"
+            : "";
+
+        return $"{at:yyyy-MM-dd HH:mm:ss} — {whatWasHappening}{Environment.NewLine}" +
+            $"{error.GetType().FullName}: {error.Message}{Environment.NewLine}" +
+            assumptionLine +
+            $"{error.StackTrace}{Environment.NewLine}{Environment.NewLine}";
     }
 }

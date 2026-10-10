@@ -343,7 +343,7 @@ public class BreakOffFactoryTests
         var rent = MonthlyBill(-1_600m, 1, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1), id: 1);
         var cutDate = new DateOnly(2025, 7, 1);
 
-        Should.Throw<ArgumentException>(() => BreakOffFactory.BreakOff(new BreakOffRequest
+        Should.Throw<DuplicateFinanceIdException>(() => BreakOffFactory.BreakOff(new BreakOffRequest
         {
             Predecessor = rent,
             PredecessorPlan = null,

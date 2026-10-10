@@ -72,7 +72,7 @@ public sealed class EarMarkPattern
     {
         if (options.FinanceId != goal.FinanceId)
         {
-            throw new ArgumentException(
+            throw new EarMarkPatternGoalMismatchException(
                 $"FinanceId {options.FinanceId} does not match the goal pattern's FinanceId {goal.FinanceId}.",
                 nameof(options));
         }
@@ -84,14 +84,14 @@ public sealed class EarMarkPattern
         // set, else its Start).
         if (options.DatePattern.ActiveStart < goal.DatePattern.ActiveStart)
         {
-            throw new ArgumentException(
+            throw new EarMarkPatternOutsideGoalSpanException(
                 $"An earmark pattern can't begin allocating before its goal's active span starts ({goal.DatePattern.ActiveStart:MMM d, yyyy}).",
                 nameof(options));
         }
 
         if (options.DatePattern.Until > goal.DatePattern.Until)
         {
-            throw new ArgumentException(
+            throw new EarMarkPatternOutsideGoalSpanException(
                 $"An earmark pattern can't still be allocating funds after the goal's own date range ends ({goal.DatePattern.Until:MMM d, yyyy}).",
                 nameof(options));
         }

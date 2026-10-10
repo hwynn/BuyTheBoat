@@ -43,7 +43,7 @@ public sealed class Account
         {
             // 3.1.a1: account (name) cannot be None. Uniqueness of the name is
             // enforced at the storage layer (a UNIQUE column).
-            throw new ArgumentException("Account name cannot be empty.", nameof(options));
+            throw new AccountNameMissingException("Account name cannot be empty.", nameof(options));
         }
 
         if (options.IdealSafetyCushion < 0)

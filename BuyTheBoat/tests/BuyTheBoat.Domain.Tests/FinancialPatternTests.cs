@@ -59,7 +59,7 @@ public class FinancialPatternTests
     [Fact]
     public void Empty_source_is_rejected()
     {
-        Should.Throw<ArgumentException>(() => FinancialPattern.Create(new FinancialPatternOptions
+        Should.Throw<FinancialPatternSourceMissingException>(() => FinancialPattern.Create(new FinancialPatternOptions
         {
             FinanceId = 4,
             Source = "   ",

@@ -65,7 +65,7 @@ public sealed class FinancialPattern
         if (string.IsNullOrWhiteSpace(options.Source))
         {
             // 4.2.a1: source cannot be None.
-            throw new ArgumentException("Source cannot be empty.", nameof(options));
+            throw new FinancialPatternSourceMissingException("Source cannot be empty.", nameof(options));
         }
 
         var mandatory = options.Mandatory ?? options.Amount < 0;

@@ -1,4 +1,5 @@
 using System.IO;
+using BuyTheBoat.Domain;
 using Shouldly;
 
 namespace BuyTheBoat.App.Tests;
@@ -33,5 +34,21 @@ public class ErrorLogTests
         line.ShouldNotContain("cut date");   // no raw developer text
         line.ShouldNotContain("#internal");
         line.ShouldContain("logged");        // tells the user it's recorded, not lost
+    }
+
+    [Fact]
+    public void A_failed_assumption_check_is_logged_with_its_assumption_id()
+    {
+        var entry = ErrorLog.FormatEntry("x", new DuplicateFinanceIdException("Reused id.", "options"), new DateTime(2026, 10, 10));
+
+        entry.ShouldContain("Assumption 3.10.a2");
+    }
+
+    [Fact]
+    public void Any_other_error_is_logged_without_an_assumption_line()
+    {
+        var entry = ErrorLog.FormatEntry("x", new ArgumentException("Source cannot be empty."), new DateTime(2026, 10, 10));
+
+        entry.ShouldNotContain("Assumption");
     }
 }

@@ -29,7 +29,7 @@ public class AccountTests
     [InlineData("   ")]
     public void Name_cannot_be_empty(string name)
     {
-        Should.Throw<ArgumentException>(() => Account.Create(Valid() with { Name = name }));
+        Should.Throw<AccountNameMissingException>(() => Account.Create(Valid() with { Name = name }));
     }
 
     [Fact]
