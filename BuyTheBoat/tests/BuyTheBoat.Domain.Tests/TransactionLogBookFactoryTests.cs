@@ -3808,16 +3808,32 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
-    public void No_isolated_earmark_is_zero_on_a_normal_day()
+    public void No_isolated_earmark_is_zero_unless_a_release_or_give_back_merged_into_it()
     {
         // 3.13c.8.a5: any isolated earmark with an expected_amount of 0 has been deleted.
-        // Deallocation days are skipped: 3.13c.a8 merges give-backs in after a5, and a merge can land on 0 (e.g. a cushion refill cancelled by a drain).
+        // a5 describes the day before releases (3.13c.a10) and give-backs (3.13c.a8) merge in, and a merge can land on 0
+        // (e.g. a cushion refill cancelled by a drain), so deallocation days and jars released that day are skipped.
         var (page, _) = SweepForecast();
 
         foreach (var snapshot in page.BalanceRecord.Values.Where(snapshot => !snapshot.IsDeallocationDay))
         {
-            snapshot.EarMarkEvents.ShouldNotContain(e => !e.RepeatedEarmark && e.ExpectedAmount == 0m);
+            var releasedToday = snapshot.ExpectedTransactions.Select(t => (int?)t.FinanceId).ToHashSet();
+            snapshot.EarMarkEvents.ShouldNotContain(e => !e.RepeatedEarmark && e.ExpectedAmount == 0m && !releasedToday.Contains(e.FinanceId));
         }
+    }
+
+    [Fact]
+    public void A_zero_isolated_earmark_before_releases_merge_in_is_rejected()
+    {
+        // 3.13c.8.a5: a real forecast never does this, so this calls the guard directly.
+        var day = new DateOnly(2025, 6, 1);
+        var zero = TestEarmark(1, repeated: false) with { ExpectedAmount = 0m };
+
+        Should.Throw<ZeroIsolatedEarmarkException>(() => TransactionLogBookFactory.EnsureNoZeroIsolatedEarmark(day, [zero]))
+            .AssumptionId.ShouldBe("3.13c.8.a5");
+
+        // A $0 repeated earmark (a paused plan's contribution) is fine.
+        Should.NotThrow(() => TransactionLogBookFactory.EnsureNoZeroIsolatedEarmark(day, [zero with { RepeatedEarmark = true, ExplicitAmount = null }]));
     }
 
     [Fact]
@@ -4057,6 +4073,44 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void An_auto_renewal_hands_the_jar_to_the_new_segment_without_reserving_it_twice()
+    {
+        // DIVERGENCE(jar-lifetime), through the real renewal path: the old segment's jar closes as the new segment's opens.
+        var (bill, plan) = GymThroughJune();
+        var renewal = new DateOnly(2025, 7, 1);
+        var renewed = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = bill,
+            PredecessorPlan = plan,
+            RenewalDate = renewal,
+            SegmentYears = 1,
+            SuccessorFinanceId = 7003,
+            CarriedOverJarBalance = 300m, // the old jar's balance after its last payment
+            AllPatterns = [bill],
+        });
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 5000m, asOfDate: new DateOnly(2025, 1, 1), horizonEndDate: new DateOnly(2025, 9, 30),
+            financialPatterns: [renewed.Predecessor, renewed.Successor],
+            earMarkPatterns: [renewed.PredecessorPlan!, renewed.SuccessorPlan!],
+            manualEarmarks: renewed.SuccessorStartingEarmark is { } starting ? [starting] : []));
+
+        foreach (var entry in result.GetTimeline())
+        {
+            if (entry.Date < renewal)
+            {
+                entry.Snapshot.FundJars.ShouldNotContain(jar => jar.FinanceId == 7003, $"new jar open early on {entry.Date}");
+            }
+            else
+            {
+                entry.Snapshot.FundJars.ShouldNotContain(jar => jar.FinanceId == bill.FinanceId, $"old jar still open on {entry.Date}");
+            }
+        }
+
+        result.GetTimeline().ShouldContain(entry => entry.Date >= renewal && entry.Snapshot.FundJars.Any(jar => jar.FinanceId == 7003));
+    }
+
+    [Fact]
     public void A_jar_outside_its_bill_or_goals_active_dates_is_rejected()
     {
         // 3.13.5.a6: a real forecast never does this, so this calls the guard directly.
@@ -4089,7 +4143,7 @@ public class TransactionLogBookFactoryTests
             }),
         });
 
-        Should.Throw<ArgumentException>(() => TransactionLogBookFactory.CreateForecast(Options(
+        Should.Throw<DuplicateFinanceIdException>(() => TransactionLogBookFactory.CreateForecast(Options(
             startingBalance: 1000m, asOfDate: SweepAsOf, horizonEndDate: new DateOnly(2025, 6, 30),
             financialPatterns: [rent, gym])));
     }

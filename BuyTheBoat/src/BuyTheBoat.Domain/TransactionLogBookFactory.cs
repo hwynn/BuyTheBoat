@@ -39,6 +39,7 @@ public static class TransactionLogBookFactory
         }
 
         var accountInputs = ResolveAccountInputs(options);
+        EnsureUniqueFinanceIds(accountInputs.SelectMany(account => account.FinancialPatterns));
 
         // One page per account, each its own independent cascade.
         var pages = new Dictionary<string, AccountTransactionPage>();
@@ -613,6 +614,9 @@ public static class TransactionLogBookFactory
                 // jar); the page.s starting date is skipped on purpose (its over-allocation
                 // is the correct "short right now" signal, not a thing to
                 // drain away).
+                // Must run before AppendDeallocationOrGoalReleases: 3.13c.8.a5 describes the day before releases and give-backs merge in, and a merge may legitimately land on 0.
+                EnsureNoZeroIsolatedEarmark(date, earMarkEvents);
+
                 var releaseResult = AppendDeallocationOrGoalReleases(
                     earMarkEvents, date, previousExpected, jarValues, cushionValue,
                     expectedTransactions, patternsById, earmarkedIds);
@@ -980,6 +984,34 @@ public static class TransactionLogBookFactory
                     $"Finance id {financeId} has a fund jar on {date:MMM d, yyyy}, outside its bill or goal's active dates.",
                     nameof(fundJars));
             }
+        }
+    }
+
+    /// <summary>[CALC] Stops the forecast if two bills, paychecks, or goals across all accounts share one finance id.</summary>
+    /// <param name="patterns">Every financial pattern going into the forecast.</param>
+    internal static void EnsureUniqueFinanceIds(IEnumerable<FinancialPattern> patterns)
+    {
+        var seen = new HashSet<int>();
+        foreach (var pattern in patterns)
+        {
+            if (!seen.Add(pattern.FinanceId))
+            {
+                throw new DuplicateFinanceIdException(
+                    $"More than one bill, paycheck, or goal has finance id {pattern.FinanceId}.", nameof(patterns));
+            }
+        }
+    }
+
+    /// <summary>[CALC] Stops the forecast if a day's one-off earmarks include a $0 one, before that day's releases and deallocation are merged in.</summary>
+    /// <param name="date">The day being processed.</param>
+    /// <param name="earMarkEvents">That day's earmark events so far.</param>
+    internal static void EnsureNoZeroIsolatedEarmark(DateOnly date, IReadOnlyList<EarMarkEvent> earMarkEvents)
+    {
+        if (earMarkEvents.FirstOrDefault(e => !e.RepeatedEarmark && e.ExpectedAmount == 0m) is { } zero)
+        {
+            throw new ZeroIsolatedEarmarkException(
+                $"{(zero.FinanceId is { } id ? $"Finance id {id}" : "The safety cushion")} has a $0 isolated earmark on {date:MMM d, yyyy}.",
+                nameof(earMarkEvents));
         }
     }
 

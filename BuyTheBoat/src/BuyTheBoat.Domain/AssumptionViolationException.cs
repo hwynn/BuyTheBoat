@@ -43,14 +43,14 @@ public sealed class ManualEarmarkOutsidePatternSpanException(string message, str
 
 /// <summary>
 /// 3.13c.8.a5: implicit earmarks on balancesnapshot c have been cleared. Any isolated earmark with an expected_amount of 0 has been deleted.
-/// Checked when a manual earmark is created with an amount of zero.
+/// Checked when a manual earmark is created with an amount of zero, and on every forecast day before that day's releases and deallocation merge in.
 /// </summary>
 public sealed class ZeroIsolatedEarmarkException(string message, string? paramName)
     : AssumptionViolationException("3.13c.8.a5", message, paramName);
 
 /// <summary>
 /// 3.10.a2: self.finance_patterns cannot contain any duplicate ids
-/// Checked when a break-off's successor is given its predecessor's own finance id.
+/// Checked when a break-off's successor is given its predecessor's own finance id, and on every forecast's full set of bills, paychecks, and goals.
 /// </summary>
 public sealed class DuplicateFinanceIdException(string message, string? paramName)
     : AssumptionViolationException("3.10.a2", message, paramName);
