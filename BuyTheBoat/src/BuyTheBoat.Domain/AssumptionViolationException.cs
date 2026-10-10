@@ -60,4 +60,25 @@ public sealed class DuplicateFinanceIdException(string message, string? paramNam
 /// Checked on every snapshot day of a forecast; the forecast builds jars from the same plans it checks, so this only fires if that link breaks.
 /// </summary>
 public sealed class FundJarMissingException(string message, string? paramName)
-    : AssumptionViolationException("3.13.5.a1", message, paramName);
+    : InternalAssumptionViolationException("3.13.5.a1", message, paramName);
+
+/// <summary>
+/// An assumption the program's own code should always keep, not one about user input.
+/// If one fires, the user sees a generic error line rather than its message.
+/// </summary>
+public abstract class InternalAssumptionViolationException(string assumptionId, string message, string? paramName)
+    : AssumptionViolationException(assumptionId, message, paramName);
+
+/// <summary>
+/// 9.5.a1: self.fund_jars must have a single fund jar with a finance_id of None
+/// Checked on the starting snapshot and every snapshot day of a forecast.
+/// </summary>
+public sealed class CushionJarCountException(string message, string? paramName)
+    : InternalAssumptionViolationException("9.5.a1", message, paramName);
+
+/// <summary>
+/// 3.13.8.1.a2: only one repeated earmark with finance_id x can exist on a single day.
+/// Checked on every snapshot day of a forecast.
+/// </summary>
+public sealed class DuplicateRepeatedEarmarkException(string message, string? paramName)
+    : InternalAssumptionViolationException("3.13.8.1.a2", message, paramName);

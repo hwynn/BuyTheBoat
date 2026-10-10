@@ -526,6 +526,7 @@ public static class TransactionLogBookFactory
             ExpectedTransactions = [],
             EarMarkEvents = [],
         };
+        EnsureOneCushionJar(null, initialSnapshot.FundJars);
 
         // === CascadePageBalanceRecord role: the forward value pass ===
 
@@ -659,6 +660,8 @@ public static class TransactionLogBookFactory
 
             var fundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: false);
             EnsureJarForEveryActivePlan(date, fundJars, input.EarMarkPatterns);
+            EnsureOneCushionJar(date, fundJars);
+            EnsureOneRepeatedEarmarkPerJar(date, earMarkEvents);
 
             balanceRecord[date] = new BalanceSnapshot
             {
@@ -890,6 +893,37 @@ public static class TransactionLogBookFactory
                 throw new FundJarMissingException(
                     $"Finance id {plan.FinanceId} has a savings plan active on {date:MMM d, yyyy} but no fund jar that day.",
                     nameof(fundJars));
+            }
+        }
+    }
+
+    /// <summary>[CALC] Stops the forecast if a snapshot doesn't hold exactly one safety cushion jar.</summary>
+    /// <param name="date">The snapshot's day; null for the starting snapshot.</param>
+    /// <param name="fundJars">The fund jars that snapshot will hold.</param>
+    internal static void EnsureOneCushionJar(DateOnly? date, IReadOnlyList<FundJar> fundJars)
+    {
+        var cushionJars = fundJars.Count(jar => jar.FinanceId is null);
+        if (cushionJars != 1)
+        {
+            throw new CushionJarCountException(
+                $"The snapshot for {(date is { } day ? day.ToString("MMM d, yyyy") : "the starting balance")} has {cushionJars} safety cushion jars instead of one.",
+                nameof(fundJars));
+        }
+    }
+
+    /// <summary>[CALC] Stops the forecast if a day has two scheduled savings-plan contributions to the same jar instead of one merged contribution.</summary>
+    /// <param name="date">The snapshot's day.</param>
+    /// <param name="earMarkEvents">That day's earmark events.</param>
+    internal static void EnsureOneRepeatedEarmarkPerJar(DateOnly date, IReadOnlyList<EarMarkEvent> earMarkEvents)
+    {
+        var seen = new HashSet<int?>();
+        foreach (var earMarkEvent in earMarkEvents)
+        {
+            if (earMarkEvent.RepeatedEarmark && !seen.Add(earMarkEvent.FinanceId))
+            {
+                throw new DuplicateRepeatedEarmarkException(
+                    $"Finance id {earMarkEvent.FinanceId} has more than one repeated earmark on {date:MMM d, yyyy}.",
+                    nameof(earMarkEvents));
             }
         }
     }

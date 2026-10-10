@@ -21,8 +21,8 @@ public static class ErrorLog
     {
         Record(whatWasHappening, error);
 
-        // A missing fund jar is an internal forecast fault, not input the user can fix, despite being an ArgumentException.
-        return error is (InvalidOperationException or ArgumentException) and not FundJarMissingException
+        // An internal assumption check is a program fault, not input the user can fix, despite being an ArgumentException.
+        return error is (InvalidOperationException or ArgumentException) and not InternalAssumptionViolationException
             ? error.Message
             : "Something went wrong and this couldn't be completed. The details have been logged.";
     }
