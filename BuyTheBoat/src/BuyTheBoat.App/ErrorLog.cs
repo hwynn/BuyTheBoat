@@ -20,7 +20,9 @@ public static class ErrorLog
     public static string RecordAndDescribe(string whatWasHappening, Exception error)
     {
         Record(whatWasHappening, error);
-        return error is InvalidOperationException or ArgumentException
+
+        // A missing fund jar is an internal forecast fault, not input the user can fix, despite being an ArgumentException.
+        return error is (InvalidOperationException or ArgumentException) and not FundJarMissingException
             ? error.Message
             : "Something went wrong and this couldn't be completed. The details have been logged.";
     }

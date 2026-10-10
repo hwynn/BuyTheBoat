@@ -10,4 +10,9 @@
     <PackageReference Include="Ical.Net" Version="5.2.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Lets the Domain tests call internal guards (e.g. TransactionLogBookFactory.EnsureJarForEveryActivePlan) with inputs a real forecast can't produce. -->
+    <InternalsVisibleTo Include="BuyTheBoat.Domain.Tests" />
+  </ItemGroup>
+
 </Project>

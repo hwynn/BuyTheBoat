@@ -657,13 +657,16 @@ public static class TransactionLogBookFactory
             // including the safety cushion.
             var expectedFree = expected - jarValues.Values.Sum() - cushionValue;
 
+            var fundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: false);
+            EnsureJarForEveryActivePlan(date, fundJars, input.EarMarkPatterns);
+
             balanceRecord[date] = new BalanceSnapshot
             {
                 SnapshotDate = date,
                 FullAmount = null, // 10.2: unknowable until the day occurs
                 ExpectedAmount = expected,
                 ExpectedFreeAmount = expectedFree,
-                FundJars = BuildJars(jarValues, milestones, cushionValue, currentIsKnown: false),
+                FundJars = fundJars,
                 ActualTransactions = [],
                 ExpectedTransactions = expectedTransactions,
                 EarMarkEvents = earMarkEvents,
@@ -871,6 +874,24 @@ public static class TransactionLogBookFactory
             ExpectedAmount = amount,
             ExplicitAmount = 0m,
         });
+    }
+
+    /// <summary>[CALC] Stops the forecast if a savings plan is active on this day but the day has no fund jar for its goal — a guard against the forecast's jar-building and its plans drifting apart.</summary>
+    /// <param name="date">The snapshot's day.</param>
+    /// <param name="fundJars">The fund jars that day's snapshot will hold.</param>
+    /// <param name="earMarkPatterns">Every savings plan in the account.</param>
+    internal static void EnsureJarForEveryActivePlan(DateOnly date, IReadOnlyList<FundJar> fundJars, IReadOnlyList<EarMarkPattern> earMarkPatterns)
+    {
+        var jarIds = fundJars.Select(jar => jar.FinanceId).ToHashSet();
+        foreach (var plan in earMarkPatterns)
+        {
+            if (plan.DatePattern.ActiveSpanContains(date) && !jarIds.Contains(plan.FinanceId))
+            {
+                throw new FundJarMissingException(
+                    $"Finance id {plan.FinanceId} has a savings plan active on {date:MMM d, yyyy} but no fund jar that day.",
+                    nameof(fundJars));
+            }
+        }
     }
 
     /// <summary>[CALC] Builds a snapshot's list of fund jars from the running per-jar values — one goal/bill jar per finance id, plus the safety cushion appended last. Order is stable (insertion order of jarValues).</summary>

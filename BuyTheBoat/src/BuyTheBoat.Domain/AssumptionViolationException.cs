@@ -2,7 +2,7 @@ namespace BuyTheBoat.Domain;
 
 /// <summary>
 /// A check enforcing one of the documented assumptions (planning/03-assumptions-glossary.md) failed.
-/// Derives from ArgumentException because every check today rejects bad input to a Create or factory call.
+/// Derives from ArgumentException because most checks reject bad input to a Create or factory call.
 /// </summary>
 public abstract class AssumptionViolationException(string assumptionId, string message, string? paramName)
     : ArgumentException(message, paramName)
@@ -54,3 +54,10 @@ public sealed class ZeroIsolatedEarmarkException(string message, string? paramNa
 /// </summary>
 public sealed class DuplicateFinanceIdException(string message, string? paramName)
     : AssumptionViolationException("3.10.a2", message, paramName);
+
+/// <summary>
+/// 3.13.5.a1: if the day exists within EarMarkPattern A's date_patern(any day between start and end), a fund jar with A's finance_id must exist on that day.
+/// Checked on every snapshot day of a forecast; the forecast builds jars from the same plans it checks, so this only fires if that link breaks.
+/// </summary>
+public sealed class FundJarMissingException(string message, string? paramName)
+    : AssumptionViolationException("3.13.5.a1", message, paramName);

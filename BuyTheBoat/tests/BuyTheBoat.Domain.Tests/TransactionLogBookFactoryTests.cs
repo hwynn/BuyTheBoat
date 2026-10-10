@@ -3582,4 +3582,28 @@ public class TransactionLogBookFactoryTests
         scaledJar.HasGlut.ShouldBeTrue();
         scaledJar.GlutSurplus.ShouldBe(300m); // exactly 2x — proportionally identical, nothing lost or distorted
     }
+
+    // 3.13.5.a1: a real forecast always builds a jar for every plan, so these call the guard directly with a jar list missing one.
+
+    [Fact]
+    public void A_day_inside_a_plans_span_with_no_jar_for_it_is_rejected()
+    {
+        var (_, earmark) = LiveGoal(4001);
+        var cushionOnly = new List<FundJar> { new() { FinanceId = null, CurrentAmount = null, ExpectedAmount = 0m, MilestoneAmount = null } };
+
+        var error = Should.Throw<FundJarMissingException>(() =>
+            TransactionLogBookFactory.EnsureJarForEveryActivePlan(new DateOnly(2025, 6, 1), cushionOnly, [earmark]));
+
+        error.AssumptionId.ShouldBe("3.13.5.a1");
+    }
+
+    [Fact]
+    public void A_day_outside_a_plans_span_needs_no_jar_for_it()
+    {
+        var (_, earmark) = LiveGoal(4002); // plan runs Jan 1 – Dec 1, 2025
+        var cushionOnly = new List<FundJar> { new() { FinanceId = null, CurrentAmount = null, ExpectedAmount = 0m, MilestoneAmount = null } };
+
+        Should.NotThrow(() =>
+            TransactionLogBookFactory.EnsureJarForEveryActivePlan(new DateOnly(2026, 2, 1), cushionOnly, [earmark]));
+    }
 }

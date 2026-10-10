@@ -37,6 +37,15 @@ public class ErrorLogTests
     }
 
     [Fact]
+    public void Hides_a_missing_fund_jar_behind_a_safe_logged_line()
+    {
+        var line = ErrorLog.RecordAndDescribe("x", new FundJarMissingException("Finance id 3 has a savings plan active but no fund jar.", "fundJars"));
+
+        line.ShouldNotContain("Finance id");
+        line.ShouldContain("logged");
+    }
+
+    [Fact]
     public void A_failed_assumption_check_is_logged_with_its_assumption_id()
     {
         var entry = ErrorLog.FormatEntry("x", new DuplicateFinanceIdException("Reused id.", "options"), new DateTime(2026, 10, 10));
