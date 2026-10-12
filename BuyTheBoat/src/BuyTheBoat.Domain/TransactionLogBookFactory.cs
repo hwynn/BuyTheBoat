@@ -9,7 +9,7 @@ namespace BuyTheBoat.Domain;
 // per-account cascade (BuildAccountPage) once per account, then rolls the
 // results up into a household summary. The single-account path (no
 // ForecastOptions.Accounts) synthesizes one "Primary" account from the flat
-// fields, so its output is unchanged.
+// fields.
 //
 // The internal steps carry the documented cascade's names:
 // - AdjustSnapshots role: materialize events and decide which dates get a
@@ -67,29 +67,20 @@ public static class TransactionLogBookFactory
             underfundedReleases.AddRange(built.UnderfundedReleases);
         }
 
-        // Global roll-ups (jar labels, goal shortfalls) span every account —
-        // finance ids are unique across the whole book, so the union is safe.
+        // Every account's patterns and plans combined, for the forecast-wide jar labels and goal shortfalls.
         var allPatterns = accountInputs.SelectMany(account => account.FinancialPatterns).ToList();
         var allEarmarks = accountInputs.SelectMany(account => account.EarMarkPatterns).ToList();
         var allManualEarmarks = accountInputs.SelectMany(account => account.ManualEarmarks).ToList();
         var patternsById = allPatterns.ToDictionary(pattern => pattern.FinanceId);
         var goalShortfalls = CalculateGoalShortfalls(allEarmarks, patternsById, allManualEarmarks);
 
-        // Today's jar per finance id, read off whichever account holds it —
-        // PlanHealthState's "right now" questions all key off this one
-        // snapshot, the same seed every account's InitialSnapshot already is.
+        // Today's jar for each bill or goal, from whichever account holds it; CalculatePlanHealthStates reads today's pace from these.
         var jarsByFinanceId = accountForecasts
             .SelectMany(account => account.Page.InitialSnapshot.FundJars)
             .Where(jar => jar.FinanceId is not null)
             .ToDictionary(jar => jar.FinanceId!.Value);
 
-        // The two once "not yet built" capabilities — the forward
-        // per-occurrence walk and account-level free funds on a future date —
-        // both turn out to be the same missing thread: each account's own
-        // BalanceRecord already carries both (a jar's day-by-day state, and
-        // ExpectedFreeAmount) by this point in CreateForecast. Keyed to the
-        // page holding each savings plan, so IsWorthWarningAbout can walk it
-        // for any future date — even for a goal whose jar isn't open today.
+        // The account page holding each savings plan, so IsWorthWarningAbout can read its jar and free funds on any future date — even for a goal whose jar isn't open today.
         var pageByFinanceId = accountForecasts
             .SelectMany(account => account.Page.EarmarkPatterns
                 .Select(plan => plan.FinanceId)
@@ -151,11 +142,7 @@ public static class TransactionLogBookFactory
         var running = startingAllocation;
         foreach (var date in eventDates)
         {
-            // Accumulate first, THEN reset if this is also a release date —
-            // same order BuildAccountPage's own loop uses, so a
-            // contribution landing the same day as its own release washes
-            // out with it rather than heading a fresh cycle (matches a plan
-            // deliberately paced to land right when its bill is due).
+            // Adds the day's contributions before resetting on a release, the same order BuildAccountPage uses, so a contribution on its own release day washes out with it.
             running += contributionsByDate[date].Sum();
             running = releaseDates.Contains(date) ? 0m : running;
             points.Add((date, running));
@@ -188,10 +175,7 @@ public static class TransactionLogBookFactory
         var running = startingAllocation;
         foreach (var date in eventDates)
         {
-            // Accumulate today's contributions first, THEN pay out a release —
-            // same order BuildAccountPage's own loop uses, so a contribution
-            // landing the same day as its own release nets against it (matches
-            // the structural-glut cascade test's same-day $150-in/$100-out).
+            // Adds the day's contributions before paying out a release, the same order BuildAccountPage uses, so a contribution on its own release day nets against it.
             running += contributionsByDate[date].Sum();
             if (releaseDates.Contains(date))
             {
@@ -242,7 +226,7 @@ public static class TransactionLogBookFactory
         return occurrences.Count > 0 ? occurrences[0] : null;
     }
 
-    /// <summary>[CALC] Returns the per-account breakdown when given; otherwise one "Primary" account synthesized from the flat fields — the pre-multi-account behavior, byte-for-byte.</summary>
+    /// <summary>[CALC] Returns the per-account breakdown when given; otherwise one "Primary" account synthesized from the flat fields.</summary>
     /// <param name="options">The forecast options, with either Accounts set or the flat single-account fields.</param>
     private static IReadOnlyList<AccountForecastInput> ResolveAccountInputs(ForecastOptions options)
     {
@@ -298,8 +282,7 @@ public static class TransactionLogBookFactory
                     shortAccounts.Add(account.Name);
                 }
 
-                // The buffer is not whole. Never fires for an account with
-                // no cushion, since 0 can't sit below 0.
+                // The account's cushion is below its target.
                 if (sample.Cushion < account.Page.IdealSafetyCushion)
                 {
                     cushionDipped.Add(account.Name);
@@ -357,20 +340,12 @@ public static class TransactionLogBookFactory
     private static AccountPageBuild BuildAccountPage(AccountForecastInput input, DateOnly asOfDate, DateOnly horizonEndDate)
     {
         var patternsById = input.FinancialPatterns.ToDictionary(pattern => pattern.FinanceId);
+        // An expense with an EarMarkPattern is paid from its jar; one without comes straight out of free funds on its due date.
         var earmarkedIds = input.EarMarkPatterns.Select(earmark => earmark.FinanceId).ToHashSet();
-
-        // Every outflow that reserves against free funds does so through a
-        // real EarMarkPattern (its Allocation Plan), created at
-        // pattern-creation time by AllocationPlanProposer and passed in via
-        // input.EarMarkPatterns — so the engine treats a bill's plan exactly
-        // like a goal's savings plan, and an outflow with no plan simply
-        // reduces free funds on its due date (and reads short).
 
         // === AdjustSnapshots role: materialize the window's events ===
 
-        // ExpectedTransactions: one per FinancialPattern occurrence in the
-        // window. These, not raw occurrence counts, now drive the balance
-        // math — restoring the documented model's event layer.
+        // Creates an ExpectedTransaction for each FinancialPattern occurrence in the window and files it under its date in expectedByDate.
         var expectedByDate = new Dictionary<DateOnly, List<ExpectedTransaction>>();
         foreach (var pattern in input.FinancialPatterns)
         {
@@ -387,13 +362,8 @@ public static class TransactionLogBookFactory
 
         var earmarkEventsByDate = new Dictionary<DateOnly, List<EarMarkEvent>>();
 
-        // Repeated earmark events from each EarMarkPattern's schedule. The
-        // stored pattern amount is negative (its sign convention is "effect
-        // on free balance"); an event's ExpectedAmount is positive-into-jar,
-        // so the sign flips here. Two patterns
-        // sharing a finance_id (concurrent earmark patterns) can land on the same
-        // day, so this merges rather than always appending — the repeated
-        // counterpart to MergeOrAppendIsolatedEarmark below.
+        // Creates a repeated earmark event for each EarMarkPattern occurrence in the window and files it under its date in earmarkEventsByDate.
+        // The amount is flipped because EarMarkPattern.Amount is stored negative (its effect on free funds).
         foreach (var earmark in input.EarMarkPatterns)
         {
             foreach (var date in earmark.DatePattern.GetOccurrences(asOfDate, horizonEndDate))
@@ -402,13 +372,8 @@ public static class TransactionLogBookFactory
             }
         }
 
-        // Manual (user-created) isolated earmarks in the window:
-        // ExplicitAmount = the user's number (8.4.a2 / 3.13.8.5.a1) — kept
-        // distinct so a deallocation-day give-back can merge in without losing
-        // the user's intent (3.13c.8.4.a2). One dated exactly on the as-of day
-        // is already folded into the seed above; it's attached here too so the
-        // day DISPLAYS it, and the seed-day rule (no deltas) prevents double
-        // counting.
+        // Creates an isolated earmark event for each manual earmark in the window and files it under its date in earmarkEventsByDate.
+        // One on the as-of day is already in the starting jars; it's added here only so that day displays it (the as-of day applies no changes).
         foreach (var manual in input.ManualEarmarks)
         {
             if (manual.Date >= asOfDate && manual.Date <= horizonEndDate)
@@ -424,18 +389,8 @@ public static class TransactionLogBookFactory
             }
         }
 
-        // ASSUMED-PAIRING(3.13c.a10): a goal's own occurrence releases the
-        // money its jar was holding, or it would be double-counted against the
-        // occurrence's ExpectedTransaction (in the documented model this
-        // implicit withdrawal is created when a PAIRED ACTUAL transaction
-        // lands; with pairing assumed, the expected occurrence triggers it).
-        // This is now decided PER DAY in the cascade below, because on a
-        // deallocation day the release IS Step A's paired earmark (06/07
-        // decision #1: the SAME earmark, mutually exclusive with the normal-day
-        // release). A goal occurrence is simply an expected transaction whose
-        // finance id has an EarMarkPattern (earmarkedIds), and it is already an
-        // ExpectedTransaction in expectedByDate — so nothing is materialized
-        // here; the cascade classifies it as a paired transaction on its day.
+        // ASSUMED-PAIRING(3.13c.a10): a bill or goal's own occurrence releases the money its jar was holding, or it would be counted twice against its ExpectedTransaction.
+        // The documented model releases it when a paired actual transaction lands; here the expected occurrence triggers it, per day in the cascade below (AppendDeallocationOrGoalReleases).
 
         // Snapshot dates: exactly the dates with at least one event
         // (adjust_snapshots / 3.13.a3). The as-of day itself is represented
@@ -446,26 +401,13 @@ public static class TransactionLogBookFactory
 
         // === Initial snapshot: the manually-seeded starting point ===
 
-        // Goal jars start from their pre-as-of state: StartingAllocation
-        // plus contributions already scheduled before/on the as-of date,
-        // minus goal occurrences that already released money
-        // (~3.13.5.3.a1, seeded from the pattern's own Start so a goal
-        // already partway through its schedule shows a non-zero jar today).
+        // Each open jar's running balance, and its milestone for the current cycle, keyed by finance id; the cascade below updates both day by day.
         var jarValues = new Dictionary<int, decimal>();
         var milestones = new Dictionary<int, decimal>();
 
-        // DIVERGENCE(jar-lifetime): 3.13.5.a2 keeps a jar inside its earmark pattern's dates; here a jar lives for its bill or goal's whole active span instead (3.13.5.a6), so it can outlive its savings plan.
-        // A jar is only open while that span covers the day: it opens when the span starts and closes on the first snapshot after the span ends, returning whatever it still holds to free funds.
-        // A break-off successor gets its own new jar, funded by its plan's StartingAllocation.
-        // Each plan's StartingAllocation lands on that plan's own active start, so a plan starting later doesn't reserve its money early.
         var startingAllocationApplied = new HashSet<EarMarkPattern>(ReferenceEqualityComparer.Instance);
 
-        // More than one EarMarkPattern may share a finance_id (a
-        // "Restructure" predecessor + successor), so every plan funding a
-        // goal is summed here — one jar/milestone value per finance_id, not
-        // one per plan. Each plan's own GetOccurrences call is bounded by
-        // ITS OWN Until, so a truncated predecessor and its successor never
-        // double-count the same day.
+        // Sets each open jar's starting balance in jarValues and its milestone in milestones, summing every plan that funds it (e.g. a Restructure predecessor and successor).
         foreach (var group in input.EarMarkPatterns.ToLookup(earmark => earmark.FinanceId))
         {
             var financeId = group.Key;
@@ -492,47 +434,14 @@ public static class TransactionLogBookFactory
             var withdrawn = Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(goal.DatePattern.ActiveStart, asOfDate).Count;
             jarValues[financeId] = Math.Max(0m, contributed - withdrawn);
 
-            // 3.13.5.4.a1, reset-at-release: milestone counts scheduled
-            // contributions since the goal's LAST release, not its lifetime
-            // total — otherwise a repeating goal's milestone climbs forever
-            // even though its jar returns to ~0 on every on-time payment (a
-            // $500/month loan paid on schedule would read "$500 short," then
-            // "$1,000 short," forever). Deliberately does not carry a
-            // chronic, multi-cycle shortfall forward — GoalShortfall (the
-            // whole-span, never-resets metric) is what catches that; this is
-            // the per-cycle pacing signal.
-            //
-            // Walks "since the last release" rather than taking a "lifetime
-            // contributed minus lifetime withdrawn" shortcut. That
-            // shortcut only equals "since the last release" when every prior
-            // cycle's own contributions exactly matched what got released —
-            // each such cycle then nets to zero and cancels out of the
-            // lifetime sum, leaving just the current cycle's own residual.
-            // The moment a goal's plans DON'T sum to its own rate (found via
-            // Storage Unit Rental in the field: two concurrent plans, $35 +
-            // $25, against a $50 bill), every prior cycle leaves a real
-            // residual too, and the shortcut silently accumulates it across
-            // every cycle instead of resetting — a stream running $10/month
-            // ahead of its bill read as "$80 saved" after 8 months instead
-            // of the ~$25 actually accrued since the last release (and the
-            // underfunded mirror image floors at 0 every cycle instead of
-            // showing what's genuinely accrued toward the current one).
-            // ComputeMilestoneTrajectory already walks this correctly
-            // (reset-at-release, proven by its own tests) — reused here for
-            // its last point rather than re-deriving a second, narrower
-            // formula. from is the earliest of this finance_id's own plans'
-            // ActiveStart, matching how a concurrent second earmark pattern is
-            // already handled everywhere else this needs an anchor date.
+            // 3.13.5.4.a1, reset-at-release: the milestone counts only contributions since the goal's last release, so an on-time repeating bill doesn't read further behind every cycle.
+            // Uses ComputeMilestoneTrajectory's walk, because lifetime contributed minus lifetime withdrawn drifts whenever a goal's plans don't add up to its amount.
             var earliestActiveStart = plans.Min(plan => plan.DatePattern.ActiveStart);
             var milestoneTrajectory = ComputeMilestoneTrajectory(plans, goal, earliestActiveStart, asOfDate);
             milestones[financeId] = milestoneTrajectory.Count > 0 ? milestoneTrajectory[^1].MilestoneAmount : 0m;
         }
 
-        // The safety cushion (finance_id = null jar, priority 0) can't live in
-        // jarValues (its key is a non-nullable int), so it rides alongside as a
-        // running value. Firm target: seeded to the full amount and refilled to
-        // it each day; deallocation drains it first. 0 (the default) keeps the
-        // pre-cushion behaviour exactly.
+        // The safety cushion (finance_id = null) can't live in jarValues, whose keys are non-nullable ints, so it's tracked here and starts full.
         var cushionTarget = input.IdealSafetyCushion;
         var cushionValue = cushionTarget;
 
@@ -542,9 +451,6 @@ public static class TransactionLogBookFactory
         var initialSnapshot = new BalanceSnapshot
         {
             SnapshotDate = null,
-            // The one manually-entered number: the user's real balance as of
-            // the as-of date, assumed to already reflect everything that
-            // happened up to and including that day.
             FullAmount = input.StartingBalance,
             ExpectedAmount = input.StartingBalance,
             ExpectedFreeAmount = input.StartingBalance - currentUnpaidExpected - jarValues.Values.Sum() - cushionValue,
@@ -565,16 +471,14 @@ public static class TransactionLogBookFactory
         var flooredManualEarmarks = new List<(DateOnly Date, int FinanceId)>();
         var underfundedReleases = new List<(DateOnly Date, int FinanceId)>();
 
+        // Builds a BalanceSnapshot for each snapshot date from the previous day's values and adds it to balanceRecord.
         foreach (var date in snapshotDates)
         {
             var expectedTransactions = expectedByDate.GetValueOrDefault(date) ?? [];
             var earMarkEvents = earmarkEventsByDate.GetValueOrDefault(date) ?? [];
 
-            // ASSUMED-PAIRING(as-of-day-settled): the entered balance is
-            // assumed to already include anything happening ON the as-of
-            // date, so a snapshot dated exactly there attaches its events
-            // for display but contributes no deltas — its values equal the
-            // initial snapshot's. (Same convention the flat engine used.)
+            // ASSUMED-PAIRING(as-of-day-settled): the entered balance already includes the as-of day's transactions.
+            // A snapshot on that date shows its events but changes nothing; its values equal the initial snapshot's.
             var isPageStartDate = date == asOfDate;
 
             // 10.3: previous snapshot's amount + today's expected
@@ -585,13 +489,10 @@ public static class TransactionLogBookFactory
             var isDeallocationDay = false;
             if (!isPageStartDate)
             {
-                // DIVERGENCE(jar-lifetime): must run before deallocation and today's events, so a closed jar is never drained and a newly opened one can take today's contributions.
+                // DIVERGENCE(jar-lifetime): must run before AppendDeallocationOrGoalReleases and today's earmark events, so a closed jar is never drained and a newly opened one can take today's contributions.
                 OpenAndCloseJars(date, jarValues, milestones, input.EarMarkPatterns, patternsById, startingAllocationApplied);
 
-                // The safety cushion refills toward its standing target each day
-                // via a positive isolated null-id earmark, toward a fixed target with
-                // no due date and no reset (delta is 0 once at target). After a
-                // deallocation drained it, this steps it back up.
+                // Adds an isolated earmark that tops the cushion back up to its target (none when it's already full).
                 var cushionFill = cushionTarget - cushionValue;
                 if (cushionFill != 0m)
                 {
@@ -605,16 +506,7 @@ public static class TransactionLogBookFactory
                     });
                 }
 
-                // At this point earMarkEvents holds exactly the day's SCHEDULED
-                // earmarks (er + ei): repeated savings-plan contributions, manual
-                // earmarks, and the cushion refill delta. jarValues + cushionValue still hold
-                // the PREVIOUS day's balances (f) — the floor loop below applies
-                // today's events. Deallocation runs first and appends its
-                // give-backs (the cushion, priority 0, is drained before any real
-                // jar); the page.s starting date is skipped on purpose (its over-allocation
-                // is the correct "short right now" signal, not a thing to
-                // drain away).
-                // Must run before AppendDeallocationOrGoalReleases: 3.13c.8.a5 describes the day before releases and give-backs merge in, and a merge may legitimately land on 0.
+                // Must run before AppendDeallocationOrGoalReleases: 3.13c.8.a5 checks the day's scheduled earmarks before releases and give-backs merge in, and a merge may legitimately land on 0.
                 EnsureNoZeroIsolatedEarmark(date, earMarkEvents);
 
                 var releaseResult = AppendDeallocationOrGoalReleases(
@@ -622,11 +514,8 @@ public static class TransactionLogBookFactory
                     expectedTransactions, patternsById, earmarkedIds);
                 isDeallocationDay = releaseResult.IsDeallocationDay;
 
-                // 3.13.5.3.a1 per jar: previous day's amount + today's earmark
-                // events, floored at 0 (a jar can be emptied, never negative).
-                // Deallocation/release give-backs are ordinary earmark events, so
-                // the jars — and the cushion — come down here for free: the ONLY
-                // place balances move.
+                // 3.13.5.3.a1: adds each of today's earmark events to its jar in jarValues (or to cushionValue), flooring at 0.
+                // This is the only place jar and cushion balances change; releases and give-backs arrive here as ordinary earmark events.
                 foreach (var earMarkEvent in earMarkEvents)
                 {
                     if (earMarkEvent.FinanceId is not { } financeId)
@@ -638,23 +527,16 @@ public static class TransactionLogBookFactory
 
                     var unfloored = jarValues[financeId] + earMarkEvent.ExpectedAmount;
 
-                    // A manual withdrawal bigger than what the jar held means the
-                    // user's stated intent didn't fully happen — only what the
-                    // jar held actually moved. Reported so the UI can flag it in
-                    // place. Judged on the user-entered portion alone, since a
-                    // release or give-back may be merged into the same event.
+                    // Records a manual withdrawal that asked for more than the jar held, so the UI can flag it.
+                    // Judged on ExplicitAmount alone, since a release or give-back may be merged into the same event.
                     if (earMarkEvent.ExplicitAmount is { } explicitAmount && explicitAmount < 0m
                         && jarValues[financeId] + explicitAmount < 0m)
                     {
                         flooredManualEarmarks.Add((date, financeId));
                     }
 
-                    // PlanHealthState's UnderfundedReleaseDates: this
-                    // specific finance id's OWN release (its goal/bill
-                    // occurrence today, per ReleasedFinanceIds — not some
-                    // unrelated jar a deallocation day happened to raid)
-                    // wanted to pay out more than the jar held, including any
-                    // manual earmark merged into the same event.
+                    // Records this bill or goal's own release coming up short, including any manual earmark merged into it.
+                    // Checks ReleasedFinanceIds so a jar a deallocation day drained isn't counted.
                     if (unfloored < 0m && !earMarkEvent.RepeatedEarmark
                         && releaseResult.ReleasedFinanceIds.Contains(financeId))
                     {
@@ -671,17 +553,8 @@ public static class TransactionLogBookFactory
                     }
                 }
 
-                // ASSUMED-PAIRING(3.13c.a10), reset-at-release: today's own
-                // goal/bill occurrence(s) close out
-                // their current cycle, so the pacing milestone starts fresh —
-                // AFTER today's own accumulation above, so a same-day final
-                // contribution (a plan intentionally paced to land right when
-                // its bill is due) washes out together with the release instead
-                // of reading as the next cycle's head start. Keyed on the
-                // occurrence itself (ReleasedFinanceIds), not on which jars
-                // moved money today, because a deallocation day can drain an
-                // UNRELATED jar to cover the shortfall — that jar's own
-                // occurrence isn't today, so its pacing must not reset.
+                // ASSUMED-PAIRING(3.13c.a10): sets the milestone back to 0 for each bill or goal that occurred today.
+                // Must run after the loop above, so a same-day final contribution washes out with the release.
                 foreach (var releasedFinanceId in releaseResult.ReleasedFinanceIds)
                 {
                     milestones[releasedFinanceId] = 0m;
@@ -753,6 +626,7 @@ public static class TransactionLogBookFactory
     }
 
     /// <summary>[CALC] The "can I afford X?" engine: on a deallocation day drains the lowest-priority jars first to cap allocation at available funds; otherwise releases each goal's jar on its own occurrence. Either way, appends the result to the day's earMarkEvents (mutated in place) — deallocation never rewrites jar values directly.</summary>
+    /// <remarks>DIVERGENCE(release-outside-plan): 3.13.8.a2 keeps an earmark inside its earmark pattern's dates, but a savings plan can end before its bill or goal is due. The isolated earmarks made here (releases and deallocation give-backs) may fall anywhere in the bill or goal's active span instead. User-entered manual earmarks still stay inside the plan's own dates (ManualEarmark.Create).</remarks>
     /// <param name="earMarkEvents">The day's already-scheduled earmark events; the day's release/deallocation events are appended here.</param>
     /// <param name="date">The day being processed.</param>
     /// <param name="previousExpected">Yesterday's ExpectedAmount (c).</param>
@@ -761,7 +635,7 @@ public static class TransactionLogBookFactory
     /// <param name="expectedTransactions">Today's expected transactions.</param>
     /// <param name="patternsById">Every financial pattern, keyed by finance id.</param>
     /// <param name="earmarkedIds">Finance ids with a savings plan — their own occurrence today is a paired transaction (ap), not an unpaired one.</param>
-    /// <returns>Whether this was a deallocation day (surfaced onto the snapshot for the UI drain highlight), plus which finance ids had their own occurrence today, so the caller can reset their milestone pacing regardless of which branch ran.</returns>
+    /// <returns>Whether this was a deallocation day (surfaced onto the snapshot for the UI drain highlight), plus which finance ids had their own occurrence today, so the caller can reset their milestone pacing regardless of which branch ran. This is not every jar that gave money back: a deallocation day can drain jars whose occurrence isn't today, and their pacing must not reset.</returns>
     private static (bool IsDeallocationDay, IReadOnlyList<int> ReleasedFinanceIds) AppendDeallocationOrGoalReleases(
         List<EarMarkEvent> earMarkEvents,
         DateOnly date,
@@ -772,7 +646,7 @@ public static class TransactionLogBookFactory
         IReadOnlyDictionary<int, FinancialPattern> patternsById,
         IReadOnlySet<int> earmarkedIds)
     {
-        // Paired (ap) vs. unpaired (au).
+        // Adds each of today's expected transactions to pairedTransactions (ap) if it has a savings plan, otherwise to the unpaired total (au).
         var pairedTransactions = new List<PairedTransaction>();
         var unpaired = 0m;
         foreach (var transaction in expectedTransactions)
@@ -792,8 +666,7 @@ public static class TransactionLogBookFactory
             }
         }
 
-        // Each jar's already-scheduled earmark total (er + ei) for the day;
-        // the cushion's own fill delta is tracked separately (null finance id).
+        // Adds each of today's scheduled earmarks (er + ei) to its jar's total in existingByJar, or to cushionExisting for the cushion.
         var existingByJar = new Dictionary<int, decimal>();
         var cushionExisting = 0m;
         foreach (var earMarkEvent in earMarkEvents)
@@ -808,10 +681,7 @@ public static class TransactionLogBookFactory
             }
         }
 
-        // The finance_id=null safety cushion goes FIRST at priority 0 (drained
-        // before every real jar), with its previous balance and today's fill
-        // delta. Then every real jar with its previous balance (f) and
-        // scheduled earmark total.
+        // Creates a DeallocationJar for the cushion first (priority 0, drained before every real jar), then adds one for each real jar.
         var jars = new List<DeallocationJar>(jarValues.Count + 1)
         {
             new(FinanceId: null, Priority: 0, Balance: cushionValue, ExistingEarmark: cushionExisting),
@@ -823,15 +693,10 @@ public static class TransactionLogBookFactory
                 Priority: patternsById[financeId].Priority,
                 Balance: balance,
                 ExistingEarmark: existingByJar.GetValueOrDefault(financeId),
-                // Mandatory means "the user has to pay this", and its only
-                // job is protecting the jar — everything skippable is
-                // drained before anything unskippable is touched.
+                // Bills the user has to pay are drained only after every skippable jar.
                 Skippable: !patternsById[financeId].Mandatory));
         }
 
-        // DIVERGENCE(release-outside-plan): 3.13.8.a2 keeps an earmark inside its earmark pattern's dates, but a savings plan can end before its bill or goal is due.
-        // The isolated earmarks made below (releases and deallocation give-backs) may fall anywhere in the bill or goal's active span instead.
-        // User-entered manual earmarks still stay inside the plan's own dates (ManualEarmark.Create).
         var isDeallocationDay =
             DeallocationCalculator.IsDeallocationDay(previousExpected, jars, pairedTransactions, unpaired);
         if (isDeallocationDay)
@@ -840,6 +705,8 @@ public static class TransactionLogBookFactory
             // normal-day release below must NOT also fire on a deallocation day.
             var deallocation = DeallocationCalculator.Deallocate(
                 previousExpected, jars, pairedTransactions, unpaired);
+
+            // Adds each deallocation earmark to today's earMarkEvents.
             foreach (var (financeId, amount) in deallocation.EarmarkEvents)
             {
                 MergeOrAppendIsolatedEarmark(earMarkEvents, financeId, amount, date);
@@ -847,8 +714,7 @@ public static class TransactionLogBookFactory
         }
         else
         {
-            // Not a deallocation day: each goal occurrence releases its jar in
-            // full, exactly as before deallocation existed.
+            // Not a deallocation day: adds a release to today's earMarkEvents for each bill or goal occurring today, taking its amount out of its jar.
             foreach (var paired in pairedTransactions)
             {
                 MergeOrAppendIsolatedEarmark(earMarkEvents, paired.FinanceId, -Math.Abs(paired.Amount), date);
@@ -930,6 +796,7 @@ public static class TransactionLogBookFactory
     }
 
     /// <summary>[CALC] Closes the jars of bills and goals that have ended (their leftover becomes free funds), opens jars for ones that have started, and adds each savings plan's starting balance once its plan has started.</summary>
+    /// <remarks>DIVERGENCE(jar-lifetime): 3.13.5.a2 keeps a jar inside its earmark pattern's dates; here a jar lives for its bill or goal's whole active span instead (3.13.5.a6), so it can outlive its savings plan. A break-off successor gets its own new jar, funded by its plan's StartingAllocation.</remarks>
     /// <param name="date">The day being processed.</param>
     /// <param name="jarValues">Every open jar's balance, keyed by finance id; jars are added and removed in place.</param>
     /// <param name="milestones">Every open jar's milestone accrual, kept in step with jarValues.</param>
@@ -1101,7 +968,7 @@ public static class TransactionLogBookFactory
         return jars;
     }
 
-    /// <summary>[CALC] Computes each goal's shortfall: whether its Allocation Plan will put in enough by its due date. Always includes every outflow that has a plan (ShortfallAmount is 0 when fully on track), evaluated independently of any display horizon, so a UI can render one row per plan without a separate lookup. The same formula serves a one-time goal and a repeating bill — the need scales by occurrence count, and "allocated" counts isolated earmarks (manual adjustments, the starting earmark) as well as the plan's own contributions. Gross-vs-gross: can't detect a plan that back-loads its contributions within the span, though the proposer never actually produces that shape.</summary>
+    /// <summary>[CALC] Computes each goal's shortfall: whether its Allocation Plan will put in enough by its due date. Always includes every expense that has a plan (ShortfallAmount is 0 when fully on track), evaluated independently of any display horizon, so a UI can render one row per plan without a separate lookup. The same formula serves a one-time goal and a repeating bill — the need scales by occurrence count, and "allocated" counts isolated earmarks (manual adjustments, the starting earmark) as well as the plan's own contributions. Gross-vs-gross: can't detect a plan that back-loads its contributions within the span, though the proposer never actually produces that shape.</summary>
     /// <param name="earMarkPatterns">Every savings plan.</param>
     /// <param name="goalsByFinanceId">Every goal/bill pattern, keyed by finance id.</param>
     /// <param name="manualEarmarks">Every manual earmark.</param>
@@ -1112,10 +979,7 @@ public static class TransactionLogBookFactory
     {
         var shortfalls = new List<GoalShortfall>();
 
-        // One row per GOAL, not one per plan — more than one EarMarkPattern
-        // may share a finance_id (a "Restructure" predecessor + successor),
-        // and every plan funding a goal must be summed into its one
-        // shortfall row.
+        // Adds a GoalShortfall to shortfalls for each goal, summing every plan that funds it.
         foreach (var group in earMarkPatterns.ToLookup(earmark => earmark.FinanceId))
         {
             var financeId = group.Key;
@@ -1128,7 +992,7 @@ public static class TransactionLogBookFactory
 
             // StartingAllocation (the entered opening balance) + every plan's
             // repeated contributions to date + any isolated earmarks dated on or
-            // before the due date. The three don't overlap, so no double count.
+            // before the due date.
             var allocated = group.Sum(earmark =>
                     earmark.StartingAllocation
                     - earmark.Amount * earmark.DatePattern.GetOccurrences(earmark.DatePattern.ActiveStart, dueDate).Count)
@@ -1149,11 +1013,7 @@ public static class TransactionLogBookFactory
         return shortfalls;
     }
 
-    // Named, easily-adjustable constants for
-    // DetermineIsWorthWarningAbout's thresholds — not literals, so they can
-    // be tuned without hunting through the rule's own branches. Hunting down
-    // *other* pre-existing magic numbers elsewhere is explicitly deferred to
-    // a future pass, not this one.
+    // DetermineIsWorthWarningAbout's thresholds.
     private const int WarnIfWithinMonths = 2;
     private const int LookaheadMonths = 6;
     private const decimal HalfOfFreeFundsRatio = 0.5m;
@@ -1189,71 +1049,40 @@ public static class TransactionLogBookFactory
             var jar = jarsByFinanceId.GetValueOrDefault(financeId)
                 ?? new FundJar { FinanceId = financeId, CurrentAmount = 0m, ExpectedAmount = 0m, MilestoneAmount = 0m };
 
-            // Today's live pace — the same two fields the Earmark form's
-            // "current jar state" row already shows, just named from the
-            // comparison's own two possible directions. At most one is ever
-            // non-zero: they are Max(0, x) and Max(0, -x) of the same gap.
+            // How far behind or ahead of its milestone the jar is today; at most one is non-zero.
             var currentShortfall = Math.Max(0m, (jar.MilestoneAmount ?? 0m) - jar.ExpectedAmount);
             var currentOverfunded = Math.Max(0m, jar.ExpectedAmount - (jar.MilestoneAmount ?? 0m));
 
-            // IsChronicShortfall: would this Savings Plan's own scheduled
-            // contributions, run to completion with no further one-time
-            // intervention, structurally reach AmountNeeded on their own?
-            // Ignores StartingAllocation and manual earmarks on purpose —
-            // those are exactly the one-time interventions being tested
-            // against, so including them would make every plan look
-            // "fixable," which is the question, not the answer.
+            // IsChronicShortfall: would the plan's scheduled contributions alone, run to the due date, fall short of AmountNeeded?
+            // Leaves out StartingAllocation and manual earmarks: those are the one-time fixes this checks whether the plan needs.
             var plannedTotal = earMarkPatterns
                 .Where(earmark => earmark.FinanceId == financeId)
                 .Sum(earmark => -earmark.Amount
                     * earmark.DatePattern.GetOccurrences(earmark.DatePattern.ActiveStart, shortfall.DueDate).Count);
             var isChronicShortfall = shortfall.ShortfallAmount > 0m && plannedTotal < shortfall.AmountNeeded;
 
-            // IsChronicOverfund: the excess-side mirror, same plannedTotal —
-            // would this Savings Plan's own scheduled contributions,
-            // structurally, put in MORE than AmountNeeded? At most one of
-            // IsChronicShortfall/IsChronicOverfund is ever true: they test
-            // opposite sides of the same plannedTotal-vs-AmountNeeded
-            // comparison, gated on ShortfallAmount/OverfundedAmount, which
-            // are themselves Max(0, x)/Max(0, -x) of the same gap.
+            // IsChronicOverfund: would the plan's scheduled contributions alone put in more than AmountNeeded?
             var isChronicOverfund = shortfall.OverfundedAmount > 0m && plannedTotal > shortfall.AmountNeeded;
 
-            // The earliest date this financeId's own release actually came
-            // up short, from the same forward-walk data IsWorthWarningAbout
-            // already uses. Falls back to the due date only when the walk
-            // found no specific short occurrence to point at (e.g. the
-            // horizon requested didn't reach one) but the whole-span
-            // shortfall is still positive.
+            // The first date this goal's own release came up short, or its due date if the forecast didn't reach one but the whole span is still short.
             var shortReleaseDates = releaseDatesByFinanceId[financeId];
             var projectedShortfallStartDate = shortReleaseDates.Any()
                 ? shortReleaseDates.Min()
                 : shortfall.ShortfallAmount > 0m ? shortfall.DueDate : (DateOnly?)null;
 
-            // "Is the excess so much that we could skip a payment?" is
-            // folded into DetermineIsWorthWarningAbout's own excess branch
-            // below rather than kept as its own property — the threshold is
-            // double the SMALLEST repeated EarMarkPattern amount in this
-            // Savings Plan (not the goal's own amount), since a plan can
-            // have more than one concurrent earmark pattern at different rates.
             var isWorthWarningAbout = DetermineIsWorthWarningAbout(
                 goalsByFinanceId[financeId], shortfall, currentShortfall, currentOverfunded,
                 pageByFinanceId[financeId], asOfDate,
                 earMarkPatterns.Where(earmark => earmark.FinanceId == financeId).ToList(),
                 shortReleaseDates);
 
-            // See PlanHealthState's own doc comments on each for the full
-            // reasoning.
             var goal = goalsByFinanceId[financeId];
             var isFirstOccurrencePending = IsFirstOccurrencePending(goal, asOfDate);
             var firstOccurrenceShortfall = FirstOccurrenceShortfall(
                 earMarkPatterns.Where(earmark => earmark.FinanceId == financeId).ToList(), goal, manualEarmarks, asOfDate);
 
-            // Free cash entering the first payment's day (measured the day
-            // before) and that payment's own date. Free is what's on hand to
-            // absorb any part of the payment still not set aside — telling "the
-            // money's probably there, just not earmarked" apart from "genuinely
-            // short"; the date stamps the urgent warning. Only computed while
-            // the first occurrence is still pending.
+            // Free funds the day before the first payment, and that payment's date; set only while the first payment is still ahead.
+            // Free funds tell "the money's there, just not set aside" apart from "genuinely short".
             decimal? firstOccurrenceFreeFunds = null;
             DateOnly? firstOccurrenceDate = null;
             if (isFirstOccurrencePending && FirstOccurrence(goal.DatePattern) is { } firstPaymentDate)
@@ -1304,8 +1133,7 @@ public static class TransactionLogBookFactory
         IReadOnlyList<EarMarkPattern> plansForThisGoal,
         IEnumerable<DateOnly> shortReleaseDatesForThisGoal)
     {
-        // A shortage TODAY is always worth surfacing — none of the plan-health rules
-        // soften "already behind right now," only the further-off/excess cases.
+        // Already behind today: always worth a warning.
         if (currentShortfall > 0m)
         {
             return true;
@@ -1324,9 +1152,7 @@ public static class TransactionLogBookFactory
                     return true;
                 }
 
-                // Non-repeated rules 3/4: further off — the half-of-free-funds
-                // boundary (rule 4: the same shared calculation the repeated
-                // branch below reuses, not two separate computations).
+                // Non-repeated rules 3/4: due further off, so warn only if the shortfall is at least half the free funds on the due date.
                 return shortfall.ShortfallAmount >= HalfOfFreeFunds(page, shortfall.DueDate);
             }
 
@@ -1336,13 +1162,8 @@ public static class TransactionLogBookFactory
                 return true; // no more occurrences to project against — default to the visible side
             }
 
-            // Repeated rule 3: any occurrence within six months being short
-            // is always worth surfacing, independent of rules 1/2 — a
-            // repeating pattern's future shortfall doesn't get to "hide" the
-            // way a single far-off one-time goal's can. This also covers
-            // rule 1 (next occurrence soon and short)
-            // whenever that's the occurrence actually flagged, since "soon"
-            // is always inside the six-month window.
+            // Repeated rule 3: warn if any release in the next six months comes up short.
+            // This also covers rule 1 (the next occurrence is soon and short).
             var lookaheadEnd = asOfDate.AddMonths(LookaheadMonths);
             if (shortReleaseDatesForThisGoal.Any(date => date <= lookaheadEnd))
             {

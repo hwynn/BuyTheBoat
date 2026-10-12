@@ -12,6 +12,8 @@ public sealed record ForecastOptions
     // User-created one-off jar adjustments. Not `required`: defaults to
     // none, so existing callers are unaffected.
     public IReadOnlyList<ManualEarmark> ManualEarmarks { get; init; } = [];
+
+    /// <summary>The account's real balance on the as-of date, as the user entered it, including everything that happened that day.</summary>
     public required decimal StartingBalance { get; init; }
     public required DateOnly AsOfDate { get; init; }
     public required DateOnly HorizonEndDate { get; init; }
@@ -90,6 +92,8 @@ public sealed record AccountForecastInput
 {
     public required int AccountId { get; init; }
     public required string Name { get; init; }
+
+    /// <summary>The account's real balance on the as-of date, as the user entered it, including everything that happened that day.</summary>
     public required decimal StartingBalance { get; init; }
     public decimal IdealSafetyCushion { get; init; }
     public required IReadOnlyList<FinancialPattern> FinancialPatterns { get; init; }
