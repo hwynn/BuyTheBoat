@@ -215,17 +215,9 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorBill.DatePattern.GetOccurrences()[0].ShouldBe(new DateOnly(2025, 6, 20));
     }
 
-    // Locks in the deliberate scoping decision behind the two fixes above:
-    // Monthly always carries an explicit ByMonthDay, so ical.net already
-    // finds the right day regardless of where Start falls — the successor's
-    // own Start stays exactly on the cut date, unlike the Weekly case.
-    // Already covered incidentally by Amount_changed_after_history_exists_
-    // breaks_off_into_a_new_finance_id_and_leaves_the_original_untouched
-    // above; this names the invariant directly so a future change to
-    // BuildSuccessorSchedule can't silently widen the Weekly-only branch
-    // without a test catching it.
+    // A monthly successor is active from the cut, but its first occurrence is the bill's next real day of month, not the cut date itself.
     [Fact]
-    public void Breaking_off_a_monthly_bill_still_starts_the_successor_exactly_on_the_cut_date()
+    public void Breaking_off_a_monthly_bill_is_active_from_the_cut_and_keeps_its_day_of_month()
     {
         var bill = Bill(1, "Electric Co", -100m, new DateOnly(2024, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(bill, accountId: 1);
@@ -237,7 +229,37 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         var successorBill = _financialPatterns.GetAll().Single(p => p.FinanceId == 2);
         successorBill.DatePattern.ActiveStart.ShouldBe(AsOf);
-        successorBill.DatePattern.ToOptions().ActiveFrom.ShouldBeNull();
+        successorBill.DatePattern.GetOccurrences()[0].ShouldBe(new DateOnly(2025, 7, 1));
+    }
+
+    // A monthly bill saved with no day of month takes its day from its start date (the 10th); starting the successor on the cut (the 15th) would move it.
+    [Fact]
+    public void Breaking_off_a_monthly_bill_with_no_day_entered_keeps_its_day_of_month()
+    {
+        var successorBill = BreakOffAmountChange(RecurrenceFrequency.Monthly, interval: 1);
+
+        successorBill.DatePattern.GetOccurrences().Take(3).ShouldBe(
+            [new DateOnly(2025, 7, 10), new DateOnly(2025, 8, 10), new DateOnly(2025, 9, 10)]);
+    }
+
+    // An every-3-months bill counts its months from its own start (Jan, Apr, Jul, Oct); counting from the cut in June would put it in Sep, Dec, Mar.
+    [Fact]
+    public void Breaking_off_an_every_three_months_bill_keeps_its_months()
+    {
+        var successorBill = BreakOffAmountChange(RecurrenceFrequency.Monthly, interval: 3, byMonthDay: 10);
+
+        successorBill.DatePattern.GetOccurrences().Take(3).ShouldBe(
+            [new DateOnly(2025, 7, 10), new DateOnly(2025, 10, 10), new DateOnly(2026, 1, 10)]);
+    }
+
+    // A yearly bill has no month field, so its month comes from its start date (January); starting the successor on the cut would move it to June.
+    [Fact]
+    public void Breaking_off_a_yearly_bill_keeps_its_month_and_day()
+    {
+        var successorBill = BreakOffAmountChange(RecurrenceFrequency.Yearly, interval: 1);
+
+        successorBill.DatePattern.ActiveStart.ShouldBe(AsOf);
+        successorBill.DatePattern.GetOccurrences().ShouldBe([new DateOnly(2026, 1, 10)]);
     }
 
     // The "glut case" for candidate previews: the "Recommended" candidate's
@@ -1814,6 +1836,32 @@ public class FinancePatternSaveConfirmationTests : IDisposable
             Amount = amount,
             DatePattern = Monthly(start, until, byMonthDay),
         });
+
+    /// <summary>[WRITES FILE] Saves a bill starting 2025-01-10 with the given schedule, raises its amount so the save breaks off at AsOf, and returns the saved successor.</summary>
+    private FinancialPattern BreakOffAmountChange(RecurrenceFrequency frequency, int interval, int? byMonthDay = null)
+    {
+        FinancialPattern BillWithAmount(decimal amount) => FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Insurance",
+            Amount = amount,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = frequency,
+                Interval = interval,
+                ByMonthDay = byMonthDay is { } day ? [day] : [],
+                DtStart = new DateOnly(2025, 1, 10),
+                Until = new DateOnly(2026, 6, 30),
+            }),
+        });
+
+        _financialPatterns.Save(BillWithAmount(-100m), accountId: 1);
+        var forecast = Forecast();
+
+        Confirmation(1, BillWithAmount(-150m), accountId: 1, forecast).Run().ShouldBeTrue();
+
+        return _financialPatterns.GetAll().Single(p => p.FinanceId == 2); // NextFinanceId() with only id 1 in play
+    }
 
     private static EarMarkPattern Plan(FinancialPattern goal, decimal amount, DateOnly start, DateOnly until) =>
         EarMarkPattern.Create(

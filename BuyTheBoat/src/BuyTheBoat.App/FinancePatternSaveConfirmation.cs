@@ -2013,29 +2013,16 @@ public sealed class FinancePatternSaveConfirmation
     }
 
     /// <summary>
-    /// [CALC] The successor schedule every break-off uses: the edited pattern's shape and end date, starting on the cut.
-    /// A Weekly pattern instead starts at its next real occurrence on or after the cut (AllocationPlanProposer.AlignedSchedule), with ActiveFrom on the cut, so it keeps its days.
+    /// [CALC] The successor schedule every break-off uses: the edited pattern's shape and end date, starting at its next real occurrence on or after the cut (AllocationPlanProposer.AlignedSchedule), with ActiveFrom on the cut, so it keeps its days.
     /// </summary>
-    /// <param name="cutDate">Where the successor's schedule should start (or count as active from, for the Weekly case below).</param>
+    /// <remarks>
+    /// Starting on the cut itself would move the dates: a weekly pattern with no weekday entered, a monthly or yearly one with no day entered, or a yearly one (which has no month field) takes the cut's day or month, and an Interval > 1 counts its steps from the cut (see AlignedSchedule's remarks).
+    /// </remarks>
+    /// <param name="cutDate">The date the successor counts as active from.</param>
     private RecurrenceRuleOptions BuildSuccessorSchedule(DateOnly cutDate)
     {
         var reference = _proposedPattern.DatePattern;
 
-        // Monthly and Yearly start right on the cut, relying on ByMonthDay to keep the day of the month.
-        if (reference.Frequency != RecurrenceFrequency.Weekly)
-        {
-            return new RecurrenceRuleOptions
-            {
-                Frequency = reference.Frequency,
-                Interval = reference.Interval,
-                ByDay = reference.ByDay,
-                ByMonthDay = reference.ByMonthDay,
-                DtStart = cutDate,
-                Until = reference.Until,
-            };
-        }
-
-        // Weekly: starting on the cut would lose the weekday or the every-other-week phase (see AlignedSchedule's remarks), so it starts at the next real occurrence instead.
         // BreakOffFactory.ValidateCutBoundaries checks ActiveStart, which ActiveFrom keeps on the cut.
         return AllocationPlanProposer.AlignedSchedule(reference, cutDate, reference.Until)
             ?? throw new InvalidOperationException("The pattern has no occurrence left in its own remaining window to break off onto.");

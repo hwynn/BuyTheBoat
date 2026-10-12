@@ -407,7 +407,7 @@ public static class BreakOffFactory
                 nameof(successorFinanceId));
         }
 
-        // Compares ActiveStart (ActiveFrom, else Start), because a weekly successor's Start may land on its next real occurrence rather than on cutDate, to keep its cadence (see FinancePatternSaveConfirmation.BuildSuccessorSchedule).
+        // Compares ActiveStart (ActiveFrom, else Start), because a successor's Start may land on its next real occurrence rather than on cutDate, to keep its cadence (see FinancePatternSaveConfirmation.BuildSuccessorSchedule).
         // ActiveFrom = cutDate is then what keeps "no gap, no overlap" with the ended predecessor.
         var successorActiveStart = successorSchedule.ActiveFrom ?? successorSchedule.DtStart;
         if (successorActiveStart != cutDate)

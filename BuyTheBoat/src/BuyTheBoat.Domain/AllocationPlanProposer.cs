@@ -610,7 +610,7 @@ public static class AllocationPlanProposer
     /// A raw new start breaks phase in two ways.
     /// With no explicit ByDay, RFC 5545 ties the weekday to DTSTART, so moving the start moves the weekday.
     /// An Interval > 1 weekly rule counts its weeks from DTSTART's week even with an explicit ByDay, so it can land a whole step off (RecurrenceRuleTests covers this).
-    /// FinancePatternSaveConfirmation.BuildSuccessorSchedule also uses this for a break-off successor's weekly schedule.
+    /// FinancePatternSaveConfirmation.BuildSuccessorSchedule also uses this for a break-off successor's schedule.
     /// </remarks>
     /// <param name="reference">The pattern whose recurrence shape (and phase) to preserve.</param>
     /// <param name="desiredStart">Where the new schedule should start from, ideally.</param>
