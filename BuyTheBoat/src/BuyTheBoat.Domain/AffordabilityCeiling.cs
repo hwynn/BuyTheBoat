@@ -1,30 +1,30 @@
 namespace BuyTheBoat.Domain;
 
-// Whether a plan change is a user-facing SUGGESTION or a silent IMPLICIT one — the axis that decides how
-// bold the affordability calculation is allowed to be. A suggestion hands the user the reallocation lever
-// (so it can count on cushion / lower-priority money actually being freed up), while an implicit change
-// has no one to prompt, so it stays more cautious. See AffordabilityCeiling for how each maps onto the
-// Frugality tiers.
+/// <summary>
+/// Whether a plan change is a suggestion shown to the user or an automatic change, which decides how bold the affordability calculation may be.
+/// A suggestion lets the user decide whether to free up cushion or lower-priority money, so it can count on it; an automatic change has no one to ask, so it stays more cautious.
+/// </summary>
 public enum ChangeKind
 {
     Implicit,
     Suggestion,
 }
 
-// The most money a plan or earmark for a given bill/goal may set aside without over-committing — one
-// ceiling a suggestion or implicit change can size itself against, composed from the Frugality-tiered
-// free-funds methods on AccountTransactionPage. It applies the settled tier rules: the tier(s),
-// window(s), and the short-/long-term split are chosen from whether
-// the expense is mandatory, whether its whole savings-plan chain reaches past the split point, and whether
-// this is a bold suggestion or a cautious implicit change.
+/// <summary>
+/// The most a plan or earmark for a bill or goal may set aside without over-committing, built from AccountTransactionPage's frugality-tiered free-funds methods.
+/// The tiers, windows, and near-versus-far split depend on whether the expense is mandatory, whether its savings-plan chain reaches past the split, and whether this is a suggestion or an automatic change.
+/// </summary>
 public static class AffordabilityCeiling
 {
-    // How far out the "we can afford to be bolder later" split sits. Held as two separate tunables — one
-    // per branch — so the mandatory and non-mandatory splits can diverge later; equal (3 months) for now.
+    // How far out the split sits, after which the ceiling can be bolder; kept as two settings so mandatory and non-mandatory can differ later.
     private const int MandatorySplitMonths = 3;
     private const int NonMandatorySplitMonths = 3;
 
-    /// <summary>[CALC] Returns the most a plan/earmark for `target` may set aside on its tightest day without over-committing, applying the settled tier rules. Feeds the "never suggest drawing more than the user has" cap on earmark suggestions and implicit plan changes — the caller compares its own proposed contribution against this. Null when a day the ceiling depends on has no computed free amount.</summary>
+    /// <summary>
+    /// [CALC] Returns the most a plan or earmark for `target` may set aside on its tightest day without over-committing.
+    /// It's the "never suggest drawing more than the user has" cap on earmark suggestions and automatic plan changes; the caller compares its proposed contribution against it.
+    /// Null when a day the ceiling depends on has no worked-out free amount.
+    /// </summary>
     /// <param name="page">The account page the target lives on — supplies both the free-funds tiers and the same-Source chain.</param>
     /// <param name="target">The bill or goal being funded; its Mandatory/Priority/Source/dates drive the whole choice.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — every window starts here.</param>
@@ -41,8 +41,7 @@ public static class AffordabilityCeiling
             var dueDate = target.DatePattern.Until;
             var nonMandSplit = asOfDate.AddMonths(NonMandatorySplitMonths);
 
-            // Non-mandatory, a one-time expense far enough out that we can bank on more money arriving:
-            // relaxed until the split, considerate after (optimistically willing to lean on the cushion by then).
+            // Non-mandatory one-time expense due after the split, when more money will have arrived: Relaxed until the split, Considerate after.
             if (isOneTime && dueDate > nonMandSplit)
             {
                 return MinCeiling(
@@ -50,17 +49,15 @@ public static class AffordabilityCeiling
                     page.MinimumAvailableFunds(nonMandSplit, dueDate, Frugality.Considerate));
             }
 
-            // Non-mandatory, everything else: only genuinely free money, over the target's own span.
+            // Any other non-mandatory expense: only free money, over the target's own span.
             return page.MinimumAvailableFunds(asOfDate, WindowEnd(asOfDate, dueDate), Frugality.Relaxed);
         }
 
-        // Mandatory: how far the WHOLE savings-plan chain (every same-Source segment) reaches decides whether
-        // there is a meaningful "beyond the split" stretch to treat more gently at all.
+        // Mandatory: how far the whole chain (every same-Source segment) reaches decides whether there's a stretch beyond the split to treat more gently.
         var chainEnd = ChainEnd(page, target);
         var mandSplit = asOfDate.AddMonths(MandatorySplitMonths);
 
-        // Mandatory, chain runs past the split: pace the near term aggressively (the money is needed soon)
-        // and the far term more gently, then hold to whichever of the two ceilings is tighter.
+        // Mandatory, chain runs past the split: a bold tier for the near term, a gentler one for the far term, holding to whichever ceiling is tighter.
         if (chainEnd > mandSplit)
         {
             var shortTier = changeKind == ChangeKind.Suggestion ? Frugality.Miserly : Frugality.Thrifty;
@@ -75,7 +72,10 @@ public static class AffordabilityCeiling
         return page.MinimumAvailableFunds(asOfDate, WindowEnd(asOfDate, chainEnd), closeTier, priority);
     }
 
-    /// <summary>[CALC] Returns the ceiling for a one-day starting/front-load earmark placed on asOfDate — the single-date counterpart to For, sizing that one set-aside via the single-date methods at whatever tier governs asOfDate. Feeds the cap on a proposed starting earmark. Null when asOfDate's free amount isn't computed.</summary>
+    /// <summary>
+    /// [CALC] Returns the ceiling for a starting earmark placed on asOfDate, at the same tier For uses for that day; it caps a proposed starting earmark.
+    /// Null when asOfDate's free amount isn't worked out.
+    /// </summary>
     /// <param name="page">The account page the target lives on.</param>
     /// <param name="target">The bill or goal the earmark front-loads.</param>
     /// <param name="asOfDate">The day the starting earmark lands on.</param>
@@ -84,7 +84,7 @@ public static class AffordabilityCeiling
         AccountTransactionPage page, FinancialPattern target, DateOnly asOfDate, ChangeKind changeKind) =>
         page.AvailableAt(asOfDate, NearTier(page, target, asOfDate, changeKind), target.Priority);
 
-    /// <summary>[CALC] Returns the Frugality tier that governs asOfDate itself — the near (first) window in For's own split — so For and ForStartingEarmark stay in step on how boldly that day is treated.</summary>
+    /// <summary>[CALC] Returns the frugality tier for asOfDate itself (For's near window), so For and ForStartingEarmark treat that day the same way.</summary>
     /// <param name="page">The account page whose finance patterns hold the chain.</param>
     /// <param name="target">The bill or goal being funded.</param>
     /// <param name="asOfDate">The day whose tier to resolve.</param>
@@ -92,15 +92,13 @@ public static class AffordabilityCeiling
     private static Frugality NearTier(
         AccountTransactionPage page, FinancialPattern target, DateOnly asOfDate, ChangeKind changeKind)
     {
-        // Non-mandatory always opens relaxed — asOfDate is in the first window, which is relaxed in both
-        // non-mandatory rules.
+        // Non-mandatory: Relaxed, since both non-mandatory rules start Relaxed.
         if (!target.Mandatory)
         {
             return Frugality.Relaxed;
         }
 
-        // Mandatory: bold for a suggestion (Miserly either way); for an implicit change, the short-window
-        // tier when the chain runs past the split, else the single close tier.
+        // Mandatory: Miserly for a suggestion; for an automatic change, the near tier For would use.
         if (changeKind == ChangeKind.Suggestion)
         {
             return Frugality.Miserly;
@@ -110,7 +108,7 @@ public static class AffordabilityCeiling
             : Frugality.Considerate;
     }
 
-    /// <summary>[CALC] Returns the furthest date this pattern's break-off chain reaches — the latest Until across every finance pattern sharing its Source (the app's own definition of a chain), the target itself included in case it's a not-yet-saved edit that isn't on the page.</summary>
+    /// <summary>[CALC] Returns the furthest date this pattern's chain reaches: the latest Until among patterns sharing its Source, including the target itself in case it's an unsaved edit not on the page.</summary>
     /// <param name="page">The account page whose finance patterns hold the chain.</param>
     /// <param name="target">The pattern whose chain to measure.</param>
     private static DateOnly ChainEnd(AccountTransactionPage page, FinancialPattern target) =>
@@ -125,7 +123,7 @@ public static class AffordabilityCeiling
     /// <param name="end">The intended end.</param>
     private static DateOnly WindowEnd(DateOnly asOfDate, DateOnly end) => end < asOfDate ? asOfDate : end;
 
-    /// <summary>[CALC] Returns the tighter (smaller) of two window ceilings, or null if either is unknown — one unknown window means the combined ceiling can't be pinned down.</summary>
+    /// <summary>[CALC] Returns the smaller of two window ceilings, or null if either is unknown.</summary>
     /// <param name="a">One window's ceiling.</param>
     /// <param name="b">The other window's ceiling.</param>
     private static decimal? MinCeiling(decimal? a, decimal? b) =>

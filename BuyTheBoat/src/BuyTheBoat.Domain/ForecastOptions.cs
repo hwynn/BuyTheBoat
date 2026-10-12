@@ -1,16 +1,15 @@
 namespace BuyTheBoat.Domain;
 
-// Input to TransactionLogBookFactory.CreateForecast. HorizonEndDate is a
-// plain input rather than a constant baked into the engine — the UI defaults
-// it to 3 months out but imposes no ceiling; the engine itself stays
-// horizon-agnostic.
+/// <summary>
+/// The inputs to one forecast run (TransactionLogBookFactory.CreateForecast).
+/// HorizonEndDate is chosen by the caller: the UI defaults it to 3 months out, and the forecast itself sets no limit.
+/// </summary>
 public sealed record ForecastOptions
 {
     public required IReadOnlyList<FinancialPattern> FinancialPatterns { get; init; }
     public required IReadOnlyList<EarMarkPattern> EarMarkPatterns { get; init; }
 
-    // User-created one-off jar adjustments. Not `required`: defaults to
-    // none, so existing callers are unaffected.
+    /// <summary>User-created one-off jar adjustments; none if not set.</summary>
     public IReadOnlyList<ManualEarmark> ManualEarmarks { get; init; } = [];
 
     /// <summary>The account's real balance on the as-of date, as the user entered it, including everything that happened that day.</summary>
@@ -18,24 +17,25 @@ public sealed record ForecastOptions
     public required DateOnly AsOfDate { get; init; }
     public required DateOnly HorizonEndDate { get; init; }
 
-    // How much the user wants held in the safety cushion (the finance_id = null
-    // jar, always priority 0 / drained first). Occupies free funds so the
-    // reported free figure reflects what's comfortable to spend, not every last
-    // dollar. Not `required` — defaults to 0 (cushion inert), so existing
-    // callers/tests are unaffected. Firm target: reserved in full even when the
-    // balance can't cover it (free then goes negative, like an unaffordable
-    // bill).
+    /// <summary>
+    /// How much the user wants held in the safety cushion, the jar with no finance id that's always drained first.
+    /// It comes out of free funds, so the free figure shows what's comfortable to spend rather than every last dollar.
+    /// It's held back in full even when the balance can't cover it, so free funds go negative, as with a bill the user can't afford.
+    /// 0 if not set, which means no cushion.
+    /// </summary>
     public decimal IdealSafetyCushion { get; init; }
 
-    // The per-account breakdown. When provided, the engine builds one
-    // AccountTransactionPage per entry — each its own silo with its own
-    // balance, cushion, and patterns — instead of a single "Primary" page.
-    // When null/empty, the flat fields above drive one combined account
-    // exactly as before, so the single-account API and its tests are
-    // unaffected.
+    /// <summary>
+    /// The per-account breakdown: one AccountTransactionPage is built per entry, each with its own balance, cushion, and patterns.
+    /// When null or empty, the flat fields above make up a single "Primary" account.
+    /// </summary>
     public IReadOnlyList<AccountForecastInput>? Accounts { get; init; }
 
-    /// <summary>[CALC] Returns a copy of these options with the savings plans (EarMarkPatterns) for the given goals left out — the bills/goals themselves, manual earmarks, and everything else stay. Forecasting the result gives the "room if those goals had no plan" picture an affordability check needs: those plans' scheduled contributions no longer reserve free funds, so the free figure is the room available to fund them. An empty set returns the same plans, so a caller omitting nothing is unaffected.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy of these options without the savings plans (EarMarkPatterns) for the given goals; the bills and goals themselves, manual earmarks, and everything else stay.
+    /// Forecasting the result shows how much room there'd be if those goals had no plan, which is what an affordability check needs.
+    /// An empty set leaves the plans as they are.
+    /// </summary>
     /// <param name="financeIds">The goals/bills whose EarMarkPatterns to leave out.</param>
     public ForecastOptions WithoutPlansFor(IReadOnlySet<int> financeIds) => this with
     {
@@ -46,7 +46,11 @@ public sealed record ForecastOptions
         }).ToList(),
     };
 
-    /// <summary>[CALC] Returns a copy of these options with one manual (one-off) earmark folded in — added, or replaced if one already sits at the same finance id and date — in whichever account holds that finance id's pattern (or the flat single-account set when Accounts isn't used). Forecasting the result previews "what if this one-off were saved," so a live preview can read the real jar off the same day-by-day walk the saved forecast would do, rather than approximating it.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy of these options with one manual (one-off) earmark added, replacing any already at the same finance id and date.
+    /// It goes into whichever account holds that finance id's pattern, or the flat set when Accounts isn't used.
+    /// Forecasting the result previews "what if this one-off were saved", reading the real jar from the same day-by-day walk as the saved forecast.
+    /// </summary>
     /// <param name="earmark">The proposed one-off earmark to fold in.</param>
     public ForecastOptions WithManualEarmark(ManualEarmark earmark)
     {
@@ -62,7 +66,12 @@ public sealed record ForecastOptions
         };
     }
 
-    /// <summary>[CALC] Returns a copy of these options with one savings plan swapped for a not-yet-saved version — the plan for the proposed plan's finance id whose active span starts on <paramref name="replacedActiveStart"/> is dropped and the proposed one added, in the account holding that goal's pattern (or the flat set when Accounts isn't used); every other plan, this goal's own other segments included, stays. Forecasting the result previews "what if I saved this plan," so a live edit's warning can read real free funds off the same day-by-day walk the saved forecast would do, rather than a no-forecast shortcut. A null <paramref name="replacedActiveStart"/> drops nothing — a brand-new plan replacing no saved segment.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy of these options with one savings plan swapped for an unsaved version, in the account holding that goal's pattern (or the flat set when Accounts isn't used).
+    /// The plan for the same finance id whose active span starts on <paramref name="replacedActiveStart"/> is dropped and the proposed one added; every other plan stays, including this goal's other segments.
+    /// A null <paramref name="replacedActiveStart"/> drops nothing, for a brand-new plan.
+    /// Forecasting the result previews "what if I saved this plan", so a live edit's warning can read real free funds from the same day-by-day walk as the saved forecast.
+    /// </summary>
     /// <param name="proposed">The not-yet-saved plan to fold in.</param>
     /// <param name="replacedActiveStart">The active start of the saved segment being replaced, or null when the proposed plan is brand new.</param>
     public ForecastOptions WithProposedPlan(EarMarkPattern proposed, DateOnly? replacedActiveStart)
@@ -85,9 +94,10 @@ public sealed record ForecastOptions
     }
 }
 
-// One account's slice of a forecast: its own seed balance and cushion, and the
-// patterns/earmarks/manual adjustments filed under it. A pattern belongs to an
-// account by being in this list — the pattern itself still carries no account.
+/// <summary>
+/// One account's part of a forecast: its own starting balance and cushion, and the patterns, plans, and manual earmarks filed under it.
+/// A pattern belongs to an account by being in these lists; the pattern itself doesn't record its account.
+/// </summary>
 public sealed record AccountForecastInput
 {
     public required int AccountId { get; init; }

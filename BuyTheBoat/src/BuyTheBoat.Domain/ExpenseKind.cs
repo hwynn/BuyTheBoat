@@ -1,35 +1,32 @@
 namespace BuyTheBoat.Domain;
 
-// The shape "am I on track?" takes differs per kind of expense
-// (shown in the selected-day region): a one-time optional
-// goal cares about the milestone and a relative due date; a regular bill cares
-// about "can I pay it in full right now"; a paycheck just gives money. This is
-// the domain vocabulary display layers branch on.
+/// <summary>
+/// The kind of expense, which decides how the selected-day region answers "am I on track?".
+/// A one-time optional goal cares about its milestone and due date, a regular bill about whether it can be paid in full now, and a paycheck just brings money in.
+/// </summary>
 public enum ExpenseKind
 {
-    // Amount > 0 — money in. Nothing to save toward.
+    /// <summary>Amount above 0: money in, nothing to save toward.</summary>
     Paycheck,
 
-    // Mandatory — a bill you have to pay (the same kind whether or not it
-    // has a savings plan).
+    /// <summary>Mandatory: a bill you have to pay, whether or not it has a savings plan.</summary>
     Bill,
 
-    // Non-mandatory, single occurrence, with a savings plan — the
-    // OneTimeGoalFactory shape ("trip to Japan").
+    /// <summary>Non-mandatory, single occurrence, with a savings plan, the OneTimeGoalFactory shape ("trip to Japan").</summary>
     OneTimeGoal,
 
-    // Non-mandatory, repeating, with a savings plan.
+    /// <summary>Non-mandatory, repeating, with a savings plan.</summary>
     RepeatingGoal,
 
-    // Non-mandatory with no savings plan — a discretionary expense.
+    /// <summary>Non-mandatory with no savings plan.</summary>
     Discretionary,
 }
 
 public static class ExpenseKindClassifier
 {
-    /// <summary>[CALC] Classifies a pattern as a Paycheck, Bill, OneTimeGoal, RepeatingGoal, or Discretionary expense — the vocabulary the forecast display branches its "am I on track?" treatment on.</summary>
+    /// <summary>[CALC] Classifies a pattern as a Paycheck, Bill, OneTimeGoal, RepeatingGoal, or Discretionary expense, which decides how the forecast display answers "am I on track?".</summary>
     /// <param name="pattern">The pattern to classify.</param>
-    /// <param name="hasEarmark">Whether an EarMarkPattern exists for this pattern's finance id. The safety cushion has no FinancialPattern at all (finance_id = null), so callers handle it before classifying.</param>
+    /// <param name="hasEarmark">Whether an EarMarkPattern exists for this pattern's finance id. The safety cushion has no FinancialPattern, so callers handle it before classifying.</param>
     public static ExpenseKind Classify(FinancialPattern pattern, bool hasEarmark)
     {
         if (pattern.Amount > 0m)

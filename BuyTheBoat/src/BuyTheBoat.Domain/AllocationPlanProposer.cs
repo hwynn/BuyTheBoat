@@ -1,96 +1,43 @@
 namespace BuyTheBoat.Domain;
 
-// The default Allocation Plan proposed for a newly-created outflow, the outflow
-// itself with its active span prepared (ActiveFrom set when it starts in the
-// future, so the plan fits inside it — persist THIS, not the original), plus an
-// optional one-off starting earmark to cover a first occurrence the plan can't
-// accumulate for in time.
+/// <summary>
+/// A proposed Allocation Plan: the expense with its active span prepared, the plan itself, and an optional one-off starting earmark for a first occurrence the plan can't save for in time.
+/// Save this Outflow, not the original: its ActiveFrom is set when the expense starts in the future, so the plan fits inside it.
+/// </summary>
 public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPattern Plan, ManualEarmark? StartingEarmark);
 
-// Proposes a default Allocation Plan (an EarMarkPattern) for a newly-created
-// outflow — a bill, a one-time goal, or any expected transaction with a
-// negative Amount.
-//
-// ONE function for both goals and bills — a one-time goal is just a
-// FinancialPattern with a single occurrence, so it falls out of the same
-// logic (billOccurrences = 1). The proposer only ever fills in a DatePattern
-// and an Amount; everything downstream (the FundJar, its MilestoneAmount,
-// the shortfall) is identical no matter which case fires, so the two shapes
-// add no new machinery. (The "Create One-Time Goal" window doesn't use this;
-// it keeps OneTimeGoalFactory's even installments.)
-//
-// Two shapes:
-//   A (single periodic income) — align contributions to the income's rhythm,
-//     spreading the amount so the plan's total over the window equals the
-//     bill's total consumption over it. If the first bill occurrence lands
-//     before the first paycheck-contribution, a starting earmark front-loads
-//     that first occurrence (branch B).
-//   C (no single usable income — none, or more than one stream) — a
-//     genuinely recurring outflow reserves the full amount on its own
-//     cadence, starting from the as-of date (front-loaded, no starting
-//     earmark needed). A SINGLE-occurrence outflow instead spreads the
-//     amount evenly across the remaining time by default — mirroring
-//     OneTimeGoalFactory's own long-standing installment default — a
-//     one-time goal or one-off bill should never lock up a large, long-dated
-//     amount all at once. The one exception is a transfer's withdrawal
-//     (`spreadEvenlyWithNoIncome: false`): a transfer stays plain and
-//     immediate, with no adaptive behavior.
-//
-// Divide-by-zero is structurally impossible: incomeOccurrences is a divisor
-// only inside shape A, which is entered only when exactly one income stream
-// has at least one occurrence in the window; the spread-evenly shape divides
-// by an occurrence count that's always >= 1 by construction (the installment
-// pattern's own Start is always its first occurrence).
-//
-// Documented v1 simplifications (defensible defaults, refine later):
-//  - "More than one income stream" is treated as shape C rather than an
-//    arbitrary post-income/pre-bill point; the front-loaded shape is a safe,
-//    if conservative, default and the user can edit it.
-//  - An income stream that ends before the bill does is not handled: the
-//    plan is bounded by min(income.Until, bill.Until), so occurrences past
-//    the income's end simply aren't funded and the shortfall reports them.
-//
-// ProposeSameSchedule/ProposeSameAmount: two further methods for
-// re-proposing a plan against an EXISTING EarMarkPattern rather than
-// building one from scratch — the save confirmation offers these on a
-// break-off, alongside Propose's own default. Deliberately narrower
-// freedom than a user's own edits get: these should always
-// still be genuinely ideal, so both return null — "don't offer this" —
-// whenever their own result wouldn't be, or would be indistinguishable from
-// Propose's own default. AlignedSchedule (below) copies a reference
-// pattern's own Frequency/Interval/ByDay/ByMonthDay at a NEW Start; it must
-// spell the weekday out explicitly, because relying on RFC 5545's implicit
-// "omitted BYDAY defaults to DTSTART's own weekday" silently loses phase at
-// the new Start. Both take carriedOverJarBalance as
-// its own parameter rather than reading existingPlan.StartingAllocation —
-// the author's own explicit direction: whatever plan gets created here must
-// carry the previous plan's own real, current funds forward, and
-// StartingAllocation is a static field frozen when the existing plan
-// was first created, not a live reading. Same "carry the funds forward"
-// field BreakOffFactory already reads off the forecast for its own default
-// Propose-based successor (BreakOffRequest.CarriedOverJarBalance) — these
-// two methods expect the same real number from their own caller.
-//
-// TODO: the goal-health suggestion doesn't offer these alternatives yet —
-// only the break-off's plan-shape picker does.
-//
-// IsPacedAgainst/FindPlansPacedAgainst: a DETECTION-ONLY
-// piece of the "loose association" work — finding which of a
-// household's EXISTING plans were paced against a given income, since
-// nothing in EarMarkPatternOptions stores that link. The exact
-// converse of ProposePaced's own forward construction: every occurrence of
-// a genuinely-paced plan lands on one of the income's own real paydays, by
-// construction, so checking for that live is the natural inverse. A
-// deliberately narrow heuristic, not a settled definition. The
-// suggestion/cascade it supports is
-// FinancePatternSaveConfirmation.PerformPaycheckAssociationCascadeIfApplicable,
-// which re-Proposes each invalidated plan (via this same class's own Propose)
-// once the user opts in through EditingHistoryConfirmationWindow's own row.
-// These two detection methods are still exactly the heuristic described
-// above; only the orchestration around them changed.
+/// <summary>
+/// Proposes a default Allocation Plan (an EarMarkPattern) for a new expense: a bill, a one-time goal, or any expected transaction with a negative Amount.
+/// Also re-proposes a plan against an existing one (ProposeSameSchedule, ProposeSameAmount), and detects which plans are paced against an income (IsPacedAgainst, FindPlansPacedAgainst).
+/// </summary>
+/// <remarks>
+/// Goals and bills share one function, since a one-time goal is just a pattern with a single occurrence.
+/// The "Create One-Time Goal" window doesn't use this; it keeps OneTimeGoalFactory's even installments.
+///
+/// Shape A (exactly one income stream): contributions land on each payday, sized so the plan's total over the window equals the bill's total over it.
+/// If the first bill occurrence lands before the first payday contribution, a starting earmark covers it (branch B).
+/// Shape C (no income, or more than one stream): a repeating expense reserves its full amount each cycle, starting from the as-of date, so no starting earmark is needed.
+/// A single-occurrence expense spreads its amount evenly over the remaining time instead, so a large, far-off amount isn't locked up all at once.
+/// A transfer's withdrawal (spreadEvenlyWithNoIncome: false) reserves its amount immediately instead.
+///
+/// Known simplifications:
+/// - More than one income stream is treated as shape C; it's a safe, if conservative, default the user can edit.
+/// - An income stream that ends before the bill does isn't handled: the plan stops at the earlier end date, so later occurrences aren't funded and the shortfall reports them.
+///
+/// The save confirmation offers ProposeSameSchedule and ProposeSameAmount on a break-off, alongside Propose's default.
+/// Each returns null when its result wouldn't be ideal, or would match Propose's default.
+/// Both take carriedOverJarBalance rather than reading existingPlan.StartingAllocation, which is frozen when the plan was created; the caller reads the jar's real balance off the forecast, as for BreakOffRequest.CarriedOverJarBalance.
+/// TODO: the goal-health suggestion doesn't offer these alternatives yet; only the break-off's plan-shape picker does.
+///
+/// IsPacedAgainst and FindPlansPacedAgainst find which existing plans were paced against an income, since no stored field records that link.
+/// They're a deliberately narrow heuristic; FinancePatternSaveConfirmation.PerformPaycheckAssociationCascadeIfApplicable uses them to re-propose those plans when the user opts in.
+/// </remarks>
 public static class AllocationPlanProposer
 {
-    /// <summary>[CALC] The income streams worth pacing a plan against over a window — positive-amount patterns that ACTUALLY have a payday in [from, to]. The date filter is load-bearing, not cosmetic: once any income is ever broken off, its truncated predecessor row keeps a positive Amount forever (a break-off truncates, never deletes), so a bare "Amount > 0" count sees it as a second, phantom income stream for every future plan — and since pacing only kicks in for exactly ONE clear income, that phantom silently collapses the paced shape to the even/front-loaded fallback. Requiring a real payday in the window drops the dead predecessor (it stopped paying before the window) while keeping genuine concurrent earners.</summary>
+    /// <summary>
+    /// [CALC] Lists the income streams worth pacing a plan against: positive-amount patterns with at least one payday in [from, to].
+    /// The date filter matters: a broken-off income's ended predecessor keeps its positive Amount forever, and counting it would look like a second income stream, which turns off pacing for every later plan.
+    /// </summary>
     /// <param name="allPatterns">Every pattern to scan for income.</param>
     /// <param name="from">Start of the window a plan would pace its contributions across.</param>
     /// <param name="to">End of that window.</param>
@@ -100,14 +47,25 @@ public static class AllocationPlanProposer
             .Where(pattern => pattern.Amount > 0m && pattern.DatePattern.GetOccurrences(from, to).Count > 0)
             .ToList();
 
-    /// <summary>[CALC] Proposes a default Allocation Plan for a newly-created outflow — paced against a single clear income stream when one exists, or front-loaded/spread otherwise. See this class's own header for the three shapes.</summary>
-    /// <param name="outflow">The newly-created bill, goal, or transfer leg needing a plan.</param>
+    /// <summary>
+    /// [CALC] Proposes a default Allocation Plan for a new expense: paced against a single clear income stream when there is one, otherwise front-loaded or spread.
+    /// The class remarks describe the shapes.
+    /// </summary>
+    /// <param name="outflow">The new bill, goal, or transfer leg needing a plan.</param>
     /// <param name="allPatterns">Every other pattern, to look for a single clear income stream to pace against.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the plan starts contributing from.</param>
-    /// <param name="spreadEvenlyWithNoIncome">Whether a single-occurrence outflow with no clear income spreads evenly across the remaining time (the default) or reserves the full amount immediately — pass false for a transfer's withdrawal, which stays plain with no adaptive behavior.</param>
-    /// <param name="carriedOverJarBalance">What an existing jar already holds, if this proposal is replacing a plan with real history rather than starting one from scratch — same field, same meaning, as ProposeSameSchedule/ProposeSameAmount's own parameter of this name. Defaults to 0m (every ordinary "brand-new outflow" caller is unaffected). Added specifically so the goal-health suggestion picker's own "Recommended" candidate preview stops understating what actually gets saved: BreakOffFactory.BreakOff already overrides the chosen plan's StartingAllocation with the real carried-over balance regardless of which candidate is picked, but the candidate the picker itself showed the user, before this fix, never reflected that — reading $0 there even when a real glut existed. Protecting that carried-over balance is why this parameter exists.</param>
-    /// <param name="startingEarmarkCeiling">The most a proposed starting (front-load) earmark may set aside, from AffordabilityCeiling.ForStartingEarmark; null leaves it uncapped (the full first-occurrence amount), the default for callers not doing an affordability-sized proposal.</param>
-    /// <param name="ongoingRateCeiling">The most the plan's per-cycle contribution may reserve, from AffordabilityCeiling.For (the range ceiling, as room FOR this plan); when the paced/spread rate would exceed it the plan is held to it instead and knowingly underfunds the outflow. Null leaves the rate uncapped. A transfer's own immediate single contribution is never capped — it stays plain regardless. Same conservative same-day reading the scaling caps use: one cycle's contribution against the window's tightest free point, not a full cumulative solve.</param>
+    /// <param name="spreadEvenlyWithNoIncome">Whether a single-occurrence expense with no clear income spreads evenly over the remaining time (the default) or reserves the full amount at once; pass false for a transfer's withdrawal.</param>
+    /// <param name="carriedOverJarBalance">
+    /// What an existing jar already holds, when this proposal replaces a plan with real history; it becomes the plan's StartingAllocation.
+    /// Defaults to 0 for a brand-new expense.
+    /// It lets a plan-picker preview show the same balance BreakOffFactory.BreakOff will actually save.
+    /// </param>
+    /// <param name="startingEarmarkCeiling">The most a proposed starting earmark may set aside (AffordabilityCeiling.ForStartingEarmark); null leaves it uncapped.</param>
+    /// <param name="ongoingRateCeiling">
+    /// The most the plan's per-cycle contribution may reserve (AffordabilityCeiling.For); a higher paced or spread rate is held to it, knowingly underfunding the expense.
+    /// Null leaves it uncapped, and a transfer's immediate single contribution is never capped.
+    /// It compares one cycle's contribution against the window's tightest free point, not a full cumulative solve.
+    /// </param>
     public static ProposedAllocationPlan Propose(
         FinancialPattern outflow,
         IReadOnlyList<FinancialPattern> allPatterns,
@@ -124,11 +82,8 @@ public static class AllocationPlanProposer
                 nameof(outflow));
         }
 
-        // Stretch the outflow's active span back to the as-of date when it starts
-        // in the future, so a plan that begins accumulating today fits inside it
-        // (an outflow already covering today keeps a null ActiveFrom). The
-        // prepared outflow is returned so the caller persists it, not the
-        // original; occurrences are untouched.
+        // Moves the expense's active span back to the as-of date when it starts in the future, so a plan that starts saving today fits inside it.
+        // Its occurrences are untouched.
         var preparedOutflow = outflow.DatePattern.ActiveStart > asOfDate
             ? outflow.WithActiveFrom(asOfDate)
             : outflow;
@@ -158,13 +113,21 @@ public static class AllocationPlanProposer
             carriedOverJarBalance);
     }
 
-    /// <summary>[CALC] Holds a proposed per-cycle contribution under an affordability ceiling — returns the ceiling when a positive one is given and the rate would exceed it, the rate itself otherwise (no ceiling, or it already fits). A ceiling of 0 or less never binds, so the returned rate is always positive whenever the rate coming in was.</summary>
+    /// <summary>
+    /// [CALC] Holds a per-cycle contribution under an affordability ceiling: returns the ceiling when the rate exceeds a positive one, otherwise the rate.
+    /// A ceiling of 0 or less never applies, so a positive rate always stays positive.
+    /// </summary>
     /// <param name="rate">The uncapped per-cycle contribution magnitude (a positive number).</param>
     /// <param name="ceiling">The most that may be reserved per cycle, or null for uncapped.</param>
     private static decimal RateUnderCeiling(decimal rate, decimal? ceiling) =>
         ceiling is decimal cap && cap > 0m && rate > cap ? cap : rate;
 
-    /// <summary>[CALC] Applies a carried-over balance to an already-built proposal's own plan, as its StartingAllocation — a no-op (the exact same instance back) when there's nothing to carry over, so every caller that never passes one gets byte-for-byte the same result as before this parameter existed. Deliberately does NOT touch MaybeStartingEarmark's own separate one-off top-up (ProposePaced's own Shape A can still propose one on top of a nonzero StartingAllocation applied here) — that method only ever reasons about SCHEDULE TIMING (does the plan's own first contribution land late), not about whether a big enough carried-over balance already covers the gap on its own. Narrow, flagged rather than fixed: the two could theoretically double up for a goal that both has a single clear income stream funding it AND is being re-proposed with a real carried-over balance AND has its very next bill due before the next payday — teaching MaybeStartingEarmark about dollar-sufficiency, not just timing, is a bigger change than this fix is about.</summary>
+    /// <summary>[CALC] Sets a carried-over balance as the proposal's plan StartingAllocation; returns the proposal unchanged when there's nothing to carry over.</summary>
+    /// <remarks>
+    /// Known gap: MaybeStartingEarmark only checks timing, not whether the carried-over balance already covers the first bill.
+    /// So a re-proposed plan with one income stream, a real carried-over balance, and a bill due before the next payday can get both.
+    /// Teaching MaybeStartingEarmark about amounts is a bigger change.
+    /// </remarks>
     /// <param name="proposal">The already-built proposal to apply the balance to.</param>
     /// <param name="carriedOverJarBalance">What to carry forward as the plan's own StartingAllocation.</param>
     private static ProposedAllocationPlan WithStartingAllocation(ProposedAllocationPlan proposal, decimal carriedOverJarBalance)
@@ -189,11 +152,17 @@ public static class AllocationPlanProposer
         return proposal with { Plan = planWithBalance };
     }
 
-    /// <summary>[CALC] Proposes a plan that keeps the existing plan's own recurrence shape — frequency, interval, which weekday or month-day — re-anchored to today without losing phase, with a freshly-computed Amount sized to exactly cover what's left of the goal net of what's already banked. Null when there's nothing left to fund, when the existing shape has no occurrence left to re-anchor to inside the goal's own remaining window, or when the result wouldn't be meaningfully different from Propose's own default.</summary>
+    /// <summary>
+    /// [CALC] Proposes a plan that keeps the existing plan's recurrence shape (frequency, interval, weekday or month-day), re-anchored to today without losing phase, with an Amount that exactly covers what's left of the goal after what's already saved.
+    /// Null when nothing is left to fund, when the shape has no occurrence left before the due date, or when the result would match Propose's default.
+    /// </summary>
     /// <param name="outflow">The goal being funded.</param>
     /// <param name="existingPlan">The plan currently in effect, whose recurrence shape is preserved.</param>
-    /// <param name="carriedOverJarBalance">What the jar actually holds right now — read by the caller off the live forecast, same as BreakOffFactory's own field of the same name. NOT existingPlan's own StartingAllocation: that's a static field frozen at whenever the plan was first created, while this carries forward everything that's actually happened since (scheduled contributions, releases, prior manual earmarks) — the whole reason this method exists is to replace a plan that's had a real history, so a stale snapshot from its own creation would under- or over-state what's genuinely already banked.</param>
-    /// <param name="manualEarmarksForThisGoal">Every manual earmark tied to this goal, dated AFTER asOfDate and on or before the due date — earmarks on or before asOfDate are already folded into carriedOverJarBalance, so counting them again here would double them.</param>
+    /// <param name="carriedOverJarBalance">
+    /// What the jar holds right now, read by the caller off the forecast.
+    /// Not existingPlan.StartingAllocation, which was frozen when the plan was created and misses everything since.
+    /// </param>
+    /// <param name="manualEarmarksForThisGoal">Every manual earmark for this goal dated after asOfDate and on or before the due date; earlier ones are already in carriedOverJarBalance.</param>
     /// <param name="allPatterns">Every pattern — passed through to Propose for the "is this actually different" check.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the re-anchored schedule starts from.</param>
     public static ProposedAllocationPlan? ProposeSameSchedule(
@@ -252,11 +221,14 @@ public static class AllocationPlanProposer
         }
     }
 
-    /// <summary>[CALC] Proposes a plan that keeps the existing plan's own Amount unchanged, on a freshly-computed cadence sized to exactly cover what's left of the goal net of what's already banked — evenly-spaced Daily-interval occurrences, not paced to any existing pattern, so there is no recurrence shape to lose phase on. Null when there's nothing left to fund, when even daily contributions of the existing Amount can't reach the target before the goal's own due date, or when the result wouldn't be meaningfully different from Propose's own default.</summary>
+    /// <summary>
+    /// [CALC] Proposes a plan that keeps the existing plan's Amount, on a new evenly spaced daily-interval schedule that exactly covers what's left of the goal after what's already saved.
+    /// Null when nothing is left to fund, when even daily contributions can't get there by the due date, or when the result would match Propose's default.
+    /// </summary>
     /// <param name="outflow">The goal being funded.</param>
     /// <param name="existingPlan">The plan currently in effect, whose Amount is preserved.</param>
-    /// <param name="carriedOverJarBalance">What the jar actually holds right now — see ProposeSameSchedule's own parameter of the same name for why this is not existingPlan.StartingAllocation.</param>
-    /// <param name="manualEarmarksForThisGoal">Every manual earmark tied to this goal, dated AFTER asOfDate and on or before the due date — see ProposeSameSchedule's own parameter of the same name for why.</param>
+    /// <param name="carriedOverJarBalance">What the jar holds right now; see ProposeSameSchedule's parameter of the same name.</param>
+    /// <param name="manualEarmarksForThisGoal">Every manual earmark for this goal dated after asOfDate and on or before the due date; see ProposeSameSchedule's parameter of the same name.</param>
     /// <param name="allPatterns">Every pattern — passed through to Propose for the "is this actually different" check.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the new schedule starts from.</param>
     public static ProposedAllocationPlan? ProposeSameAmount(
@@ -293,10 +265,8 @@ public static class AllocationPlanProposer
         }
         else
         {
-            // Evenly spaced, spanning the whole window — the last of the N
-            // occurrences lands on or before dueDate (floor division), never
-            // after. Daily/Interval sidesteps AlignedSchedule entirely: it
-            // has no implicit day-of-week/month-day to lose phase on.
+            // Spaces the occurrences evenly across the window so the last one lands on or before dueDate.
+            // A daily interval has no weekday or month-day to lose phase on, so AlignedSchedule isn't needed.
             var windowDays = dueDate.DayNumber - asOfDate.DayNumber;
             var interval = windowDays / (occurrencesNeeded - 1);
             if (interval < 1)
@@ -336,17 +306,16 @@ public static class AllocationPlanProposer
         }
     }
 
-    // The empty (declined) plan. When the user removes or declines the proposed
-    // Allocation Plan, the outflow STILL gets a real EarMarkPattern — one with no
-    // contributions — plus a fund jar visible from today, so the money still
-    // reads as unspent, there is a jar to top up, and the shortfall is the full
-    // unfunded amount. The plan is a plain Count = 1 rrule at the outflow's
-    // Until with Amount = 0; ActiveFrom does the span work so the rrule stays
-    // ordinary (no empty-rrule type). The single $0 earmark event it emits at
-    // Until is the accepted cost of keeping it plain.
-    /// <summary>[CALC] Gives an outflow a real (but empty) savings plan when the proposed one is declined, so its jar still exists and can be topped up by hand.</summary>
-    /// <param name="outflow">The outflow to give an empty plan.</param>
-    /// <param name="asOfDate">Today, or the forecast's as-of date — the jar becomes visible from here rather than only on the outflow's last day.</param>
+    /// <summary>
+    /// [CALC] Gives an expense a real but empty savings plan when the proposed one is declined, so its jar still exists from today and can be topped up by hand.
+    /// The shortfall then shows the full unfunded amount.
+    /// </summary>
+    /// <remarks>
+    /// The plan is a plain Count = 1 rule at the expense's Until with Amount = 0, and ActiveFrom stretches it back to today, so no special empty-plan type is needed.
+    /// Its single $0 earmark event at Until is the accepted cost of keeping it plain.
+    /// </remarks>
+    /// <param name="outflow">The expense to give an empty plan.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date — the jar becomes visible from here rather than only on the expense's last day.</param>
     public static ProposedAllocationPlan ProposeEmpty(FinancialPattern outflow, DateOnly asOfDate)
     {
         if (outflow.Amount >= 0m)
@@ -356,8 +325,7 @@ public static class AllocationPlanProposer
                 nameof(outflow));
         }
 
-        // Same sparing rule as Propose: stretch the outflow's active span back to
-        // today only when it starts in the future, so its jar is visible now.
+        // Moves the expense's active span back to today when it starts in the future, as Propose does, so its jar is visible now.
         var preparedOutflow = outflow.DatePattern.ActiveStart > asOfDate
             ? outflow.WithActiveFrom(asOfDate)
             : outflow;
@@ -371,9 +339,7 @@ public static class AllocationPlanProposer
             Frequency = RecurrenceFrequency.Yearly,
             DtStart = planStart,
             Count = 1,
-            // Reach the jar's span back to today so the jar exists now, not only
-            // on the outflow's last day — but only when that day is in the future
-            // (ActiveFrom must be <= Start; the same sparing rule again).
+            // Stretches the plan back to today so the jar exists now, only when its one day is in the future (ActiveFrom must be on or before Start).
             ActiveFrom = planStart > asOfDate ? asOfDate : null,
         });
 
@@ -390,17 +356,7 @@ public static class AllocationPlanProposer
         return new ProposedAllocationPlan(preparedOutflow, plan, null);
     }
 
-    // The "loose association" detection — detecting an EXISTING plan's association
-    // with an income, not proposing a new one. No stored link exists
-    // anywhere in EarMarkPatternOptions for this; IsPacedAgainst re-derives
-    // it live by checking the same relationship ProposePaced builds going
-    // forward. A heuristic (see its own comment below for
-    // what it does and doesn't catch), not a settled definition — it exists
-    // so the "your paycheck changed, want to re-pace these bills too?"
-    // suggestion has something to detect candidates with. That suggestion
-    // itself, and any cascade/orchestration around it, is NOT built here.
-
-    /// <summary>[CALC] Reports whether a plan's own schedule coincides with an income's own paydays — the inverse of ProposePaced's own forward construction, for finding an association no stored link records.</summary>
+    /// <summary>[CALC] Reports whether every one of a plan's occurrences lands on one of an income's paydays, the reverse of how ProposePaced builds a plan, since no stored link records which income a plan was paced against.</summary>
     /// <param name="plan">The plan to check.</param>
     /// <param name="income">The candidate income stream to check it against.</param>
     public static bool IsPacedAgainst(EarMarkPattern plan, FinancialPattern income)
@@ -416,19 +372,9 @@ public static class AllocationPlanProposer
             return false; // nothing to compare — never "paced" by construction
         }
 
-        // Every one of the plan's own occurrences must land on one of the
-        // income's own paydays — the exact converse of AlignedSchedule's own
-        // forward construction (copies income's Frequency/Interval/ByDay/
-        // ByMonthDay, re-anchored at one of income's own real occurrences).
-        // A plan ProposePaced actually built satisfies this by construction,
-        // so this also catches a hand-edited plan that still lines up — and
-        // correctly misses a same-shape-but-different-phase stream (e.g. two
-        // biweekly incomes paying on alternating weeks) that a bare shape
-        // comparison alone would not. Requiring EVERY occurrence to match,
-        // not just most, is the strictest reading and the safest starting
-        // point; how much drift (a skipped date, a one-off manual edit)
-        // should still count as "still paced against it" is an open
-        // question this doesn't attempt to answer.
+        // Every plan occurrence must land on a payday.
+        // This catches a hand-edited plan that still lines up, and misses a same-shape income on a different phase (e.g. two biweekly paychecks on alternating weeks).
+        // Requiring every occurrence is the strictest reading; how much drift should still count is an open question.
         var paydays = income.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, plan.DatePattern.Until).ToHashSet();
         return planDates.All(paydays.Contains);
     }
@@ -440,9 +386,9 @@ public static class AllocationPlanProposer
         allPlans.Where(plan => IsPacedAgainst(plan, income)).ToList();
 
     /// <summary>[CALC] Shape A: builds a plan with one contribution per payday, sized so the window's contributions equal the window's bill consumption.</summary>
-    /// <param name="outflow">The outflow being funded.</param>
+    /// <param name="outflow">The expense being funded.</param>
     /// <param name="income">The single income stream to pace against.</param>
-    /// <param name="billAmount">The outflow's own amount, per occurrence.</param>
+    /// <param name="billAmount">The expense's amount, per occurrence.</param>
     /// <param name="planUntil">When the plan stops — the earlier of the income's and the bill's own end.</param>
     /// <param name="paydayCount">How many paydays fall in the window.</param>
     /// <param name="billOccurrenceCount">How many bill occurrences fall in the window.</param>
@@ -460,20 +406,11 @@ public static class AllocationPlanProposer
         decimal? startingEarmarkCeiling,
         decimal? ongoingRateCeiling)
     {
-        // Held under the affordability ceiling — a bill we can't fully pace for stays knowingly underfunded
-        // (the forecast then reports the shortfall) rather than reserving money that isn't there.
+        // Held under the affordability ceiling; a bill that can't be fully paced stays knowingly underfunded, and the forecast reports the shortfall.
         var perPayday = RateUnderCeiling(Math.Round(billAmount * billOccurrenceCount / paydayCount, 2), ongoingRateCeiling);
 
-        // DtStart must not be asOfDate blindly here. Copying
-        // income's own Frequency/Interval/ByDay/ByMonthDay but anchoring at
-        // asOfDate instead of a real payday silently loses phase whenever
-        // income relies on RFC 5545's implicit "omitted BYDAY defaults to
-        // DTSTART's own weekday" (true for any interval-anchored income with
-        // no explicit ByDay, e.g. a biweekly paycheck): the plan would land on
-        // the wrong weekday, one the income never actually pays on.
-        // AlignedSchedule (below) re-anchors at income's own next real payday
-        // instead. paydayCount > 0 already guarantees one exists on or after
-        // asOfDate within [asOfDate, planUntil], so this can't come back null.
+        // Anchors at the income's next real payday rather than asOfDate, so the plan lands on the days the income actually pays (see AlignedSchedule).
+        // paydayCount > 0 guarantees that payday exists, so AlignedSchedule can't return null here.
         var planPattern = RecurrenceRule.Create(
             AlignedSchedule(income.DatePattern, asOfDate, planUntil)
             ?? throw new InvalidOperationException("Unreachable: Propose already confirmed paydayCount > 0 in this window."));
@@ -482,9 +419,8 @@ public static class AllocationPlanProposer
             new EarMarkPatternOptions
             {
                 FinanceId = outflow.FinanceId,
-                // Negative = money moves INTO the jar (the pattern's sign
-                // convention is "effect on free balance"; the factory flips it).
                 DatePattern = planPattern,
+                // Negative means money into the jar: EarMarkPattern.Amount is its effect on free funds.
                 Amount = -perPayday,
                 ExplicitlyCreated = false, // auto-proposed, not made by the user
             },
@@ -493,13 +429,16 @@ public static class AllocationPlanProposer
         return new ProposedAllocationPlan(outflow, plan, MaybeStartingEarmark(outflow, plan, billAmount, asOfDate, startingEarmarkCeiling));
     }
 
-    /// <summary>[CALC] Shape C: reserves the full amount every bill cycle, starting at the as-of date so the first contribution reserves the whole amount up front. A single-occurrence outflow instead spreads or reserves immediately, per <paramref name="spreadEvenlyWithNoIncome"/>.</summary>
-    /// <param name="outflow">The outflow being funded.</param>
-    /// <param name="billAmount">The outflow's own amount, per occurrence.</param>
-    /// <param name="billUntil">The outflow's own end date.</param>
+    /// <summary>
+    /// [CALC] Shape C: reserves the full amount each bill cycle, starting at the as-of date.
+    /// A single-occurrence expense instead spreads its amount or reserves it at once, per <paramref name="spreadEvenlyWithNoIncome"/>.
+    /// </summary>
+    /// <param name="outflow">The expense being funded.</param>
+    /// <param name="billAmount">The expense's amount, per occurrence.</param>
+    /// <param name="billUntil">The expense's end date.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
-    /// <param name="spreadEvenlyWithNoIncome">For a single-occurrence outflow: whether to spread the amount evenly across the remaining time, or reserve it all immediately.</param>
-    /// <param name="ongoingRateCeiling">Cap for the per-cycle contribution — applied to a recurring outflow's own full-amount reservation and to a spread goal's installments, but NOT to a transfer's own immediate single contribution, which stays plain. Null leaves the rate uncapped.</param>
+    /// <param name="spreadEvenlyWithNoIncome">For a single-occurrence expense: whether to spread the amount evenly over the remaining time, or reserve it all at once.</param>
+    /// <param name="ongoingRateCeiling">Cap for each contribution of a repeating expense or a spread goal; a transfer's immediate single contribution is never capped, and null leaves it uncapped.</param>
     private static ProposedAllocationPlan ProposeFrontLoaded(
         FinancialPattern outflow,
         decimal billAmount,
@@ -508,21 +447,8 @@ public static class AllocationPlanProposer
         bool spreadEvenlyWithNoIncome,
         decimal? ongoingRateCeiling)
     {
-        // A single-occurrence outflow (a one-time goal, a one-off bill, a
-        // one-off transfer) never generates one full contribution per
-        // frequency cycle between now and the due date — that would
-        // over-reserve many times over. What it does instead differs by
-        // kind: a one-time goal or one-off bill spreads the amount evenly
-        // across the remaining time, mirroring
-        // OneTimeGoalFactory's own long-standing default — reserving a large,
-        // long-dated, discretionary amount all at once is wrong for the same
-        // reason a boat can't be saved for in one contribution the way a TV
-        // can. A transfer's withdrawal is the one exception: it keeps
-        // reserving the whole amount immediately (spreadEvenlyWithNoIncome
-        // false), since a transfer is a plain, deliberate move with no
-        // adaptive behavior. A genuinely recurring outflow with no usable
-        // income (the multi-occurrence branch below) is unaffected either
-        // way — it already reserves the full amount per cycle.
+        // Does the expense happen only once (a one-time goal, one-off bill, or one-off transfer)?
+        // Then reserving the full amount every cycle until it's due would reserve it many times over, so it's spread or reserved once instead.
         var isSingleOccurrence =
             outflow.DatePattern.GetOccurrences(outflow.DatePattern.ActiveStart, billUntil).Count <= 1;
 
@@ -546,22 +472,20 @@ public static class AllocationPlanProposer
             {
                 FinanceId = outflow.FinanceId,
                 DatePattern = planPattern,
-                // Held under the affordability ceiling — a recurring bill we can't fully reserve for stays
-                // knowingly underfunded rather than drawing money that isn't there.
+                // Held under the affordability ceiling; a repeating bill that can't be fully reserved stays knowingly underfunded.
                 Amount = -RateUnderCeiling(billAmount, ongoingRateCeiling),
                 ExplicitlyCreated = false, // auto-proposed, not made by the user
             },
             outflow);
 
-        // The first contribution is at the as-of date (front-loaded), so nothing
-        // lands before it — no starting earmark needed.
+        // The first contribution is on the as-of date, so no starting earmark is needed.
         return new ProposedAllocationPlan(outflow, plan, null);
     }
 
     /// <summary>[CALC] Builds a plan with a single contribution at the as-of date, for the whole amount — a transfer's withdrawal keeps this shape, with no adaptive spreading.</summary>
-    /// <param name="outflow">The outflow being funded.</param>
-    /// <param name="billAmount">The outflow's own amount.</param>
-    /// <param name="billUntil">The outflow's own end date.</param>
+    /// <param name="outflow">The expense being funded.</param>
+    /// <param name="billAmount">The expense's amount.</param>
+    /// <param name="billUntil">The expense's end date.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
     private static ProposedAllocationPlan ProposeImmediateSingleContribution(
         FinancialPattern outflow, decimal billAmount, DateOnly billUntil, DateOnly asOfDate)
@@ -570,7 +494,7 @@ public static class AllocationPlanProposer
         {
             Frequency = RecurrenceFrequency.Yearly,
             // Guard a past-dated one-off: the plan can't end after the
-            // outflow it funds (EarMarkPattern.Create / 3.11.2.a2).
+            // expense it funds (EarMarkPattern.Create / 3.11.2.a2).
             DtStart = asOfDate <= billUntil ? asOfDate : billUntil,
             Count = 1,
         });
@@ -589,9 +513,9 @@ public static class AllocationPlanProposer
     }
 
     /// <summary>[CALC] Builds a plan with monthly installments from the as-of date (or the due date, if it's already past) to the due date — mirrors OneTimeGoalFactory's own default cadence.</summary>
-    /// <param name="outflow">The outflow being funded.</param>
-    /// <param name="billAmount">The outflow's own amount, split evenly across installments.</param>
-    /// <param name="billUntil">The outflow's own end date.</param>
+    /// <param name="outflow">The expense being funded.</param>
+    /// <param name="billAmount">The expense's amount, split evenly across installments.</param>
+    /// <param name="billUntil">The expense's end date.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
     /// <param name="ongoingRateCeiling">Cap for each installment; when an even split would exceed it the plan is held to it and knowingly underfunds. Null leaves it uncapped.</param>
     private static ProposedAllocationPlan ProposeSpreadEvenly(
@@ -606,8 +530,7 @@ public static class AllocationPlanProposer
             Until = billUntil,
         });
         var occurrenceCount = installmentPattern.GetOccurrences().Count;
-        // Held under the affordability ceiling — a goal we can't fully spread for stays knowingly
-        // underfunded rather than reserving money that isn't there.
+        // Held under the affordability ceiling; a goal that can't be fully spread stays knowingly underfunded.
         var installmentAmount = RateUnderCeiling(Math.Round(billAmount / occurrenceCount, 2), ongoingRateCeiling);
 
         var plan = EarMarkPattern.Create(
@@ -623,10 +546,13 @@ public static class AllocationPlanProposer
         return new ProposedAllocationPlan(outflow, plan, null);
     }
 
-    /// <summary>[CALC] Returns a starting earmark to front-load the first bill occurrence, if it falls before the plan's own first contribution (shape A, when the bill is due before the next paycheck) — capped at the affordability ceiling when one is given, and null when even a partial front-load can't be afforded (or none is needed).</summary>
-    /// <param name="outflow">The outflow being funded.</param>
+    /// <summary>
+    /// [CALC] Returns a starting earmark covering the first bill occurrence when it falls before the plan's first contribution (shape A, with a bill due before the next paycheck).
+    /// It's capped at the affordability ceiling when one is given; null when none is needed or the day can't spare anything.
+    /// </summary>
+    /// <param name="outflow">The expense being funded.</param>
     /// <param name="plan">The proposed plan.</param>
-    /// <param name="billAmount">The outflow's own amount, to front-load.</param>
+    /// <param name="billAmount">The expense's amount, to cover.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date — where the starting earmark is dated.</param>
     /// <param name="ceiling">The most that can be front-loaded on asOfDate; null leaves the full amount uncapped.</param>
     private static ManualEarmark? MaybeStartingEarmark(
@@ -649,8 +575,7 @@ public static class AllocationPlanProposer
             return null;
         }
 
-        // Front-load the full first occurrence, but never more than the day can spare; at or below zero
-        // (an already-over-committed day) even a partial front-load can't be placed.
+        // Covers the full first occurrence, capped at what the day can spare; none at all when the day can't spare anything.
         var amount = ceiling is decimal cap ? Math.Min(billAmount, cap) : billAmount;
         if (amount <= 0m)
         {
@@ -676,7 +601,17 @@ public static class AllocationPlanProposer
         return occurrences.Count > 0 ? occurrences[0] : null;
     }
 
-    /// <summary>[CALC] Re-anchors a reference pattern's own recurrence shape at a new start date without losing phase — finds the reference's own next real occurrence on or after the desired date and uses THAT as the new Start, rather than the raw desired date itself. Safe even when the reference's ByDay/ByMonthDay was never set explicitly: RFC 5545 then implicitly ties an omitted BYDAY to DTSTART's own weekday, which a raw new Start would silently change out from under it. Also the only safe way to re-anchor an Interval > 1 Weekly rule at all, even with an EXPLICIT ByDay: as RecurrenceRuleTests.Explicit_byday_alone_does_not_protect_an_intervals_own_week_phase_when_start_is_pinned_elsewhere shows, "every Nth week" is counted from DTSTART's own calendar week regardless of ByDay, so a raw new Start can land a whole interval-step off even when the weekday itself is spelled out. Extends the reference's own Until first when the caller needs a later window than the reference itself currently reaches — the reference's SHAPE is what's being preserved, not its own current end date. When the aligned occurrence lands after desiredStart, sets ActiveFrom back to desiredStart — same reasoning as Propose's own outflow-preparation step — so the jar still reads as alive (and a starting earmark can still be dated) from desiredStart onward, not only from the first real contribution. Public because FinancePatternSaveConfirmation.BuildSuccessorSchedule reuses this directly for a break-off successor's own Weekly schedule, rather than duplicating the logic.</summary>
+    /// <summary>
+    /// [CALC] Copies a reference pattern's recurrence shape to a new start without losing phase, by starting at the reference's next real occurrence on or after desiredStart rather than desiredStart itself.
+    /// When that occurrence is after desiredStart, ActiveFrom is set to desiredStart, so the jar is active (and a starting earmark can be dated) from desiredStart on.
+    /// The reference's Until is extended first if the caller needs a later window; only its shape is kept.
+    /// </summary>
+    /// <remarks>
+    /// A raw new start breaks phase in two ways.
+    /// With no explicit ByDay, RFC 5545 ties the weekday to DTSTART, so moving the start moves the weekday.
+    /// An Interval > 1 weekly rule counts its weeks from DTSTART's week even with an explicit ByDay, so it can land a whole step off (RecurrenceRuleTests covers this).
+    /// FinancePatternSaveConfirmation.BuildSuccessorSchedule also uses this for a break-off successor's weekly schedule.
+    /// </remarks>
     /// <param name="reference">The pattern whose recurrence shape (and phase) to preserve.</param>
     /// <param name="desiredStart">Where the new schedule should start from, ideally.</param>
     /// <param name="until">The new schedule's own end date.</param>
@@ -701,9 +636,12 @@ public static class AllocationPlanProposer
         };
     }
 
-    /// <summary>[CALC] Whether a candidate plan is functionally identical to what Propose would build fresh for the same outflow — same Amount and the same recurrence shape. A candidate this close to the default isn't a meaningfully different option to offer alongside it.</summary>
+    /// <summary>
+    /// [CALC] Whether a candidate plan matches what Propose would build fresh for the same expense: same Amount and recurrence shape.
+    /// A candidate that close isn't worth offering alongside the default.
+    /// </summary>
     /// <param name="candidate">The plan to compare.</param>
-    /// <param name="outflow">The outflow to compare it against Propose's own default for.</param>
+    /// <param name="outflow">The expense whose default proposal to compare against.</param>
     /// <param name="allPatterns">Every pattern, passed through to Propose unchanged.</param>
     /// <param name="asOfDate">Today, or the forecast's as-of date, passed through to Propose unchanged.</param>
     private static bool MatchesDefaultProposal(

@@ -8,15 +8,16 @@ public sealed record TransferTruncationResult
     public required FinancialPattern Deposit { get; init; }
 }
 
-// Ends a scheduled transfer on a chosen date, with no continuation — the
-// transfer analogue of PatternTruncation.EndOn. A transfer is three linked
-// things: the Transfer record itself, the withdrawal leg (and its savings
-// plan, if it has one), and the deposit leg (income, never has a plan). All
-// three must end on the identical date, or the project's own
-// transfer-validation sweep would flag the drift.
+/// <summary>
+/// Ends a scheduled transfer on a chosen date, with nothing continuing after; the transfer version of PatternTruncation.EndOn.
+/// A transfer is three linked things: the Transfer record, the withdrawal leg (and its savings plan, if any), and the deposit leg; all three must end on the same date, or the transfer check flags them as out of step.
+/// </summary>
 public static class TransferTruncation
 {
-    /// <summary>[CALC] Ends a scheduled transfer on a chosen date, with no continuation. Whatever was reserved for it becomes ordinary free balance again from that date on, the same as ending any other pattern.</summary>
+    /// <summary>
+    /// [CALC] Ends a scheduled transfer on a chosen date, with nothing continuing after.
+    /// Whatever was set aside for it becomes free funds again from that date on.
+    /// </summary>
     /// <param name="transfer">The transfer being ended.</param>
     /// <param name="withdrawal">Its withdrawal leg.</param>
     /// <param name="withdrawalPlan">The withdrawal leg's savings plan, if it has one.</param>

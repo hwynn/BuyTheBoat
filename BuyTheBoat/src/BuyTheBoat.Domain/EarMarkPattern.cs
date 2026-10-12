@@ -1,37 +1,30 @@
 namespace BuyTheBoat.Domain;
 
-// Recurring contributions toward a single goal. FinanceId is not this
-// pattern's own identity — it's the FinanceId of the FinancialPattern (the
-// goal) being saved for; that's the only link between them
-// (planning/01-glossary-of-terms.md#earmarkpattern).
-// Deliberately carries no account of its own.
+/// <summary>The fields for building an EarMarkPattern with EarMarkPattern.Create.</summary>
 public sealed record EarMarkPatternOptions
 {
     public required int FinanceId { get; init; }
     public required RecurrenceRule DatePattern { get; init; }
     public required decimal Amount { get; init; }
 
-    // How much is already sitting in this jar before any of DatePattern's own
-    // occurrences run — e.g. an already-funded retirement goal shouldn't
-    // forecast as starting from $0 just because it's new to this app. Not
-    // `required`: every existing caller (OneTimeGoalFactory, tests) creates a
-    // jar starting from scratch, so 0m is the right default rather than a
-    // migration burden.
+    /// <summary>
+    /// How much is already in the jar before any of DatePattern's occurrences, so an already-funded goal doesn't start from $0 just because it's new to the app.
+    /// Defaults to 0.
+    /// </summary>
     public decimal StartingAllocation { get; init; }
 
-    // Whether the user made this savings plan their OWN — opened its form and
-    // saved it, or committed a full-save choice about it in a confirmation
-    // popup — as opposed to it being an auto-generated default the user never
-    // influenced. Drives "don't bother the user about an implicit change if it
-    // doesn't alter anything they explicitly did" (see FinancePatternSaveConfirmation's
-    // popup gate): a change touching only never-explicitly-created plans is
-    // trivial and stays silent. Defaults TRUE on purpose — the safe direction
-    // is to over-confirm, never to wrongly silence a warning; the few genuine
-    // auto-mint sites (AllocationPlanProposer, OneTimeGoalFactory) set it false,
-    // and maintenance rewrites preserve whatever the plan already had.
+    /// <summary>
+    /// Did the user make this savings plan their own, by saving its form or choosing a full save for it in a confirmation popup, rather than leave an automatic default untouched?
+    /// FinancePatternSaveConfirmation stays silent about an automatic change that only touches plans the user never made their own.
+    /// Defaults to true, since asking too often is safer than wrongly staying silent; AllocationPlanProposer and OneTimeGoalFactory set it false, and other rewrites keep the plan's existing value.
+    /// </summary>
     public bool ExplicitlyCreated { get; init; } = true;
 }
 
+/// <summary>
+/// Recurring contributions toward a single goal (planning/01-glossary-of-terms.md#earmarkpattern).
+/// FinanceId is the goal's FinanceId, not the plan's own identity; it's the only link between them, and the plan has no account of its own.
+/// </summary>
 public sealed class EarMarkPattern
 {
     public int FinanceId { get; }
@@ -51,7 +44,10 @@ public sealed class EarMarkPattern
         ExplicitlyCreated = options.ExplicitlyCreated;
     }
 
-    /// <summary>[CALC] Returns this same plan tagged with whether the user explicitly made it their own — used at save sites to record that a form save or popup full-save "adopted" the plan, or that an implicit re-pace should keep the plan's existing standing. Copies the already-validated fields directly (no goal to re-check against), so it never re-runs Create's span validation.</summary>
+    /// <summary>
+    /// [CALC] Returns this plan marked with whether the user made it their own, for save code recording a form save or popup full save, or an automatic re-pace keeping the existing value.
+    /// It copies the already-validated fields, so Create's span checks don't run again.
+    /// </summary>
     /// <param name="explicitlyCreated">True to mark the plan the user's own; false to mark it an untouched auto default.</param>
     public EarMarkPattern WithExplicitlyCreated(bool explicitlyCreated) =>
         ExplicitlyCreated == explicitlyCreated
@@ -77,11 +73,7 @@ public sealed class EarMarkPattern
                 nameof(options));
         }
 
-        // DIVERGENCE(active-from): enforces 3.11.2.a2 in both directions,
-        // against the goal's active span — an earmark can't still be
-        // allocating after the goal's range ends (Until), and can't begin
-        // before the goal's active span starts (its ActiveFrom lead-in if
-        // set, else its Start).
+        // DIVERGENCE(active-from): enforces 3.11.2.a2 against the goal's active span, so a plan can't begin before the goal's ActiveStart or run past its Until.
         if (options.DatePattern.ActiveStart < goal.DatePattern.ActiveStart)
         {
             throw new EarMarkPatternOutsideGoalSpanException(
@@ -104,13 +96,20 @@ public sealed class EarMarkPattern
         return new EarMarkPattern(options);
     }
 
-    /// <summary>[CALC] Whether two earmark patterns under one goal can be folded into one with no change anyone would notice (the silent join) — same Amount, and recurrence shapes that merge to exactly the union of their occurrences (RecurrenceRule.CanMergeWith). A true result means JoinedWith yields an identical contribution schedule, so there's no user choice worth asking about; a false one is a genuine difference, left for a with-consequence consolidation to resolve. StartingAllocation is not part of the test — the join simply sums the two jars.</summary>
+    /// <summary>
+    /// [CALC] Whether two plans under one goal can be folded into one with no change anyone would notice (the silent join): same Amount, and schedules that merge to exactly the union of their occurrences (RecurrenceRule.CanMergeWith).
+    /// When true, JoinedWith gives an identical contribution schedule, so there's nothing to ask the user; when false, a consolidation with consequences handles it.
+    /// StartingAllocation isn't compared, since the join adds the two together.
+    /// </summary>
     /// <param name="a">One earmark pattern.</param>
     /// <param name="b">The other earmark pattern — expected to already share a's FinanceId.</param>
     public static bool CanJoinWithoutConsequence(EarMarkPattern a, EarMarkPattern b) =>
         a.Amount == b.Amount && a.DatePattern.CanMergeWith(b.DatePattern);
 
-    /// <summary>[CALC] Folds this earmark pattern and another under the same goal into one covering the union of their spans — same Amount and recurrence shape, its jar the sum of the two StartingAllocations. Call only when CanJoinWithoutConsequence(this, other) holds (it's re-checked, and rejected otherwise): the merged schedule is then identical to running the two separately. Validated against the goal, same as Create.</summary>
+    /// <summary>
+    /// [CALC] Folds this plan and another under the same goal into one covering both spans, with the same Amount and shape and the two StartingAllocations added together.
+    /// Throws unless CanJoinWithoutConsequence(this, other) holds, so the merged schedule matches running the two separately; it's checked against the goal like Create.
+    /// </summary>
     /// <param name="other">The earmark pattern to join with — must share this one's FinanceId and Amount and have a mergeable shape.</param>
     /// <param name="goal">The FinancialPattern both earmark patterns fund — validated against.</param>
     public EarMarkPattern JoinedWith(EarMarkPattern other, FinancialPattern goal)
@@ -139,8 +138,7 @@ public sealed class EarMarkPattern
                 DatePattern = DatePattern.ReanchoredToStartOn(mergedStart).WithUntil(mergedUntil),
                 Amount = Amount,
                 StartingAllocation = StartingAllocation + other.StartingAllocation,
-                // Explicit if either side was — merging keeps the user's stake in
-                // whichever plan they had already made their own.
+                // The user's own if either plan was.
                 ExplicitlyCreated = ExplicitlyCreated || other.ExplicitlyCreated,
             },
             goal);

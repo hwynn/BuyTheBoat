@@ -15,28 +15,25 @@ public sealed record OneTimeGoalRequest
     public required DateOnly DueDate { get; init; }
     public required DateOnly StartSavingDate { get; init; }
 
-    // Per FinancialPattern's documented convention: 1 = lowest priority,
-    // higher numbers = higher priority. This is what actually decides which
-    // goals get funded first when money is short — deallocation drains the
-    // least important jars first, whatever the timing below.
+    /// <summary>
+    /// 1 is the lowest priority; higher numbers are more important.
+    /// This decides which goals get funded first when money is short, since deallocation drains the least important jars first whatever the schedule.
+    /// </summary>
     public int Priority { get; init; } = 3;
 
-    // Only meant to be user-controlled behind an "advanced" opt-in. The
-    // default case shouldn't ask about this at all: when money runs short,
-    // deallocation drains jars by priority whatever the cadence, so this isn't
-    // a schedule the user needs to get exactly right.
+    /// <summary>
+    /// Only meant to be set by the user behind an "advanced" option.
+    /// When money runs short, deallocation drains jars by priority whatever the schedule, so the user doesn't need to get this exactly right.
+    /// </summary>
     public SavingsFrequency Frequency { get; init; } = SavingsFrequency.Monthly;
 }
 
 public sealed record OneTimeGoal(FinancialPattern Goal, EarMarkPattern SavingsPlan);
 
-// Implicitly creates the goal + savings-plan pair for the simplified
-// one-time-goal flow — mirrors mini_fund_project's "one time goals" sheet,
-// which asked for exactly these things (description, amount, due date,
-// optional start date) and nothing about how or when money actually arrives.
-// There is no separate "Goal" type in the documented domain model — a
-// one-time goal is a FinancialPattern with a single occurrence, exactly as
-// class documentation.ods's own "boat" example models it.
+/// <summary>
+/// Creates the goal and savings plan together for the simplified one-time-goal flow, asking only what mini_fund_project's "one time goals" sheet did: description, amount, due date, and optional start date.
+/// A one-time goal is just a FinancialPattern with a single occurrence, as in class documentation.ods's "boat" example; there's no separate Goal type.
+/// </summary>
 public static class OneTimeGoalFactory
 {
     /// <summary>[CALC] Builds a one-time goal's FinancialPattern plus its savings plan (EarMarkPattern), splitting the amount needed evenly across installments from the start date to the due date.</summary>
@@ -58,10 +55,7 @@ public static class OneTimeGoalFactory
                 Frequency = RecurrenceFrequency.Yearly,
                 DtStart = request.DueDate,
                 Count = 1,
-                // The goal's only occurrence is its due date, but saving starts
-                // earlier — ActiveFrom stretches the goal's active span back to the
-                // save-start day so its savings plan (and jar) legitimately begin
-                // before the due date.
+                // The goal's only occurrence is its due date; ActiveFrom stretches its active span back to the save-start day so its plan and jar can begin earlier.
                 ActiveFrom = request.StartSavingDate,
             }),
             Amount = -request.AmountNeeded,
@@ -69,11 +63,7 @@ public static class OneTimeGoalFactory
             Mandatory = false, // discretionary even though the amount is negative
         });
 
-        // BuildSavingsDatePattern always derives ByDay/ByMonthDay from
-        // StartSavingDate itself, so StartSavingDate is always a matching
-        // occurrence — combined with the check above (Start < Due), there's
-        // always at least one installment. No "zero occurrences" case exists
-        // to guard against here.
+        // StartSavingDate is always an occurrence and comes before DueDate (checked above), so there's at least one installment.
         var savingsPattern = BuildSavingsDatePattern(request.StartSavingDate, request.DueDate, request.Frequency);
         var occurrenceCount = savingsPattern.GetOccurrences().Count;
         var installmentAmount = Math.Round(-request.AmountNeeded / occurrenceCount, 2);
@@ -84,8 +74,7 @@ public static class OneTimeGoalFactory
                 FinanceId = goal.FinanceId,
                 DatePattern = savingsPattern,
                 Amount = installmentAmount,
-                // The plan auto-created alongside a brand-new goal — implicit
-                // until the user edits the plan itself (see EarMarkPattern.ExplicitlyCreated).
+                // Created automatically, so not the user's own until they edit it (see EarMarkPattern.ExplicitlyCreated).
                 ExplicitlyCreated = false,
             },
             goal);

@@ -7,7 +7,7 @@ namespace BuyTheBoat.Domain;
 public abstract class AssumptionViolationException(string assumptionId, string message, string? paramName)
     : ArgumentException(message, paramName)
 {
-    // The assumption's ID exactly as the docs write it, e.g. "3.11.2.a2".
+    /// <summary>The assumption's ID exactly as the docs write it, e.g. "3.11.2.a2".</summary>
     public string AssumptionId { get; } = assumptionId;
 }
 

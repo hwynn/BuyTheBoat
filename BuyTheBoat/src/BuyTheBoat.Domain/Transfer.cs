@@ -1,11 +1,6 @@
 namespace BuyTheBoat.Domain;
 
-// A user-scheduled movement of money between two of their own accounts. A
-// transfer is built from a pair of ordinary FinancialPatterns — a withdrawal
-// from the source account and a matching deposit into the destination. This
-// record is the canonical definition those two patterns are generated from
-// and validated against. It is owned by the book, not by any single account,
-// because a transfer spans two.
+/// <summary>The fields for building a Transfer with Transfer.Create.</summary>
 public sealed record TransferOptions
 {
     public required int Id { get; init; }
@@ -15,13 +10,17 @@ public sealed record TransferOptions
     public required RecurrenceRule DatePattern { get; init; }
 }
 
+/// <summary>
+/// A scheduled movement of money between two of the user's own accounts, made up of two ordinary FinancialPatterns: a withdrawal from one account and a matching deposit into the other.
+/// This record is the definition both patterns are generated from and checked against; it belongs to the book, not to either account, since it spans two.
+/// </summary>
 public sealed class Transfer
 {
     public int Id { get; }
     public int FromAccountId { get; }
     public int ToAccountId { get; }
 
-    // Always a positive magnitude — direction lives in From/To, not the sign.
+    /// <summary>Always positive; From and To give the direction.</summary>
     public decimal Amount { get; }
     public RecurrenceRule DatePattern { get; }
 
@@ -53,7 +52,7 @@ public sealed class Transfer
         return new Transfer(options);
     }
 
-    /// <summary>[CALC] Returns a copy of this transfer ending on the given (earlier) date instead — everything else, including which accounts and how much, unchanged. Used to end a transfer early, including as the predecessor half of a break-off.</summary>
+    /// <summary>[CALC] Returns a copy of this transfer ending on the given earlier date instead, for ending it early or as the first half of a break-off; everything else is unchanged.</summary>
     /// <param name="until">The new, earlier end date.</param>
     public Transfer WithUntil(DateOnly until) => Create(new TransferOptions
     {

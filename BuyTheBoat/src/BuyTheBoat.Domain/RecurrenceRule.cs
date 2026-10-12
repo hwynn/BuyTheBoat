@@ -12,60 +12,58 @@ public enum RecurrenceFrequency
     Yearly,
 }
 
-// Everything an EarMarkPattern/FinancialPattern's date_pattern needs, per
-// planning/01-glossary-of-terms.md. Deliberately mirrors the RRULE fields used
-// throughout mini_fund_project/goals.xlsx (freq, dstart, interval, byday,
-// bymonthday, count, until) rather than exposing the full RFC 5545 surface.
+/// <summary>
+/// Everything a pattern's date_pattern needs (planning/01-glossary-of-terms.md).
+/// It uses only the RRULE fields from mini_fund_project/goals.xlsx (freq, dtstart, interval, byday, bymonthday, count, until), not all of RFC 5545.
+/// </summary>
 public sealed record RecurrenceRuleOptions
 {
     public required RecurrenceFrequency Frequency { get; init; }
 
-    // The rrule DTSTART anchor, only for building the recurrence — NOT the
-    // pattern's start (an ActiveFrom lead-in, or a one-time far-future event,
-    // can push it past the real start; ActiveStart is the pattern's start).
+    /// <summary>
+    /// The rrule DTSTART anchor, used only to build the recurrence.
+    /// It isn't the pattern's start: a lead-in or a one-time future event can push it past the real start, which is ActiveStart.
+    /// </summary>
     public required DateOnly DtStart { get; init; }
 
     public int Interval { get; init; } = 1;
     public IReadOnlyList<DayOfWeek> ByDay { get; init; } = [];
     public IReadOnlyList<int> ByMonthDay { get; init; } = [];
 
-    // Exactly one of these must be set. Count is a convenience for entry only —
-    // see RecurrenceRule.Until for why it never survives construction.
+    /// <summary>When the schedule ends; set exactly one of Until and Count.</summary>
     public DateOnly? Until { get; init; }
+
+    /// <summary>
+    /// How many occurrences, as a convenience when entering a schedule; set exactly one of Until and Count.
+    /// It's converted to an Until when the rule is built (see RecurrenceRule).
+    /// </summary>
     public int? Count { get; init; }
 
-    // DIVERGENCE(active-from): a "lead-in" date the pattern counts as active FROM
-    // — earlier than its first occurrence — so a fund jar for it can exist before
-    // the pattern starts producing occurrences. Null = no lead-in. Never affects
-    // occurrence generation; used only for span/containment checks.
+    /// <summary>
+    /// DIVERGENCE(active-from): a lead-in date the pattern counts as active from, before its first occurrence, so its fund jar can exist before occurrences start.
+    /// Null means no lead-in; it never changes which dates the pattern occurs on.
+    /// </summary>
     public DateOnly? ActiveFrom { get; init; }
 
-    // RFC 5545's own EXDATE — dates GetOccurrences skips even though the
-    // schedule would otherwise land on them ("the glut case," mechanism C). Deliberately NOT
-    // validated against DtStart/Until/the pattern's own real occurrences here —
-    // real EXDATE semantics treat a non-matching date as a harmless no-op,
-    // not an error, and every existing range-narrowing operation (WithUntil,
-    // PatternTruncation.EndOn, break-off's own predecessor truncation) would
-    // otherwise risk throwing the moment it shortened a pattern past an
-    // excluded date that used to be in range. Empty = nothing excluded, the
-    // default for every existing caller.
+    /// <summary>
+    /// Dates GetOccurrences skips even though the schedule would land on them (RFC 5545 EXDATE; "the glut case," mechanism C).
+    /// They aren't checked against the schedule: a date that doesn't match is ignored, as in RFC 5545, so shortening a pattern past an excluded date never throws.
+    /// </summary>
     public IReadOnlyList<DateOnly> ExcludedDates { get; init; } = [];
 }
 
-// The chart-only rule found in planning/05-assumption-chart-full-text.md
-// ("self.date_pattern rrule must have until property, not count property")
-// is enforced here structurally: Count is accepted as input but Until is the
-// only thing that exists on a constructed RecurrenceRule. Mirrors
-// mini_fund_project/MmfUtility.py's count_to_until_rrule.
+/// <summary>
+/// A pattern's recurrence schedule, built on Ical.Net.
+/// Count is accepted as input, but a built rule only ever has an Until, enforcing "date_pattern rrule must have until property, not count property" (planning/05-assumption-chart-full-text.md), like mini_fund_project/MmfUtility.py's count_to_until_rrule.
+/// </summary>
 public sealed class RecurrenceRule
 {
     private readonly RecurrencePattern _pattern;
 
-    // The rrule DTSTART anchor: the pattern's persistence key and the date its
-    // occurrences are counted from. NOT the pattern's start — a lead-in (or a
-    // one-time far-future event) can push it past the real start. Use
-    // ActiveStart for "when does this begin"; read DtStart only for persistence
-    // keys and occurrence-anchor logic.
+    /// <summary>
+    /// The rrule DTSTART anchor: the pattern's persistence key and the date its occurrences are counted from.
+    /// It isn't the pattern's start, since a lead-in or a one-time future event can push it past the real start; use ActiveStart for when the pattern begins.
+    /// </summary>
     public DateOnly DtStart { get; }
     public RecurrenceFrequency Frequency { get; }
     public int Interval { get; }
@@ -73,19 +71,24 @@ public sealed class RecurrenceRule
     public IReadOnlyList<int> ByMonthDay { get; }
     public DateOnly Until { get; }
 
-    // The optional lead-in — a date the pattern counts as active from, earlier
-    // than its first occurrence. Private; ActiveStart folds it in.
+    /// <summary>The optional lead-in before the first occurrence; callers read it through ActiveStart.</summary>
     private DateOnly? ActiveFrom { get; }
     public IReadOnlyList<DateOnly> ExcludedDates { get; }
 
-    /// <summary>[CALC] The pattern's real start — its ActiveFrom lead-in if one is set, otherwise its rrule DtStart anchor. This is what "start" means to callers; DtStart is an internal rrule detail.</summary>
+    /// <summary>
+    /// [CALC] The pattern's real start: its ActiveFrom lead-in if one is set, otherwise its rrule DtStart anchor.
+    /// This is what "start" means to callers; DtStart is an internal rrule detail.
+    /// </summary>
     public DateOnly ActiveStart => ActiveFrom ?? DtStart;
 
     /// <summary>[CALC] Reports whether a date falls inside the pattern's active span (ActiveStart..Until) — the range a fund jar for it may exist in, wider than its occurrences when there is a lead-in.</summary>
     /// <param name="date">The date to check.</param>
     public bool ActiveSpanContains(DateOnly date) => date >= ActiveStart && date <= Until;
 
-    /// <summary>[CALC] Whether this pattern's active span ends exactly the day before another's begins — the back-to-back, no-gap-no-overlap shape that makes two patterns chain neighbors. Keyed on ActiveStart, not the rrule anchor.</summary>
+    /// <summary>
+    /// [CALC] Whether this pattern's active span ends exactly the day before another's begins, which makes the two chain neighbors.
+    /// Compares ActiveStart, not the rrule anchor.
+    /// </summary>
     /// <param name="next">The pattern that would come immediately after this one.</param>
     public bool ImmediatelyPrecedes(RecurrenceRule next) => Until.AddDays(1) == next.ActiveStart;
 
@@ -97,7 +100,10 @@ public sealed class RecurrenceRule
     /// <param name="other">The pattern to check for an overlapping span.</param>
     public bool ActiveSpansOverlap(RecurrenceRule other) => ActiveStart <= other.Until && other.ActiveStart <= Until;
 
-    /// <summary>[CALC] Whether two rules share the same recurrence SHAPE — Frequency, Interval, ByDay, and ByMonthDay — ignoring where each begins and ends. What tells an amount-only edit apart from one that also moves the occurrence dates.</summary>
+    /// <summary>
+    /// [CALC] Whether two rules share the same recurrence shape (Frequency, Interval, ByDay, ByMonthDay), ignoring where each begins and ends.
+    /// This tells an amount-only edit apart from one that also moves the occurrence dates.
+    /// </summary>
     /// <param name="other">The rule to compare shapes with.</param>
     public bool HasSameShapeAs(RecurrenceRule other) =>
         Frequency == other.Frequency
@@ -105,7 +111,10 @@ public sealed class RecurrenceRule
         && ByDay.SequenceEqual(other.ByDay)
         && ByMonthDay.SequenceEqual(other.ByMonthDay);
 
-    /// <summary>[CALC] Whether a single rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences — nothing shifted, added, or dropped. Needs the same recurrence shape (Frequency/Interval/ByDay/ByMonthDay), the same cadence, and no gap between them a merged rule would fill in. The rrule half of EarMarkPattern.CanJoinWithoutConsequence (the silent join); a pair whose merge WOULD move a date is a genuine difference, left for a with-consequence consolidation instead.</summary>
+    /// <summary>
+    /// [CALC] Whether one rule spanning both this and <paramref name="other"/> would land on exactly the union of their occurrences, with nothing shifted, added, or dropped.
+    /// This is the date half of EarMarkPattern.CanJoinWithoutConsequence (the silent join); a pair whose merge would move a date is left for a consolidation with consequences instead.
+    /// </summary>
     /// <param name="other">The rule to test merging with.</param>
     public bool CanMergeWith(RecurrenceRule other)
     {
@@ -127,7 +136,10 @@ public sealed class RecurrenceRule
         return merged.GetOccurrences().SequenceEqual(union);
     }
 
-    /// <summary>[CALC] This rule's full state as options, raw DtStart anchor and ActiveFrom included — for persistence/serialization that must round-trip the exact rule. Ordinary callers want ActiveStart and the span methods, not this.</summary>
+    /// <summary>
+    /// [CALC] This rule's full state as options, including the raw DtStart anchor and ActiveFrom, for saving and loading the exact rule.
+    /// Ordinary callers want ActiveStart and the span methods instead.
+    /// </summary>
     public RecurrenceRuleOptions ToOptions() => new()
     {
         Frequency = Frequency,
@@ -140,24 +152,22 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     };
 
-    /// <summary>[CALC] A copy whose active span begins on the given date while KEEPING its cadence — the safe replacement for WithStart when relinking a chain. Its occurrences stay on the same days (unlike WithStart, which shifts an interval>1 or implicit-by-rule pattern onto different days); only where the span begins, and how far back that cadence reaches when it grows earlier, changes. Until, amount, and shape are untouched.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy whose active span begins on the given date while its occurrences stay on the same days, for relinking a chain.
+    /// Use it instead of WithStart, which can move an interval > 1 or implicit-weekday pattern onto different days.
+    /// Until and the recurrence shape are untouched.
+    /// </summary>
     /// <param name="newActiveStart">Where the pattern's active span should begin.</param>
     public RecurrenceRule ReanchoredToStartOn(DateOnly newActiveStart)
     {
-        // Walk this rule's own anchor back by whole cadence periods until it
-        // sits on or before the new start, so its recurring days are defined
-        // across the whole new span — needed when a segment grows backward.
-        // Stepping by exact periods never changes which dates it lands on, only
-        // how early it can be enumerated from.
+        // Steps the anchor back by whole periods until it's on or before the new start, so the schedule covers the whole new span; whole-period steps never change which days it lands on.
         var anchor = DtStart;
         for (var guard = 0; anchor > newActiveStart && guard < 6000; guard++)
         {
             anchor = StepBackOnePeriod(anchor);
         }
 
-        // The new DtStart is the first occurrence on or after the new start; a
-        // lead-in (ActiveFrom) fills the gap when it lands later, so the active
-        // span still begins exactly where asked.
+        // The new DtStart is the first occurrence on or after the new start; an ActiveFrom lead-in covers any gap, so the active span begins exactly where asked.
         var grid = Create(new RecurrenceRuleOptions
         {
             Frequency = Frequency,
@@ -209,7 +219,7 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     });
 
-    /// <summary>[CALC] Returns a copy of this rule ending on the given date instead — DtStart, ActiveFrom, and everything else stay the same. Used to end a pattern early.</summary>
+    /// <summary>[CALC] Returns a copy of this rule ending on the given date instead; DtStart, ActiveFrom, and everything else stay the same.</summary>
     /// <param name="until">The new end date.</param>
     public RecurrenceRule WithUntil(DateOnly until) => Create(new RecurrenceRuleOptions
     {
@@ -223,7 +233,10 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     });
 
-    /// <summary>[CALC] Returns a copy with its rrule DtStart anchor moved to the given date — Until, ActiveFrom, and the rest stay the same. WARNING: for interval>1 or an implicit by-rule this shifts the whole cadence onto different days (DtStart is the RFC 5545 anchor), so use it only when moving which days it lands on is actually intended; ReanchoredToStartOn keeps the cadence instead.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy with its rrule DtStart anchor moved to the given date; Until, ActiveFrom, and the rest stay the same.
+    /// Warning: for interval > 1 or an implicit weekday this moves the whole schedule onto different days (DtStart is the RFC 5545 anchor); use ReanchoredToStartOn to keep the days.
+    /// </summary>
     /// <param name="start">The new rrule anchor date.</param>
     public RecurrenceRule WithStart(DateOnly start) => Create(new RecurrenceRuleOptions
     {
@@ -237,7 +250,10 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     });
 
-    /// <summary>[CALC] A copy of this rule wearing another's recurrence shape — its Frequency, Interval, ByDay, ByMonthDay — while keeping this rule's own dates (DtStart anchor, Until, ActiveFrom, ExcludedDates). For cascading an amount/shape change onto a later segment without moving where it sits.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy with another rule's recurrence shape (Frequency, Interval, ByDay, ByMonthDay), keeping this rule's own DtStart, Until, ActiveFrom, and ExcludedDates.
+    /// Used to cascade a shape change onto a later segment without moving where it sits.
+    /// </summary>
     /// <param name="shape">The rule whose recurrence shape to take on.</param>
     public RecurrenceRule WithShapeOf(RecurrenceRule shape) => Create(new RecurrenceRuleOptions
     {
@@ -251,7 +267,10 @@ public sealed class RecurrenceRule
         ExcludedDates = ExcludedDates,
     });
 
-    /// <summary>[CALC] Returns a copy of this rule with a new set of excluded dates (RFC 5545 EXDATE) — everything else, including the schedule itself, stays the same. Replaces the whole list rather than adding one at a time, so a caller removing a date doesn't need a separate method.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy of this rule with a new set of excluded dates (RFC 5545 EXDATE); everything else stays the same.
+    /// It replaces the whole list, so the same call adds or removes dates.
+    /// </summary>
     /// <param name="excludedDates">The complete new list of dates to skip.</param>
     public RecurrenceRule WithExcludedDates(IReadOnlyList<DateOnly> excludedDates) => Create(new RecurrenceRuleOptions
     {
@@ -381,7 +400,7 @@ public sealed class RecurrenceRule
     private static DateOnly ToDateOnly(Occurrence occurrence) =>
         DateOnly.FromDateTime(occurrence.Period.StartTime.Value);
 
-    /// <summary>[CALC] Returns every date this rule occurs on within a range, with ExcludedDates already left out. Always bounded — Until is always set by construction, so this never runs away.</summary>
+    /// <summary>[CALC] Returns every date this rule occurs on within a range, leaving out ExcludedDates.</summary>
     /// <param name="from">Start of the range to search; defaults to the rule's own DtStart.</param>
     /// <param name="to">End of the range to search; defaults to the rule's own Until.</param>
     public IReadOnlyList<DateOnly> GetOccurrences(DateOnly? from = null, DateOnly? to = null)
@@ -395,11 +414,7 @@ public sealed class RecurrenceRule
             RecurrenceRule = _pattern,
         };
 
-        // EXDATE, RFC 5545's own way to skip specific dates without
-        // reshaping the rule itself — every caller of GetOccurrences (the
-        // forecast cascade, milestone trajectories, form previews) honors an
-        // exclusion automatically just by going through here, with nothing
-        // extra to wire up at any of those call sites.
+        // Adds each excluded date as an RFC 5545 EXDATE, so every caller of GetOccurrences skips it with no extra work.
         foreach (var excluded in ExcludedDates)
         {
             calendarEvent.ExceptionDates.Add(new CalDateTime(excluded.Year, excluded.Month, excluded.Day));

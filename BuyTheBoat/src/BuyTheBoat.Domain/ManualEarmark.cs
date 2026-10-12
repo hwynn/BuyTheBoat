@@ -1,19 +1,19 @@
 namespace BuyTheBoat.Domain;
 
-// A user-created one-off allocation adjustment: on a chosen day, move money
-// into a fund jar (positive) or back out to the free balance (negative), on
-// top of whatever the jar's EarMarkPattern does automatically. At most one
-// per finance id per day (3.13.8.1.a1 — the persistence key enforces the
-// merge rule).
+/// <summary>The fields for building a ManualEarmark with ManualEarmark.Create.</summary>
 public sealed record ManualEarmarkOptions
 {
     public required int FinanceId { get; init; }
     public required DateOnly Date { get; init; }
 
-    // Positive moves money into the jar; negative pulls it back to free.
+    /// <summary>Positive moves money into the jar; negative moves it back to free funds.</summary>
     public required decimal Amount { get; init; }
 }
 
+/// <summary>
+/// A one-off adjustment the user makes: on a chosen day, moves money into a fund jar or back out to free funds, on top of what the jar's savings plan does.
+/// At most one per finance id per day (3.13.8.1.a1); the saved data's key enforces this.
+/// </summary>
 public sealed class ManualEarmark
 {
     public int FinanceId { get; }
@@ -29,7 +29,10 @@ public sealed class ManualEarmark
         Amount = options.Amount;
     }
 
-    /// <summary>[CALC] Creates a manual earmark, validating that its date falls within its jar's own lifetime. Doesn't check the jar's balance — a withdrawal that would overdraw the jar is the UI's job to catch, since that depends on the live forecast, not anything this constructor can see.</summary>
+    /// <summary>
+    /// [CALC] Creates a manual earmark, checking that its date falls within its jar's lifetime.
+    /// It doesn't check the jar's balance; catching a withdrawal that would overdraw the jar is the UI's job, since that needs the forecast.
+    /// </summary>
     /// <param name="options">The earmark's finance id, date, and amount.</param>
     /// <param name="pattern">The jar's EarMarkPattern — its date span is the jar's lifetime, so a manual earmark can only land on a day the jar exists.</param>
     public static ManualEarmark Create(ManualEarmarkOptions options, EarMarkPattern pattern)
@@ -46,13 +49,7 @@ public sealed class ManualEarmark
             throw new ZeroIsolatedEarmarkException("Amount cannot be zero.", nameof(options));
         }
 
-        // ActiveSpanContains (ActiveStart..Until), not the narrower Start..Until:
-        // ActiveStart already exists precisely so a jar can be considered alive
-        // — and so a manual earmark can land on it — before the pattern's own
-        // first occurrence (e.g. a lead-in set by AllocationPlanProposer's own
-        // asOfDate handling). Identical behavior to before whenever ActiveFrom
-        // is unset (ActiveStart falls back to Start in that case) — this only
-        // widens what validates, never narrows it.
+        // Checks the active span, not just the occurrences, since a jar exists from its ActiveFrom lead-in, before the first occurrence.
         if (!pattern.DatePattern.ActiveSpanContains(options.Date))
         {
             throw new ManualEarmarkOutsidePatternSpanException(

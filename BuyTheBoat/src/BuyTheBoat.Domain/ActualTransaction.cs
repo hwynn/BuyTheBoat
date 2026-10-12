@@ -1,29 +1,29 @@
 namespace BuyTheBoat.Domain;
 
-// A real, observed movement of money — from a bank feed, exported statement,
-// or manual entry. A pure stub in the current scope: nothing constructs one,
-// and BalanceSnapshot.ActualTransactions is always empty. Exists to mark
-// where actual-transaction import will land and what pairing will key on.
-//
-// ASSUMED-PAIRING(import): every site tagged ASSUMED-PAIRING elsewhere in
-// this project is a place that currently pretends instances of this class
-// exist and are paired to their ExpectedTransactions. Grep for that tag when
-// import becomes real — those are the sites to revisit.
+/// <summary>
+/// A real movement of money, from a bank feed, an exported statement, or manual entry.
+/// Nothing creates one yet, and BalanceSnapshot.ActualTransactions is always empty; it marks where transaction import and pairing will go.
+/// </summary>
+/// <remarks>
+/// ASSUMED-PAIRING(import): every spot tagged ASSUMED-PAIRING acts as if these existed and were paired to their ExpectedTransactions.
+/// Search for that tag when import is built; those are the spots to revisit.
+/// </remarks>
 public sealed record ActualTransaction
 {
-    // "Where the transaction came from and what it is for" — the string
-    // matched against FinancialPattern.Source for automatic pairing.
+    /// <summary>"Where the transaction came from and what it is for"; matched against FinancialPattern.Source for automatic pairing.</summary>
     public required string Source { get; init; }
 
-    // Cannot be in the future — a user can't record a transaction in advance.
+    /// <summary>Can't be in the future, since a transaction can't be recorded before it happens.</summary>
     public required DateOnly OccurredDate { get; init; }
 
     public required decimal Amount { get; init; }
 
-    // Pairing to an ExpectedTransaction: both set, or both null.
+    /// <summary>The ExpectedTransaction this is paired to; set together with PairedExpectedDate, or both null.</summary>
     public int? PairedFinanceId { get; init; }
+
+    /// <summary>The paired ExpectedTransaction's date; set together with PairedFinanceId, or both null.</summary>
     public DateOnly? PairedExpectedDate { get; init; }
 
-    // Whether this arrived via a batch import rather than hand entry.
+    /// <summary>Whether this came from a batch import rather than being entered by hand.</summary>
     public bool MadeInBulk { get; init; }
 }

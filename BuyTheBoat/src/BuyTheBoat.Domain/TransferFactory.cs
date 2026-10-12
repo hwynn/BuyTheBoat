@@ -12,21 +12,18 @@ public sealed record TransferRequest
     public required decimal Amount { get; init; }
     public required RecurrenceRule DatePattern { get; init; }
 
-    // "It just keeps going" for a transfer — set on BOTH legs (they must always
-    // agree, per TransferBreakOffFactory's own check). Marks an ongoing transfer
-    // the forecast-time pass extends to the horizon; default false = a plain
-    // transfer that ends on its own schedule.
+    /// <summary>
+    /// "It just keeps going" for a transfer, set on both legs, which must always agree (TransferBreakOffFactory checks this).
+    /// The forecast extends an ongoing transfer to the horizon; false means it ends on its own schedule.
+    /// </summary>
     public bool AutoRenew { get; init; }
 }
 
-// The Transfer plus the two ordinary FinancialPatterns it expands into.
-// Withdrawal is negative and files under the FROM account; Deposit is
-// positive and files under the TO account. The filing itself happens at
-// save time (the patterns, like every FinancialPattern, carry no account of
-// their own). Both patterns carry the transfer's schedule and are
-// non-mandatory: moving your own money is not a bill. (The withdrawal
-// still reserves, through a plain, immediate savings plan made when the
-// transfer is saved.)
+/// <summary>
+/// The Transfer plus the two ordinary FinancialPatterns it becomes: a negative Withdrawal filed under the from account, and a positive Deposit filed under the to account.
+/// The filing happens at save time, since patterns carry no account of their own.
+/// Both follow the transfer's schedule and are non-mandatory, since moving your own money isn't a bill; the withdrawal still sets money aside through a plain, immediate savings plan made when the transfer is saved.
+/// </summary>
 public sealed record TransferResult
 {
     public required Transfer Transfer { get; init; }
@@ -34,9 +31,7 @@ public sealed record TransferResult
     public required FinancialPattern Deposit { get; init; }
 }
 
-// The transfer analogue of OneTimeGoalFactory: one user action becomes a
-// linked set of persisted objects. Nothing here is a new documented class —
-// the patterns are plain FinancialPatterns.
+/// <summary>Turns one transfer the user enters into a Transfer record and two plain FinancialPatterns, as OneTimeGoalFactory does for goals.</summary>
 public static class TransferFactory
 {
     /// <summary>[CALC] Builds a transfer's Transfer record plus its withdrawal and deposit patterns, from the accounts, amount, and schedule the user entered.</summary>

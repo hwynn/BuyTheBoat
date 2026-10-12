@@ -1,10 +1,12 @@
 namespace BuyTheBoat.Domain;
 
-// Per-goal savings status, one per EarMarkPattern — evaluated against its own
-// goal's due date, independent of whatever horizon a forecast's day-by-day
-// timeline happens to cover. Always present for every goal that has a
-// savings plan, not just the ones falling short — ShortfallAmount is 0 for
-// a goal that's fully on track.
+/// <summary>
+/// One goal's savings status, judged against its own due date regardless of how far the forecast's day-by-day timeline reaches.
+/// Every goal with a savings plan has one, not just those falling short; ShortfallAmount is 0 for a goal that's on track.
+/// </summary>
+/// <remarks>
+/// TODO: tell the user unprompted when a goal is running ahead (OverfundedAmount), rather than waiting for them to open and save its form.
+/// </remarks>
 public sealed record GoalShortfall
 {
     public required int FinanceId { get; init; }
@@ -15,14 +17,9 @@ public sealed record GoalShortfall
 
     public decimal ShortfallAmount => Math.Max(0m, AmountNeeded - AmountAllocatedByDueDate);
 
-    // The mirror of ShortfallAmount — how far ahead of schedule a goal is
-    // (e.g. a big manual earmark filled the jar early). For a repeating
-    // goal this reads the whole remaining span rather than pace against
-    // the next occurrence, the same scope ShortfallAmount uses.
+    /// <summary>
+    /// How far ahead of schedule a goal is, for example after a big manual earmark filled the jar early.
+    /// For a repeating goal, this covers the whole remaining span rather than the next occurrence, the same as ShortfallAmount.
+    /// </summary>
     public decimal OverfundedAmount => Math.Max(0m, AmountAllocatedByDueDate - AmountNeeded);
-
-    // TODO: overfunded proactive nudge. Detection is done (OverfundedAmount
-    // above); what's unbuilt is surfacing it unprompted — telling the user a
-    // goal is running ahead without waiting for them to open and save its form.
-    // Deferred as a future stage.
 }

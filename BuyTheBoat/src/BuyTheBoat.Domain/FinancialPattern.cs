@@ -1,9 +1,6 @@
 namespace BuyTheBoat.Domain;
 
-// A bill or a paycheck are the same thing here, distinguished only by the sign
-// of Amount — see planning/01-glossary-of-terms.md#financialpattern. One-time
-// goals (e.g. "trip to Japan") are also a FinancialPattern, just with a
-// DatePattern that has a single occurrence.
+/// <summary>The fields for building a FinancialPattern with FinancialPattern.Create.</summary>
 public sealed record FinancialPatternOptions
 {
     public required int FinanceId { get; init; }
@@ -12,24 +9,24 @@ public sealed record FinancialPatternOptions
     public required decimal Amount { get; init; }
     public int Priority { get; init; }
 
-    // null defers to "true if Amount is negative" — the documented default.
+    /// <summary>Null means the documented default: true if Amount is negative.</summary>
     public bool? Mandatory { get; init; }
     public string? Description { get; init; }
 
-    // Free-form text the user types on the Expense form. Never read by the forecast.
+    /// <summary>Free-form text the user types on the Expense form; the forecast never reads it.</summary>
     public string? Notes { get; init; }
 
-    // DIVERGENCE(auto-renew): a marker set invisibly when the user answers
-    // "it just keeps going" at creation. It never affects the rrule, the math,
-    // or occurrence generation — the pattern still ends on its stored Until.
-    // Instead the app extends it forward at forecast time
-    // (MainWindow.RenewOngoingPatternsToHorizon adds fresh chain segments that
-    // continue the existing plan; the transfer analogue extends in place) so it
-    // always reaches the horizon; this flag is what tells those passes which
-    // patterns to keep extending.
+    /// <summary>
+    /// DIVERGENCE(auto-renew): set when the user answers "it just keeps going" at creation; it never changes the schedule or the math, and the pattern still ends on its stored Until.
+    /// The app extends these patterns at forecast time so they always reach the horizon (MainWindow.RenewOngoingPatternsToHorizon adds new chain segments; transfers are extended in place).
+    /// </summary>
     public bool AutoRenew { get; init; }
 }
 
+/// <summary>
+/// A bill or a paycheck, which differ only in the sign of Amount (planning/01-glossary-of-terms.md#financialpattern).
+/// A one-time goal (e.g. "trip to Japan") is also a FinancialPattern, with a single occurrence.
+/// </summary>
 public sealed class FinancialPattern
 {
     public int FinanceId { get; }
@@ -72,7 +69,7 @@ public sealed class FinancialPattern
         return new FinancialPattern(options, mandatory);
     }
 
-    /// <summary>[CALC] Returns a copy of this pattern whose date pattern is active from the given (earlier) date — so a plan and jar for it can begin before its first occurrence — with its occurrences and every other field unchanged.</summary>
+    /// <summary>[CALC] Returns a copy of this pattern active from the given earlier date, so a plan and jar for it can begin before its first occurrence; everything else is unchanged.</summary>
     /// <param name="activeFrom">The new, earlier active-from date.</param>
     public FinancialPattern WithActiveFrom(DateOnly activeFrom) => Create(new FinancialPatternOptions
     {
@@ -87,7 +84,7 @@ public sealed class FinancialPattern
         AutoRenew = AutoRenew,
     });
 
-    /// <summary>[CALC] Returns a copy of this pattern ending on the given (earlier) date instead — every other field, including occurrences up to that date, unchanged. Used to end a pattern early.</summary>
+    /// <summary>[CALC] Returns a copy of this pattern ending on the given earlier date instead; everything else, including occurrences up to that date, is unchanged.</summary>
     /// <param name="until">The new, earlier end date.</param>
     public FinancialPattern WithUntil(DateOnly until) => Create(new FinancialPatternOptions
     {
@@ -102,7 +99,10 @@ public sealed class FinancialPattern
         AutoRenew = AutoRenew,
     });
 
-    /// <summary>[CALC] Returns a copy with its rrule DtStart anchor moved to the given date — every other field unchanged. WARNING: this shifts an interval>1 (or implicit-by-rule) cadence onto different days, since DtStart is the RFC 5545 anchor; use it only when moving which days it lands on is intended (a direct Start edit). To relink a chain neighbor while keeping its cadence, use ReanchoredToStartOn.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy with its rrule DtStart anchor moved to the given date; everything else is unchanged.
+    /// Warning: for interval > 1 or an implicit weekday this moves the whole schedule onto different days, so use it only for a direct Start edit; use ReanchoredToStartOn to keep the days.
+    /// </summary>
     /// <param name="start">The new rrule anchor date.</param>
     public FinancialPattern WithStart(DateOnly start) => Create(new FinancialPatternOptions
     {
@@ -117,7 +117,10 @@ public sealed class FinancialPattern
         AutoRenew = AutoRenew,
     });
 
-    /// <summary>[CALC] Returns a copy whose active span begins on the given date, keeping its cadence — every other field unchanged. Used by BreakOffFactory's chain-boundary resolution to nudge a successor's own start to stay contiguous without silently shifting an interval>1 neighbor onto different days.</summary>
+    /// <summary>
+    /// [CALC] Returns a copy whose active span begins on the given date while its occurrences stay on the same days; everything else is unchanged.
+    /// BreakOffFactory uses it to keep chain neighbors back to back.
+    /// </summary>
     /// <param name="newActiveStart">Where the pattern's active span should begin.</param>
     public FinancialPattern ReanchoredToStartOn(DateOnly newActiveStart) => Create(new FinancialPatternOptions
     {

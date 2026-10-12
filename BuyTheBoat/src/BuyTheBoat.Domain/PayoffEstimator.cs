@@ -1,9 +1,9 @@
 namespace BuyTheBoat.Domain;
 
-// What the payoff estimate needs: how much is still owed, the size of one
-// regular payment (a positive magnitude, like the create forms use), and the
-// schedule those payments follow. The schedule fields mirror
-// RecurrenceRuleOptions minus the end bound — which is exactly what we compute.
+/// <summary>
+/// What the payoff estimate needs: how much is still owed, one regular payment (a positive amount, as the forms use), and the payment schedule.
+/// The schedule fields match RecurrenceRuleOptions without an end date, which is what gets worked out.
+/// </summary>
 public sealed record PayoffRequest
 {
     public required decimal TotalOwed { get; init; }
@@ -15,21 +15,16 @@ public sealed record PayoffRequest
     public IReadOnlyList<int> ByMonthDay { get; init; } = [];
 }
 
-// How many payments it takes and the date of the last one. Both are lower
-// bounds: interest and fees are ignored, so a real loan takes at least this
-// many payments and runs at least this long. The form states the date to
-// the user as a floor ("at least until ..."), never as an exact date.
+/// <summary>
+/// How many payments it takes and the date of the last one.
+/// Both are minimums, since interest and fees are ignored; the form shows the date as "at least until ...", never as exact.
+/// </summary>
 public sealed record PayoffEstimate(int PaymentCount, DateOnly PayoffDate);
 
-// Answers a bill's "when does this stop?" with "when I've paid it off", from
-// just the amount owed and the regular payment. Deliberately ignores
-// interest and fees — the figure it returns is the soonest a loan could be
-// clear, presented as a floor, not an exact date.
-//
-// It is the mirror of RecurrenceRule's own Count->Until resolution: "pay it
-// off" means "make N payments", N payments is a Count, and a Count resolves to
-// the date of the Nth occurrence. So this reuses that tested path rather than
-// re-deriving occurrence dates by hand.
+/// <summary>
+/// Answers a bill's "when does this stop?" with "when I've paid it off", from the amount owed and the regular payment.
+/// Paying it off means making N payments, which is a Count, so this uses RecurrenceRule's Count-to-Until conversion to find the last payment's date.
+/// </summary>
 public static class PayoffEstimator
 {
     /// <summary>[CALC] Works out the fewest payments and earliest date a loan could be paid off in, from the amount owed and the regular payment — a floor, since it ignores interest and fees.</summary>
@@ -50,12 +45,10 @@ public static class PayoffEstimator
                 "Payment must be greater than zero — a loan is never paid off at zero per payment.");
         }
 
-        // Round up: a final partial payment is still a whole payment date. $12,000
-        // owed at $350 a month is 34.28 payments — i.e. a 35th, smaller payment.
+        // Rounds up, since a final partial payment still needs its own date ($12,000 at $350 a month is 34.28, so 35 payments).
         var paymentCount = (int)Math.Ceiling(request.TotalOwed / request.Payment);
 
-        // N payments IS a Count, so its end date is exactly the Count->Until
-        // resolution RecurrenceRule.Create already performs and tests.
+        // RecurrenceRule.Create turns the Count into the last payment's date.
         var schedule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
             Frequency = request.Frequency,
