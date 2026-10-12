@@ -6,50 +6,37 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// A self-contained "build me a recurrence rule" form + live calendar preview,
-// embedded wherever something needs a date_pattern (the Expense, Earmark and
-// Transfer tabs). Exposes the computed RecurrenceRule (or null,
-// while the form is in an invalid state) rather than owning a window itself.
+/// <summary>
+/// A "build a recurrence rule" form with a live calendar preview, used wherever something needs a date_pattern (the Expense, Earmark, and Transfer tabs).
+/// Exposes the built RecurrenceRule, or null while the form isn't valid.
+/// </summary>
 public partial class RecurrenceRuleEditor : UserControl
 {
     // Guards against recalculating on every individual control's default-value
     // assignment while the control is still being constructed.
     private bool _initialized;
 
-    // When a host form owns the "when does this stop?" question (the bill
-    // form), the built-in Ends controls are hidden and the end date is
-    // supplied from outside via SetHostEndDate instead of the radios.
+    /// <summary>Does the host form ask "when does this stop?" itself (the bill form)? Then the built-in Ends controls are hidden and SetHostEndDate supplies the end date.</summary>
     private bool _hostControlsEnd;
     private DateOnly? _hostUntil;
 
-    // A host form can mark specific occurrences with an altered highlight color
-    // and show a short caption below the list (e.g. "Projected short"). Both
-    // default to "nothing to flag," so a caller that never calls SetHighlight
-    // is unaffected.
+    // Occurrences a host form highlights, and the caption and legend shown with them (SetHighlight); empty by default.
     private IReadOnlyCollection<DateOnly> _highlightedDates = [];
     private string? _caption;
     private string? _legendText;
 
     private static readonly Brush ShortDateHighlightBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xD9, 0xA0));
 
-    // The occurrence list defaults to showing only this many dates, with a
-    // toggle to see the rest — kept as a named constant so it's easy to
-    // retune later.
+    /// <summary>How many dates the occurrence list shows before the toggle to see the rest.</summary>
     private const int DefaultVisibleOccurrenceCount = 5;
 
     private IReadOnlyList<DateOnly> _allOccurrences = [];
     private bool _showAllOccurrences;
 
-    // RFC 5545 EXDATE — dates skipped even though the schedule would otherwise
-    // land on them (the glut case). Maintained here regardless of whether
-    // ExcludedDatesSection is visible, same as every other schedule field —
-    // only the section's own Visibility is host-gated.
+    /// <summary>Dates the schedule skips (RFC 5545 EXDATE, "the glut case"), kept whether or not ExcludedDatesSection is shown.</summary>
     private List<DateOnly> _excludedDates = [];
 
-    // The enclosing span a host has capped the pickers to (LimitSelectableDates),
-    // or null for no cap. Kept as fields so the Until picker's own lower bound
-    // can be re-derived as the later of this earliest and the live Start on
-    // every Start change, without the two rules overwriting each other.
+    // The span a host has limited the pickers to (LimitSelectableDates), or null for no limit; kept so Until's lower bound can be worked out again on every Start change.
     private DateOnly? _outerEarliest;
     private DateOnly? _outerLatest;
 
@@ -60,10 +47,7 @@ public partial class RecurrenceRuleEditor : UserControl
         StartDatePicker.SelectedDate = DateTime.Today;
         UntilDatePicker.SelectedDate = DateTime.Today.AddYears(3);
 
-        // The calendar recycles its CalendarDayButtons as the user pages
-        // between months, rather than keeping every date's button alive at
-        // once — the highlight has to be re-applied every time the visible
-        // days change, not just when the schedule fields do.
+        // Re-applies the highlight when the user pages months, since the calendar reuses its day buttons.
         PreviewCalendar.DisplayDateChanged += (_, _) => ApplyHighlight();
         Loaded += (_, _) => ApplyHighlight();
 
@@ -71,7 +55,10 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Marks specific occurrences with an altered highlight color, shows a short caption below the occurrence list, and — since this control has no idea what a highlighted date actually represents, only that it's highlighted — a caller-supplied legend explaining what the highlight color means. An empty list, and null/blank text for either string, clears that piece back to the plain preview.</summary>
+    /// <summary>
+    /// [UI] Highlights specific occurrences, with a short caption below the list and a legend explaining what the highlight means, since this control doesn't know.
+    /// An empty list, or null or blank text, clears that piece.
+    /// </summary>
     /// <param name="dates">The occurrences to highlight.</param>
     /// <param name="caption">A short caption shown below the occurrence list, or null to clear it.</param>
     /// <param name="legendText">Explains what the highlight color means, or null to clear it.</param>
@@ -135,7 +122,7 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Undoes LetHostControlEndDate — restores the built-in "Ends" controls so the editor decides its own end date again. Needed because a host form (ExpenseFormPanel) is one long-lived instance reused across every open rather than a fresh window each time: without this, switching from the bill form's "when does this stop?" question to any other mode would leave the Ends controls hidden for good.</summary>
+    /// <summary>[UI] Undoes LetHostControlEndDate, bringing back the built-in "Ends" controls; needed because ExpenseFormPanel reuses one editor, which would otherwise keep them hidden.</summary>
     public void LetSelfControlEndDate()
     {
         if (!_hostControlsEnd)
@@ -166,7 +153,7 @@ public partial class RecurrenceRuleEditor : UserControl
     /// <summary>[UI] Reveals the "Skip specific dates" section — collapsed by default so Expense/Transfer, which don't offer this freedom, are unaffected. One-way: no matching "hide it again" exists yet, since nothing currently needs it.</summary>
     public void ShowExcludedDatesEditor() => ExcludedDatesSection.Visibility = Visibility.Visible;
 
-    /// <summary>[UI] Replaces the skipped-dates list wholesale and reveals the section — for pre-filling a suggested set of skips (a goal-health "skip some events" correction), exactly as if the user had picked those dates by hand. Refreshes the preview so the skips show immediately.</summary>
+    /// <summary>[UI] Replaces the skipped-dates list and shows the section, for pre-filling a goal-health "skip some events" correction as if the user had picked them; refreshes the preview.</summary>
     /// <param name="excludedDates">The complete set of dates to mark skipped.</param>
     public void SetExcludedDates(IReadOnlyList<DateOnly> excludedDates)
     {
@@ -175,7 +162,7 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Lets a host inject its own field(s) at the top of this editor's own left column — e.g. Earmark's "Amount per occurrence," so the right-side preview can use the vertical space that would otherwise sit empty above the recurrence fields. Null clears it back to nothing — every other current caller (Expense, Transfer) is unaffected unless it calls this too.</summary>
+    /// <summary>[UI] Puts a host's own fields at the top of this editor's left column, such as the Earmark form's amount, so the preview can use that height; null clears it.</summary>
     /// <param name="content">The element to inject, or null to clear it.</param>
     public void SetLeadingContent(UIElement? content)
     {
@@ -187,9 +174,7 @@ public partial class RecurrenceRuleEditor : UserControl
     /// <param name="until">The end date the host chose, or null if none picked yet.</param>
     public void SetHostEndDate(DateOnly? until)
     {
-        // No-op when unchanged: the host recomputes the end in response to
-        // ResultChanged, so without this guard SetHostEndDate → Recalculate →
-        // ResultChanged → SetHostEndDate would loop.
+        // Skips an unchanged date, since the host sets the end in response to ResultChanged and would otherwise loop.
         if (_hostUntil == until)
         {
             return;
@@ -199,7 +184,7 @@ public partial class RecurrenceRuleEditor : UserControl
         Recalculate();
     }
 
-    /// <summary>[UI] Caps the Start and Until date pickers so only days inside the given span can be picked from the calendar — used to keep an earmark plan's own span within its goal's, so the user can't pick a date the save would reject. A null for either end clears that bound. On top of this outer cap, the Until picker never reaches earlier than the live Start (see ApplyDateBounds).</summary>
+    /// <summary>[UI] Limits the Start and Until pickers to the given span, keeping a savings plan inside its goal's dates; null clears that end, and Until also never goes before Start (ApplyDateBounds).</summary>
     /// <param name="earliest">The earliest pickable day, or null for no lower bound.</param>
     /// <param name="latest">The latest pickable day, or null for no upper bound.</param>
     public void LimitSelectableDates(DateOnly? earliest, DateOnly? latest)
@@ -209,7 +194,7 @@ public partial class RecurrenceRuleEditor : UserControl
         ApplyDateBounds();
     }
 
-    /// <summary>[UI] Re-derives what the two date pickers will let the user choose: Start ranges over the host's outer cap (LimitSelectableDates), and Until can't reach earlier than the chosen Start — so an end date before the start, which would silently produce an empty schedule, can't be picked. Called both when the cap changes and, via Recalculate, whenever the Start date moves.</summary>
+    /// <summary>[UI] Sets what the date pickers allow: Start within the host's limit (LimitSelectableDates), and Until no earlier than Start, since that would make an empty schedule; runs when the limit or Start changes.</summary>
     private void ApplyDateBounds()
     {
         var outerStart = _outerEarliest?.ToDateTime(TimeOnly.MinValue);
@@ -250,14 +235,10 @@ public partial class RecurrenceRuleEditor : UserControl
         UpdateFormVisibility();
         ErrorText.Text = string.Empty;
 
-        // Keep Until's floor pinned to whatever Start now reads — a Start moved
-        // past the current Until re-tightens the picker so the invalid end date
-        // can't be re-chosen (the note below catches one already sitting there).
+        // Keeps Until from going before the new Start; an end date already before it is flagged below.
         ApplyDateBounds();
 
-        // Independent of whether the rest of the form is currently valid —
-        // what's already been skipped doesn't disappear just because the
-        // user is mid-edit on some other field.
+        // Shown even while another field is invalid mid-edit.
         ExcludedDatesListBox.ItemsSource = _excludedDates;
 
         try
@@ -283,10 +264,7 @@ public partial class RecurrenceRuleEditor : UserControl
             UpdateOccurrencesDisplay();
             UpdateExcludableOccurrences(rule);
 
-            // A rule that's structurally valid but lands on nothing — the
-            // silent empty-schedule trap. Flagged only here, in the success
-            // branch: the catch below already shows a real error message, and
-            // stacking this note on top of it would just be noise.
+            // Flags a valid rule that lands on no dates; not shown with an error, which the catch below already reports.
             EmptyScheduleNote.Visibility = occurrences.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             Result = rule;
@@ -306,15 +284,13 @@ public partial class RecurrenceRuleEditor : UserControl
 
         ResultChanged?.Invoke(this, EventArgs.Empty);
 
-        // Schedule edits rebuild SelectedDates/OccurrencesListBox from
-        // scratch — reapply whatever highlight/caption/legend the host last
-        // set so it survives the user continuing to edit the form afterward.
+        // Re-applies the host's highlight, caption, and legend, since the lists were just rebuilt.
         ApplyHighlight();
         ApplyCaption();
         ApplyLegend();
     }
 
-    /// <summary>[UI] Colors whichever currently-realized CalendarDayButtons fall in _highlightedDates, and clears the color from any we previously set that are no longer in that set. A button we never touched is left alone, so the calendar's own "today"/selected styling isn't disturbed.</summary>
+    /// <summary>[UI] Colors the visible calendar days in _highlightedDates and clears the color from ones no longer in it, leaving other days alone so the calendar's own "today" and selection styling stays.</summary>
     private void ApplyHighlight()
     {
         if (!PreviewCalendar.IsLoaded)
@@ -368,7 +344,7 @@ public partial class RecurrenceRuleEditor : UserControl
         UpdateOccurrencesDisplay();
     }
 
-    /// <summary>[UI] Refreshes which dates the "Skip specific dates" picker offers — this schedule's own real occurrences, minus whichever are already skipped. Reads the RAW list (WithExcludedDates([])) rather than the already-filtered one Recalculate just computed, since a date already skipped is exactly the one thing that shouldn't be offered again.</summary>
+    /// <summary>[UI] Refreshes the dates the "Skip specific dates" picker offers: the schedule's occurrences (read without exclusions) minus the ones already skipped.</summary>
     /// <param name="rule">The just-built rule to read candidate dates from.</param>
     private void UpdateExcludableOccurrences(RecurrenceRule rule)
     {
@@ -416,7 +392,7 @@ public partial class RecurrenceRuleEditor : UserControl
         CaptionText.Visibility = hasCaption ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>[UI] The color-key row beneath the caption — same on/off shape ApplyCaption uses, own element since a caption ("Keeps falling short") and a legend ("highlighted = this release came up short") answer different questions and a host might supply one without the other.</summary>
+    /// <summary>[UI] Shows or hides the color legend below the caption; separate from the caption, since a host may give one without the other.</summary>
     private void ApplyLegend()
     {
         var hasLegend = !string.IsNullOrWhiteSpace(_legendText);

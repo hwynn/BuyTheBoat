@@ -3,13 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:BuyTheBoat.App">
     <DockPanel Margin="8">
-        <!-- Bottom bar: the two settled save buttons. Both persist
-             identically; only where they navigate to
-             afterward differs. StatusText added 2026-08-07 (author's own
-             go-ahead) — the settled four plan-health states and their
-             labels: the linked plan's
-             own health, docked left per the settled left-status /
-             right-actions layout. -->
+        <!-- Bottom bar: the two save buttons save the same way and differ only in where they go afterward.
+             StatusText, docked left, shows the linked plan's health. -->
         <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="True">
             <TextBlock x:Name="StatusText" DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold"
                        Foreground="#FF9A4F08" Background="#FFFBF0E2" Padding="6,4" Visibility="Collapsed"/>
@@ -21,42 +16,24 @@
             </StackPanel>
         </DockPanel>
 
-        <!-- Wrapped in a ScrollViewer, added 2026-08-06 — same fix, same
-             reasoning as EarmarkFormPanel (see its own comment there): this
-             form stacks strictly more regions (instance-info-block,
-             characterization-block, Details, Due-date/Stop-question,
-             RecurrenceRuleEditor, Summary) with nothing to scroll them, so
-             the just-added Summary region below would be equally
-             unreachable once the tab ran out of height. -->
+        <!-- The ScrollViewer keeps every region below reachable, as in EarmarkFormPanel. -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
-                <!-- REGION 1 — the instance-information-block.
-                     Topmost, always. Which instance is
-                     loaded, whether it has unsaved edits, and the controls to
-                     discard those edits or start a blank one. No delete button here
-                     — deletion stays on the Expenses list tab, next to the row. -->
+                <!-- REGION 1 — the instance-information-block, always on top: which item is loaded, whether it has unsaved edits, and controls to discard them or start a blank one.
+                     Deleting stays on the Expenses list tab. -->
                 <Border BorderBrush="#FFCCCCCC" BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,10">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock x:Name="ModifiedIndicatorText" Text="● Unsaved changes" Foreground="DarkOrange"
                                        FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0" Visibility="Collapsed"/>
-                            <!-- "Discard changes" wording is explicitly left
-                                 open — provisional, easy to retitle later. -->
+                            <!-- The "Discard changes" wording is provisional. -->
                             <Button x:Name="DiscardChangesButton" Content="Discard changes" Padding="8,3" Margin="0,0,8,0" Click="OnDiscardChangesClick"/>
                             <Button Content="Clear form" Padding="8,3" Click="OnClearClick"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="Editing" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <!-- The button opens FinancialPatternPickerWindow (the
-                                 author's own call, 2026-08-06) — not a ComboBox, and
-                                 not the fancier searchable control left
-                                 undecided; this is the one settled shape, reused the
-                                 same way in every form's instance-info-block except
-                                 Account's. Setting SelectedInstanceText directly (not
-                                 through this button) is also how a MainWindow
-                                 shortcut ("Edit Selected...", "Create Bill...") lands
-                                 on this form — programmatically, the popup never
-                                 visibly opens on its own. -->
+                            <!-- Opens FinancialPatternPickerWindow, the picker every form's instance-info-block uses except Account's.
+                                 MainWindow shortcuts ("Edit Selected...", "Create Bill...") set SelectedInstanceText directly instead, without showing the popup. -->
                             <TextBlock x:Name="SelectedInstanceText" Text="— New Expense —" VerticalAlignment="Center"
                                        Margin="0,0,8,0" FontWeight="SemiBold" AutomationProperties.AutomationId="SelectedInstanceText"/>
                             <Button Content="Change..." Padding="8,3" Click="OnChangeInstanceClick"
@@ -69,12 +46,7 @@
                      What KIND of thing this is, plus a computed, always-present label. -->
                 <GroupBox Header="What is this?" Padding="10" Margin="0,0,0,10">
                     <DockPanel>
-                        <!-- Advanced mode (the author's own call, 2026-08-06;
-                             the Advanced-mode design only ever
-                             covered Expense, with its content itself partly
-                             still undecided — see this control's own doc
-                             comment in code-behind for exactly what's wired
-                             today vs. what still isn't). -->
+                        <!-- Advanced mode; see OnAdvancedModeChanged in code-behind for what it reveals. -->
                         <CheckBox x:Name="AdvancedModeCheckBox" DockPanel.Dock="Right" Content="Advanced mode" VerticalAlignment="Center"
                                   Checked="OnAdvancedModeChanged" Unchecked="OnAdvancedModeChanged"/>
                         <StackPanel Orientation="Horizontal">
@@ -100,10 +72,7 @@
                     </DockPanel>
                 </GroupBox>
 
-                <!-- REGION 3 — everything else. Not yet organized into named
-                     sub-blocks (there's no settled further breakdown), so
-                     this stays one
-                     GroupBox of the remaining consistent fields. -->
+                <!-- REGION 3 — the remaining fields, in one GroupBox until there's a settled breakdown. -->
                 <GroupBox Header="Details" Padding="10" Margin="0,0,0,10">
                     <StackPanel>
                         <UniformGrid Columns="3" Rows="2">
@@ -133,8 +102,7 @@
                             <StackPanel/>
                         </UniformGrid>
 
-                        <!-- Hidden for income — money coming
-                             in is never something you skip paying. -->
+                        <!-- Hidden for income, since incoming money is never something you skip paying. -->
                         <StackPanel x:Name="MandatoryPanel" Margin="0,10,0,0">
                             <TextBlock Text="If money got tight, could you skip this?"/>
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -148,28 +116,20 @@
                     </StackPanel>
                 </GroupBox>
 
-                <!-- One-time: a
-                     single plain date, not the full recurrence machinery. Internally
-                     still becomes a real one-occurrence RecurrenceRule at save time. -->
+                <!-- One-time: a single date instead of the recurrence editor, saved as a one-occurrence RecurrenceRule. -->
                 <StackPanel x:Name="DueDatePanel" Margin="0,0,0,10">
                     <TextBlock Text="Due date"/>
                     <DatePicker x:Name="DueDatePicker" Width="180" HorizontalAlignment="Left" Margin="0,2,0,0" SelectedDateChanged="OnFieldChanged"/>
                 </StackPanel>
 
-                <!-- Repeating: "when does this stop?" now shows for every repeating
-                     Expense, not only the
-                     old "Create Bill" shortcut — supplies the schedule editor's end
-                     date itself, so its own raw Ends controls step aside. -->
+                <!-- Repeating: "when does this stop?" supplies the schedule's end date, so the editor's own Ends controls are hidden. -->
                 <GroupBox x:Name="StopQuestionBox" Header="When does this stop?" Padding="10" Margin="0,0,0,10">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <RadioButton x:Name="StopOnDateRadio" Content="On a date I know" GroupName="Stop" IsChecked="True" Checked="OnStopModeChanged" Margin="0,0,18,0"/>
                             <RadioButton x:Name="StopPaidOffRadio" Content="When I've paid it off (a loan)" GroupName="Stop" Checked="OnStopModeChanged" Margin="0,0,18,0"/>
-                            <!-- "Keeps going": sets an invisible
-                                 AutoRenew flag with nothing to configure. Its end date
-                                 is pushed out to the forecast horizon plus a cycle, and
-                                 renewed as the horizon advances (MainWindow.
-                                 RenewOngoingPatternsToHorizon). -->
+                            <!-- "Keeps going": sets a hidden AutoRenew flag with nothing to configure.
+                                 Its end date is pushed one cycle past the forecast horizon and renewed as the horizon advances (MainWindow.RenewOngoingPatternsToHorizon). -->
                             <RadioButton x:Name="StopKeepsGoingRadio" Content="It just keeps going" GroupName="Stop" Checked="OnStopModeChanged"/>
                         </StackPanel>
                         <TextBlock x:Name="KeepsGoingNote" Visibility="Collapsed"
@@ -195,13 +155,8 @@
 
                 <local:RecurrenceRuleEditor x:Name="RuleEditor" Margin="0,0,0,10"/>
 
-                <!-- Continuity note (2026-08-13, author's own request):
-                     break-offs/restructures create a genuinely new
-                     FinanceId, so it's easy to forget — looking at just
-                     this one row — that it continues from, or is later
-                     continued by, another pattern. Both collapsed by
-                     default; UpdateContinuityNote (code-behind) shows
-                     whichever apply. -->
+                <!-- Continuity note: a break-off or restructure creates a new FinanceId, so this says whether the pattern continues from, or is continued by, another one.
+                     Both collapsed by default; UpdateContinuityNote shows whichever apply. -->
                 <TextBlock x:Name="PredecessorNoteText" Margin="0,0,0,4" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
                 <TextBlock x:Name="SuccessorNoteText" Margin="0,0,0,10" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"/>
 
@@ -214,10 +169,8 @@
                              AutomationProperties.AutomationId="NotesTextBox"/>
                 </StackPanel>
 
-                <!-- The author's own call, 2026-08-06: this Expense's linked savings
-                     plan, shown the same way Earmark shows its own — present even in
-                     the plain healthy state, not only surfaced through a warning.
-                     Read-only here; the plan itself is edited on the Earmark tab. -->
+                <!-- This Expense's linked savings plan, shown as the Earmark tab shows it, even when healthy.
+                     Read-only here; the plan is edited on the Earmark tab. -->
                 <local:SummaryRegion x:Name="Summary"/>
             </StackPanel>
         </ScrollViewer>

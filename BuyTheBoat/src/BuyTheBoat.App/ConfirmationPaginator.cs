@@ -3,17 +3,17 @@ using System.Collections.Generic;
 
 namespace BuyTheBoat.App;
 
-// The height-based pagination the confirmation popup's
-// front-end contract calls for. Splitting is about HEIGHT, never logic: the
-// dynamic reveal (a ChoiceOption's child rows) decides which questions apply
-// WITHIN a page, so a top-level row and its whole subtree always stay together
-// on one page. The pre-pass measures each row worst-case (every option's
-// children counted as if revealed) so a page can't grow past the budget once the
-// user starts expanding things. Pure and WPF-free on purpose, so it stays
-// unit-testable in BuyTheBoat.App.Tests, which can't render the real window.
+/// <summary>
+/// Splits the confirmation popup's rows into pages by height only; a row and its nested rows always stay on one page.
+/// Each row is measured as if every nested question were shown, so a page can't outgrow its budget as the user expands things.
+/// Free of WPF so BuyTheBoat.App.Tests can test it without the real window.
+/// </summary>
 internal static class ConfirmationPaginator
 {
-    /// <summary>[CALC] Splits the popup's rows into pages that each fit a height budget, keeping every row (with its dynamic-reveal children) whole on one page — MainWindow's popup driver uses this to decide whether one save needs more than one confirmation page. Returns a single page holding all the rows whenever they fit, so the common one-page save is unchanged; a lone row taller than the budget gets its own page rather than being split.</summary>
+    /// <summary>
+    /// [CALC] Splits the rows into pages that each fit a height budget, keeping every row whole with its nested rows; MainWindow uses this to decide whether a save needs several pages.
+    /// Everything fits on one page when it can; a row taller than the budget gets a page of its own.
+    /// </summary>
     /// <param name="rows">The full row set the wrapper built for this save, in display order.</param>
     /// <param name="maxPageHeight">The comfortable height budget for one page's rows, in the same approximate pixels estimateHeight returns.</param>
     /// <param name="estimateHeight">Worst-case height of one row with its children expanded — normally ConfirmationRowHeights.EstimateWorstCase; taken as a parameter so the split can be tested against exact heights.</param>
@@ -26,9 +26,7 @@ internal static class ConfirmationPaginator
         var current = new List<ConfirmationRow>();
         var currentHeight = 0d;
 
-        // Greedy pack: begin a new page only once the current one holds something
-        // AND the next row would push it past the budget — so a single over-tall
-        // row still lands alone on its own page instead of being split or dropped.
+        // Adds each row to the current page, starting a new page when it isn't empty and the row would push it past the budget, so an over-tall row gets a page of its own.
         foreach (var row in rows)
         {
             var rowHeight = estimateHeight(row);
@@ -43,8 +41,7 @@ internal static class ConfirmationPaginator
             currentHeight += rowHeight;
         }
 
-        // The trailing page, and — for a description-only request with no rows —
-        // one empty page, matching the single dialog it drew before pagination.
+        // Adds the last page, or one empty page when there are no rows, so a description-only request still shows one dialog.
         if (current.Count > 0 || pages.Count == 0)
         {
             pages.Add(current);
@@ -54,16 +51,13 @@ internal static class ConfirmationPaginator
     }
 }
 
-// A deliberately rough pixel estimate of how tall a confirmation
-// row draws in EditingHistoryConfirmationWindow (Width 440, default font), used
-// only to decide page breaks. It never has to be exact: the window keeps a scroll
-// fallback for a page that still overshoots, and "too tall to read comfortably"
-// is itself a soft threshold. WPF-free so it stays testable next to the paginator.
+/// <summary>
+/// A rough pixel estimate of how tall a row draws in EditingHistoryConfirmationWindow, used only for page breaks.
+/// It needn't be exact, since the window scrolls a page that still runs over; free of WPF so it's testable.
+/// </summary>
 internal static class ConfirmationRowHeights
 {
-    // Tuned to the popup's own layout: ~408px of text width inside the 440px
-    // window's 16px side margins, the default ~12pt font's line box, and the 14px
-    // gap every row carries below it.
+    // Matched to the popup's layout: ~408px of text inside the 440px window's margins, the default font's line height, and the 14px gap under each row.
     private const double ContentWidth = 408;
     private const double AvgCharWidth = 7;
     private const double LineHeight = 18;
@@ -73,7 +67,7 @@ internal static class ConfirmationRowHeights
     private const double FooterGap = 4;
     private const double ChildIndentGap = 8; // the indented child panel's own margins
 
-    /// <summary>[CALC] The worst-case height one confirmation row draws at, in approximate pixels — the value ConfirmationPaginator.Paginate sums to place page breaks. "Worst-case" because a page must still fit once the user reveals a nested question, so every option's children are counted whether or not they'd currently be visible.</summary>
+    /// <summary>[CALC] A row's height in approximate pixels with every nested question shown, which Paginate adds up to place page breaks.</summary>
     /// <param name="row">The row to estimate.</param>
     public static double EstimateWorstCase(ConfirmationRow row) => row switch
     {
@@ -94,9 +88,7 @@ internal static class ConfirmationRowHeights
         var height = WrappedTextHeight(row.Question) + QuestionGap + RowBottomMargin;
         var tallestConsequence = 0d;
 
-        // Each option adds its own line and its full child subtree (worst case =
-        // every child revealed); the footer only ever shows one option's
-        // consequence at a time, so that part is a max across options, not a sum.
+        // Adds each option's line and all its nested rows; the footer shows one option's consequence at a time, so it counts the tallest one.
         foreach (var option in row.Options)
         {
             height += OptionLineHeight + WrappedExtraLines(option.Label);

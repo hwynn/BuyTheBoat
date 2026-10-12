@@ -10,13 +10,8 @@
                     AutomationProperties.AutomationId="SaveAccountButton"/>
         </StackPanel>
 
-        <!-- Characterization-field-block, added 2026-08-06 — Account never
-             had one before (nothing here needs characterizing the way
-             Expense's Direction/Repeats? or Earmark's Savings-plan/One-off
-             does), so this is a new, minimal region that exists solely to
-             hold the Advanced mode checkbox the author asked every form
-             have. Currently inert: Account has no recurrence editor or any
-             other content that Advanced mode would reveal yet. -->
+        <!-- Characterization-field-block: holds the Advanced mode checkbox every form has.
+             Account has nothing for Advanced mode to reveal yet. -->
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
             <CheckBox x:Name="AdvancedModeCheckBox" DockPanel.Dock="Right" Content="Advanced mode" VerticalAlignment="Center"/>
         </DockPanel>

@@ -8,42 +8,28 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// A dumb renderer over request.Rows. Each row is one question or
-// announcement FinancePatternSaveConfirmation or EarmarkPatternSaveConfirmation
-// decided to raise on a single
-// save; this window draws them top-to-bottom and reports the raw selections
-// back as a ConfirmationOutcome (one option index per ChoiceRow it drew). It
-// never decides which rows exist, what they mean, or that one answer might
-// unlock another — and, with the row-keyed outcome, it no longer even knows
-// what a selection means: the wrapper reads each index back into a decision.
-// Still deliberately the minimal plain-WPF look (a styled version is the
-// eventual target, not this).
-//
-// Built in code-behind rather than an ItemsControl + DataTemplates on purpose:
-// the ConfirmationRow records are immutable (no mutable SelectedIndex to bind
-// two-way against), each ChoiceRow needs its own independent radio group, and
-// the selected-option consequence footer has to update live — all a few lines
-// here, but each needs its own per-row viewmodel + converters through pure XAML
-// binding. Nothing about the domain lives in this file regardless of how it's
-// drawn.
+/// <summary>
+/// Shows request.Rows, the questions and announcements FinancePatternSaveConfirmation or EarmarkPatternSaveConfirmation raised for one save, top to bottom, and reports the selections back as a ConfirmationOutcome.
+/// It never decides which rows exist or what an answer means; the confirmation class reads each index back into a decision.
+/// It's a deliberately plain WPF look for now; a styled version is the eventual goal.
+/// </summary>
+/// <remarks>
+/// Built in code-behind rather than with an ItemsControl and DataTemplates, since the rows are immutable records, each ChoiceRow needs its own radio group, and the consequence footer updates live.
+/// Those are a few lines here, but would each need a per-row view model and converters in XAML.
+/// </remarks>
 public partial class EditingHistoryConfirmationWindow : Window
 {
-    // One entry per ChoiceRow drawn — its radios (in option order), its options
-    // (for the consequence text), the footer TextBlock under them, and the
-    // per-option child-row panel (null for a leaf option) shown only while that
-    // option is selected (dynamic reveal). Keyed by row Id so ToOutcome can
-    // report each selection and the one shared OnOptionChecked handler can
-    // refresh the right footer and child panels.
+    /// <summary>
+    /// One drawn ChoiceRow: its radios and options in order, the consequence footer, and each option's child-row panel (null for a leaf), shown only while that option is selected.
+    /// Kept by row Id so ToOutcome can report each selection and OnOptionChecked can refresh the right footer and panels.
+    /// </summary>
     private sealed record ChoiceRowControls(
         IReadOnlyList<RadioButton> Radios, IReadOnlyList<ChoiceOption> Options, TextBlock Footer,
         IReadOnlyList<FrameworkElement?> ChildPanels);
 
     private readonly Dictionary<string, ChoiceRowControls> _choiceRows = new();
 
-    // The one plan-shape picker, if this request drew one — its
-    // radios (in candidate order) and the candidates themselves, so ToOutcome can
-    // report the picked candidate's own plan as ChosenPlanShape. Null when no
-    // picker was shown (most saves), which reads back as the default candidate.
+    /// <summary>The plan-shape picker's radios and candidates, so ToOutcome can report the picked plan as ChosenPlanShape; null when no picker was shown, which reads as the default.</summary>
     private (IReadOnlyList<RadioButton> Radios, IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> Candidates)? _planShapePicker;
 
     public EditingHistoryConfirmationWindow(
@@ -51,9 +37,7 @@ public partial class EditingHistoryConfirmationWindow : Window
     {
         InitializeComponent();
 
-        // Cap at the working screen so a tall page — or a single row too tall to
-        // split — scrolls inside the window instead of pushing the buttons
-        // off-screen; the scroll fallback behind height-based pagination.
+        // Limits the height to the screen, so a page too tall to split scrolls inside the window instead of pushing the buttons off-screen.
         MaxHeight = SystemParameters.WorkArea.Height * 0.92;
 
         DescriptionText.Text = request.Description;
@@ -163,11 +147,7 @@ public partial class EditingHistoryConfirmationWindow : Window
             radios.Add(radio);
             optionsPanel.Children.Add(radio);
 
-            // An option's own child rows (dynamic reveal) — built recursively and
-            // indented under it, shown only while this option is selected. Their
-            // own ChoiceRows register themselves in _choiceRows too (via
-            // BuildRowControl), so ToOutcome reports their selections like any
-            // other, whether or not they happen to be visible.
+            // Builds the option's child rows, indented and shown only while it's selected; they register in _choiceRows too, so ToOutcome reports them whether or not they're visible.
             if (option.Children.Count > 0)
             {
                 var childPanel = new StackPanel { Margin = new Thickness(22, 2, 0, 6) };
@@ -229,10 +209,7 @@ public partial class EditingHistoryConfirmationWindow : Window
         return container;
     }
 
-    // The one place a selected option's consequence is written — replaces the
-    // hand-copied per-section Update*Visibility handlers the old window had. The
-    // sender's Tag names its row; refresh that row's footer to whatever option
-    // is now checked.
+    /// <summary>[UI] Updates a row's consequence footer and child rows to the option now checked; the sender's Tag names the row.</summary>
     private void OnOptionChecked(object sender, RoutedEventArgs e)
     {
         if (sender is RadioButton { Tag: string rowId } && _choiceRows.TryGetValue(rowId, out var controls))
@@ -242,9 +219,7 @@ public partial class EditingHistoryConfirmationWindow : Window
         }
     }
 
-    // Show the selected option's child rows and hide the rest — the dynamic
-    // reveal. A group's radios fire Checked on the newly-selected one, so
-    // refreshing every option's panel here keeps them all in sync.
+    /// <summary>[UI] Shows the selected option's child rows and hides the others'.</summary>
     private static void RefreshChildPanels(ChoiceRowControls controls)
     {
         for (var i = 0; i < controls.Radios.Count; i++)

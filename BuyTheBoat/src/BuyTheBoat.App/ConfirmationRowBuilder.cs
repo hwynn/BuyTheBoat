@@ -1,62 +1,47 @@
 namespace BuyTheBoat.App;
 
-// Everything BuildRows needs to project the rows — the trigger booleans and
-// the pre-computed warning/description strings, gathered by each entry point
-// from its own state. An internal build-time intermediate, so the public
-// request stays down to what the popup actually reads (Description, Rows).
-// Fields default to false / "" so each builder sets only the ones its own
-// path can raise.
+/// <summary>
+/// Everything BuildRows needs: the conditions and the ready-made warning and description strings, gathered by each confirmation class from its own state.
+/// Kept internal so the public request holds only what the popup reads; fields default to false or "", so each class sets only the ones it can raise.
+/// </summary>
 internal sealed record RowInputs
 {
     public bool IsChangeCritical { get; init; }
 
-    // The break-off successor's alternative plan shapes, or empty when there's no real
-    // choice (most edits, or a break-off with no existing plan). More than one entry means
-    // a genuine choice; each carries its own plan, so it becomes a CandidatePickerRow.
+    /// <summary>The successor's plan shapes, or empty when there's no real choice; becomes a CandidatePickerRow.</summary>
     public IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> PlanShapeCandidates { get; init; } = [];
 
     public bool HasMultipleEarmarkPatterns { get; init; }
-    // Whether at least one plan is one the user made their own — the "combine / keep
-    // separate" question shows only when true (untouched dummies have no meaningful choice).
+
+    /// <summary>Has the user made at least one plan their own? The combine-or-keep-separate question only shows then.</summary>
     public bool HasExplicitEarmarkPattern { get; init; }
     public bool ConsolidationNeeded { get; init; }
     public string ConsolidationForcedReason { get; init; } = "";
 
-    // The nested "these kept-separate plans over/underfund the new amount — adjust them?"
-    // wording, or "" when there's no funding gap (row hidden). Rides under the Consolidation
-    // row's "keep them separate" option, shown only while that option is picked.
+    /// <summary>The "adjust the kept-separate plans to meet the new amount?" wording, shown under "keep them separate" while it's picked; "" hides it.</summary>
     public string KeepSeparateFundingQuestion { get; init; } = "";
 
     public string SourceChangeWarning { get; init; } = "";
 
-    // The goal-health suggestion's question wording, or "" when there's no correction (row
-    // hidden). Picking a correction pre-fills the single plan's form with it as an unsaved edit.
+    /// <summary>The goal-health question, or "" to hide it; picking a correction pre-fills the plan's form with it as an unsaved edit.</summary>
     public string GoalHealthSuggestionQuestion { get; init; } = "";
 
-    // One option label per goal-health correction, in recommendation order — then a trailing
-    // "leave it as is". Today exactly one ("Load the suggested amount"); empty when none applies.
-    // Set for the UNDERfunded case; the overfunded case uses the fields below.
+    /// <summary>For an underfunded goal: one option label per correction, in recommendation order, before a final "leave it as is"; currently just "Load the suggested amount".</summary>
     public IReadOnlyList<string> GoalHealthCorrectionLabels { get; init; } = [];
 
-    // The OVERfunded goal-health nested flow. GoalHealthLowerRateLabel is the "lower the
-    // contribution to $X" option (also this shape's presence flag); GoalHealthKeepRateLabel is
-    // the "keep saving at this rate" option the skip sub-question nests under; GoalHealthSkip*
-    // are that sub-question's prompt and strategy options. All empty when not overfunded.
+    // For an overfunded goal: the "lower the contribution to $X" option (its presence turns this case on), the "keep saving at this rate" option, and the skip question and options nested under it; all empty otherwise.
     public string GoalHealthLowerRateLabel { get; init; } = "";
     public string GoalHealthKeepRateLabel { get; init; } = "";
     public string GoalHealthSkipQuestion { get; init; } = "";
     public IReadOnlyList<string> GoalHealthSkipLabels { get; init; } = [];
 
-    // The consequence footer under the goal-health "leave it as is" option — names what
-    // rejecting costs (goal falling short, or money tied up). "" when there's no suggestion.
+    /// <summary>The consequence under "leave it as is": the goal falling short, or money tied up; "" when there's no suggestion.</summary>
     public string GoalHealthRejectWarning { get; init; } = "";
 
-    // The plan's own health heads-up, or "" when there's nothing worth
-    // surfacing. A plain announcement — no choice attached.
+    /// <summary>The plan's health warning, shown as an announcement; "" when there's nothing to say.</summary>
     public string ConcerningPlanNotice { get; init; } = "";
 
-    // "[bill] occurs N more times" — the heads-up that moving a boundary outward
-    // grew a plan to keep pace. "" when no boundary extended a plan. Announcement.
+    /// <summary>The "[bill] occurs N more times" announcement when a boundary moved outward and grew a plan; "" otherwise.</summary>
     public string BoundaryExtensionAnnouncement { get; init; } = "";
     public bool TouchesChainBoundary { get; init; }
     public bool PlanTouchesChainBoundary { get; init; }
@@ -69,61 +54,47 @@ internal sealed record RowInputs
     public string TrivialFieldsCascadeDescription { get; init; } = "";
     public bool PacedBillsCanCascade { get; init; }
 
-    // The two paced-bills cascade footers, one per option: "update them" states
-    // the plans will be re-paced, "leave them" states they stay on the old
-    // schedule until edited. Both "" when nothing was invalidated.
+    // The paced-bills footers: "update them" says the plans will be re-paced, "leave them" says they stay on the old schedule until edited; both "" when nothing was affected.
     public string PacedBillsCascadeDescription { get; init; } = "";
     public string PacedBillsLeaveDescription { get; init; } = "";
 
-    // One entry per later finance pattern the amount change carries forward onto that's
-    // funded by more than one earmark pattern — each becomes its own cross-boundary
-    // combine-or-keep-separate ChoiceRow. Empty unless the change reaches such a pattern.
+    /// <summary>One entry per later segment the amount change cascades onto that several plans fund; each becomes its own combine-or-keep-separate row.</summary>
     public IReadOnlyList<CrossBoundaryConsolidationInput> CrossBoundaryConsolidations { get; init; } = [];
 
-    // Whether a consolidation is on the table this save, so the two consolidate-
-    // strategy questions apply — sizing always, spread only when a clear income
-    // exists (otherwise both spreads land on the same result).
+    // Whether the two consolidation questions apply: sizing whenever plans are combined, spread only when there's one clear income, since otherwise both spreads give the same result.
     public bool ShowConsolidationSizing { get; init; }
     public bool ShowConsolidationSpread { get; init; }
 
-    // Earmark path only: offer "split at today vs recalculate the whole plan" for an
-    // amount/rate edit to a lone plan with past contributions. Break off (index 0) is the
-    // pre-selected default — keeps what's set aside instead of re-rating the jar's history.
+    /// <summary>Earmark form only: offer "split at today or recalculate the whole plan" for a rate change to a lone plan that's already saving; splitting (option 0) is the default.</summary>
     public bool OfferRerateBreakOff { get; init; }
 }
 
-// One later segment that needs a cross-boundary combine-or-keep-separate question,
-// identified by its finance_id, with a short label naming which segment it is.
+/// <summary>One later segment needing a cross-boundary combine-or-keep-separate question: its finance id and a short label.</summary>
 internal sealed record CrossBoundaryConsolidationInput(int FinanceId, string Label);
 
-// The one row-projection both save-confirmation wrappers share
-// (FinancePatternSaveConfirmation and EarmarkPatternSaveConfirmation). Each
-// wrapper works out its own conditions, fills a RowInputs, and calls BuildRows;
-// neither wrapper knows the other, and there's a single place that decides which
-// rows a given set of inputs produces — so the two paths can never drift apart
-// in what the popup shows.
+/// <summary>
+/// Builds the confirmation rows for both FinancePatternSaveConfirmation and EarmarkPatternSaveConfirmation from their RowInputs.
+/// Having one place decide which rows appear keeps the two from drifting apart in what the popup shows.
+/// </summary>
 internal static class ConfirmationRowBuilder
 {
-    /// <summary>[CALC] Projects the computed inputs into the confirmation-row list — one row per section, in most-vital-first order, under the same visibility conditions the hand-built popup used. Serves both entry points: the earmark path only sets the chain fields, so it naturally yields just those rows.
-    ///
-    /// The plan-shape picker is emitted as a CandidatePickerRow right under the break-off announcement, so the successor's shape is a real choice rather than a silent "Recommended."
-    ///
-    /// An always-shown description that accompanies a choice (the cascade/trivial/paced-bills descriptions) rides as BOTH options' Consequence, so the popup's "footer under the selected option" shows it whichever option is picked. A per-option warning (the chain-boundary case) rides only on the option it belongs to.</summary>
+    /// <summary>
+    /// [CALC] Turns the inputs into the confirmation rows, one per section, most important first; the Earmark form only sets the chain fields, so it gets just those rows.
+    /// The plan-shape picker sits right under the break-off announcement.
+    /// A description that applies whichever option is picked (cascade, trivial fields, paced bills) is set as both options' Consequence; a warning for one option (the chain boundary) is set only on that option.
+    /// </summary>
     public static IReadOnlyList<ConfirmationRow> BuildRows(RowInputs r)
     {
         var rows = new List<ConfirmationRow>();
 
-        // A Critical edit always breaks off from today — announced, not asked
-        // (forward-only).
+        // A Critical edit always breaks off from today, so it's announced, not asked.
         if (r.IsChangeCritical)
         {
             rows.Add(new AnnouncementRow(ConfirmationRowIds.WarnAboutBreakOff,
                 "This reaches back to history that's already happened, so it will start a new segment from today — your past records stay exactly as they were."));
         }
 
-        // The new segment's savings plan can be shaped a few ways (Recommended, keep the
-        // same schedule, keep the same amount). Only shown when there's a real choice; the
-        // picker returns the chosen candidate's plan as ChosenPlanShape. Recommended is index 0.
+        // The successor plan's shape (Recommended first, then same schedule or same amount), when there's a real choice; the pick comes back as ChosenPlanShape.
         if (r.PlanShapeCandidates.Count > 0)
         {
             rows.Add(new CandidatePickerRow(ConfirmationRowIds.PlanShape,
@@ -132,16 +103,10 @@ internal static class ConfirmationRowBuilder
                 DefaultIndex: 0));
         }
 
-        // The consolidation choice — only with a real choice to make (more than one plan,
-        // not forced by a schedule/start change, and at least one plan the user's own —
-        // folding untouched dummies alters nothing). Both answers are honored on a break-off:
-        // keep-separate gives the successor one plan per surviving plan.
+        // Combine or keep separate, when there's a real choice: several plans, not forced to combine, and at least one the user made their own.
         if (r.HasMultipleEarmarkPatterns && !r.ConsolidationNeeded && r.HasExplicitEarmarkPattern)
         {
-            // When keeping them separate would over/underfund the new amount, a nested
-            // question offers to re-rate them to meet it — shown only while "keep them
-            // separate" is picked (combining folds them into one instead). Its OWN row:
-            // the choice above decides whether plans stay several, this one how much each gives.
+            // Under "keep them separate": offers to re-rate the plans when they'd over- or underfund the new amount.
             List<ConfirmationRow> keepSeparateChildren = string.IsNullOrEmpty(r.KeepSeparateFundingQuestion)
                 ? []
                 :
@@ -178,16 +143,10 @@ internal static class ConfirmationRowBuilder
             rows.Add(new AnnouncementRow(ConfirmationRowIds.SourceChange, r.SourceChangeWarning));
         }
 
-        // The goal-health suggestion: a plan that no longer meets its edited goal, offered
-        // one or more corrections to pre-fill its form with, then a trailing "leave it as
-        // is." First correction pre-selected; "leave it" carries a consequence footer naming
-        // what that costs, shown only while picked. Identical corrections are collapsed
-        // upstream (DetermineGoalHealthSuggestionIfApplicable), so no two options repeat.
+        // The goal-health suggestion for a plan that no longer meets its edited goal.
         if (!string.IsNullOrEmpty(r.GoalHealthSuggestionQuestion) && r.GoalHealthCorrectionLabels.Count > 0)
         {
-            // Underfunded: one option per correction, then a trailing "leave it as is." The
-            // wrapper maps a chosen index to its overrides and treats the trailing option
-            // (index == correction count) — and an unanswered row — as "no correction."
+            // Underfunded: one option per correction, then "leave it as is" with its consequence; the first correction is pre-selected.
             var goalHealthOptions = r.GoalHealthCorrectionLabels
                 .Select(label => new ChoiceOption(label, "", ""))
                 .Append(new ChoiceOption("Leave it as is", "", r.GoalHealthRejectWarning))
@@ -201,10 +160,7 @@ internal static class ConfirmationRowBuilder
         }
         else if (!string.IsNullOrEmpty(r.GoalHealthSuggestionQuestion) && !string.IsNullOrEmpty(r.GoalHealthLowerRateLabel))
         {
-            // Overfunded: a two-step nested question. Lower the rate to meet the goal
-            // (recommended, pre-selected), or keep the rate — which reveals the skip
-            // sub-question when there's a whole contribution's surplus to skip. Skip options
-            // list the strategies, then a trailing "don't skip any" (its default).
+            // Overfunded: lower the rate (pre-selected), or keep it, which shows the skip question when a whole contribution can be skipped; "don't skip any" is the skip default.
             ChoiceRow? skipRow = r.GoalHealthSkipLabels.Count > 0
                 ? new ChoiceRow(ConfirmationRowIds.GoalHealthSkip,
                     r.GoalHealthSkipQuestion,
@@ -235,20 +191,14 @@ internal static class ConfirmationRowBuilder
             rows.Add(new AnnouncementRow(ConfirmationRowIds.ConcerningPlan, r.ConcerningPlanNotice));
         }
 
-        // Moving a boundary outward grew a plan to keep pace — otherwise silent,
-        // so this names how many more times the goal now occurs. Announcement.
+        // A boundary moved outward and grew a plan; names how many more times the goal now occurs.
         if (!string.IsNullOrEmpty(r.BoundaryExtensionAnnouncement))
         {
             rows.Add(new AnnouncementRow(ConfirmationRowIds.BoundaryExtension, r.BoundaryExtensionAnnouncement));
         }
 
-        // "Cascade forward or not" for an Amount/shape change, built first so it can nest
-        // under the chain question below. The cross-boundary questions nest under its "apply
-        // going forward" option — they only matter if the change carries forward, so the popup
-        // shows them only while that option is selected. One per later finance pattern the
-        // change reaches that's funded by more than one earmark pattern; each its OWN row kind,
-        // never the break-off Consolidation above (an edit is a break-off or a carry-forward,
-        // not both). Default "keep them separate" (0), matching the break-off row's default.
+        // "Cascade forward or not", built first so it can nest under the chain question below.
+        // The cross-boundary combine-or-keep-separate questions nest under "apply going forward", since they only matter if the change carries forward; each defaults to keeping them separate.
         ChoiceRow? cascadeRow = null;
         if (r.ChangeCanCascade || r.PlanChangeCanCascade)
         {
@@ -264,10 +214,7 @@ internal static class ConfirmationRowBuilder
                     Layout: OptionLayout.Stacked))
                 .ToList();
 
-            // The two consolidate-strategy questions ride alongside the cross-boundary rows,
-            // under "apply going forward" — they matter whenever a consolidation happens
-            // downstream (a chosen combine, or a forced shape-change fold). Sizing always;
-            // spread only when a clear income makes the two differ.
+            // The two consolidation questions also nest under "apply going forward", for any plans combined downstream.
             if (r.ShowConsolidationSizing)
             {
                 carryForwardChildren.Add(new ChoiceRow(ConfirmationRowIds.ConsolidationSizing,
@@ -302,11 +249,8 @@ internal static class ConfirmationRowBuilder
                 Layout: OptionLayout.Stacked);
         }
 
-        // "Stay linked or break" — shared by both chain types (only one is ever true per
-        // request). The cascade question nests under "keep it linked": breaking the chain
-        // leaves no forward chain to carry the change onto, so the popup hides it there — and
-        // the wrapper gates the cascade on the stay-linked answer to match. Each option
-        // carries its own consequence, shown while selected.
+        // "Stay linked or break", for either kind of chain; each option carries its own consequence.
+        // The cascade question nests under "keep it linked", since breaking the chain leaves nothing to cascade onto.
         if (r.TouchesChainBoundary || r.PlanTouchesChainBoundary)
         {
             rows.Add(new ChoiceRow(ConfirmationRowIds.ChainBoundary,
@@ -326,9 +270,7 @@ internal static class ConfirmationRowBuilder
             rows.Add(cascadeRow); // no chain boundary in play — the cascade question stands on its own
         }
 
-        // Editing a lone savings plan's amount/rate when it's already been accumulating:
-        // split it at today (keep what's set aside) or recalculate the whole plan. Break off
-        // is the pre-selected, non-destructive default; re-rating warns the set-aside changes.
+        // A rate change to a lone plan that's already saving: split at today (the default, keeping what's set aside) or recalculate the whole plan.
         if (r.OfferRerateBreakOff)
         {
             rows.Add(new ChoiceRow(ConfirmationRowIds.EarmarkRerate,
@@ -347,10 +289,7 @@ internal static class ConfirmationRowBuilder
                 Layout: OptionLayout.Stacked));
         }
 
-        // The trivial-fields cascade (Priority/Mandatory/Description/
-        // Notes/AutoRenew) — no EarMarkPattern equivalent. Defaults to "just this
-        // segment" (index 0), the one place this doesn't mirror Amount/shape's
-        // own default.
+        // The trivial-fields cascade (Priority, Mandatory, Description, Notes, AutoRenew), defaulting to just this segment, unlike the Amount and shape cascade.
         if (r.TrivialFieldsCanCascade)
         {
             rows.Add(new ChoiceRow(ConfirmationRowIds.TrivialFieldsCascade,
@@ -363,12 +302,7 @@ internal static class ConfirmationRowBuilder
                 Layout: OptionLayout.Stacked));
         }
 
-        // The paycheck-association cascade. The popup pre-selects "update them"
-        // (index 0) — the author's chosen default for what a real user sees, so
-        // matching the bills to the new schedule is one Save away. The no-popup fallback
-        // (DefaultOutcome) still declines, so nothing re-paces money
-        // when no one was actually asked. Each option carries its own
-        // consequence, shown while selected.
+        // The paycheck cascade: the popup pre-selects "update them", while no popup (DefaultOutcome) leaves the bills alone, so nothing re-paces money without asking.
         if (r.PacedBillsCanCascade)
         {
             rows.Add(new ChoiceRow(ConfirmationRowIds.PacedBillsCascade,

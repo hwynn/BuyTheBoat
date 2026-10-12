@@ -2,33 +2,20 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// A confirmation row: one question, or one announcement, that the
-// save-confirmation popup may raise on a single save. The popup renders a
-// list of these, top to bottom, most-vital first, and returns the user's
-// choices — it never decides which rows exist, in what order, or that one
-// answer might make another question relevant. A wrapper
-// (FinancePatternSaveConfirmation for a bill/paycheck, EarmarkPatternSaveConfirmation
-// for a savings plan) owns all of that and hands the popup a finished list.
-//
-// The design is the row kinds below and the two-layout front-end contract.
-// These are what
-// runs today — ConfirmationRowBuilder.BuildRows constructs them, the popup
-// (EditingHistoryConfirmationWindow) renders them, and the wrapper reads the
-// choices back off the ConfirmationOutcome.
+/// <summary>
+/// One question or announcement the save-confirmation popup may show on a save.
+/// The popup shows a list of these top to bottom, most important first, and returns the user's choices; it never decides which rows exist, their order, or that one answer makes another question relevant.
+/// FinancePatternSaveConfirmation (bills and paychecks) or EarmarkPatternSaveConfirmation (savings plans) decides all that, builds the list with ConfirmationRowBuilder.BuildRows, and reads the choices back from ConfirmationOutcome; EditingHistoryConfirmationWindow shows it.
+/// </summary>
 public abstract record ConfirmationRow(string Id);
 
-// A statement with no choice attached — a forced-consolidation notice, a
-// source-change warning, a narrowing-limitation notice. The popup shows it
-// only when Text is non-empty, matching how the flat DTO's own announcement
-// strings ("" = hide) behave today.
+/// <summary>A statement with no choice, such as a forced-combine notice or a Source-change warning; shown only when Text isn't empty.</summary>
 public sealed record AnnouncementRow(string Id, string Text) : ConfirmationRow(Id);
 
-// A question with a fixed set of options and a visibly pre-selected default.
-// Question is the message shown above the options; DefaultIndex is the option
-// that looks already-picked; Layout is how the options sit (see OptionLayout).
-// Every ChoiceRow must have a real default — a question reaching the popup
-// without one is a design gap to resolve with the author, not a runtime
-// state to guess at.
+/// <summary>
+/// A question with a fixed set of options and a visibly pre-selected DefaultIndex; Question shows above the options, and Layout sets how they sit.
+/// Every ChoiceRow must have a real default; a question without one is a design gap to resolve, not something to guess at.
+/// </summary>
 public sealed record ChoiceRow(
     string Id,
     string Question,
@@ -36,114 +23,91 @@ public sealed record ChoiceRow(
     int DefaultIndex,
     OptionLayout Layout) : ConfirmationRow(Id);
 
-// One option within a ChoiceRow. It can hold information, not just a label:
-// Detail is the fuller explanation (used especially in the Stacked layout,
-// where an option gets the popup's full width). Consequence is the
-// warning/consequence footer shown under the options while THIS option is the
-// selected one — "" for an option with no downside, so the footer escalates as
-// the user picks a riskier choice while the default option stays safe.
+/// <summary>
+/// One option in a ChoiceRow: Detail is a fuller explanation, used mostly in the Stacked layout.
+/// Consequence is the warning shown under the options while this option is selected; "" when there's no downside, so the default option stays safe.
+/// </summary>
 public sealed record ChoiceOption(string Label, string Detail, string Consequence)
 {
-    // Rows this option unlocks while it's the selected one (dynamic reveal):
-    // they appear indented under it in the popup and disappear when another
-    // option is picked — so a follow-up question only shows when it's actually
-    // relevant. Empty for a leaf option. The wrapper builds the tree; the popup
-    // shows/hides mechanically, at most three levels deep.
+    /// <summary>
+    /// Rows shown indented under this option only while it's selected, so a follow-up question only appears when it matters; empty for a leaf option.
+    /// The confirmation class builds the tree; the popup shows and hides rows, at most three levels deep.
+    /// </summary>
     public IReadOnlyList<ConfirmationRow> Children { get; init; } = [];
 }
 
-// Choose one of several labelled candidate plan shapes —
-// each candidate carries its own preview, so this is its own kind rather than
-// a plain ChoiceRow. DefaultIndex is the recommended candidate.
+/// <summary>A choice between labeled plan shapes, each with its own preview, so it's its own row kind; DefaultIndex is the recommended one.</summary>
 public sealed record CandidatePickerRow(
     string Id,
     string Question,
     IReadOnlyList<FinancePatternSaveConfirmation.PlanShapeCandidate> Candidates,
     int DefaultIndex) : ConfirmationRow(Id);
 
-// How a ChoiceRow's options are arranged. SideBySide (the default) suits
-// options that summarize in a few words; Stacked gives each option the popup's
-// full width, for choices that need room to explain themselves — a suggestion
-// reshaping a long-term savings plan, say.
+/// <summary>
+/// How a ChoiceRow's options are arranged: SideBySide (the default) for options that fit in a few words, or Stacked to give each the popup's full width.
+/// Stacked suits choices that need explaining, such as a suggestion reshaping a long-term savings plan.
+/// </summary>
 public enum OptionLayout
 {
     SideBySide,
     Stacked,
 }
 
-// The stable Id of every row FinancePatternSaveConfirmation.BuildRows can
-// produce. Shared so the builder and the popup that reads choices back
-// (EditingHistoryConfirmationWindow.OnSaveClick) can never drift on a literal
-// — a mismatch there would map a selection to the wrong answer with no test
-// catching it, since the whole suite bypasses the real popup (a delegate
-// double stands in). The announcement Ids aren't read back (announcements have
-// no answer), but are named here for one complete list.
+/// <summary>
+/// The Id of every row ConfirmationRowBuilder.BuildRows can produce, shared so the builder and the popup reading choices back (EditingHistoryConfirmationWindow.OnSaveClick) always agree.
+/// A mismatch would map a choice to the wrong answer without any test noticing, since tests bypass the real popup; announcement ids aren't read back but are listed for completeness.
+/// </summary>
 public static class ConfirmationRowIds
 {
     public const string WarnAboutBreakOff = "warn-about-break-off";
-    // The break-off successor's savings-plan shape:
-    // Recommended vs keep-the-same-schedule vs keep-the-same-amount. Its selection
-    // comes back as ConfirmationOutcome.ChosenPlanShape (the picked candidate's own
-    // plan), not as an option index like the ChoiceRows — see CandidatePickerRow.
+
+    /// <summary>The successor plan shape (Recommended, same schedule, or same amount); its answer comes back as ConfirmationOutcome.ChosenPlanShape rather than an option index.</summary>
     public const string PlanShape = "plan-shape";
     public const string Consolidation = "consolidation";
-    // Nested under Consolidation's "keep them separate": offers to re-rate the
-    // kept-separate plans so they meet the new amount instead of over/underfunding it.
+
+    /// <summary>Nested under Consolidation's "keep them separate": offers to re-rate the kept-separate plans to meet the new amount.</summary>
     public const string KeepSeparateFunding = "keep-separate-funding";
     public const string ConsolidationForced = "consolidation-forced";
     public const string SourceChange = "source-change";
-    // Accept/reject offer to pre-fill the single plan's form with a correction
-    // that meets the edited goal (the goal-health suggestion picker).
+
+    /// <summary>Offers to pre-fill the plan's form with a correction that meets the edited goal.</summary>
     public const string GoalHealthSuggestion = "goal-health-suggestion";
-    // Nested under the overfunded goal-health "keep saving at this rate" option:
-    // skip the next contribution, skip a stretch, or don't skip — using up the
-    // surplus by pausing contributions rather than lowering the rate.
+
+    /// <summary>Nested under the overfunded "keep saving at this rate": skip the next contribution, skip a stretch, or don't skip.</summary>
     public const string GoalHealthSkip = "goal-health-skip";
-    // Plain heads-up that the plan is worth a look.
+
+    /// <summary>The "worth a look" warning about the plan.</summary>
     public const string ConcerningPlan = "concerning-plan";
-    // Heads-up that moving a boundary outward grew a plan — "[bill] occurs N more times".
+
+    /// <summary>The "[bill] occurs N more times" notice when a boundary moved outward and grew a plan.</summary>
     public const string BoundaryExtension = "boundary-extension";
     public const string ChainBoundary = "chain-boundary";
     public const string Cascade = "cascade";
-    // Editing the amount/rate of a lone savings plan that's already been
-    // accumulating: split it at today (break off — keep what's set aside, new
-    // rate forward) or recalculate the whole plan at the new rate. Earmark path
-    // only. [0] = break off (the pre-selected, jar-preserving default).
+
+    /// <summary>For a rate change to a lone plan that's already saving: split it at today (option 0, the default, keeping what's set aside) or recalculate the whole plan; Earmark form only.</summary>
     public const string EarmarkRerate = "earmark-rerate";
     public const string TrivialFieldsCascade = "trivial-fields-cascade";
     public const string PacedBillsCascade = "paced-bills-cascade";
 
-    // One combine-or-keep-separate question per later finance pattern the edited
-    // finance pattern's amount change is carried forward onto that's funded by
-    // more than one earmark pattern (cross-boundary). The id carries the later
-    // finance pattern's finance_id, since there can be several at once —
-    // deliberately its own row kind, never the break-off Consolidation above, so
-    // the two never share behavior (the break-off folds into a new segment; this
-    // folds a later finance pattern's earmark patterns in place, or scales them
-    // if kept separate).
+    /// <summary>
+    /// The start of each cross-boundary combine-or-keep-separate row id: one per later segment the amount change cascades onto that several plans fund, ending in that segment's finance id.
+    /// A separate row kind from the break-off's Consolidation: that one folds plans into a new segment, while this folds a later segment's plans in place or scales them.
+    /// </summary>
     public const string CrossBoundaryConsolidationPrefix = "cross-boundary-consolidation-";
 
     /// <summary>[CALC] The row id of the cross-boundary combine-or-keep-separate question for one later segment, by its finance_id.</summary>
     /// <param name="financeId">The later segment the question is about.</param>
     public static string CrossBoundaryConsolidation(int financeId) => CrossBoundaryConsolidationPrefix + financeId;
 
-    // The two consolidate-strategy questions, shown whenever a
-    // consolidation is on the table: how the folded plan is sized (meet the goal
-    // vs keep the current rate) and how it's spread (across paydays vs evenly).
-    // One pair for the whole save, applied to every consolidation it makes.
+    // The two consolidation questions, asked once per save and applied to every consolidation it makes: how the combined plan is sized, and how it's spread.
     public const string ConsolidationSizing = "consolidation-sizing";
     public const string ConsolidationSpread = "consolidation-spread";
 }
 
-// The user's answer, as the raw selections the popup reports — one option
-// index per ChoiceRow it drew, keyed by row Id, plus any picked plan shape. The
-// popup doesn't interpret these (it never knew what a row
-// meant); the wrapper (FinancePatternSaveConfirmation.Run or
-// EarmarkPatternSaveConfirmation.Run) reads each index back into a decision,
-// each keying off the same ConfirmationRowIds. A row the popup never drew is simply absent
-// from the map — the wrapper treats absent as that row's own safe default, so
-// a caller with no popup (or a test) can return a bare Proceed and still get the
-// settled defaults for every question.
+/// <summary>
+/// The user's answers as the popup reports them: the option index for each ChoiceRow it showed, keyed by row Id, plus any picked plan shape.
+/// The confirmation class reads each index back into a decision; a row the popup didn't show is absent and reads as its safe default, so a bare Proceed gets the default for every question.
+/// </summary>
 public sealed record ConfirmationOutcome
 {
     public required bool Proceed { get; init; }

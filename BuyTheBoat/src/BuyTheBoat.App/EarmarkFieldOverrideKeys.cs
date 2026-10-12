@@ -1,22 +1,14 @@
 namespace BuyTheBoat.App;
 
-// The keys of the optional override dictionary a suggestion passes into the
-// Earmark form's own load (EarmarkFormPanel.LoadPattern). Each key names one
-// field whose suggested value should win over what's on the saved plan, so the
-// form opens pre-filled with the correction as an UNSAVED edit for the user to
-// review. Shared so the side that builds the dictionary (FinancePatternSaveConfirmation)
-// and the side that reads it (EarmarkFormPanel) can never drift on a literal —
-// the same reason ConfirmationRowIds exists. Only the fields a suggestion can
-// actually change today are listed; more get added here as richer suggestions
-// are built (each value's runtime type is noted, since the dictionary is untyped).
+/// <summary>
+/// The keys for the values a suggestion passes to EarmarkFormPanel.LoadPattern, each a field whose suggested value replaces the saved one, so the form opens with the correction as an unsaved edit.
+/// Shared so FinancePatternSaveConfirmation and EarmarkFormPanel always agree, as with ConfirmationRowIds; each key notes its value's type, since the dictionary is untyped.
+/// </summary>
 public static class EarmarkFieldOverrideKeys
 {
-    // decimal — the plan's own signed Amount (negative = into the jar), same
-    // convention EarMarkPattern.Amount uses; the form shows it as its magnitude.
+    /// <summary>decimal: the plan's signed Amount (negative = into the jar), as in EarMarkPattern.Amount; the form shows it without the sign.</summary>
     public const string Amount = "amount";
 
-    // IReadOnlyList<DateOnly> — contribution dates to mark skipped (RFC 5545
-    // EXDATE), for a goal-health "skip some events" correction. Pre-fills the
-    // recurrence editor's skip list exactly as if the user picked them by hand.
+    /// <summary>IReadOnlyList&lt;DateOnly&gt;: contribution dates to skip (RFC 5545 EXDATE), for a "skip some events" correction, filled into the skip list as if picked by hand.</summary>
     public const string ExcludedDates = "excludedDates";
 }

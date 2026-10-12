@@ -4,11 +4,10 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// The simplified path for the common case: a single future expense. Asks
-// only what mini_fund_project's "one time goals" sheet asked for — the user
-// never sees or picks an "allocation trigger" at all. All the actual
-// goal+earmark construction logic lives in OneTimeGoalFactory (Domain),
-// where it's unit-tested; this is just form plumbing.
+/// <summary>
+/// The simple path for the common case, a single future expense, asking only what mini_fund_project's "one time goals" sheet asked; the user never picks an "allocation trigger".
+/// The goal and earmark are built by OneTimeGoalFactory (Domain); this window only gathers the fields.
+/// </summary>
 public partial class CreateOneTimeGoalWindow : Window
 {
     private readonly IReadOnlyList<FinancialPattern> _existingPatterns;
@@ -32,10 +31,10 @@ public partial class CreateOneTimeGoalWindow : Window
         StartDatePicker.SelectedDate = DateTime.Today;
     }
 
-    // Which account this goal's savings sit in — always a real selection.
+    /// <summary>The account this goal's savings sit in; always set.</summary>
     public int SelectedAccountId => (int)AccountComboBox.SelectedValue;
 
-    /// <summary>[UI] Fences the "start saving" and "need it by" pickers off each other so the start always falls strictly before the due date — the combination OneTimeGoalFactory.Create would otherwise reject only once Create is clicked. Each picker's calendar simply won't offer a day on the wrong side of the other's current selection.</summary>
+    /// <summary>[UI] Keeps the "start saving" date before the "need it by" date by hiding calendar days on the wrong side of the other picker, so Create can't be rejected for it.</summary>
     private void OnDateRangeChanged(object sender, SelectionChangedEventArgs e)
     {
         DueDatePicker.DisplayDateStart = StartDatePicker.SelectedDate?.AddDays(1);

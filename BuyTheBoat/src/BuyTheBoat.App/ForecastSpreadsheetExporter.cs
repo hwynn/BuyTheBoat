@@ -3,18 +3,14 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// Output-only: a human-readable snapshot of an already-computed forecast,
-// for sharing/archiving outside the app. Distinct from MainWindow's Export
-// Data/Import Data (which copy the raw SQLite file byte-for-byte for
-// backup/transfer) — this never round-trips back in.
-//
-// Because the export can't offer dynamic day-selection, it has to lay ALL the detail
-// out statically: per day, the current/free amounts, a breakdown of every fund
-// jar, and every transaction — with the full amount due + due date shown for
-// EVERY expense type (unlike the tailored on-screen views), and colors/clear
-// headers/grouped columns doing the work of communicating good-vs-bad at a
-// glance. (Today it's two sheets — a day-by-day Timeline and a Goals list; a richer
-// layout is the target it should grow toward, and one day may offer multiple layouts.)
+/// <summary>
+/// Writes a readable spreadsheet of a computed forecast, for sharing or archiving; it never imports back in, unlike Export Data/Import Data, which copy the raw SQLite file.
+/// It has two sheets: a day-by-day Timeline and a Goals list.
+/// </summary>
+/// <remarks>
+/// Target layout: since a spreadsheet can't select days like the app does, lay everything out per day: current and free amounts, every fund jar, and every transaction, with the full amount and due date for every expense type, using colors, clear headers, and grouped columns to show good versus bad.
+/// It may one day offer several layouts.
+/// </remarks>
 public static class ForecastSpreadsheetExporter
 {
     public static void Export(ForecastResult forecast, string path)

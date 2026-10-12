@@ -4,9 +4,7 @@
     <GroupBox Header="Summary">
         <StackPanel Margin="6">
             <DockPanel LastChildFill="True">
-                <!-- The informational column sits at the TOP-RIGHT, aligned with the narrative,
-                     so "Fund jar, today" isn't pushed down below a full-width summary band
-                     (reclaims the white space above it). The narrative + chart share the left. -->
+                <!-- The informational column sits top-right beside the narrative, so "Fund jar, today" isn't pushed below a full-width band; the narrative and chart share the left. -->
                 <StackPanel x:Name="AsideStack" DockPanel.Dock="Right" Width="190" Margin="14,0,0,0">
                     <TextBlock Text="Fund jar, today:" FontWeight="Bold"/>
                     <TextBlock x:Name="AsideText" TextWrapping="Wrap" Margin="0,2,0,0"/>
@@ -20,12 +18,7 @@
                     <Canvas x:Name="ChartCanvas" Height="150" ClipToBounds="True"/>
                 </StackPanel>
             </DockPanel>
-            <!-- Author, 2026-08-07: "I didn't even notice the legend in the
-                 settled design. But yes, that would be helpful" — matches
-                 the settled design's own chart legend. Populated in
-                 code-behind (DrawChart), same as ChartCanvas's own children
-                 — which entries appear depends on which lines actually got
-                 drawn, not a fixed set. -->
+            <!-- Chart legend, filled in DrawChart with entries only for the lines actually drawn. -->
             <WrapPanel x:Name="LegendPanel" Margin="0,6,0,0"/>
         </StackPanel>
     </GroupBox>

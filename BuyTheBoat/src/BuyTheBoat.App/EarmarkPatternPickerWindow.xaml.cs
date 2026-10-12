@@ -5,13 +5,10 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// A minimal disambiguation popup for
-// FinancePatternSaveConfirmation.AskWhichEarmarkPatternToOpen.
-// Mirrors FinancialPatternPickerWindow's own shape (a plain grid +
-// Select/Cancel) rather than inventing a new one — only fires when more
-// than one EarMarkPattern genuinely survives for one goal (a
-// sequential chain or concurrent earmark patterns), the same rare case that
-// window's own doc comment describes for FinancialPattern.
+/// <summary>
+/// A popup for FinancePatternSaveConfirmation.AskWhichEarmarkPatternToOpen, laid out like FinancialPatternPickerWindow.
+/// Shown only when more than one EarMarkPattern remains for one goal (a chain of plans one after another, or plans running at once).
+/// </summary>
 public partial class EarmarkPatternPickerWindow : Window
 {
     private sealed class Row(EarMarkPattern pattern)
@@ -22,7 +19,7 @@ public partial class EarmarkPatternPickerWindow : Window
         public string StartingAllocationText => Pattern.StartingAllocation.ToString("C");
     }
 
-    // The plan the user picked, or null if they cancelled out.
+    /// <summary>The plan the user picked, or null if they cancelled.</summary>
     public EarMarkPattern? SelectedPlan { get; private set; }
 
     public EarmarkPatternPickerWindow(IReadOnlyList<EarMarkPattern> plans)

@@ -12,11 +12,8 @@
         </StackPanel>
 
         <StackPanel>
-            <!-- Characterization-field-block: a transfer has no Description/
-                 Priority/Mandatory to characterize (all auto-set by
-                 TransferFactory), just its two accounts and amount. These
-                 fields + the schedule below are the whole of what the user
-                 sets — the same four the old CreateTransferWindow collected. -->
+            <!-- Characterization-field-block: a transfer's two accounts and amount; TransferFactory sets Description, Priority, and Mandatory.
+                 These and the schedule below are all the user sets. -->
             <GroupBox Header="Transfer details" Padding="10">
                 <StackPanel>
                     <TextBlock x:Name="NeedsTwoAccountsNote" Foreground="#9A4F08" TextWrapping="Wrap"
@@ -41,11 +38,8 @@
                     <TextBlock FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
                                Text="Moves money out of one of your accounts and into another on this schedule. For a one-time transfer, set &quot;Ends: After this many occurrences&quot; to 1 in the schedule below."/>
 
-                    <!-- "Keeps going" for a transfer: sets AutoRenew
-                         on both legs and an end date of horizon+cycle, and the
-                         forecast-time pass extends it as the horizon advances. When
-                         checked, the schedule's own "Ends" controls step aside (the
-                         host supplies the end date), matching the bill form. -->
+                    <!-- "Keeps going" for a transfer: sets AutoRenew on both legs with an end date one cycle past the horizon, extended as the horizon advances.
+                         When checked, the schedule's own Ends controls are hidden, as in the bill form. -->
                     <CheckBox x:Name="KeepsGoingCheckBox" Content="This transfer just keeps going (no end date)"
                               Margin="0,10,0,0" Checked="OnKeepsGoingChanged" Unchecked="OnKeepsGoingChanged"
                               AutomationProperties.AutomationId="TransferKeepsGoingCheckBox"/>
@@ -57,13 +51,8 @@
 
             <local:RecurrenceRuleEditor x:Name="RuleEditor" Margin="0,10,0,0"/>
 
-            <!-- Helper region: a plain live confirmation of the move (accounts +
-                 amount, whose direction is easy to reverse by accident). Sits
-                 BELOW the characterization block, the one settled
-                 layout constraint. Deliberately minimal for this first pass —
-                 the fuller per-region helper inventory for Transfer was never
-                 designed with the author, so this stays a single honest line, not invented
-                 plan-health content the way the Earmark form has. -->
+            <!-- Helper region: one line confirming the accounts and amount, since the direction is easy to reverse by accident.
+                 Sits below the characterization block; no fuller helper set has been designed for Transfer. -->
             <GroupBox Header="Summary" Padding="10" Margin="0,10,0,0" HorizontalAlignment="Left" Width="420">
                 <TextBlock x:Name="SummaryText" TextWrapping="Wrap"/>
             </GroupBox>

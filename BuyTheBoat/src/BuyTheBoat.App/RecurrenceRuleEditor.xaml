@@ -3,35 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid Margin="4">
         <Grid.ColumnDefinitions>
-            <!-- Left widened 330->390 and right changed *->Auto (2026-08-06,
-                 first pass): Frequency/Every and On-these-days/Starts sit
-                 side by side, and the right column sizes to its own content
-                 instead of stretching to fill whatever's left.
-
-                 That pass fixed the preview's own width, but not its
-                 *position* — with this root Grid's own HorizontalAlignment
-                 left at its default (Stretch), an Auto column doesn't reach
-                 for the container's right edge; it sits directly after
-                 Column 0+1, and any width the container has beyond
-                 390+gutter+Auto's content is unclaimed space trailing after
-                 the preview, not before it. That's what the author was still
-                 seeing: pushed nowhere near the right edge.
-
-                 2026-08-06, second pass: the gutter itself becomes the
-                 flexible column (*) instead of a fixed 20 — it, not the
-                 preview, absorbs whatever room the container has beyond what
-                 the two content columns actually need, which is what
-                 actually pushes the preview flush against the right edge.
-                 MinWidth keeps a floor so the two columns never touch.
-
-                 2026-08-06, third pass: removing Earmark's "Already saved"
-                 field freed up room the author asked to spend here instead —
-                 390->430 so Frequency/Every/On-these-days/Starts (currently
-                 ~187px per side) have real breathing room, not just enough to
-                 avoid overlapping. Deliberately not a bigger jump: "it
-                 doesn't need to use all this extra space" (the author's own
-                 words) — most of what's freed up still goes to the flexible
-                 gutter, not either fixed column. -->
+            <!-- The left column is 430 wide so the paired fields have room; the gutter column (*) takes the spare width, pushing the preview flush right.
+                 MinWidth keeps the two columns from touching. -->
             <ColumnDefinition Width="430"/>
             <ColumnDefinition Width="*" MinWidth="20"/>
             <ColumnDefinition Width="Auto"/>
@@ -41,9 +14,7 @@
         <StackPanel Grid.Column="0">
             <TextBlock Text="Repeat" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
 
-            <!-- Frequency + Every paired side by side — matches
-                 the settled Earmark design, and is what
-                 needed the extra left-column width above. -->
+            <!-- Frequency and Every, side by side. -->
             <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -68,9 +39,7 @@
                 </StackPanel>
             </Grid>
 
-            <!-- On-these-days (or On-these-day(s)-of-month, mutually
-                 exclusive by frequency) + Starts, also paired (2026-08-06),
-                 same reasoning as above. -->
+            <!-- On these days (or days of month, depending on frequency) and Starts, side by side. -->
             <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -100,20 +69,8 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Ends paired with a host-injection slot (2026-08-06) — this is
-                 where Earmark's Amount field lives now (SetLeadingContent),
-                 moved from its own dedicated band above "Repeat." Checked
-                 the form designs first: neither reserves anything
-                 for the space beside Amount, so it was costing this column
-                 height for nothing — sharing Ends' own already-existing row
-                 instead means Amount adds essentially no extra height here,
-                 since Ends' own content occupies that vertical span either
-                 way. Empty/Collapsed by default for any caller that never
-                 calls SetLeadingContent (Expense, Transfer) — same as
-                 before the move, only the position within this column
-                 changed. EndsAfterCountRadio's own label now wraps
-                 explicitly (it didn't need to at the old full column width;
-                 it does at half). -->
+            <!-- Ends shares its row with a slot for host content (SetLeadingContent), where Earmark's Amount sits; it's empty and collapsed for Expense and Transfer.
+                 EndsAfterCountRadio's label wraps to fit the half-width column. -->
             <Grid Margin="0,4,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -134,13 +91,8 @@
                 <ContentControl x:Name="LeadingContentHost" Grid.Column="2" Visibility="Collapsed"/>
             </Grid>
 
-            <!-- Skip specific dates (RFC 5545 EXDATE) — hidden unless a host
-                 calls ShowExcludedDatesEditor (today just the Earmark form's
-                 own savings-plan editor, "the glut case," mechanism C — a
-                 FinancialPattern's own real bill/paycheck events don't get
-                 this freedom). Picks FROM this schedule's own real
-                 occurrences rather than a freeform date field, so there's no
-                 way to "skip" a date that was never actually scheduled. -->
+            <!-- Skip specific dates (RFC 5545 EXDATE), hidden unless a host calls ShowExcludedDatesEditor (only the Earmark savings-plan editor, "the glut case," mechanism C).
+                 Picks from this schedule's real occurrences, so only a scheduled date can be skipped. -->
             <StackPanel x:Name="ExcludedDatesSection" Margin="0,0,0,10" Visibility="Collapsed">
                 <TextBlock Text="Skip specific dates" FontWeight="Bold"/>
                 <TextBlock Text="Leave one of this schedule's own dates out — nothing gets generated for it, and whatever's already set aside stays right where it is."
@@ -168,12 +120,7 @@
                 </ListBox>
             </StackPanel>
 
-            <!-- Hidden unless a host turns on Advanced mode (the author's own
-                 call — the Advanced-mode design, which
-                 only ever covered Expense, is now settled on location
-                 [characterization-field-block, every form] but this is the
-                 first concrete piece of *content* gated by it). Takes real
-                 space for something most editing is never going to need. -->
+            <!-- Shown only in Advanced mode, since most editing never needs it. -->
             <TextBlock x:Name="RruleLabel" Text="RRULE" Margin="0,14,0,0" FontWeight="Bold" Visibility="Collapsed"/>
             <TextBox x:Name="RruleStringTextBox" IsReadOnly="True" TextWrapping="Wrap" Margin="0,2,0,0"
                      Background="#FFF0F0F0" Padding="4" Visibility="Collapsed"/>
@@ -191,27 +138,13 @@
 
             <StackPanel Grid.Row="0" Orientation="Horizontal">
                 <TextBlock Text="Preview" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
-                <!-- MaxWidth capped (2026-08-06, tightened further in the
-                     same-day follow-up pass below) — this column is
-                     Auto-sized to its content, and an Auto measurement pass
-                     gives its children effectively infinite available width,
-                     so an unwrapped, uncapped caption this long would have
-                     single-handedly dictated the whole column's width right
-                     back up to "way too much horizontal space." -->
+                <!-- MaxWidth stops this long caption from widening the Auto-sized column. -->
                 <TextBlock Text="(highlighted dates are computed occurrences — clicking the calendar doesn't change anything)"
                            FontStyle="Italic" Foreground="Gray" Margin="10,0,0,0" VerticalAlignment="Center"
                            TextWrapping="Wrap" MaxWidth="300"/>
             </StackPanel>
 
-            <!-- Occurrence-list column: 220 -> 140 (first width pass,
-                 2026-08-06) -> 180 (this pass, same day) — the author asked
-                 to widen the preview "a little," and specifically asked the
-                 occurrence dates to say what weekday they fall on again
-                 (code-behind: "ddd, MMM d, yyyy", e.g. "Thu, Aug 6, 2026" —
-                 up from the plain "MMM d, yyyy" the first pass shortened it
-                 to). That's the actual reason this needs to be wider than
-                 140 again: the weekday abbreviation is what no longer fits
-                 there. Inner gutter 12->16 to match. -->
+            <!-- The occurrence list is 180 wide to fit dates with their weekday ("Thu, Aug 6, 2026"). -->
             <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -223,42 +156,21 @@
 
                 <StackPanel Grid.Column="2">
                     <TextBlock Text="All occurrences" FontWeight="Bold"/>
-                    <!-- Capped unconditionally (was only capped when a host
-                         caption was set) so expanding a long-running rule's
-                         list can't reintroduce unbounded growth — the list
-                         itself gets an internal scrollbar past this height. -->
+                    <!-- Always capped, so a long list scrolls inside itself instead of growing. -->
                     <ListBox x:Name="OccurrencesListBox" Margin="0,4,0,0" MaxHeight="220"/>
-                    <!-- Shown when a rule is valid but lands on nothing — most
-                         often an end date on or before the start, which
-                         RecurrenceRule.Create accepts but which produces an
-                         empty schedule (a bill/plan that silently does
-                         nothing). The date pickers now stop this being
-                         picked in the first place; this note catches the
-                         cases they can't (e.g. a typed-in end date). -->
+                    <!-- Shown when a valid rule lands on no dates, usually an end date on or before the start, which RecurrenceRule.Create accepts.
+                         The date pickers block that; this catches what they can't, like a typed end date. -->
                     <TextBlock x:Name="EmptyScheduleNote" Margin="0,4,0,0" TextWrapping="Wrap"
                                Foreground="#FFB05A00" FontWeight="SemiBold" Visibility="Collapsed"
                                AutomationProperties.AutomationId="EmptyScheduleNote"
                                Text="This schedule has no occurrences — check that the end date is after the start date."/>
-                    <!-- Collapsed to DefaultVisibleOccurrenceCount dates by
-                         default (the author's own call, 2026-08-06); this
-                         button's own label carries the total count even
-                         while collapsed. See OnToggleOccurrencesClick. -->
+                    <!-- Shows DefaultVisibleOccurrenceCount dates by default; the button's label always gives the total (see OnToggleOccurrencesClick). -->
                     <Button x:Name="ToggleOccurrencesButton" Content="Show all" HorizontalAlignment="Left"
                             Padding="6,2" Margin="0,4,0,0" Click="OnToggleOccurrencesClick" Visibility="Collapsed"/>
                     <TextBlock x:Name="CaptionText" Margin="0,8,0,0" FontWeight="SemiBold" TextWrapping="Wrap"
                                Foreground="#FFB05A00" Visibility="Collapsed"/>
-                    <!-- Author, 2026-08-08: "a legend explaining the color
-                         should appear... The function running the rrule
-                         preview is ignorant of that, so the caller will
-                         have to include that in the optional message
-                         whenever it sends dates to be highlighted." This
-                         control still doesn't know WHY a date is
-                         highlighted or what it means — SetHighlight's own
-                         new legendText parameter is the caller's answer to
-                         that, shown here rather than assumed. Swatch color
-                         is a literal copy of ShortDateHighlightBrush
-                         (code-behind), not a separate constant to drift
-                         from it. -->
+                    <!-- Legend for highlighted dates: the caller explains them through SetHighlight's legendText, since this control doesn't know why a date is highlighted.
+                         The swatch color copies ShortDateHighlightBrush (code-behind). -->
                     <StackPanel x:Name="LegendPanel" Orientation="Horizontal" Margin="0,6,0,0" Visibility="Collapsed">
                         <Border Width="10" Height="10" Background="#FFFFD9A0" BorderBrush="#FFB05A00" BorderThickness="1"
                                 VerticalAlignment="Center" Margin="0,0,6,0"/>

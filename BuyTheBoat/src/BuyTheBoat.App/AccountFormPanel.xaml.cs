@@ -5,24 +5,14 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// The permanent Account tab. Fields, captions and validation, including the
-// name-uniqueness check, live here so a
-// clash shows inline instead of a MessageBox, matching every other
-// permanent-tab form. AccountRepository's own UNIQUE column is still the
-// backstop (case-sensitive — no COLLATE NOCASE on that column — matched
-// here with StringComparison.Ordinal), not relied on for the user-facing
-// message.
-//
-// IsPopulated means an existing account is loaded — this form has no
-// separate instance-picker, but the same "editing an existing thing" signal
-// applies. IsDirty/IsPopulated back MainWindow's tab-header styling and
-// this form's own Save button IsEnabled.
-//
-// TODO: two contextual helper regions this panel doesn't have yet —
-// "cushion currently held vs. target" (needs a live forecast read, editing
-// only) and "Referenced by: N Expenses, M Transfers" (editing only). Both
-// confirmed helpful, neither built; the plain three-field form below still
-// functions without them.
+/// <summary>
+/// The Account tab, with validation, including the unique-name check, done here so a clash shows inline like the other forms.
+/// AccountRepository's UNIQUE column is the backstop; it's case-sensitive, matched here with StringComparison.Ordinal.
+/// IsPopulated means an existing account is loaded; IsDirty and IsPopulated drive MainWindow's tab-header styling and this form's Save button.
+/// </summary>
+/// <remarks>
+/// TODO: two helper regions for editing an account: "cushion held vs. target" (needs a live forecast read) and "Referenced by: N Expenses, M Transfers".
+/// </remarks>
 public partial class AccountFormPanel : UserControl
 {
     private IReadOnlyList<Account> _existingAccounts = [];
@@ -31,9 +21,7 @@ public partial class AccountFormPanel : UserControl
     private bool _suppressEvents;
     private bool _isDirty;
 
-    // Guards against TextChanged firing while still under construction. No field
-    // currently has an XAML default that would trigger it, but matching every
-    // other panel's defensive convention costs nothing.
+    /// <summary>False until the constructor finishes, so TextChanged during construction is ignored, as in the other panels.</summary>
     private bool _initialized;
 
     public AccountFormPanel()
@@ -47,8 +35,7 @@ public partial class AccountFormPanel : UserControl
         _initialized = true;
     }
 
-    // MainWindow persists whatever comes back through this — this panel owns
-    // no repository itself, matching EarmarkFormPanel.
+    /// <summary>Receives the saved account; MainWindow stores it, since this panel has no repository.</summary>
     public Action<Account>? AccountSaved { get; set; }
 
     /// <summary>[UI] Fires whenever IsDirty or IsPopulated could have changed, so MainWindow can restyle this form's tab header live.</summary>
@@ -83,7 +70,7 @@ public partial class AccountFormPanel : UserControl
         ClearDirty();
     }
 
-    /// <summary>[STEP] Loads an existing account for editing — Id is fixed, same as the old edit-mode constructor.</summary>
+    /// <summary>[STEP] Loads an existing account for editing; its Id can't change.</summary>
     /// <param name="existing">The account to load for editing.</param>
     public void LoadExisting(Account existing)
     {
@@ -93,8 +80,7 @@ public partial class AccountFormPanel : UserControl
         NameTextBox.Text = existing.Name;
         BalanceTextBox.Text = existing.Balance.ToString(CultureInfo.InvariantCulture);
 
-        // A cushion of 0 means "none set", so show it blank — otherwise editing
-        // implies the user deliberately chose a zero cushion.
+        // A cushion of 0 means none was set, so it shows blank rather than as a chosen zero.
         CushionTextBox.Text = existing.IdealSafetyCushion == 0m
             ? string.Empty
             : existing.IdealSafetyCushion.ToString(CultureInfo.InvariantCulture);
@@ -152,9 +138,7 @@ public partial class AccountFormPanel : UserControl
             IdealSafetyCushion = cushion,
         });
 
-        // The form clears itself automatically after a successful save,
-        // before invoking the callback, unconditional even though the
-        // callback's own navigation takes the user elsewhere.
+        // Clears the form before the callback, which may navigate elsewhere.
         LoadForNew();
         AccountSaved?.Invoke(account);
     }

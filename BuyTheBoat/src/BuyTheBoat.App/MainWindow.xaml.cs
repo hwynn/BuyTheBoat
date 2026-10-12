@@ -97,8 +97,8 @@ public partial class MainWindow : Window
         };
 
         // Same standing-tab treatment as Earmark above.
-        // Each panel does its own validation (AccountFormPanel's uniqueness check included) — these callbacks are purely "persist what came back, then refresh."
-        // Both now recompute the shown forecast after saving (an account's own starting balance feeds it), matching Earmark's save.
+        // Each panel does its own validation (AccountFormPanel's uniqueness check included); these callbacks save what came back and refresh.
+        // Both recompute the shown forecast after saving, since an account's starting balance feeds it.
         AccountForm.AccountSaved = account =>
         {
             _accounts.Save(account);
@@ -315,7 +315,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// [UI] Picking a row other than the one open in the form, while the form has unsaved changes, asks whether to load the picked row (discarding the changes) or go back to the changes.
-    /// Without unsaved changes, picking a row only selects it, as before.
+    /// Without unsaved changes, picking a row only selects it.
     /// </summary>
     private void OnListRowSelected(object sender, SelectionChangedEventArgs e)
     {
@@ -410,7 +410,10 @@ public partial class MainWindow : Window
         return popup.ContinueToSelection == true;
     }
 
-    /// <summary>[STEP] Pre-fills from whatever was entered last time (Forecast tab's own state is meant to persist across launches, unlike a one-off what-if input) — and, if there's something to show, forecasts immediately so the tab isn't blank on a normal relaunch.</summary>
+    /// <summary>
+    /// [STEP] Fills in what was entered last time, since the Forecast tab's settings carry across launches.
+    /// If there's something to show, it forecasts right away so the tab isn't blank after a relaunch.
+    /// </summary>
     private void LoadSavedBalance()
     {
         var saved = _currentBalance.GetCurrent();
@@ -549,9 +552,9 @@ public partial class MainWindow : Window
             AutoRenew = inputs.AutoRenew,
         });
 
-        // The transfer reserves in the account it leaves, through a front-loaded Allocation Plan on the withdrawal — no income pacing (a transfer isn't a recurring bill), so the no-income shape reserves the full amount from the as-of date.
-        // spreadEvenlyWithNoIncome: false — a transfer stays plain and immediate, not spread like a one-time goal; a deliberate ruling against adaptive behavior for transfers.
-        // Propose first: the proposer may stretch the withdrawal's active span back to the as-of date (its ActiveFrom) so its plan fits, and that prepared withdrawal is what must be persisted (via the transfer) for the plan to resolve.
+        // The transfer sets money aside in the account it leaves, through a plan on the withdrawal that reserves the full amount from the as-of date, with no income pacing.
+        // spreadEvenlyWithNoIncome: false keeps a transfer plain and immediate, not spread like a one-time goal.
+        // Proposes first, since the proposer may move the withdrawal's start back to the as-of date, and that prepared withdrawal is what must be saved for the plan to fit.
         var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate(), spreadEvenlyWithNoIncome: false);
         _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
         // Clear any existing withdrawal plan before saving the freshly-proposed one.
@@ -1771,7 +1774,7 @@ public partial class MainWindow : Window
 
         RefreshTransfersGrid();
 
-        // Every outflow that reserves has its own Allocation Plan (an EarMarkPattern, per the allocation model), so the grid just shows those; nothing here is a synthesized "automatic" row.
+        // Every expense that reserves has its own Allocation Plan (an EarMarkPattern, per the allocation model), so the grid just shows those; nothing here is a synthesized "automatic" row.
         // A transfer's withdrawal reserves through a plan too, but it's hidden here for the same reason its patterns are: a transfer is shown as one thing on its own tab, not as its underlying reservation machinery.
         var transferWithdrawalIds = _financialPatterns.GetTransferWithdrawalFinanceIds();
         EarMarkPatternsGrid.ItemsSource = earMarkPatterns
@@ -1824,7 +1827,10 @@ public partial class MainWindow : Window
         SwitchToTab("Expense");
     }
 
-    /// <summary>[WRITES FILE] Export/Import move the raw SQLite file rather than any intermediate format (XML, CSV, etc.) — it's already the single source of truth, so copying it byte-for-byte is both the simplest option and the only one that can't lose or misrepresent data in translation.</summary>
+    /// <summary>
+    /// [WRITES FILE] Exports the data by copying the SQLite file as is.
+    /// Export and Import move the raw file rather than another format, since it's the single source of truth and a straight copy can't lose anything.
+    /// </summary>
     private void OnExportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
@@ -1923,7 +1929,7 @@ public partial class MainWindow : Window
             if (File.Exists(liveDatabasePath))
             {
                 // A safety net taken before the overwrite.
-                // In the demo this is a timestamped copy in backups\ (older ones are kept); off-demo it's the single "<db>.bak" beside the database, exactly as before.
+                // In the demo this is a timestamped copy in backups\ (older ones are kept); off-demo it's the single "<db>.bak" beside the database.
                 File.Copy(liveDatabasePath, AppPaths.NextImportBackupPath(), overwrite: true);
             }
 
@@ -1981,8 +1987,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// [STEP] What ExpenseForm.PatternSaved calls (wired in the constructor) — the migration target, now resolved: routes every Expense save through FinancePatternSaveConfirmation instead of a plain repository save, so a Critical edit against existing history goes through EditingHistoryConfirmationWindow first.
-    /// AutoCreateAllocationPlan (an older concern — a brand-new outflow always gets a proposed plan, regardless of the history-aware confirmations) has to be called from two places below rather than once: Run()'s own NavigateToEarmarkForm callback fires before this method regains control, so for a new pattern going straight to Earmark, the plan has to be created inside that callback (and the plan this method was handed — computed before the plan existed — re-read afterward); for "Save and Skip planning," it happens here instead, after Run() returns.
+    /// [STEP] Saves an Expense form pattern (ExpenseForm.PatternSaved) through FinancePatternSaveConfirmation, so a Critical edit against existing history goes through EditingHistoryConfirmationWindow first.
+    /// A new expense always gets a proposed plan (AutoCreateAllocationPlan), called from two places below: inside the NavigateToEarmarkForm callback for "Save and Plan", since that fires before Run() returns (re-reading the plan afterward), and here after Run() for "Save and Skip planning".
     /// </summary>
     /// <param name="pattern">The form's current field values — what the user typed, before any implicit break-off/correction Run() might apply.</param>
     /// <param name="accountId">Which account the pattern is filed under.</param>
@@ -2011,10 +2017,8 @@ public partial class MainWindow : Window
             PickEarmarkPattern = PickEarmarkPatternToOpen,
             NavigateToEarmarkForm = (plan, suggestedOverrides) =>
             {
-                // No plan to open yet, but the user asked to plan — propose one, the same affordability-capped proposal a brand-new outflow gets.
-                // Covers two cases with one path: a brand-new pattern (the plan doesn't exist until AutoCreateAllocationPlan makes it right here), and an EXISTING plan-less outflow the user is now planning for.
-                // AutoCreateAllocationPlan no-ops for income (Amount >= 0), so running it unconditionally when plan is null is safe — plan just stays null and the income branch below handles it.
-                // Re-read rather than trusting the now-stale (null) plan parameter above.
+                // No plan yet but the user asked to plan: proposes the same affordability-capped plan a new expense gets, for a new pattern or an existing one with no plan.
+                // AutoCreateAllocationPlan does nothing for income, so plan stays null and the income branch below handles it; the plan is re-read afterward.
                 if (plan is null)
                 {
                     AutoCreateAllocationPlan(pattern, accountId);
@@ -2042,7 +2046,7 @@ public partial class MainWindow : Window
                 }
                 else if (pattern.Amount < 0m)
                 {
-                    // Defensive fallback: an outflow should have a plan by now (AutoCreateAllocationPlan above always saves one for Amount < 0), but if the proposal somehow produced none, open a blank Earmark form so the user can still create one by hand rather than landing nowhere.
+                    // Defensive fallback: an expense should have a plan by now (AutoCreateAllocationPlan above always saves one for Amount < 0), but if the proposal somehow produced none, open a blank Earmark form so the user can still create one by hand rather than landing nowhere.
                     EarmarkForm.LoadForNewPattern();
                     SwitchToTab("Earmark");
                 }
@@ -2089,7 +2093,10 @@ public partial class MainWindow : Window
         return true;
     }
 
-    /// <summary>[STEP] What EarmarkForm.PatternSaved calls (wired in the constructor) — the migration target, now resolved: routes every Savings-plan save through EarmarkPatternSaveConfirmation instead of a plain repository save, so a Start/Until edit that touches a chain neighbor, or an Amount/schedule edit with later segments to carry it to, goes through EditingHistoryConfirmationWindow first.</summary>
+    /// <summary>
+    /// [STEP] Saves a savings plan from the Earmark form (EarmarkForm.PatternSaved) through EarmarkPatternSaveConfirmation.
+    /// A Start or Until edit that touches a chain neighbor, or an Amount or schedule edit with later segments, goes through EditingHistoryConfirmationWindow first.
+    /// </summary>
     /// <param name="pattern">The form's current field values — what the user typed, before any stay-linked/cascade resolution Run() might apply.</param>
     /// <param name="savedStart">The plan's own Start as it's actually saved today, or the same as pattern's own Start for a brand-new plan (EarmarkFormPanel's own _loadedPlanStart).</param>
     private bool OnEarmarkPatternSaved(EarMarkPattern pattern, DateOnly savedStart)
@@ -2203,13 +2210,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// [CALC] Every scheduled outflow reserves through its own Allocation Plan (the allocation model), proposed at creation from the current as-of date and the user's income.
+    /// [CALC] Every scheduled expense reserves through its own Allocation Plan (the allocation model), proposed at creation from the current as-of date and the user's income.
     /// Income never gets one.
     /// The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed.
-    /// Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this outflow's own account — a paycheck filed under a different account never actually funds this one.
+    /// Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this expense's own account — a paycheck filed under a different account never actually funds this one.
     /// </summary>
-    /// <param name="pattern">The newly-created outflow to propose an allocation plan for.</param>
-    /// <param name="accountId">Which account the outflow is filed under — scopes the income scan.</param>
+    /// <param name="pattern">The newly-created expense to propose an allocation plan for.</param>
+    /// <param name="accountId">Which account the expense is filed under — scopes the income scan.</param>
     private void AutoCreateAllocationPlan(FinancialPattern pattern, int accountId)
     {
         if (ProposeAllocationPlanFor(pattern, accountId, CurrentAsOfDate()) is not { } proposal)
@@ -2217,7 +2224,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // The proposer may stretch the outflow's active span back to the as-of date (its ActiveFrom) so its plan fits — persist that prepared outflow, not the original, or the plan reads short against a goal whose own Start is later.
+        // The proposer may stretch the expense's active span back to the as-of date (its ActiveFrom) so its plan fits — persist that prepared expense, not the original, or the plan reads short against a goal whose own Start is later.
         _financialPatterns.Save(proposal.Outflow, accountId);
         _earMarkPatterns.Save(proposal.Plan);
         if (proposal.StartingEarmark is { } starting)
@@ -2227,13 +2234,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// [CALC] Builds the affordability-capped default plan for an outflow WITHOUT saving anything — shared by AutoCreateAllocationPlan (which persists it) and the Earmark form's own plan-less-goal draft (which loads its values for the user to edit).
+    /// [CALC] Builds the affordability-capped default plan for an expense WITHOUT saving anything — shared by AutoCreateAllocationPlan (which persists it) and the Earmark form's own plan-less-goal draft (which loads its values for the user to edit).
     /// Null for income (no plan to propose).
-    /// The front-load and ongoing rate are each capped at what the funds can spare (the affordability ceiling), measured on a re-forecast with this outflow's own plans omitted so they aren't counted against themselves — the single-date ceiling for the front-load, the range ceiling for the per-cycle rate.
+    /// The front-load and ongoing rate are each capped at what the funds can spare (the affordability ceiling), measured on a re-forecast with this expense's own plans omitted so they aren't counted against themselves — the single-date ceiling for the front-load, the range ceiling for the per-cycle rate.
     /// </summary>
-    /// <param name="pattern">The outflow to propose a plan for.</param>
-    /// <param name="accountId">Which account the outflow is filed under.</param>
-    /// <param name="asOf">The date the proposal is paced from — today for a live outflow, or the goal's own future start so the plan fits its span without the proposer having to stretch it.</param>
+    /// <param name="pattern">The expense to propose a plan for.</param>
+    /// <param name="accountId">Which account the expense is filed under.</param>
+    /// <param name="asOf">The date the proposal is paced from — today for a live expense, or the goal's own future start so the plan fits its span without the proposer having to stretch it.</param>
     private ProposedAllocationPlan? ProposeAllocationPlanFor(FinancialPattern pattern, int accountId, DateOnly asOf)
     {
         if (pattern.Amount >= 0m)
@@ -2338,7 +2345,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// [CALC] What this jar holds as of the forecast's own start date — the amount the delete warning says will be freed up.
-    /// Zero when there is no forecast on screen yet, or the jar doesn't exist in it (an outflow with no savings plan has no jar).
+    /// Zero when there is no forecast on screen yet, or the jar doesn't exist in it (an expense with no savings plan has no jar).
     /// </summary>
     /// <param name="financeId">Which jar to read.</param>
     private decimal CurrentJarAmount(int financeId)

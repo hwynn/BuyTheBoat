@@ -5,12 +5,10 @@ namespace BuyTheBoat.App;
 
 public partial class App : Application
 {
-    // Catches errors that would otherwise close the app without a trace: writes
-    // them to a findable log (ErrorLog, alongside the database) and tells the
-    // user where it is, so a demo tester can send it in — the app's bug-report
-    // path. A UI-thread error keeps the app running afterward (e.Handled = true)
-    // so a single broken action doesn't lose everything; a background-thread
-    // error can't be resumed, but is still logged before the app closes.
+    /// <summary>
+    /// Logs errors that would otherwise close the app without a trace (ErrorLog) and tells the user where the log is, so a demo tester can send it in.
+    /// A UI-thread error leaves the app running (e.Handled = true); a background-thread error can't be recovered, but is logged before the app closes.
+    /// </summary>
     public App()
     {
         DispatcherUnhandledException += (_, e) =>

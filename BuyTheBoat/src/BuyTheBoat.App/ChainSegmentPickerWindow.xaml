@@ -13,8 +13,7 @@
         <DataGrid x:Name="SegmentsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                   SelectionChanged="OnSelectionChanged" MouseDoubleClick="OnGridDoubleClick"
                   AutomationProperties.AutomationId="ChainSegmentPickerGrid">
-            <!-- The current segment (the one editing would otherwise land on)
-                 is set apart in bold, so it's obvious which one is live. -->
+            <!-- The current segment (the one editing would otherwise open) is in bold. -->
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>

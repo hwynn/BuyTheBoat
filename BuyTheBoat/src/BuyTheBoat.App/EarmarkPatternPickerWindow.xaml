@@ -10,10 +10,7 @@
             <Button Content="Cancel" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnCancelClick"/>
             <Button x:Name="SelectButton" Content="Select" Width="90" Padding="0,5" Click="OnSelectClick" IsDefault="True" IsEnabled="False"/>
         </StackPanel>
-        <!-- Mirrors FinancialPatternPickerWindow's own shape (grid +
-             Select/Cancel) — EarMarkPattern has no Source/Description of its
-             own, so Amount/date range/starting allocation are what actually
-             tells one segment apart from another here. -->
+        <!-- Laid out like FinancialPatternPickerWindow; EarMarkPattern has no Source or Description, so Amount, date range, and starting allocation tell plans apart. -->
         <DataGrid x:Name="PlansGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                   SelectionChanged="OnSelectionChanged" MouseDoubleClick="OnGridDoubleClick"
                   AutomationProperties.AutomationId="EarmarkPatternPickerGrid">

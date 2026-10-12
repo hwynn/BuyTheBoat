@@ -5,11 +5,10 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// Lets the user pick WHICH segment of a bill/paycheck's break-off chain to
-// open for editing, rather than always being sent to the current one.
-// Shown only when a chain actually has more than one segment; a standalone
-// pattern skips it. The current segment — same Source, latest Start, per
-// BreakOffFactory.FindCurrentSegment's own rule — is set apart in bold.
+/// <summary>
+/// Lets the user pick which segment of a bill or paycheck's break-off chain to open for editing, instead of always the current one.
+/// Shown only when a chain has more than one segment; the current segment (per BreakOffFactory.FindCurrentSegment) is shown in bold.
+/// </summary>
 public partial class ChainSegmentPickerWindow : Window
 {
     private sealed class Row(FinancialPattern pattern, bool isCurrent)
@@ -18,13 +17,12 @@ public partial class ChainSegmentPickerWindow : Window
         public bool IsCurrent { get; } = isCurrent;
         public string StatusText => IsCurrent ? "Current" : "";
 
-        // Both borders of the range in full — year, month, and day.
         public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
 
         public string AmountText => $"{Math.Abs(Pattern.Amount):C}{(Pattern.Amount < 0 ? " / occurrence" : "")}";
     }
 
-    // The segment the user picked, or null if they cancelled out.
+    /// <summary>The segment the user picked, or null if they cancelled.</summary>
     public FinancialPattern? SelectedSegment { get; private set; }
 
     public ChainSegmentPickerWindow(IReadOnlyList<FinancialPattern> segments)
@@ -34,7 +32,7 @@ public partial class ChainSegmentPickerWindow : Window
         var current = BreakOffFactory.FindCurrentSegment(segments[0], segments);
 
         var rows = segments
-            .OrderBy(segment => segment.DatePattern.ActiveStart) // oldest first — history reads top to bottom
+            .OrderBy(segment => segment.DatePattern.ActiveStart) // oldest first
             .Select(segment => new Row(segment, segment.FinanceId == current.FinanceId))
             .ToList();
 

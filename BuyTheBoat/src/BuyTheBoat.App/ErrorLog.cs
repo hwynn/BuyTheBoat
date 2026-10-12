@@ -4,17 +4,20 @@ using BuyTheBoat.Persistence;
 
 namespace BuyTheBoat.App;
 
-// Where uncaught errors (and a few deliberately-caught ones, like a failed
-// import/export) get written, so a friend trying the demo can find ONE file
-// and send it back when something breaks. AppPaths owns the location: in the
-// portable demo it's the labeled logs\ folder next to the .exe; otherwise it's
-// the hidden LocalAppData folder alongside the database — either way, one place.
+/// <summary>
+/// Where uncaught errors (and a few caught ones, like a failed import or export) are written, so someone trying the demo can find one file and send it back.
+/// AppPaths sets the location: the logs\ folder next to the .exe in the portable demo, otherwise the LocalAppData folder beside the database.
+/// </summary>
 public static class ErrorLog
 {
     /// <summary>[CALC] The error-log file's full path, wherever AppPaths puts it (the demo's logs\ folder, or the LocalAppData folder off-demo).</summary>
     public static string FilePath => AppPaths.LogFilePath;
 
-    /// <summary>[WRITES FILE] Records a caught form/save error and returns the ONE line to show the user, so no raw developer text ever dead-ends them. Two outcomes: the exception's own message when it's the app's or the domain's deliberate, user-facing validation (InvalidOperationException / ArgumentException — written to be read and acted on, e.g. "Enter a name" or "A transfer must be between two different accounts"); otherwise a safe generic line, since an unexpected internal fault — a stray domain invariant that was supposed to be unreachable, an I/O hiccup — shouldn't surface as jargon or a stack trace. Either way the full exception is logged first (Record never throws), so anything that DOES slip through is findable in the one log file rather than lost. Use this at every save/confirm catch site instead of assigning ex.Message directly.</summary>
+    /// <summary>
+    /// [WRITES FILE] Logs a caught save error and returns the one line to show the user, so they never hit raw developer text; use it at every save or confirm catch instead of ex.Message.
+    /// Shows the exception's message for deliberate validation (InvalidOperationException or ArgumentException, like "Enter a name"), and a safe generic line for anything unexpected.
+    /// The full exception is always logged first (Record never throws).
+    /// </summary>
     /// <param name="whatWasHappening">A short note on the operation in progress (e.g. "saving this expense").</param>
     /// <param name="error">The caught exception.</param>
     public static string RecordAndDescribe(string whatWasHappening, Exception error)

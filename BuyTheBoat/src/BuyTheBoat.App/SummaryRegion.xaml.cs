@@ -6,21 +6,15 @@ using System.Windows.Shapes;
 
 namespace BuyTheBoat.App;
 
-// The Earmark form's Summary region — a narrative sentence, a small line
-// chart, and an aside, covering the goal detail, current jar state, and
-// proposed plan in one place. Compose the actual wording with
-// PlanHealthMessages before calling Load; this control only lays it out and
-// draws the chart, it doesn't decide what anything says.
-//
-// Known, deliberate gaps:
-//  - TextAt (below) approximates right-alignment from string length instead
-//    of measuring the rendered text — fine at the font size/amounts used so
-//    far.
-//  - ActualTrajectory stays split at Today and always will under this
-//    architecture: TransactionLogBookFactory only ever cascades day-by-day
-//    balances forward from AsOfDate — no historical BalanceRecord exists
-//    before today — so before Today it's a straight-line placeholder (one
-//    real point at each end, nothing real in between).
+/// <summary>
+/// The Summary region on the Earmark and Expense forms: a narrative sentence, a small line chart, and an aside covering the goal, the jar today, and the proposed plan.
+/// Callers write the wording with PlanHealthMessages before calling Load; this control only lays it out and draws the chart.
+/// </summary>
+/// <remarks>
+/// Known gaps:
+/// - TextAt estimates right-alignment from string length rather than measuring the text, which is fine at the sizes used.
+/// - The actual-balance line before Today is a straight-line placeholder, since the forecast has no balances before today.
+/// </remarks>
 public partial class SummaryRegion : UserControl
 {
     private ChartData? _chart;
@@ -40,7 +34,7 @@ public partial class SummaryRegion : UserControl
         IReadOnlyList<(DateOnly Date, decimal Amount)> ProposedTrajectory,
         decimal? AdditionAmount);
 
-    /// <summary>[UI] Shows a plain one-line placeholder instead of the chart/aside — for whenever there's genuinely nothing to summarize yet (no goal picked, no linked plan). The "Summary" GroupBox itself stays visible either way; only its content changes, so the region never just reads as accidentally blank.</summary>
+    /// <summary>[UI] Shows a one-line placeholder instead of the chart and aside when there's nothing to summarize yet; the "Summary" box stays visible, so it never looks accidentally blank.</summary>
     /// <param name="message">The placeholder text to show.</param>
     public void Clear(string message)
     {
@@ -94,7 +88,10 @@ public partial class SummaryRegion : UserControl
         DrawChart();
     }
 
-    /// <summary>[UI] Draws the chart: a flat goal line, the fund jar's actual line (straight before today, stepped from today on — see the class header), the proposed-plan or one-off line when there is one, the date markers and the legend. Coordinates scale to whatever size the Canvas actually gets laid out at, so this re-runs on every SizeChanged, not just on Load.</summary>
+    /// <summary>
+    /// [UI] Draws the chart: a flat goal line, the jar's actual line (straight before today, stepped from today on), the proposed-plan or one-off line if any, the date markers, and the legend.
+    /// Coordinates scale to the canvas size, so this runs again on every SizeChanged.
+    /// </summary>
     private void DrawChart()
     {
         ChartCanvas.Children.Clear();
@@ -110,11 +107,7 @@ public partial class SummaryRegion : UserControl
         var plotWidth = width - leftMargin - rightMargin;
         var plotHeight = height - topMargin - bottomMargin;
 
-        // The x-axis due date is whatever the caller passed — the goal's Until, or a nearer
-        // cap (EarmarkFormPanel caps a far-off repeating goal at ~5 years so early activity
-        // stays legible; the plan's lines then run to the right edge). For a bill well beyond
-        // the forecast horizon, the trajectory below stops partway and the rest reads as
-        // genuinely unknown-yet. Both are honest, not bugs.
+        // The x-axis ends at the caller's DueDate, which may be capped (EarmarkFormPanel caps a far-off repeating goal at 5 years); past the forecast horizon, the actual line stops partway.
         var totalDays = Math.Max(1, (chart.DueDate.ToDateTime(TimeOnly.MinValue) - chart.Start.ToDateTime(TimeOnly.MinValue)).TotalDays);
         double X(DateOnly date) => leftMargin + plotWidth *
             (date.ToDateTime(TimeOnly.MinValue) - chart.Start.ToDateTime(TimeOnly.MinValue)).TotalDays / totalDays;
@@ -142,14 +135,8 @@ public partial class SummaryRegion : UserControl
         ChartCanvas.Children.Add(TextAt($"{chart.GoalAmount:C0} goal", width - rightMargin, goalY - 12, right: true, width));
         legendEntries.Add(("Goal", Brushes.Gray, true));
 
-        // Savings-plan mode's "proposed" line and One-off mode's "Actual" line are mutually
-        // exclusive, never drawn together — the further toward an isolated earmark event this
-        // form looks, the more "what's saved now" matters over "what this proposed rate would
-        // produce" (EarmarkFormPanel.UpdateSummary only builds a ProposedTrajectory in
-        // Savings-plan mode). Both reuse the SteelBlue solid treatment — same visual role, never
-        // on screen together. This proposed line is the projected jar ExpectedAmount (a release
-        // subtracts the payout and floors at 0, so a starting balance/glut carries forward — NOT
-        // the reset-at-release milestone); only the earmark-pattern form passes it.
+        // The "proposed" line, only passed in Savings-plan mode, so it never appears with One-off mode's line; both use solid SteelBlue.
+        // It's the projected jar balance rather than the milestone, so a starting balance or glut carries past each release.
         if (chart.ProposedTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline
@@ -162,10 +149,7 @@ public partial class SummaryRegion : UserControl
         }
         else if (chart.ActualTrajectory.Count > 0)
         {
-            // Split at Today (see the header comment). Before Today: the older straight-line
-            // placeholder, one real point at each end. Today onward: real, walked, per-occurrence
-            // data off the saved forecast, stepped (Stepped below) rather than smoothed, so a plan
-            // whose balance resets at every release actually reads as resetting.
+            // Before Today, a straight-line placeholder; from Today on, the forecast's real balances, stepped rather than smoothed so a balance that resets at each release looks like it.
             var todayPoint = chart.ActualTrajectory[0];
             ChartCanvas.Children.Add(new Polyline
             {
@@ -182,11 +166,8 @@ public partial class SummaryRegion : UserControl
             legendEntries.Add(("Fund jar (actual)", Brushes.SteelBlue, false));
         }
 
-        // One-off mode's extra line — the ActualTrajectory shape shifted by the typed
-        // one-off's amount, from Today onward. A plain parallel shift, not a recomputation
-        // through the floor/deallocation rules (changing the plan is a different action from
-        // adding a one-off). AdditionAmount is the one-off's effect on today's jar, from a what-if
-        // forecast; it's null when there's none (e.g. a release already used it up), so nothing's drawn.
+        // One-off mode's extra line: the actual line shifted by the one-off's effect on today's jar (AdditionAmount, from a what-if forecast), from Today on.
+        // A plain shift, not a full recomputation; null when the one-off has no effect, so nothing's drawn.
         if (chart.AdditionAmount is { } addition && chart.ActualTrajectory.Count > 0)
         {
             ChartCanvas.Children.Add(new Polyline
@@ -199,11 +180,8 @@ public partial class SummaryRegion : UserControl
             legendEntries.Add(($"With today's addition ({(addition >= 0 ? "+" : string.Empty)}{addition:C0})", AdditionBrush, true));
         }
 
-        // A labeled gridline at each period boundary the caller supplies. Empty for a
-        // one-time goal, which keeps the plain "Due {DueDate}" label below (one real date,
-        // nothing to pick out of a row of repeats). WarningBrush matches
-        // StartingShortfallWarningText's #FF9A4F08 — the first-payment warning color this
-        // gridline is meant to be found from.
+        // Draws a labeled gridline at each date the caller supplies; a one-time goal has none and gets a plain "Due" label below.
+        // WarningBrush matches StartingShortfallWarningText's color, so the first-payment warning leads the eye here.
         foreach (var peakDate in chart.PeakDates)
         {
             var peakX = X(peakDate);
@@ -229,9 +207,7 @@ public partial class SummaryRegion : UserControl
             ChartCanvas.Children.Add(TextAt($"Due {chart.DueDate:MMM d}", width - rightMargin, topMargin + plotHeight + 4, right: true, width));
         }
 
-        // Built from whichever lines actually got drawn (legendEntries), not a fixed set —
-        // the two modes never show the same combination (see the mutual-exclusion comment
-        // above), so a fixed legend would omit or fabricate an entry depending on mode.
+        // Adds a legend entry for each line actually drawn, since the two modes draw different lines.
         foreach (var (label, color, dashed) in legendEntries)
         {
             var swatch = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 16, 0) };
@@ -250,7 +226,7 @@ public partial class SummaryRegion : UserControl
     private static readonly Brush WarningBrush = new SolidColorBrush(Color.FromRgb(0x9A, 0x4F, 0x08));
     private static readonly Brush AdditionBrush = new SolidColorBrush(Color.FromRgb(0xCC, 0x6D, 0x00));
 
-    /// <summary>[CALC] Turns a chronological list of (x, y) samples into a proper step — hold flat at the previous value until the next date, THEN jump — not a smoothed ramp between real data points. A 2-point line has nothing to step, so it passes through unchanged (the Start-to-Today placeholder segment uses that path deliberately, staying a plain diagonal rather than a fabricated step).</summary>
+    /// <summary>[CALC] Turns (x, y) samples into steps, staying flat until the next date and then jumping; a 2-point line passes through unchanged, which keeps the before-Today placeholder a plain diagonal.</summary>
     /// <param name="points">The chronological samples to step.</param>
     private static IReadOnlyList<Point> Stepped(IReadOnlyList<Point> points)
     {
@@ -269,7 +245,10 @@ public partial class SummaryRegion : UserControl
         return stepped;
     }
 
-    /// <summary>[UI] Approximates right-alignment from string length instead of measuring the rendered TextBlock — a known gap, see the class header. Both branches clamp to [0, canvasWidth - the text's own estimated width], so neither edge can run off the canvas regardless of where x falls — "Today" in particular sits at the chart's own left edge for any freshly-created plan (Start == today), where an unclamped left coordinate would go negative and WPF simply wouldn't draw it.</summary>
+    /// <summary>
+    /// [UI] Places a label on the chart, estimating right-alignment from string length (a known gap; see the class remarks).
+    /// Keeps the label inside the canvas, so "Today" still shows at the left edge for a plan that starts today.
+    /// </summary>
     /// <param name="text">The label text to place.</param>
     /// <param name="x">The anchor x-coordinate.</param>
     /// <param name="y">The top y-coordinate.</param>

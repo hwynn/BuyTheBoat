@@ -2,14 +2,12 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// Flattened, display-only shapes for the grids in MainWindow — kept out of
-// BuyTheBoat.Domain deliberately, since "how a goal's description should
-// read in a list" is a UI concern, not a domain one.
+// Display-only row shapes for MainWindow's grids, kept out of BuyTheBoat.Domain since how things read in a list is a UI concern.
 
-// A List subtab row that can be the item currently open in its Form subtab.
-// Unlike the otherwise-immutable rows here, IsOpenInForm and IsDirty change after creation
-// (the form loads a different item, or gets edited, without the list being rebuilt), so they
-// raise PropertyChanged for the row style's DataTriggers.
+/// <summary>
+/// A List subtab row that can be the item open in its Form subtab.
+/// IsOpenInForm and IsDirty change after the row is created, so they raise PropertyChanged for the row style's DataTriggers.
+/// </summary>
 public abstract class FormListRow : System.ComponentModel.INotifyPropertyChanged
 {
     private bool _isOpenInForm;
@@ -77,15 +75,11 @@ public sealed class EarMarkPatternRow(EarMarkPattern pattern, FinancialPattern? 
     public string Repeats => Pattern.DatePattern.ToRruleString();
 }
 
-// A synthesized stand-in for a mandatory bill's automatic funding
-// (TransactionLogBookFactory's automatically funded expense earmarking) — deliberately not
-// backed by any persisted row. Exposes the same property names
-// EarMarkPatternsGrid's columns already bind to so it can sit in the same
-// DataGrid alongside real EarMarkPatternRows; WPF's binding resolves
-// properties by name at runtime regardless of the two types sharing no base
-// class. Has no Edit/Delete affordance — it reflects the bill's own
-// existence and disappears the moment the bill is deleted or gets a real
-// explicit earmark instead.
+/// <summary>
+/// A row standing in for a mandatory bill's automatic funding, with no saved row behind it.
+/// It has the same property names EarMarkPatternsGrid binds to, so it sits beside real EarMarkPatternRows (WPF binds by name).
+/// It has no Edit or Delete, and disappears once the bill is deleted or gets its own savings plan.
+/// </summary>
 public sealed class AutomaticBillEarmarkRow(FinancialPattern bill)
 {
     public FinancialPattern Bill { get; } = bill;
@@ -95,10 +89,7 @@ public sealed class AutomaticBillEarmarkRow(FinancialPattern bill)
     public string Repeats => Bill.DatePattern.ToRruleString();
 }
 
-// One row of the forecast rendered under its display date. Since the calendar
-// redesign this type feeds ONLY the spreadsheet export's Timeline sheet (the
-// on-screen overview is MonthRow/DayCellRow below) — kept because the exporter
-// mirrors the pre-calendar tabular reading of a day, and JarLabel is shared.
+/// <summary>One forecast row under its display date, used only by the spreadsheet export's Timeline sheet; the on-screen overview uses MonthRow and DayCellRow.</summary>
 public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, string> jarLabels)
 {
     public BalanceSnapshot Snapshot { get; } = entry.Snapshot;
@@ -108,10 +99,7 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
     public string Reserved => FormatReserved(Snapshot, jarLabels);
     public decimal FreeBalance => Snapshot.ExpectedFreeAmount ?? 0m;
 
-    // Drives the red "Free Balance" cell — a light-touch warning for any day
-    // free goes negative (a debt day, an over-committed reservation, or the
-    // as-of day if commitments already exceed the balance). All three are worth
-    // surfacing; the red is per-row rather than a nagging popup.
+    /// <summary>Is free balance negative this day? Turns the "Free Balance" cell red, a quiet per-row warning rather than a popup.</summary>
     public bool FreeBalanceNegative => FreeBalance < 0m;
 
     public string Events => FormatEvents(Snapshot, jarLabels);
@@ -119,7 +107,7 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
     // Internal (not private): ForecastSpreadsheetExporter reuses these so the
     // exported file's columns read identically to the on-screen grid.
 
-    /// <summary>[CALC] Zero-balance jars (a goal not yet started, a bill just paid, the still-empty safety cushion) are filtered out — otherwise most days would read as a wall of "$0.00" entries, exactly the noise this column exists to cut through.</summary>
+    /// <summary>[CALC] Lists the day's jars, leaving out empty ones so most days don't read as a wall of "$0.00".</summary>
     /// <param name="snapshot">The day's balance snapshot, for its fund jars.</param>
     /// <param name="jarLabels">Finance id → display label, for naming each jar.</param>
     internal static string FormatReserved(BalanceSnapshot snapshot, IReadOnlyDictionary<int, string> jarLabels) =>
@@ -127,7 +115,10 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
             .Where(jar => jar.ExpectedAmount > 0m)
             .Select(jar => $"{JarLabel(jar.FinanceId, jarLabels)} {jar.ExpectedAmount:C}"));
 
-    /// <summary>[CALC] The at-a-glance column shows the day's scheduled events (expected transactions and planned allocation installments) — the same set the pre-restructure grid showed. System-generated implicit events (cushion refills, deallocation give-backs, goal releases) appear in the selected-day detail pane instead, where there's room to label what they are.</summary>
+    /// <summary>
+    /// [CALC] Lists the day's scheduled events: expected transactions and planned savings contributions.
+    /// Automatic events (cushion refills, deallocation give-backs, goal releases) show in the selected-day pane instead, where there's room to label them.
+    /// </summary>
     /// <param name="snapshot">The day's balance snapshot, for its transactions and earmark events.</param>
     /// <param name="jarLabels">Finance id → display label, for naming each event.</param>
     internal static string FormatEvents(BalanceSnapshot snapshot, IReadOnlyDictionary<int, string> jarLabels)
@@ -156,15 +147,9 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
 
 // ===== The calendar overview =====
 //
-// The OVERVIEW region's job is showing many days at a glance — every balance
-// snapshot in the window, per-day free + TOTAL allocated (never a per-jar
-// breakdown), event dots for money in/out/aside, attention tints for days
-// worth a closer look, and TODAY visually distinct. Rendered as month
-// sections of Sun–Sat day cells (the chosen calendar direction); per-day
-// detail lives in the selected-day region.
+// The overview rows: many days at a glance, as month sections of Sun–Sat day cells, each with free and total set aside, event markers, warning tints, and today stood out; per-day detail is in the selected-day rows further down.
 
-// One month section: a title plus its cells in grid order (leading padding
-// cells align day 1 under its weekday; the UniformGrid fills left-to-right).
+/// <summary>One month section: a title and its cells in grid order, with leading blank cells so day 1 sits under its weekday.</summary>
 public sealed class MonthRow
 {
     public required string Title { get; init; }               // "July 2026"
@@ -172,10 +157,7 @@ public sealed class MonthRow
     public required IReadOnlyList<DayCellRow> Cells { get; init; }
 }
 
-// One account's money-flow marker in a day cell: the account's first letter
-// plus an arrow — ↑ money in, ↓ money out, • no change (which replaced an
-// unreadable "status square"). The letter and glyph carry
-// the meaning, so it reads without relying on color.
+/// <summary>One account's money-flow marker in a day cell: its first letter plus ↑ for money in, ↓ for money out, or • for no change, readable without relying on color.</summary>
 public sealed class AccountFlowCell
 {
     public required string Letter { get; init; }
@@ -183,17 +165,11 @@ public sealed class AccountFlowCell
     public required string Kind { get; init; } // "In" | "Out" | "None"
 }
 
-// One calendar day cell — the "rich month calendar": two
-// LABELED numbers (Total + Free), the day's top event by name, an explicit
-// event count top-right, a per-account flow strip, and a ⚠ + words warning.
-// Everything a trigger reads is precomputed at construction so recycled
-// containers rebind cheaply during scroll.
-//
-// Deliberate deviation from this file's otherwise-immutable rows: selection
-// changes AFTER creation (clicking day B must un-highlight day A), and the
-// cell template's DataTrigger needs a change notification for that — so this
-// one class implements INotifyPropertyChanged, with IsSelected as its single
-// settable property.
+/// <summary>
+/// One calendar day cell: labeled Total and Free, the day's top event, an event count, a per-account flow strip, and a ⚠ warning with words.
+/// Everything its triggers read is worked out up front, so recycled cells rebind cheaply while scrolling.
+/// IsSelected changes after creation (clicking another day un-highlights this one), so it raises PropertyChanged.
+/// </summary>
 public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
 {
     public DateOnly? Date { get; }
@@ -301,13 +277,9 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
 
 // ===== The selected-day region =====
 //
-// Leverages the full BalanceSnapshot: every transaction listed (left pane),
-// every fund jar with per-type "am I on track?" health (right pane), and the
-// day's free amount. That on-track health takes a different shape per
-// ExpenseKind — that's what JarDetailRow renders.
+// The selected-day rows: every transaction (left pane), every jar with its "am I on track?" health (right pane, shaped per ExpenseKind by JarDetailRow), and the day's free amount.
 
-// Everything the selected-day rows need beyond the snapshot itself, built once
-// per selection in MainWindow.
+/// <summary>Everything the selected-day rows need besides the snapshot, built once per selection in MainWindow.</summary>
 public sealed class DayDetailContext
 {
     public required DateOnly Date { get; init; }
@@ -322,11 +294,10 @@ public sealed class DayDetailContext
     public IReadOnlySet<int> FlooredFinanceIds { get; init; } = new HashSet<int>();
 }
 
-// One fund jar in the selected-day detail pane, rendered per its ExpenseKind:
-// a bill shows amount due + "can I pay it in full now" styling; a
-// one-time goal shows its milestone and a relative due summary; the cushion
-// shows its target. StatusKind drives pill colors in XAML: "FullyCovered"
-// (strongest green) / "OnTrack" (green) / "Behind" (amber) / "Neutral".
+/// <summary>
+/// One jar in the selected-day pane, shown by its ExpenseKind: a bill shows the amount due and whether it can be paid in full now; a one-time goal shows its milestone and how far off it's due; the cushion shows its target.
+/// StatusKind sets the pill color in XAML: "FullyCovered" (strongest green), "OnTrack" (green), "Behind" (amber), or "Neutral".
+/// </summary>
 public sealed class JarDetailRow
 {
     // Which account this jar belongs to — the selected-day panes group by it so
@@ -354,9 +325,7 @@ public sealed class JarDetailRow
 
     public static JarDetailRow From(FundJar jar, BalanceSnapshot snapshot, DayDetailContext context)
     {
-        // A deallocation-day give-back is a negative isolated earmark; on a
-        // normal day that same shape is a planned goal payout — so flag red only
-        // when the day deallocated AND this jar's net isolated earmark is < 0.
+        // Red only on a deallocation day, since on a normal day a negative isolated earmark is a planned payout.
         var drained = snapshot.IsDeallocationDay
             && NetIsolatedEarmark(snapshot, jar.FinanceId) < 0m;
         var saved = jar.ExpectedAmount;
@@ -527,8 +496,7 @@ public sealed class JarDetailRow
             .Sum(earmark => earmark.ExpectedAmount);
 }
 
-// A far-off goal reads as a summary ("~8 months away"); an actual
-// formatted date (month as a word) only once it's close (within ~2 months).
+/// <summary>Describes a due date: a far-off one as "~8 months away", and a close one (within ~2 months) as a written-out date.</summary>
 internal static class DueDateText
 {
     internal static string Relative(DateOnly due, DateOnly from)
@@ -551,28 +519,15 @@ internal static class DueDateText
     }
 }
 
-// One event in the selected-day "What happened today" pane — every transaction
-// and earmark event the day holds, ordered so a paycheck sits directly
-// above the allocations it funds, with deallocation pulls last.
-// ChipKind drives chip colors in XAML: "In" / "Out" / "Aside" / "Release" / "Pull".
-// The grouping key for the selected-day panes: the account and its balance on the
-// day being shown, plus how short it is and — when short — whether the gap is
-// coverable from another account (the three-rung shortfall ladder).
-// Grouping by this record (records give value equality, so grouping still works)
-// rather than a bare name lets the group header carry the account's own balance,
-// the shortfall narrative, and the "move money in" lever — a
-// problem the app surfaces comes with a fix.
-//
-//   rung 2 — CanCoverElsewhere true:  the money exists, just in another account
-//            (DonorName names it when one account alone covers the whole gap).
-//            The lever is shown; a transfer can genuinely fix it.
-//   rung 3 — CanCoverElsewhere false: no other account can cover it. No lever —
-//            offering "move money in" when none can be would be a lie.
-// IsThin: free funds are low but not yet negative (below one cushion's worth) —
-// the milder free-funds warning shown beside "short" on the header. It also stands
-// in for a dipped safety cushion: a cushion only drops below target when a
-// deallocation drains it to avoid going short, which leaves free near zero, so a
-// reserve dip always reads as thin anyway (folded in rather than shown apart).
+/// <summary>
+/// How the selected-day panes group their rows: the account, its balance that day, how short it is, and whether another account could cover the gap (the shortfall ladder).
+/// A record, so grouping works by value, and the group header can show the balance, the shortfall narrative, and the "move money in" button.
+/// </summary>
+/// <remarks>
+/// CanCoverElsewhere true: the money is in another account (DonorName names it when one account covers the whole gap), so the "move money in" button shows.
+/// CanCoverElsewhere false: no other account can cover it, so there's no button.
+/// IsThin: free funds are low but not negative (below one cushion's worth), a milder warning beside "short"; a dipped cushion always reads as thin too, since a cushion only drops when a deallocation drains it to avoid going short.
+/// </remarks>
 public sealed record AccountGroupKey(
     int AccountId, string Name, decimal Balance, decimal Shortfall, bool CanCoverElsewhere = false, string? DonorName = null,
     bool IsThin = false)
@@ -604,13 +559,10 @@ public sealed record AccountGroupKey(
                 : "In another account — the money's in your other accounts."
             : "No other account can cover it.";
 
-    // The header's individual labels sit inside a WPF GroupItem header, whose
-    // automation peer drops header content — so a screen reader can't reach the
-    // balance, "Short $X", "funds running low", or the rung narrative one by one.
-    // Rolling them into a single string lets the GroupItem announce the whole
-    // header story through its own Name instead (bound in MainWindow.xaml). Order
-    // mirrors the visual header: name and balance, then the warnings, then the rung.
-    /// <summary>[CALC] The account's header spoken as one line for screen readers — name and balance, plus any "short"/"funds running low" warning and the rung narrative — since the individual header labels are invisible to assistive tech.</summary>
+    /// <summary>
+    /// [CALC] The account's group header as one line for screen readers: name and balance, any "short" or "funds running low" warning, then the shortfall narrative, in the same order as on screen.
+    /// WPF's GroupItem header hides its labels from screen readers, so MainWindow.xaml binds this as the GroupItem's Name instead.
+    /// </summary>
     public string AccessibleSummary
     {
         get
@@ -624,6 +576,10 @@ public sealed record AccountGroupKey(
     }
 }
 
+/// <summary>
+/// One event in the selected-day "What happened today" pane: every transaction and earmark event that day, ordered so a paycheck sits above the allocations it funds, with deallocation pulls last.
+/// ChipKind sets the chip color in XAML: "In", "Out", "Aside", "Release", or "Pull".
+/// </summary>
 public sealed class DayEventRow
 {
     // Which account this event happened in — the panes group by it.
@@ -677,10 +633,7 @@ public sealed class DayEventRow
             var label = TimelineRow.JarLabel(earmark.FinanceId, context.JarLabels);
             if (!earmark.RepeatedEarmark && earmark.ExplicitAmount is { } explicitAmount && explicitAmount != 0m)
             {
-                // The user's own adjustment — a nonzero
-                // ExplicitAmount is what distinguishes it from system events.
-                // On a deallocation day the merged give-back rides along in
-                // ExpectedAmount; the jar rows + day chip tell that story.
+                // The user's own adjustment, told apart from automatic events by a nonzero ExplicitAmount; a merged deallocation give-back shows in the jar rows instead.
                 manual.Add(new DayEventRow
                 {
                     Event = label, Chip = "MANUAL", ChipKind = "Manual",
@@ -732,7 +685,7 @@ public sealed class DayEventRow
     }
 }
 
-// One row of the Allocations tab's "Manual adjustments" grid.
+/// <summary>One row of the Allocations tab's "Manual adjustments" grid.</summary>
 public sealed class ManualEarmarkRow(ManualEarmark earmark, string target) : FormListRow
 {
     public ManualEarmark Earmark { get; } = earmark;
@@ -741,8 +694,7 @@ public sealed class ManualEarmarkRow(ManualEarmark earmark, string target) : For
     public decimal Amount => Earmark.Amount;
 }
 
-// Per-goal savings status, reused by the spreadsheet export's Goals sheet
-// and the detail pane's Status column.
+/// <summary>One goal's savings status, for the spreadsheet export's Goals sheet and the detail pane's Status column.</summary>
 public sealed class GoalStatusRow(GoalShortfall status)
 {
     public string Goal => status.Label;
@@ -756,10 +708,10 @@ public sealed class GoalStatusRow(GoalShortfall status)
         : "On track";
 }
 
-// One row of the Accounts tab. Cushion is shown blank rather than "$0.00" when
-// the user hasn't given the account one — don't surface an
-// internal zero as if it were a setting they chose.
-// The balance is typed straight into the list, so a row swaps in the re-saved Account in place (ReplaceAccount) rather than the list being rebuilt under the box being typed in.
+/// <summary>
+/// One row of the Accounts tab; the cushion shows blank rather than "$0.00" when the user hasn't set one.
+/// The balance is typed straight into the list, so a saved Account replaces the row in place (ReplaceAccount) rather than rebuilding the list under the box.
+/// </summary>
 public sealed class AccountRow(Account account) : FormListRow
 {
     public Account Account { get; private set; } = account;
@@ -780,9 +732,7 @@ public sealed class AccountRow(Account account) : FormListRow
         : Account.IdealSafetyCushion.ToString("C");
 }
 
-// One row of the Transfers tab. From/To are account names (resolved by the
-// caller); the two underlying patterns never appear here — a transfer reads as one
-// thing.
+/// <summary>One row of the Transfers tab, with From and To as account names; its two patterns don't appear, so a transfer reads as one thing.</summary>
 public sealed class TransferRow(Transfer transfer, string fromName, string toName) : FormListRow
 {
     public Transfer Transfer { get; } = transfer;
@@ -792,6 +742,5 @@ public sealed class TransferRow(Transfer transfer, string fromName, string toNam
     public string Repeats => Transfer.DatePattern.ToRruleString();
 }
 
-// One entry in the overview's account filter. A null
-// AccountId is the "All accounts" household roll-up.
+/// <summary>One entry in the overview's account filter; a null AccountId is "All accounts".</summary>
 public sealed record AccountFilterOption(int? AccountId, string Name);

@@ -5,22 +5,11 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
 
-// A reusable "pick one of my Bills/Paychecks/Goals" popup — every CREATE/EDIT
-// form stays on its own permanent tab, but SELECTING an existing
-// FinancialPattern (to link something else to it, or to switch which one
-// another form is showing) is a different, smaller action — a popup is the
-// right shape for it, not a tab of its own.
-//
-// Source of truth is TransactionLogBook.AllFinancialPatterns(): a plain
-// repository read would also see every pattern with no page-boundary
-// limitation, but the forecast's own Book is meant to be the canonical
-// "everything the user has" source for this popup, not the repository
-// underneath it.
-//
-// Always excludes expired patterns (DatePattern.Until already passed) and
-// transfer-leg patterns — both built into this window, not something a
-// caller can turn off, since no second use case needing either has come up
-// yet.
+/// <summary>
+/// A popup to pick one of the user's Bills, Paychecks, or Goals, for linking something to it or switching which one a form shows; creating and editing stay on their tabs.
+/// Lists TransactionLogBook.AllFinancialPatterns(), the forecast's record of everything the user has.
+/// Always leaves out ended patterns and transfer legs.
+/// </summary>
 public partial class FinancialPatternPickerWindow : Window
 {
     private sealed class Row(FinancialPattern pattern)
@@ -31,7 +20,7 @@ public partial class FinancialPatternPickerWindow : Window
         public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
     }
 
-    // The pattern the user picked, or null if they cancelled out.
+    /// <summary>The pattern the user picked, or null if they cancelled.</summary>
     public FinancialPattern? SelectedPattern { get; private set; }
 
     public FinancialPatternPickerWindow(TransactionLogBook book, IReadOnlySet<int> transferFinanceIds, DateOnly today)

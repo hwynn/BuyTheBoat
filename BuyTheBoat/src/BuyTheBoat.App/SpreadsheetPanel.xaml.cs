@@ -15,14 +15,15 @@ using BuyTheBoat.Persistence;
 
 namespace BuyTheBoat.App;
 
-// The Bills & Paychecks › Spreadsheet subtab: a place to jot bills and paychecks down as rough draft rows,
-// fix them up, and open each in the Form to save it for real. Saved bills and paychecks are listed underneath, read-only.
-// This panel owns no repository: MainWindow stores the drafts through the callbacks below, the same shape as the form panels.
-//
-// TODO: saved rows become editable here once this grid runs the same checks and confirmations the Form does on save.
-// TODO: after fixing one red cell, offer to apply the same fix to every other draft cell in that column holding the same text.
-// Ideas, not planned: remember fixes so future pastes tidy them automatically (needs its own table);
-// a suggestion that fills two cells at once ("every 2 weeks" → Frequency Weekly and Every 2).
+/// <summary>
+/// The Bills &amp; Paychecks › Spreadsheet subtab: jot bills and paychecks down as rough draft rows, fix them up, and open each in the Form to save it for real; saved ones are listed underneath, read-only.
+/// This panel has no repository: MainWindow stores the drafts through the callbacks below, like the form panels.
+/// </summary>
+/// <remarks>
+/// TODO: make saved rows editable here once this grid runs the same checks and confirmations the Form does on save.
+/// TODO: after fixing one red cell, offer to apply the same fix to every other draft cell in that column with the same text.
+/// Ideas, not planned: remember fixes so future pastes tidy them automatically (needs its own table); a suggestion that fills two cells at once ("every 2 weeks" → Frequency Weekly and Every 2).
+/// </remarks>
 public partial class SpreadsheetPanel : UserControl
 {
     private readonly SpreadsheetModel _model;
