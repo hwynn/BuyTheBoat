@@ -156,15 +156,11 @@ public static class EarmarkConsolidation
 
                 if (paydayCount > 0)
                 {
-                    var pacedSchedule = RecurrenceRule.Create(new RecurrenceRuleOptions
-                    {
-                        Frequency = income.DatePattern.Frequency,
-                        Interval = income.DatePattern.Interval,
-                        ByDay = income.DatePattern.ByDay,
-                        ByMonthDay = income.DatePattern.ByMonthDay,
-                        DtStart = start,
-                        Until = planUntil,
-                    });
+                    // Anchors at the income's first real payday on or after start, so contributions land on the days it actually pays (see AllocationPlanProposer.AlignedSchedule).
+                    // paydayCount > 0 guarantees that payday exists, so AlignedSchedule can't return null here.
+                    var pacedSchedule = RecurrenceRule.Create(
+                        AllocationPlanProposer.AlignedSchedule(income.DatePattern, start, planUntil)
+                        ?? throw new InvalidOperationException("Unreachable: paydayCount > 0 in this window."));
                     return (pacedSchedule, Math.Round(total / paydayCount, 2));
                 }
             }

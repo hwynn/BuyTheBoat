@@ -86,6 +86,74 @@ public class EarmarkConsolidationTests
     }
 
     [Fact]
+    public void Paced_plan_lands_on_a_biweekly_incomes_paydays_when_no_weekday_is_set()
+    {
+        var goal = MonthlyGoal();
+        // Every other Friday, anchored only by its start date (no ByDay), as the form allows.
+        var income = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 100,
+            Source = "income100",
+            Amount = 2000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Weekly,
+                Interval = 2,
+                DtStart = new DateOnly(2024, 12, 6),
+                Until = new DateOnly(2026, 1, 1),
+            }),
+        });
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal, income],
+        });
+
+        var paydays = income.DatePattern.GetOccurrences(result.Start, result.End);
+        result.ConsolidatedPlan.DatePattern.GetOccurrences().ShouldBe(paydays);
+        result.ConsolidatedPlan.DatePattern.ActiveStart.ShouldBe(GoalStart);
+        AllocationPlanProposer.IsPacedAgainst(result.ConsolidatedPlan, income).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Paced_plan_lands_on_a_monthly_incomes_paydays_and_covers_the_goal_when_no_day_is_set()
+    {
+        var goal = MonthlyGoal();
+        // The 15th of each month, anchored only by its start date (no ByMonthDay).
+        var income = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 100,
+            Source = "income100",
+            Amount = 3000m,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                DtStart = new DateOnly(2024, 6, 15),
+                Until = new DateOnly(2026, 1, 1),
+            }),
+        });
+        var plan = SurvivingPlan(goal, GoalStart, GoalEnd);
+
+        var result = EarmarkConsolidation.Consolidate(new ConsolidationRequest
+        {
+            Goal = goal,
+            SurvivingPlans = [plan],
+            ManualEarmarksForThisGoal = [],
+            AllPatterns = [goal, income],
+        });
+
+        // 3 paydays (Jan/Feb/Mar 15th) share the full $1,200: $400 each, $1,200 in total.
+        var planDates = result.ConsolidatedPlan.DatePattern.GetOccurrences();
+        planDates.ShouldBe([new DateOnly(2025, 1, 15), new DateOnly(2025, 2, 15), new DateOnly(2025, 3, 15)]);
+        result.ConsolidatedPlan.Amount.ShouldBe(-400m);
+        (-result.ConsolidatedPlan.Amount * planDates.Count).ShouldBe(1200m);
+    }
+
+    [Fact]
     public void Start_is_the_earliest_surviving_plans_own_ActiveStart_not_its_literal_Start()
     {
         var goal = MonthlyGoal();
