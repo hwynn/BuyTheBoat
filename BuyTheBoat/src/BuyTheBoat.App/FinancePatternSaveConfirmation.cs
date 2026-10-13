@@ -668,7 +668,8 @@ public sealed class FinancePatternSaveConfirmation
             AutoRenew = saved.AutoRenew,
         });
 
-        var allPatterns = forecast.Book.AllFinancialPatterns();
+        // The paychecks every plan choice for the successor may pace against: this account's own patterns, without transfers.
+        var patternsToPaceAgainst = PatternsToPaceAgainst(forecast.Book.AllFinancialPatterns(), _accountId);
         var carriedOverJarBalance = JarBalanceOn(cutDate, _financeId);
 
         // Must be read before PerformSave, while every manual earmark still validates against its unchanged plan.
@@ -680,18 +681,18 @@ public sealed class FinancePatternSaveConfirmation
         {
             // Passes carriedOverJarBalance so the preview shows the balance BreakOffFactory.BreakOff will actually save, like the other two candidates.
             // Both ceilings are measured on the edited goal's chain, since the unsaved successor's own chain has nothing to free up; Suggestion tier, since the user picks from this list.
-            new("Recommended", AllocationPlanProposer.Propose(successor, allPatterns, cutDate,
+            new("Recommended", AllocationPlanProposer.Propose(successor, patternsToPaceAgainst, cutDate,
                 carriedOverJarBalance: carriedOverJarBalance,
                 startingEarmarkCeiling: CeilingOmitting(_financeId, successor, ChangeKind.Suggestion, startingEarmark: true),
                 ongoingRateCeiling: CeilingOmitting(_financeId, successor, ChangeKind.Suggestion, startingEarmark: false))),
         };
 
-        if (AllocationPlanProposer.ProposeSameSchedule(successor, existingPlan, carriedOverJarBalance, manualEarmarks, allPatterns, cutDate) is { } sameSchedule)
+        if (AllocationPlanProposer.ProposeSameSchedule(successor, existingPlan, carriedOverJarBalance, manualEarmarks, patternsToPaceAgainst, cutDate) is { } sameSchedule)
         {
             candidates.Add(new("Keep the same schedule", sameSchedule));
         }
 
-        if (AllocationPlanProposer.ProposeSameAmount(successor, existingPlan, carriedOverJarBalance, manualEarmarks, allPatterns, cutDate) is { } sameAmount)
+        if (AllocationPlanProposer.ProposeSameAmount(successor, existingPlan, carriedOverJarBalance, manualEarmarks, patternsToPaceAgainst, cutDate) is { } sameAmount)
         {
             candidates.Add(new("Keep the same amount", sameAmount));
         }
@@ -861,7 +862,7 @@ public sealed class FinancePatternSaveConfirmation
         // Counts income still paying on or after today, so a broken-off income's ended predecessor doesn't count as a second stream (as in AllocationPlanProposer.ActiveIncomeStreams).
         var asOfToday = _requestForecast().AsOfDate;
         _consolidationHasIncomeForSpread = anyConsolidating
-            && book.AllFinancialPatterns().Count(pattern => pattern.Amount > 0m && pattern.DatePattern.Until >= asOfToday) == 1;
+            && PatternsToPaceAgainst(book.AllFinancialPatterns(), _accountId).Count(pattern => pattern.Amount > 0m && pattern.DatePattern.Until >= asOfToday) == 1;
     }
 
     /// <summary>
@@ -901,7 +902,7 @@ public sealed class FinancePatternSaveConfirmation
             SuccessorAmount = _proposedPattern.Amount,
             SuccessorSchedule = BuildSuccessorSchedule(cutDate),
             CarriedOverJarBalance = JarBalanceOn(cutDate, _financeId),
-            AllPatterns = forecast.Book.AllFinancialPatterns(),
+            AllPatterns = PatternsToPaceAgainst(forecast.Book.AllFinancialPatterns(), _accountId),
         });
 
         var ceiling = AffordabilityCeilingFor(result.Successor, ChangeKind.Implicit);
@@ -1754,7 +1755,7 @@ public sealed class FinancePatternSaveConfirmation
             Goal = goal,
             SurvivingPlans = plans,
             ManualEarmarksForThisGoal = _repositories.ManualEarmarks.GetAll().Where(earmark => earmark.FinanceId == goal.FinanceId).ToList(),
-            AllPatterns = _repositories.FinancialPatterns.GetAll(),
+            AllPatterns = PatternsToPaceAgainst(_repositories.FinancialPatterns.GetAll(), _repositories.FinancialPatterns.GetAccountId(goal.FinanceId) ?? _accountId),
             CurrentJar = JarOn(_requestForecast().AsOfDate, goal.FinanceId),
             Sizing = _chosenSizing,
             Spread = _chosenSpread,
@@ -1956,7 +1957,8 @@ public sealed class FinancePatternSaveConfirmation
             }
 
             var carriedOverJarBalance = JarBalanceOn(forecast.AsOfDate, oldPlan.FinanceId);
-            var proposal = AllocationPlanProposer.Propose(bill, allPatterns, forecast.AsOfDate,
+            var billAccountId = _repositories.FinancialPatterns.GetAccountId(bill.FinanceId) ?? _accountId;
+            var proposal = AllocationPlanProposer.Propose(bill, PatternsToPaceAgainst(allPatterns, billAccountId), forecast.AsOfDate,
                 carriedOverJarBalance: carriedOverJarBalance,
                 startingEarmarkCeiling: StartingEarmarkCeilingFor(bill, ChangeKind.Implicit),
                 ongoingRateCeiling: OngoingRateCeilingFor(bill, ChangeKind.Implicit));
@@ -2028,6 +2030,17 @@ public sealed class FinancePatternSaveConfirmation
             ?? throw new InvalidOperationException("The pattern has no occurrence left in its own remaining window to break off onto.");
     }
 
+    /// <summary>[READS FILE] Narrows a pattern list to the ones a plan in the given account may pace against: that account's own patterns, without transfers, the same rule MainWindow uses when proposing a plan for a new expense.</summary>
+    /// <param name="patterns">The patterns to narrow.</param>
+    /// <param name="accountId">The account the plan's expense is filed under.</param>
+    private IReadOnlyList<FinancialPattern> PatternsToPaceAgainst(IReadOnlyList<FinancialPattern> patterns, int accountId)
+    {
+        var allowedFinanceIds = _repositories.FinancialPatterns.GetByAccountExcludingTransferPatterns(accountId)
+            .Select(pattern => pattern.FinanceId)
+            .ToHashSet();
+        return patterns.Where(pattern => allowedFinanceIds.Contains(pattern.FinanceId)).ToList();
+    }
+
     /// <summary>[READS FILE] The saved pattern being edited; every break-off path needs it, and IsChangeCritical can only be true when it exists.</summary>
     private FinancialPattern GetSavedPatternOrThrow() =>
         _repositories.FinancialPatterns.GetByFinanceId(_financeId)
@@ -2062,7 +2075,7 @@ public sealed class FinancePatternSaveConfirmation
             SuccessorAmount = _proposedPattern.Amount,
             SuccessorSchedule = BuildSuccessorSchedule(cutDate),
             CarriedOverJarBalance = predecessorPlan is null ? 0m : JarBalanceOn(cutDate, _financeId),
-            AllPatterns = forecast.Book.AllFinancialPatterns(),
+            AllPatterns = PatternsToPaceAgainst(forecast.Book.AllFinancialPatterns(), _accountId),
             ChosenSuccessorPlan = chosenSuccessorPlan,
             // Only used when there's no candidate (no existing plan); sized against the predecessor, which shares the successor's Mandatory, priority, Source, and end date, so the tier and window come out the same.
             SuccessorStartingEarmarkCeiling = chosenSuccessorPlan is null ? CeilingOmitting(_financeId, saved, ChangeKind.Suggestion, startingEarmark: true) : null,
@@ -2117,7 +2130,7 @@ public sealed class FinancePatternSaveConfirmation
             SuccessorAmount = _proposedPattern.Amount,
             SuccessorSchedule = BuildSuccessorSchedule(cutDate),
             CarriedOverJarBalance = JarBalanceOn(cutDate, _financeId),
-            AllPatterns = forecast.Book.AllFinancialPatterns(),
+            AllPatterns = PatternsToPaceAgainst(forecast.Book.AllFinancialPatterns(), _accountId),
             ChosenSuccessorPlan = chosenSuccessorPlan,
             // Only used when there's no candidate; sized against the predecessor, as in PerformSingleSuccessorBreakOff.
             SuccessorStartingEarmarkCeiling = chosenSuccessorPlan is null ? CeilingOmitting(_financeId, saved, ChangeKind.Suggestion, startingEarmark: true) : null,
@@ -2167,7 +2180,7 @@ public sealed class FinancePatternSaveConfirmation
             SuccessorAmount = _proposedPattern.Amount,
             SuccessorSchedule = BuildSuccessorSchedule(cutDate),
             CarriedOverJarBalance = JarBalanceOn(cutDate, _financeId),
-            AllPatterns = forecast.Book.AllFinancialPatterns(),
+            AllPatterns = PatternsToPaceAgainst(forecast.Book.AllFinancialPatterns(), _accountId),
         });
 
         // The successor is now the current segment, so navigation after saving looks there.

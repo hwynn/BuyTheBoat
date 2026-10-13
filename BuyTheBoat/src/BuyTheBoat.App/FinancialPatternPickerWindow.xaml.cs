@@ -8,7 +8,7 @@ namespace BuyTheBoat.App;
 /// <summary>
 /// A popup to pick one of the user's Bills, Paychecks, or Goals, for linking something to it or switching which one a form shows; creating and editing stay on their tabs.
 /// Lists TransactionLogBook.AllFinancialPatterns(), the forecast's record of everything the user has.
-/// Always leaves out ended patterns and transfer legs.
+/// Always leaves out ended patterns and transfers.
 /// </summary>
 public partial class FinancialPatternPickerWindow : Window
 {

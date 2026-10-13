@@ -262,6 +262,46 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         successorBill.DatePattern.GetOccurrences().ShouldBe([new DateOnly(2026, 1, 10)]);
     }
 
+    // A recurring transfer into the account is stored as a positive deposit; it isn't a paycheck, so the successor's plan still paces against the one real paycheck.
+    [Fact]
+    public void Breaking_off_a_bill_paces_against_the_paycheck_and_ignores_a_transfer_into_the_account()
+    {
+        var bill = Bill(1, "Electric Co", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var paycheck = Biweekly(100, "Job", 2000m, new DateOnly(2025, 1, 3)); // Fridays
+        _financialPatterns.Save(bill, accountId: 1);
+        _financialPatterns.Save(paycheck, accountId: 1);
+        _financialPatterns.Save(Biweekly(200, "Transfer from Checking", 50m, new DateOnly(2025, 1, 6)), accountId: 1, transferId: 9); // Mondays
+        _earMarkPatterns.Save(Plan(bill, -120m, bill.DatePattern.ActiveStart, bill.DatePattern.Until));
+        var forecast = Forecast();
+
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+        Confirmation(1, editedBill, accountId: 1, forecast).Run().ShouldBeTrue();
+
+        var successorPlan = _earMarkPatterns.GetAll().Single(p => p.FinanceId != bill.FinanceId);
+        successorPlan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Weekly);
+        paycheck.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.DtStart);
+    }
+
+    // A paycheck filed under another account never funds this bill, so the successor's plan paces against the paycheck in the bill's own account.
+    [Fact]
+    public void Breaking_off_a_bill_paces_against_the_paycheck_in_its_own_account()
+    {
+        var bill = Bill(1, "Electric Co", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
+        var sameAccountPaycheck = Biweekly(100, "Job", 2000m, new DateOnly(2025, 1, 3)); // Fridays
+        _financialPatterns.Save(bill, accountId: 1);
+        _financialPatterns.Save(sameAccountPaycheck, accountId: 1);
+        _financialPatterns.Save(Biweekly(101, "Side job", 500m, new DateOnly(2025, 1, 6)), accountId: 2); // Mondays
+        _earMarkPatterns.Save(Plan(bill, -120m, bill.DatePattern.ActiveStart, bill.DatePattern.Until));
+        var forecast = Forecast();
+
+        var editedBill = Bill(1, bill.Source, -150m, bill.DatePattern.ActiveStart, bill.DatePattern.Until);
+        Confirmation(1, editedBill, accountId: 1, forecast).Run().ShouldBeTrue();
+
+        var successorPlan = _earMarkPatterns.GetAll().Single(p => p.FinanceId != bill.FinanceId);
+        successorPlan.DatePattern.Frequency.ShouldBe(RecurrenceFrequency.Weekly);
+        sameAccountPaycheck.DatePattern.GetOccurrences().ShouldContain(successorPlan.DatePattern.DtStart);
+    }
+
     // The "glut case" for candidate previews: the "Recommended" candidate's
     // own preview must read the real carried-over balance as its
     // StartingAllocation, matching what BreakOffFactory.BreakOff saves once
@@ -1862,6 +1902,22 @@ public class FinancePatternSaveConfirmationTests : IDisposable
 
         return _financialPatterns.GetAll().Single(p => p.FinanceId == 2); // NextFinanceId() with only id 1 in play
     }
+
+    /// <summary>[CALC] An every-other-week pattern from the given first date through 2026-01-01, for a paycheck or a transfer's deposit.</summary>
+    private static FinancialPattern Biweekly(int financeId, string source, decimal amount, DateOnly firstDate) =>
+        FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = financeId,
+            Source = source,
+            Amount = amount,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Weekly,
+                Interval = 2,
+                DtStart = firstDate,
+                Until = new DateOnly(2026, 1, 1),
+            }),
+        });
 
     private static EarMarkPattern Plan(FinancialPattern goal, decimal amount, DateOnly start, DateOnly until) =>
         EarMarkPattern.Create(
