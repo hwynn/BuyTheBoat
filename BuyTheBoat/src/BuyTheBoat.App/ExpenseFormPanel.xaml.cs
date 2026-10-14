@@ -47,6 +47,7 @@ public partial class ExpenseFormPanel : UserControl
 
     /// <summary>Every FinancialPattern, so LoadPattern and ChooseSegmentToLoad can find which segment of a chain to open.</summary>
     private IReadOnlyList<FinancialPattern> _allPatterns = [];
+    private IReadOnlyList<ManualEarmark> _manualEarmarks = [];
 
     /// <summary>Gets the live forecast, computing it if needed (MainWindow.EnsureForecast, which always succeeds).</summary>
     public Func<ForecastResult>? RequestForecast { get; set; }
@@ -101,17 +102,20 @@ public partial class ExpenseFormPanel : UserControl
     /// <param name="transferFinanceIds">Finance ids that are transfer legs — excluded from the instance picker.</param>
     /// <param name="earMarkPatterns">Every savings plan, so the Summary region can find this Expense's own linked plan.</param>
     /// <param name="allPatterns">Every FinancialPattern — LoadPattern's own BreakOffFactory.FindCurrentSegment redirect needs the full chain to search, not just the one pattern being loaded.</param>
+    /// <param name="manualEarmarks">Every manual earmark, so the Summary's no-forecast jar reading counts one-off adds and withdrawals.</param>
     public void SetContext(
         IReadOnlyDictionary<int, int> accountIdByFinanceId,
         IReadOnlyList<Account> accounts,
         IReadOnlySet<int> transferFinanceIds,
         IReadOnlyList<EarMarkPattern> earMarkPatterns,
-        IReadOnlyList<FinancialPattern> allPatterns)
+        IReadOnlyList<FinancialPattern> allPatterns,
+        IReadOnlyList<ManualEarmark> manualEarmarks)
     {
         _accountIdByFinanceId = accountIdByFinanceId;
         _accounts = accounts;
         _transferFinanceIds = transferFinanceIds;
         _allPatterns = allPatterns;
+        _manualEarmarks = manualEarmarks;
 
         // Keeps each goal's most recently started plan, since a goal can have several (as in EarmarkFormPanel.SetContext).
         _patternsByFinanceId = earMarkPatterns
@@ -499,7 +503,7 @@ public partial class ExpenseFormPanel : UserControl
         }
         else
         {
-            var (expected, _) = ComputeLiveJarAmounts([plan], existing, plan.StartingAllocation, todayDate);
+            var expected = ComputeLiveJarAmount([plan], existing, plan.StartingAllocation, _manualEarmarks, todayDate);
             jarStateLine = PlanHealthMessages.JarSavedLine(expected);
         }
 
@@ -589,7 +593,7 @@ public partial class ExpenseFormPanel : UserControl
         var narrative =
             $"We'd need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. This is a rough preview of the savings plan Save and Plan would set up — {Math.Abs(proposal.Plan.Amount):C0} per occurrence, starting {proposal.Plan.DatePattern.ActiveStart:MMM d, yyyy}.";
 
-        var (expected, _) = ComputeLiveJarAmounts([proposal.Plan], pattern, proposal.Plan.StartingAllocation, todayDate);
+        var expected = ComputeLiveJarAmount([proposal.Plan], pattern, proposal.Plan.StartingAllocation, _manualEarmarks, todayDate);
 
         Summary.Load(
             narrative,
@@ -630,20 +634,21 @@ public partial class ExpenseFormPanel : UserControl
         }
     }
 
-    /// <summary>[CALC] Today's jar balance and milestone from the plan's schedule alone, with no forecast; the same approach as EarmarkFormPanel.GetLiveJarAmounts, which explains it.</summary>
+    /// <summary>
+    /// [CALC] Today's jar balance worked out from the plan's schedule and the goal's manual earmarks, with no forecast; the same walk as EarmarkFormPanel.GetLiveJarAmounts.
+    /// It pays each release in full and ignores deallocation, so it's a rough reading for when no forecast has the goal's jar today.
+    /// </summary>
     /// <param name="patterns">Every EarMarkPattern funding the goal.</param>
     /// <param name="goal">The goal being funded.</param>
-    /// <param name="startingTotal">What was already in the jar before this plan's own contributions began.</param>
-    /// <param name="asOfDate">Today's date, to read the live amounts as of.</param>
-    private static (decimal ExpectedAmount, decimal MilestoneAmount) ComputeLiveJarAmounts(
-        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, decimal startingTotal, DateOnly asOfDate)
+    /// <param name="startingTotal">The plans' StartingAllocation; manual earmarks, the starting one included, come from manualEarmarks.</param>
+    /// <param name="manualEarmarks">Every manual earmark; only the goal's own count.</param>
+    /// <param name="asOfDate">Today's date, to read the jar as of.</param>
+    private static decimal ComputeLiveJarAmount(
+        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, decimal startingTotal, IReadOnlyList<ManualEarmark> manualEarmarks, DateOnly asOfDate)
     {
         var activeStart = patterns.Count > 0 ? patterns.Min(p => p.DatePattern.ActiveStart) : asOfDate;
-        var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(patterns, goal, activeStart, asOfDate);
-        var liveMilestone = milestoneTrajectory.Count > 0 ? milestoneTrajectory[^1].MilestoneAmount : 0m;
-        var hasReleased = goal.DatePattern.GetOccurrences(activeStart, asOfDate).Count > 0;
-        var liveExpected = hasReleased ? liveMilestone : startingTotal + liveMilestone;
-        return (liveExpected, liveMilestone);
+        return TransactionLogBookFactory.ComputeExpectedTrajectory(
+            patterns, goal, activeStart, asOfDate, startingTotal, manualEarmarks)[^1].ExpectedAmount;
     }
 
     /// <summary>[CALC] The linked plan's jar day by day from today through `to`, for the chart's "Fund jar (actual)" line; empty when there's no forecast reading.</summary>

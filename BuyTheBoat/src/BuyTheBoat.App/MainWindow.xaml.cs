@@ -168,7 +168,7 @@ public partial class MainWindow : Window
         var accountIdByFinanceId = _financialPatterns.GetAllByAccount()
             .SelectMany(entry => entry.Value.Select(pattern => (pattern.FinanceId, AccountId: entry.Key)))
             .ToDictionary(pair => pair.FinanceId, pair => pair.AccountId);
-        ExpenseForm.SetContext(accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll(), _financialPatterns.GetAll());
+        ExpenseForm.SetContext(accountIdByFinanceId, _accounts.GetAll(), _financialPatterns.GetTransferFinanceIds(), _earMarkPatterns.GetAll(), _financialPatterns.GetAll(), _manualEarmarks.GetAll());
     }
 
     /// <summary>[STEP] Jumps to a main tab (by plain Header like "Forecast", or Tag) or to a Form subtab by its Tag (Account/Transfer/Expense/Earmark), selecting the main tab that holds it too.</summary>

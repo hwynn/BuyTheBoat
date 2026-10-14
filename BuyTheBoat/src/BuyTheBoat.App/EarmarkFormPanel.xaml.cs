@@ -1266,8 +1266,13 @@ public partial class EarmarkFormPanel : UserControl
             if (TryBuildProposedPattern(goal) is { } proposedForChart)
             {
                 var proposedStartingTotal = Math.Abs(_startingAllocation) + _startingEarmarkAmount;
+
+                // The saved starting earmark sits on the plan's start and is already in proposedStartingTotal as the typed amount.
+                var laterManualEarmarks = _existingManualEarmarks
+                    .Where(manual => manual.Date != plan.DatePattern.ActiveStart)
+                    .ToList();
                 proposedTrajectory = TransactionLogBookFactory.ComputeExpectedTrajectory(
-                        GetPatternsForLiveCheck(goal, proposedForChart), goal, plan.DatePattern.ActiveStart, chartEnd, proposedStartingTotal)
+                        GetPatternsForLiveCheck(goal, proposedForChart), goal, plan.DatePattern.ActiveStart, chartEnd, proposedStartingTotal, laterManualEarmarks)
                     .Select(p => (p.Date, p.ExpectedAmount))
                     .ToList();
             }
@@ -1612,24 +1617,25 @@ public partial class EarmarkFormPanel : UserControl
     }
 
     /// <summary>
-    /// [CALC] Today's jar balance and milestone, worked out from the plan's schedule alone, with no forecast.
-    /// The milestone walk resets to 0 at each release, which also wipes out any starting balance, so after the first release the balance equals the milestone; before it, the balance is startingTotal plus the milestone.
+    /// [CALC] Today's jar balance and milestone, worked out from the plan's schedule and the goal's manual earmarks, with no forecast.
+    /// Like the chart's proposed line, it pays each release in full and ignores deallocation, so it's a rough reading for when no forecast has the goal's jar today.
     /// </summary>
     /// <param name="patterns">Every pattern funding the goal (see GetPatternsForLiveCheck), so a goal with more than one concurrent earmark pattern is still computed correctly.</param>
     /// <param name="proposed">The not-yet-saved version of the pattern currently being edited.</param>
     /// <param name="goal">The goal being funded.</param>
-    /// <param name="startingTotal">What was already in the jar before this plan's own contributions began.</param>
+    /// <param name="startingTotal">What was already in the jar before this plan's own contributions began, including the starting earmark.</param>
     /// <param name="asOfDate">Today's date, to read the live amounts as of.</param>
     private (decimal ExpectedAmount, decimal MilestoneAmount) GetLiveJarAmounts(
         IReadOnlyList<EarMarkPattern> patterns, EarMarkPattern proposed, FinancialPattern goal, decimal startingTotal, DateOnly asOfDate)
     {
-        // TODO: this live preview ignores a mid-plan ManualEarmark that the real forecast counts,
-        // so the Summary can show a misleading jar balance — revisit the preview's honesty.
         var activeStart = proposed.DatePattern.ActiveStart;
         var milestoneTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(patterns, goal, activeStart, asOfDate);
         var liveMilestone = milestoneTrajectory.Count > 0 ? milestoneTrajectory[^1].MilestoneAmount : 0m;
-        var hasReleased = goal.DatePattern.GetOccurrences(activeStart, asOfDate).Count > 0;
-        var liveExpected = hasReleased ? liveMilestone : startingTotal + liveMilestone;
+
+        // The starting earmark sits on the plan's start and is already in startingTotal.
+        var laterManualEarmarks = _existingManualEarmarks.Where(manual => manual.Date != activeStart).ToList();
+        var liveExpected = TransactionLogBookFactory.ComputeExpectedTrajectory(
+            patterns, goal, activeStart, asOfDate, startingTotal, laterManualEarmarks)[^1].ExpectedAmount;
         return (liveExpected, liveMilestone);
     }
 

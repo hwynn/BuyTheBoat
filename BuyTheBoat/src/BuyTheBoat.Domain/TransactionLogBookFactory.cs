@@ -153,6 +153,7 @@ public static class TransactionLogBookFactory
     /// [CALC] Walks a finance id's projected jar ExpectedAmount day by day across a date range, for the "proposed" line on the Earmark form's Summary chart.
     /// Unlike ComputeMilestoneTrajectory, a release doesn't reset to 0: it subtracts the goal's per-occurrence amount and floors at 0, so a starting balance or structural glut carries forward like a real fund jar.
     /// It's a rough single-jar estimate that pays each release in full rather than modelling deallocation across jars.
+    /// Manual earmarks on the goal count on their own day alongside its contributions, as they do in the real forecast.
     /// The first point is always at `from` with startingAllocation, so a starting balance shows at the chart's left edge.
     /// </summary>
     /// <param name="patterns">The savings plan(s) funding the goal.</param>
@@ -160,11 +161,17 @@ public static class TransactionLogBookFactory
     /// <param name="from">Start of the range to walk — the point seeded with startingAllocation.</param>
     /// <param name="to">End of the range to walk.</param>
     /// <param name="startingAllocation">What the jar already holds at `from`, before this plan's own contributions begin.</param>
+    /// <param name="manualEarmarks">One-off adds and withdrawals; only this goal's, within the range, are counted. Leave out any already counted in startingAllocation.</param>
     public static IReadOnlyList<(DateOnly Date, decimal ExpectedAmount)> ComputeExpectedTrajectory(
-        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, DateOnly from, DateOnly to, decimal startingAllocation = 0m)
+        IReadOnlyList<EarMarkPattern> patterns, FinancialPattern goal, DateOnly from, DateOnly to, decimal startingAllocation = 0m,
+        IReadOnlyList<ManualEarmark>? manualEarmarks = null)
     {
+        var manualEntries = (manualEarmarks ?? [])
+            .Where(manual => manual.FinanceId == goal.FinanceId && manual.Date >= from && manual.Date <= to)
+            .Select(manual => (manual.Date, manual.Amount));
         var contributionsByDate = patterns
             .SelectMany(pattern => pattern.DatePattern.GetOccurrences(from, to).Select(date => (Date: date, Amount: -pattern.Amount)))
+            .Concat(manualEntries)
             .ToLookup(entry => entry.Date, entry => entry.Amount);
         var releaseAmount = Math.Abs(goal.Amount);
         var releaseDates = goal.DatePattern.GetOccurrences(from, to).ToHashSet();
@@ -178,12 +185,14 @@ public static class TransactionLogBookFactory
         var running = startingAllocation;
         foreach (var date in eventDates)
         {
-            // Adds the day's contributions before paying out a release, the same order BuildAccountPage uses, so a contribution on its own release day nets against it.
+            // Nets the day's contributions, manual earmarks and release before flooring at 0, as BuildAccountPage does, so a withdrawal and a contribution on the same day cancel rather than the withdrawal flooring first.
             running += contributionsByDate[date].Sum();
             if (releaseDates.Contains(date))
             {
-                running = Math.Max(0m, running - releaseAmount);
+                running -= releaseAmount;
             }
+
+            running = Math.Max(0m, running);
 
             points.Add((date, running));
         }

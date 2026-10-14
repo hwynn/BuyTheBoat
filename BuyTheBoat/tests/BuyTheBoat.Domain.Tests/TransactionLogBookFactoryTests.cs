@@ -730,6 +730,62 @@ public class TransactionLogBookFactoryTests
     }
 
     [Fact]
+    public void ComputeExpectedTrajectory_counts_manual_earmarks_the_way_the_real_cascade_does()
+    {
+        // A $40 add mid-January, then a $500 withdrawal mid-February that's more than the jar holds and floors at 0.
+        var goal = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = _nextFinanceId++,
+            Source = "Rent",
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = RecurrenceFrequency.Monthly,
+                ByMonthDay = [1],
+                DtStart = new DateOnly(2025, 1, 1),
+                Until = new DateOnly(2025, 12, 31),
+            }),
+            Amount = -100m,
+        });
+        var plan = EarMarkPattern.Create(
+            new EarMarkPatternOptions
+            {
+                FinanceId = goal.FinanceId,
+                Amount = -150m,
+                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+                {
+                    Frequency = RecurrenceFrequency.Monthly,
+                    ByMonthDay = [1],
+                    DtStart = new DateOnly(2025, 1, 1),
+                    Until = new DateOnly(2025, 12, 31),
+                }),
+            },
+            goal);
+        ManualEarmark[] manuals =
+        [
+            ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = new DateOnly(2025, 1, 15), Amount = 40m }, plan),
+            ManualEarmark.Create(new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = new DateOnly(2025, 2, 15), Amount = -500m }, plan),
+        ];
+
+        var result = TransactionLogBookFactory.CreateForecast(Options(
+            startingBalance: 10_000m,
+            asOfDate: new DateOnly(2025, 1, 1),
+            horizonEndDate: new DateOnly(2025, 3, 31),
+            financialPatterns: [goal],
+            earMarkPatterns: [plan],
+            manualEarmarks: manuals));
+
+        var trajectory = TransactionLogBookFactory.ComputeExpectedTrajectory(
+            [plan], goal, new DateOnly(2024, 12, 31), new DateOnly(2025, 3, 1), manualEarmarks: manuals);
+
+        foreach (var date in new[] { new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 15), new DateOnly(2025, 2, 1), new DateOnly(2025, 2, 15), new DateOnly(2025, 3, 1) })
+        {
+            trajectory.Single(p => p.Date == date).ExpectedAmount.ShouldBe(Jar(SnapshotOn(result, date), goal.FinanceId));
+        }
+
+        trajectory.Single(p => p.Date == new DateOnly(2025, 2, 15)).ExpectedAmount.ShouldBe(0m);
+    }
+
+    [Fact]
     public void IsFirstOccurrencePending_is_true_before_the_first_occurrence_and_on_it_but_false_after()
     {
         var bill = FinancialPattern.Create(new FinancialPatternOptions
