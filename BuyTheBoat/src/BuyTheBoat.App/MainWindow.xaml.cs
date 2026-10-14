@@ -253,6 +253,9 @@ public partial class MainWindow : Window
             case "Account":
                 RefreshAccountFormContext();
                 break;
+            case "MoneyFlow":
+                RefreshMoneyFlow();
+                break;
             case "Transfer":
                 RefreshTransferFormContext();
                 break;
@@ -614,6 +617,29 @@ public partial class MainWindow : Window
             ? "—"
             : $"{total:C} in {accounts.Count} account{(accounts.Count == 1 ? string.Empty : "s")}"
                 + (cushion > 0m ? $" · {cushion:C} cushion" : string.Empty);
+    }
+
+    /// <summary>[UI] Fills the Accounts tab's Money flow subtab with each account's average monthly money in and out, from the current saved data.</summary>
+    private void RefreshMoneyFlow()
+    {
+        // Same window as the shown forecast, but re-run so edits made since pressing Forecast show up.
+        var shown = EnsureForecast();
+        var forecast = TransactionLogBookFactory.CreateForecast(BuildForecastOptions(shown.AsOfDate, shown.HorizonEndDate));
+
+        var rows = forecast.Accounts
+            .Select(account => new AccountFlowRow(
+                account.Name,
+                AccountMoneyFlow.AverageMonthlyInflow(account.Page, forecast.AsOfDate, forecast.HorizonEndDate),
+                AccountMoneyFlow.AverageMonthlyOutflow(account.Page, forecast.AsOfDate, forecast.HorizonEndDate)))
+            .ToList();
+        MoneyFlowGrid.ItemsSource = rows;
+
+        MoneyFlowWindowText.Text = $"Averaged over {forecast.AsOfDate:MMM d, yyyy} – {forecast.HorizonEndDate:MMM d, yyyy}. Change the window with the Forecast tab's dates.";
+
+        // Transfers cancel out across all accounts, so the household net is earnings minus spending.
+        var householdNet = rows.Sum(row => row.MonthlyNet);
+        MoneyFlowTotalText.Text = $"All accounts together: {householdNet:C} per month "
+            + (householdNet < 0m ? "more going out than coming in." : "left over after spending.");
     }
 
     /// <summary>[UI] Selects the whole balance on entering its box, so typing replaces it.</summary>

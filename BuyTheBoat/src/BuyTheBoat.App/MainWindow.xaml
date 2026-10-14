@@ -561,6 +561,35 @@
                         </TabItem.Header>
                         <local:AccountFormPanel x:Name="AccountForm"/>
                     </TabItem>
+                    <TabItem Header="Money flow" Tag="MoneyFlow">
+                        <DockPanel Margin="8">
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="How much comes into and goes out of each account in an average month, so you can spot an account that is slowly draining while another piles up. Transfers count on both sides: out of the account they leave, into the one they reach. One-time goals are left out. Averages cover the forecast window, so a horizon of a year or more evens out yearly bills."/>
+                            <TextBlock x:Name="MoneyFlowWindowText" DockPanel.Dock="Top" Margin="0,0,0,8"
+                                       AutomationProperties.AutomationId="MoneyFlowWindowText"/>
+                            <TextBlock x:Name="MoneyFlowTotalText" DockPanel.Dock="Bottom" Margin="0,8,0,0" FontWeight="SemiBold"
+                                       AutomationProperties.AutomationId="MoneyFlowTotalText"/>
+                            <DataGrid x:Name="MoneyFlowGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                                      AutomationProperties.AutomationId="MoneyFlowGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
+                                    <DataGridTextColumn Header="Comes in / month" Binding="{Binding MonthlyIn, StringFormat={}{0:C}}" Width="150"/>
+                                    <DataGridTextColumn Header="Goes out / month" Binding="{Binding MonthlyOut, StringFormat={}{0:C}}" Width="150"/>
+                                    <DataGridTextColumn Header="Net / month" Binding="{Binding MonthlyNet, StringFormat={}{0:C}}" Width="*">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsDraining}" Value="True">
+                                                        <Setter Property="Foreground" Value="Firebrick"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
                 </TabControl>
             </TabItem>
 

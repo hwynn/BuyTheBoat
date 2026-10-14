@@ -732,6 +732,15 @@ public sealed class AccountRow(Account account) : FormListRow
         : Account.IdealSafetyCushion.ToString("C");
 }
 
+/// <summary>One row of the Accounts tab's Money flow subtab: an account's average monthly money in and out over the forecast window.</summary>
+public sealed record AccountFlowRow(string Name, decimal MonthlyIn, decimal MonthlyOut)
+{
+    public decimal MonthlyNet => MonthlyIn - MonthlyOut;
+
+    /// <summary>[CALC] True when more leaves this account each month than arrives, which turns its Net red.</summary>
+    public bool IsDraining => MonthlyNet < 0m;
+}
+
 /// <summary>One row of the Transfers tab, with From and To as account names; its two patterns don't appear, so a transfer reads as one thing.</summary>
 public sealed class TransferRow(Transfer transfer, string fromName, string toName) : FormListRow
 {

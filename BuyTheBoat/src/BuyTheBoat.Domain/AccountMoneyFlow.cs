@@ -2,7 +2,7 @@ namespace BuyTheBoat.Domain;
 
 /// <summary>
 /// Average monthly money in and out of one account, read from its forecast.
-/// Nothing calls these yet; they're meant for a future overview of how balanced each account's money flow is.
+/// The Accounts tab's Money flow subtab shows these side by side for every account.
 /// </summary>
 /// <remarks>
 /// Transfers count on both sides, because each one is an ordinary withdrawal pattern on the source account and a deposit pattern on the destination.
@@ -14,14 +14,12 @@ public static class AccountMoneyFlow
     private const decimal DaysPerMonth = 365.2425m / 12m;
 
     /// <summary>[CALC] Works out how much money leaves this account in an average month between two dates (spending plus transfers out, one-time goals excluded), as a positive amount.</summary>
-    /// <remarks>TODO: unused — find a good place to show this; it may need a new page or tab.</remarks>
     /// <param name="from">First day of the window, inclusive.</param>
     /// <param name="to">Last day of the window, inclusive.</param>
     public static decimal AverageMonthlyOutflow(AccountTransactionPage page, DateOnly from, DateOnly to) =>
         -CountedAmounts(page, from, to).Where(amount => amount < 0m).Sum() / MonthsBetween(from, to);
 
     /// <summary>[CALC] Works out how much money comes into this account in an average month between two dates (earnings plus transfers in).</summary>
-    /// <remarks>TODO: unused — find a good place to show this; it may need a new page or tab.</remarks>
     /// <param name="from">First day of the window, inclusive.</param>
     /// <param name="to">Last day of the window, inclusive.</param>
     public static decimal AverageMonthlyInflow(AccountTransactionPage page, DateOnly from, DateOnly to) =>
