@@ -4,11 +4,11 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.Persistence;
 
-// Per-account storage (Id + unique Name + balance + cushion). Ids are
-// app-assigned like FinanceId (NextId = max + 1); the migration seeds the first
-// account, "primary", as Id 1. Decimals are invariant-culture strings, matching
-// the rest of this layer. Name uniqueness is enforced by the table's UNIQUE
-// column (SQLite honours UNIQUE, unlike declared foreign keys).
+/// <summary>
+/// Stores accounts: Id, unique Name, balance, and safety cushion.
+/// Ids are assigned by the app like FinanceId (NextId = max + 1); EnsureDefaultAccount creates the first account, "primary", as Id 1.
+/// Decimals are stored as invariant-culture strings like the rest of this layer, and the table's UNIQUE column keeps names unique (SQLite enforces UNIQUE, unlike declared foreign keys).
+/// </summary>
 public sealed class AccountRepository(PatternDatabase database)
 {
     /// <summary>[WRITES FILE] Creates a new account, or updates the existing one with the same Id.</summary>
@@ -85,9 +85,12 @@ public sealed class AccountRepository(PatternDatabase database)
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
-    /// <summary>[WRITES FILE] Ensures at least one account exists, creating a "primary" one from the legacy single balance/cushion if none do yet. Idempotent — does nothing once any account exists.</summary>
-    /// <param name="seedBalance">The legacy single balance to seed the primary account with, on a fresh migration.</param>
-    /// <param name="seedCushion">The legacy single safety cushion to seed the primary account with, on a fresh migration.</param>
+    /// <summary>
+    /// [WRITES FILE] Makes sure at least one account exists, creating a "primary" one from the older single balance and cushion when there are none.
+    /// Does nothing once any account exists.
+    /// </summary>
+    /// <param name="seedBalance">The balance the primary account starts with when it's created.</param>
+    /// <param name="seedCushion">The safety cushion the primary account starts with when it's created.</param>
     public Account EnsureDefaultAccount(decimal seedBalance, decimal seedCushion)
     {
         var existing = GetAll();
@@ -98,9 +101,7 @@ public sealed class AccountRepository(PatternDatabase database)
 
         var primary = Account.Create(new AccountOptions
         {
-            // Id 1 — the AccountId column's own DEFAULT 1 backfill on
-            // existing FinancialPatterns rows relies on the primary account
-            // landing at exactly this id.
+            // Id 1, because the AccountId column's DEFAULT 1 files every older FinancialPatterns row under this account.
             Id = 1,
             Name = "primary",
             Balance = seedBalance,
@@ -111,7 +112,10 @@ public sealed class AccountRepository(PatternDatabase database)
         return primary;
     }
 
-    /// <summary>[DELETES] Removes an account. No reference guard here — the App layer checks HasPatternsInAccount/IsAccountReferenced before calling this, so a still-referenced account is never actually deleted.</summary>
+    /// <summary>
+    /// [DELETES] Removes an account, without checking whether anything still uses it.
+    /// MainWindow checks HasPatternsInAccount and IsAccountReferenced first.
+    /// </summary>
     /// <param name="id">The account to delete.</param>
     public void Delete(int id)
     {

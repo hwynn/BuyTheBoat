@@ -463,6 +463,33 @@ public class RecurrenceRuleTests
         occurrences.ShouldAllBe(date => date.DayOfWeek == DayOfWeek.Friday);
     }
 
+    // A renewal moves the start to the day after Until (2025-12-21), past the rule's own end, then extends Until; the schedule must keep the days it had since its 2025-01-10 start.
+    [Theory]
+    [InlineData(RecurrenceFrequency.Weekly, 2, 0, "2025-12-26")] // every other Friday, no weekday ticked
+    [InlineData(RecurrenceFrequency.Monthly, 1, 0, "2026-01-10")] // no day of month entered
+    [InlineData(RecurrenceFrequency.Monthly, 1, 10, "2026-01-10")]
+    [InlineData(RecurrenceFrequency.Monthly, 3, 10, "2026-01-10")] // every 3 months: Jan, Apr, Jul, Oct
+    [InlineData(RecurrenceFrequency.Yearly, 1, 0, "2026-01-10")]
+    public void ReanchoredToStartOn_past_Until_keeps_the_schedules_days(RecurrenceFrequency frequency, int interval, int byMonthDay, string expectedFirst)
+    {
+        var segment = RecurrenceRule.Create(new RecurrenceRuleOptions
+        {
+            Frequency = frequency,
+            Interval = interval,
+            ByMonthDay = byMonthDay == 0 ? [] : [byMonthDay],
+            DtStart = new DateOnly(2025, 1, 10), // a Friday
+            Until = new DateOnly(2025, 12, 20),
+        });
+        var renewalDate = new DateOnly(2025, 12, 21);
+        var renewedUntil = new DateOnly(2027, 12, 21);
+
+        var renewed = segment.ReanchoredToStartOn(renewalDate).WithUntil(renewedUntil);
+
+        renewed.ActiveStart.ShouldBe(renewalDate);
+        renewed.GetOccurrences()[0].ShouldBe(DateOnly.Parse(expectedFirst));
+        renewed.GetOccurrences().ShouldBe(segment.WithUntil(renewedUntil).GetOccurrences(renewalDate, renewedUntil)); // the same dates the segment would have kept producing
+    }
+
     private static RecurrenceRule MonthlySpan(DateOnly start, DateOnly until) => RecurrenceRule.Create(new RecurrenceRuleOptions
     {
         Frequency = RecurrenceFrequency.Monthly,

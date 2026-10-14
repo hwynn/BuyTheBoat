@@ -601,6 +601,44 @@ public class BreakOffFactoryTests
         result.Successor.DatePattern.ByMonthDay.ShouldBe(rent.DatePattern.ByMonthDay);
     }
 
+    // A renewal date is usually not a payment day; the successor must keep the dates the predecessor had since its 2025-01-10 start, not take the renewal date's day or month.
+    [Theory]
+    [InlineData(RecurrenceFrequency.Weekly, 2, "2025-12-26")] // every other Friday, no weekday ticked
+    [InlineData(RecurrenceFrequency.Monthly, 1, "2026-01-10")] // no day of month entered
+    [InlineData(RecurrenceFrequency.Yearly, 1, "2026-01-10")]
+    public void Renew_keeps_the_predecessors_payment_dates_when_renewing_between_them(RecurrenceFrequency frequency, int interval, string expectedFirst)
+    {
+        var bill = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "Insurance",
+            Amount = -150m,
+            AutoRenew = true,
+            DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = frequency,
+                Interval = interval,
+                DtStart = new DateOnly(2025, 1, 10), // a Friday
+                Until = new DateOnly(2025, 12, 21),
+            }),
+        });
+        var renewalDate = new DateOnly(2025, 12, 21);
+
+        var result = BreakOffFactory.Renew(new RenewalRequest
+        {
+            Predecessor = bill,
+            PredecessorPlan = null,
+            RenewalDate = renewalDate,
+            SegmentYears = 2,
+            SuccessorFinanceId = 2,
+            CarriedOverJarBalance = 0m,
+            AllPatterns = [bill],
+        });
+
+        result.Successor.DatePattern.ActiveStart.ShouldBe(renewalDate);
+        result.Successor.DatePattern.GetOccurrences()[0].ShouldBe(DateOnly.Parse(expectedFirst));
+    }
+
     [Fact]
     public void Renew_extends_exactly_one_year_from_the_renewal_date()
     {

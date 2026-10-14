@@ -4,14 +4,15 @@ namespace BuyTheBoat.Persistence;
 
 public sealed record CurrentBalance(decimal Balance, DateOnly AsOfDate, DateOnly HorizonEndDate, decimal IdealSafetyCushion);
 
-// Single mutable row (see the CHECK (Id = 1) constraint in PatternDatabase) —
-// there's nothing to version yet, since a Forecast is recomputed fresh from
-// this seed value every time rather than persisted itself.
+/// <summary>
+/// Stores the single CurrentBalance row (PatternDatabase's CHECK (Id = 1) keeps it to one), which holds the forecast's as-of and horizon dates.
+/// Its balance and cushion are household totals; the forecast uses each account's own values instead.
+/// </summary>
 public sealed class CurrentBalanceRepository(PatternDatabase database)
 {
     private const string DateFormat = "yyyy-MM-dd";
 
-    /// <summary>[WRITES FILE] Saves the current balance snapshot — the single legacy row the Forecast tab reads its inputs from at startup.</summary>
+    /// <summary>[WRITES FILE] Saves the CurrentBalance row, which the Forecast tab reads its as-of and horizon dates from at startup.</summary>
     /// <param name="balance">The household's current total balance.</param>
     /// <param name="asOfDate">The forecast's as-of date.</param>
     /// <param name="horizonEndDate">How far ahead the forecast runs.</param>
@@ -37,7 +38,10 @@ public sealed class CurrentBalanceRepository(PatternDatabase database)
         command.ExecuteNonQuery();
     }
 
-    /// <summary>[READS FILE] Returns the saved balance snapshot, or null if nothing's been saved yet. Feeds the Forecast tab's inputs on startup.</summary>
+    /// <summary>
+    /// [READS FILE] Returns the saved CurrentBalance row, or null if nothing's been saved yet.
+    /// The Forecast tab reads it at startup.
+    /// </summary>
     public CurrentBalance? GetCurrent()
     {
         using var connection = database.OpenConnection();
@@ -53,9 +57,7 @@ public sealed class CurrentBalanceRepository(PatternDatabase database)
         var balance = decimal.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
         var asOfDate = DateOnly.ParseExact(reader.GetString(1), DateFormat, CultureInfo.InvariantCulture);
 
-        // Rows saved before the horizon became user-adjustable won't have
-        // this column populated — fall back to the original fixed default
-        // rather than surfacing a blank or invalid date.
+        // A row saved before the horizon could be changed has no HorizonEndDate, so it falls back to the default rather than a blank or invalid date.
         var horizonEndDate = reader.IsDBNull(2)
             ? asOfDate.AddMonths(3)
             : DateOnly.ParseExact(reader.GetString(2), DateFormat, CultureInfo.InvariantCulture);

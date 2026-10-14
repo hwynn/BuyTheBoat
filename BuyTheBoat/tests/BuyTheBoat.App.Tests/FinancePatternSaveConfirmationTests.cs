@@ -1841,6 +1841,53 @@ public class FinancePatternSaveConfirmationTests : IDisposable
         cascade.Options[0].Children.OfType<ChoiceRow>().ShouldContain(r => r.Id == ConfirmationRowIds.ConsolidationSizing); // nested under "apply going forward"
     }
 
+    // The only paycheck ends in August, before the later segment's plans run (Sep 1 to Dec 1), so "Across your paydays" couldn't pace and the spread question isn't asked.
+    [Fact]
+    public void The_spread_question_is_not_asked_when_the_only_paycheck_ends_before_the_combined_plan_starts()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _financialPatterns.Save(Bill(100, "Old job", 3000m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 15)), accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, raisedCurrent, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+        confirmation.Run();
+
+        captured.ShouldNotBeNull();
+        var cascade = captured!.Rows.OfType<ChoiceRow>().Single(r => r.Id == ConfirmationRowIds.Cascade);
+        cascade.Options[0].Children.OfType<ChoiceRow>().ShouldNotContain(r => r.Id == ConfirmationRowIds.ConsolidationSpread);
+    }
+
+    // The old job ends in August and the new one starts in September; only the new one pays while the combined plan runs, so the spread question is asked.
+    [Fact]
+    public void The_spread_question_is_asked_when_one_paycheck_pays_while_the_combined_plan_runs()
+    {
+        var current = Bill(1, "Rent", -1000m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        var successor = Bill(2, "Rent", -1000m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1));
+        _financialPatterns.Save(current, accountId: 1);
+        _financialPatterns.Save(successor, accountId: 1);
+        _financialPatterns.Save(Bill(100, "Old job", 3000m, new DateOnly(2025, 1, 1), new DateOnly(2025, 8, 15)), accountId: 1);
+        _financialPatterns.Save(Bill(101, "New job", 3200m, new DateOnly(2025, 9, 5), new DateOnly(2026, 6, 30)), accountId: 1);
+        _earMarkPatterns.Save(Plan(successor, -600m, new DateOnly(2025, 9, 1), new DateOnly(2025, 12, 1)));
+        _earMarkPatterns.Save(Plan(successor, -400m, new DateOnly(2025, 10, 1), new DateOnly(2025, 12, 1)));
+
+        var raisedCurrent = Bill(1, "Rent", -1200m, new DateOnly(2025, 7, 1), new DateOnly(2025, 8, 31));
+        ImplicitChangeConfirmationRequest? captured = null;
+        var confirmation = Confirmation(1, raisedCurrent, accountId: 1, Forecast());
+        confirmation.ConfirmImplicitChanges = request => { captured = request; return Confirm.Proceed(); };
+        confirmation.Run();
+
+        captured.ShouldNotBeNull();
+        var cascade = captured!.Rows.OfType<ChoiceRow>().Single(r => r.Id == ConfirmationRowIds.Cascade);
+        cascade.Options[0].Children.OfType<ChoiceRow>().ShouldContain(r => r.Id == ConfirmationRowIds.ConsolidationSpread);
+    }
+
     [Fact]
     public void Combining_with_keep_current_rate_holds_the_plans_own_rate_not_the_goal()
     {

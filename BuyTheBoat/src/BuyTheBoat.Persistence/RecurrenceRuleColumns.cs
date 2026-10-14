@@ -4,14 +4,12 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.Persistence;
 
-// Shared between FinancialPatternRepository, EarMarkPatternRepository, and
-// TransferRepository — all three tables store a RecurrenceRule using the same
-// seven columns.
+/// <summary>Reads and writes a RecurrenceRule's eight columns, for FinancialPatternRepository, EarMarkPatternRepository, and TransferRepository, whose tables all store a rule the same way.</summary>
 internal static class RecurrenceRuleColumns
 {
     private const string DateFormat = "yyyy-MM-dd";
 
-    /// <summary>[WRITES FILE] Adds a recurrence rule's seven columns as SQL parameters, ready for an INSERT/UPDATE. Shared by FinancialPatternRepository, EarMarkPatternRepository, and TransferRepository, since all three tables store a rule the same way.</summary>
+    /// <summary>[WRITES FILE] Adds a recurrence rule's eight columns as SQL parameters, ready for an INSERT or UPDATE.</summary>
     /// <param name="command">The command to add parameters to.</param>
     /// <param name="rule">The rule to serialize.</param>
     public static void AddParameters(SqliteCommand command, RecurrenceRule rule)
@@ -37,7 +35,7 @@ internal static class RecurrenceRuleColumns
                 : DBNull.Value);
     }
 
-    /// <summary>[CALC] Builds a RecurrenceRule from a row's six recurrence columns.</summary>
+    /// <summary>[CALC] Builds a RecurrenceRule from a row's eight recurrence columns.</summary>
     /// <param name="reader">The reader, positioned on the row to read.</param>
     public static RecurrenceRule Read(SqliteDataReader reader)
     {

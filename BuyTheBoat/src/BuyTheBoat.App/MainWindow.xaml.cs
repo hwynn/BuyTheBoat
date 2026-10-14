@@ -983,15 +983,8 @@ public partial class MainWindow : Window
                 Source = segment.Source,
                 Description = $"{StripRenewalMarker(segment.Description ?? segment.Source)} (renewed {renewalDate:yyyy-MM-dd})",
                 Notes = segment.Notes,
-                DatePattern = RecurrenceRule.Create(new RecurrenceRuleOptions
-                {
-                    Frequency = segment.DatePattern.Frequency,
-                    Interval = segment.DatePattern.Interval,
-                    ByDay = segment.DatePattern.ByDay,
-                    ByMonthDay = segment.DatePattern.ByMonthDay,
-                    DtStart = renewalDate,
-                    Until = renewalDate.AddYears(segmentYears),
-                }),
+                // Active from renewalDate but first occurring on the segment's next real date, so it keeps its days, as the continued plans below do.
+                DatePattern = segment.DatePattern.ReanchoredToStartOn(renewalDate).WithUntil(renewalDate.AddYears(segmentYears)),
                 Amount = segment.Amount,
                 Priority = segment.Priority,
                 Mandatory = segment.Mandatory,

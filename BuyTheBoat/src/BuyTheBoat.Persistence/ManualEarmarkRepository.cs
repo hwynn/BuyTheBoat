@@ -3,9 +3,10 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.Persistence;
 
-// User-created one-off jar adjustments. The (FinanceId, EarmarkDate) primary
-// key IS the documented one-isolated-earmark-per-jar-per-day merge rule:
-// saving onto an occupied day replaces that day's manual amount.
+/// <summary>
+/// Stores manual (one-off) jar adjustments.
+/// The (FinanceId, EarmarkDate) primary key is the one-isolated-earmark-per-jar-per-day rule: saving onto a day that already has one replaces its amount.
+/// </summary>
 public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPatternRepository earMarkPatterns)
 {
     private const string DateFormat = "yyyy-MM-dd";
@@ -32,12 +33,7 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
     /// <summary>[READS FILE] Returns every manual (one-off) earmark, validated against its linked savings plan.</summary>
     public IReadOnlyList<ManualEarmark> GetAll()
     {
-        // Grouped by FinanceId, not keyed by it alone: a finance id can have
-        // more than one EarMarkPattern (a second concurrent earmark pattern, or a
-        // break-off predecessor+successor pair), so a stored earmark is
-        // validated against whichever sibling plan actually covers its
-        // date, not just whichever one happened to load first (see
-        // Concurrent_plans_on_the_same_goal_dont_crash_GetAll_and_validate_against_the_right_one).
+        // Groups plans by FinanceId, since a goal can have several (plans running at once, or a break-off's earlier and later plan), so each earmark is checked against the plan covering its date.
         var plansByFinanceId = earMarkPatterns.GetAll()
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => group.ToList());
@@ -53,24 +49,15 @@ public sealed class ManualEarmarkRepository(PatternDatabase database, EarMarkPat
             var financeId = reader.GetInt32(0);
             var date = DateOnly.ParseExact(reader.GetString(1), DateFormat, CultureInfo.InvariantCulture);
 
-            // Re-validates against the linked earmark pattern on the way
-            // out, same as ManualEarmark.Create going in — both paths go
-            // through the one place that enforces the
-            // pattern-span-is-jar-lifetime rule. A row whose pattern has
-            // since shrunk its span would throw here;
-            // EarMarkPatternRepository.Delete's own cascade prevents the
-            // orphan case, and span edits are the restructuring feature's
-            // own concern.
+            // No plan for this finance id means the earmark's jar is gone, which is corrupt data.
             if (!plansByFinanceId.TryGetValue(financeId, out var candidatePlans))
             {
                 throw new InvalidOperationException(
                     $"ManualEarmark for finance id {financeId} has no matching EarMarkPattern — data is corrupt.");
             }
 
-            // Prefer whichever sibling plan's own span actually covers this
-            // date; fall back to the first so a genuinely out-of-span earmark
-            // still fails through ManualEarmark.Create's own, more specific
-            // error below rather than a generic one here.
+            // Re-validates through ManualEarmark.Create against the plan whose span covers this date, so reads and writes enforce the plan-span-is-jar-lifetime rule in one place.
+            // Falls back to the first plan so an earmark outside every span fails with ManualEarmark.Create's more specific error.
             var pattern = candidatePlans.Find(candidate => candidate.DatePattern.ActiveSpanContains(date))
                 ?? candidatePlans[0];
 

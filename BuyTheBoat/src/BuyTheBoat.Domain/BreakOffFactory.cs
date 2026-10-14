@@ -349,15 +349,11 @@ public static class BreakOffFactory
             SuccessorFinanceId = request.SuccessorFinanceId,
             // Unchanged from the predecessor — a renewal is not a change.
             SuccessorAmount = request.Predecessor.Amount,
-            SuccessorSchedule = new RecurrenceRuleOptions
-            {
-                Frequency = request.Predecessor.DatePattern.Frequency,
-                Interval = request.Predecessor.DatePattern.Interval,
-                ByDay = request.Predecessor.DatePattern.ByDay,
-                ByMonthDay = request.Predecessor.DatePattern.ByMonthDay,
-                DtStart = request.RenewalDate,
-                Until = request.RenewalDate.AddYears(request.SegmentYears),
-            },
+            // Active from RenewalDate but first occurring on the predecessor's next real date, so it keeps its days.
+            SuccessorSchedule = request.Predecessor.DatePattern
+                .ReanchoredToStartOn(request.RenewalDate)
+                .WithUntil(request.RenewalDate.AddYears(request.SegmentYears))
+                .ToOptions(),
             CarriedOverJarBalance = request.CarriedOverJarBalance,
             AllPatterns = request.AllPatterns,
         });

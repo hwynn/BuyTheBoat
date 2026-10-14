@@ -11,12 +11,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
-        // Keyed on (FinanceId, StartDate), not FinanceId alone: more than
-        // one plan may fund the same goal in sequence (a "Restructure"
-        // predecessor + successor), so this updates the one row that
-        // already starts on that date — typically the same plan being
-        // re-edited — and inserts a new row for a genuinely new segment
-        // starting on a different date.
+        // Keyed on (FinanceId, StartDate), since one goal can have several plans in sequence (a Restructure's earlier and later plan): this updates the row starting on the same date and inserts a new row for a plan starting on a different date.
         command.CommandText = """
             INSERT INTO EarMarkPatterns
                 (FinanceId, Amount, Frequency, IntervalValue, ByDay, ByMonthDay, StartDate, UntilDate, ActiveFrom, StartingAllocation, ExcludedDates, ExplicitlyCreated)
@@ -61,11 +56,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
             var explicitlyCreated = reader.GetInt32(reader.GetOrdinal("ExplicitlyCreated")) != 0;
             var datePattern = RecurrenceRuleColumns.Read(reader);
 
-            // Re-validates against the linked goal on the way back out, same
-            // as EarMarkPattern.Create does going in — a goal's own dates
-            // can't have changed underneath it since this was saved, but
-            // this keeps both read and write paths going through the one
-            // place that enforces 3.11.2.a2.
+            // Re-validates against the linked goal through EarMarkPattern.Create, so reads and writes both enforce 3.11.2.a2 in one place.
             var goal = financialPatterns.GetByFinanceId(financeId)
                 ?? throw new InvalidOperationException(
                     $"EarMarkPattern {financeId} has no matching FinancialPattern — data is corrupt.");
@@ -91,9 +82,7 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
     {
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
-        // The pattern's span is the fund jar's lifetime, so the jar's manual
-        // adjustments die with the pattern — otherwise they'd be orphans
-        // pointing at a jar that no longer exists.
+        // Deletes the plan's manual earmarks too, since the plan's span is the jar's lifetime and they'd otherwise point at a jar that no longer exists.
         command.CommandText = """
             DELETE FROM ManualEarmarks WHERE FinanceId = $FinanceId;
             DELETE FROM EarMarkPatterns WHERE FinanceId = $FinanceId;
@@ -102,9 +91,13 @@ public sealed class EarMarkPatternRepository(PatternDatabase database, Financial
         command.ExecuteNonQuery();
     }
 
-    /// <summary>[DELETES] Removes one savings plan segment — the one starting on a specific date — without touching any sibling segment sharing the same finance id, or that segment's own ManualEarmarks. Needed whenever a segment's own Start moves (PatternTruncation.StartOn): Save's own (FinanceId, StartDate) upsert key means saving the moved segment inserts a second row rather than replacing the original, since its StartDate no longer matches — this is the other half of that move, removing the stale row left at the old StartDate. Unlike the FinanceId-only Delete above, this deliberately does NOT cascade to ManualEarmarks — the caller has already decided which of those survive (the ones now on or after the new Start) and which don't.</summary>
+    /// <summary>
+    /// [DELETES] Removes one savings plan segment, the one starting on startDate, leaving other segments with the same finance id and all manual earmarks alone.
+    /// Needed when a segment's Start moves (PatternTruncation.StartOn): Save's (FinanceId, StartDate) key makes saving the moved segment insert a new row, so this removes the stale row left at the old Start.
+    /// Unlike Delete, it doesn't delete manual earmarks, since the caller has already decided which ones survive.
+    /// </summary>
     /// <param name="financeId">Which goal or bill's savings plan this segment belongs to.</param>
-    /// <param name="startDate">Which segment to remove, by its own (now-stale) Start.</param>
+    /// <param name="startDate">Which segment to remove, by its old Start.</param>
     public void Delete(int financeId, DateOnly startDate)
     {
         using var connection = database.OpenConnection();

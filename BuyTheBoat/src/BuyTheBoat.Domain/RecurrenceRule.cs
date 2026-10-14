@@ -168,6 +168,8 @@ public sealed class RecurrenceRule
         }
 
         // The new DtStart is the first occurrence on or after the new start; an ActiveFrom lead-in covers any gap, so the active span begins exactly where asked.
+        // Searches at least Interval + 1 years past the new start, which covers one full period of any frequency, so a new start past Until (a renewal) still finds the next real occurrence.
+        var searchUntil = newActiveStart.AddYears(Interval + 1);
         var grid = Create(new RecurrenceRuleOptions
         {
             Frequency = Frequency,
@@ -175,7 +177,7 @@ public sealed class RecurrenceRule
             ByDay = ByDay,
             ByMonthDay = ByMonthDay,
             DtStart = anchor,
-            Until = Until >= anchor ? Until : anchor,
+            Until = Until > searchUntil ? Until : searchUntil,
             ExcludedDates = ExcludedDates,
         });
         var onOrAfter = grid.GetOccurrences(newActiveStart, grid.Until);

@@ -833,6 +833,7 @@ public sealed class FinancePatternSaveConfirmation
         var book = _requestForecast().Book;
         var candidates = new List<FinancialPattern>();
         var anyConsolidating = false;
+        var hasIncomeForSpread = false;
 
         foreach (var successor in context.OtherPatterns.Where(pattern => pattern.DatePattern.ActiveStart > context.Saved.DatePattern.ActiveStart))
         {
@@ -843,7 +844,8 @@ public sealed class FinancePatternSaveConfirmation
                 continue; // the carry-forward doesn't touch this successor
             }
 
-            if (book.EarMarkPatternsFor(successor.FinanceId).Count <= 1)
+            var plans = book.EarMarkPatternsFor(successor.FinanceId);
+            if (plans.Count <= 1)
             {
                 continue; // a single earmark pattern is re-rated/re-aligned, never consolidated
             }
@@ -854,15 +856,19 @@ public sealed class FinancePatternSaveConfirmation
             {
                 candidates.Add(successor);
             }
+
+            // The spread question only matters when "Across your paydays" can actually pace: exactly one paycheck paying within the dates the combined plan would cover.
+            // Those dates and that count match EarmarkConsolidation.Consolidate and BuildSchedule: from the later of the earliest plan's start and the segment's start, through the segment's end.
+            var earliestPlanStart = plans.Min(plan => plan.DatePattern.ActiveStart);
+            var start = earliestPlanStart > successor.DatePattern.ActiveStart ? earliestPlanStart : successor.DatePattern.ActiveStart;
+            var accountId = _repositories.FinancialPatterns.GetAccountId(successor.FinanceId) ?? _accountId;
+            hasIncomeForSpread |= AllocationPlanProposer.ActiveIncomeStreams(
+                PatternsToPaceAgainst(book.AllFinancialPatterns(), accountId), start, successor.DatePattern.Until).Count == 1;
         }
 
         _crossBoundaryConsolidations = candidates;
         _consolidationStrategyApplies = anyConsolidating;
-        // The spread question only matters with exactly one income stream to pace against.
-        // Counts income still paying on or after today, so a broken-off income's ended predecessor doesn't count as a second stream (as in AllocationPlanProposer.ActiveIncomeStreams).
-        var asOfToday = _requestForecast().AsOfDate;
-        _consolidationHasIncomeForSpread = anyConsolidating
-            && PatternsToPaceAgainst(book.AllFinancialPatterns(), _accountId).Count(pattern => pattern.Amount > 0m && pattern.DatePattern.Until >= asOfToday) == 1;
+        _consolidationHasIncomeForSpread = hasIncomeForSpread;
     }
 
     /// <summary>

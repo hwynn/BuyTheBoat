@@ -2,10 +2,10 @@ using Microsoft.Data.Sqlite;
 
 namespace BuyTheBoat.Persistence;
 
-// One connection-per-operation (not a long-lived shared connection) — this is
-// a single-user desktop app talking to a local file, so simplicity wins over
-// pooling cleverness. Lives under LocalAppData by default so data survives
-// rebuilds and repeated `dotnet run`/F5 launches, not next to the binaries.
+/// <summary>
+/// The SQLite database, opened with a new connection for each operation rather than one shared connection, since this is a single-user app on a local file.
+/// AppPaths decides where the file lives: under LocalAppData normally, so data survives rebuilds and repeated runs, or in the portable demo's own folder.
+/// </summary>
 public sealed class PatternDatabase
 {
     private readonly string _connectionString;
@@ -25,7 +25,10 @@ public sealed class PatternDatabase
         Initialize();
     }
 
-    /// <summary>[CALC] Returns the live database file's path — under LocalAppData normally, or inside the portable demo's own folder when this is that demo. Delegates to AppPaths, which owns the whole where-do-files-go decision.</summary>
+    /// <summary>
+    /// [CALC] The live database file's path: under LocalAppData normally, or in the portable demo's folder.
+    /// AppPaths makes that decision.
+    /// </summary>
     public static string DefaultDatabasePath() => AppPaths.DatabasePath;
 
     /// <summary>[READS FILE] Opens a new connection to this database. One connection per operation — callers dispose it when done.</summary>
@@ -36,7 +39,10 @@ public sealed class PatternDatabase
         return connection;
     }
 
-    /// <summary>[READS FILE] Checks whether a file is actually a BuyTheBoat database. Used before Import overwrites the live database with it, so the user doesn't accidentally wipe their data with an unrelated file.</summary>
+    /// <summary>
+    /// [READS FILE] Checks whether a file is actually a BuyTheBoat database.
+    /// Import checks this before overwriting the live database, so an unrelated file can't wipe the user's data.
+    /// </summary>
     /// <param name="path">The file to check.</param>
     public static bool LooksLikeValidDatabaseFile(string path)
     {
@@ -58,10 +64,16 @@ public sealed class PatternDatabase
         }
     }
 
-    /// <summary>[CALC] Releases every pooled native SQLite connection handle. Called before Import overwrites the live database file — Microsoft.Data.Sqlite keeps pooled handles open even after every SqliteConnection using them has been disposed, which would otherwise block the overwrite.</summary>
+    /// <summary>
+    /// [CALC] Releases every pooled SQLite connection handle; Import calls it before overwriting the live database file.
+    /// Microsoft.Data.Sqlite keeps pooled handles open after their connections are disposed, which would block the overwrite.
+    /// </summary>
     public static void ReleasePooledConnections() => SqliteConnection.ClearAllPools();
 
-    /// <summary>[WRITES FILE] Overwrites one database file with another, first releasing pooled handles and deleting the destination's leftover -wal/-shm/-journal scratch files. Without that cleanup, a stale journal from the old data (left by an earlier crash) could be rolled back into the freshly copied file the next time it opens, corrupting it — the reason the SeedData tool clears the same scratch files when it resets the database. Used by Import to swap in the selected file.</summary>
+    /// <summary>
+    /// [WRITES FILE] Overwrites one database file with another; Import uses it to swap in the chosen file.
+    /// First releases pooled handles and deletes the destination's leftover -wal, -shm, and -journal files, since a stale journal from an earlier crash could otherwise be rolled back into the new file and corrupt it.
+    /// </summary>
     /// <param name="sourcePath">The database file to copy in.</param>
     /// <param name="destinationPath">The live database file to overwrite.</param>
     public static void ReplaceDatabaseFile(string sourcePath, string destinationPath)
@@ -85,7 +97,12 @@ public sealed class PatternDatabase
         File.Copy(sourcePath, destinationPath, overwrite: true);
     }
 
-    /// <summary>[READS FILE] Whether the app could actually LOAD this database file — a deeper check than LooksLikeValidDatabaseFile's table-presence one. Opens a throwaway copy, runs the same schema migrations startup would, then reads every repository (each re-validates its rows on the way out, the way the live app does). Catches an old-version or subtly-inconsistent export that passes the lighter check but would then crash the app on its first forecast after import — an orphaned earmark, a row outside its plan's span, and the like. Returns a short reason when it can't load, or null when it loads cleanly. Never throws: a failure to check is itself reported as "can't load."</summary>
+    /// <summary>
+    /// [READS FILE] Whether the app could actually load this database file, a deeper check than LooksLikeValidDatabaseFile's table check.
+    /// Opens a throwaway copy, runs the startup migrations, then reads every repository, each of which re-validates its rows as the live app does.
+    /// Catches an old or inconsistent export that would pass the lighter check but crash the app on its first forecast, such as an orphaned earmark or a row outside its plan's span.
+    /// Returns a short reason when it can't load, or null when it loads cleanly; never throws, since a failed check is reported as "can't load."
+    /// </summary>
     /// <param name="path">The database file to check.</param>
     public static string? DescribeLoadFailure(string path)
     {
@@ -98,9 +115,7 @@ public sealed class PatternDatabase
             var financialPatterns = new FinancialPatternRepository(database);
             var earMarkPatterns = new EarMarkPatternRepository(database, financialPatterns);
 
-            // Reading each is what exercises the corruption guards — a plan with no pattern, an earmark
-            // with no plan, a row outside its plan's span — the exact throws that would otherwise crash
-            // the app on load. Discarded; this is only about whether they read without throwing.
+            // Reads each repository so its corruption checks run (a plan with no pattern, an earmark with no plan, a row outside its plan's span); the results are discarded.
             _ = financialPatterns.GetAll();
             _ = earMarkPatterns.GetAll();
             _ = new ManualEarmarkRepository(database, earMarkPatterns).GetAll();
@@ -130,7 +145,10 @@ public sealed class PatternDatabase
         }
     }
 
-    /// <summary>[WRITES FILE] Creates every table this app needs if they don't exist yet, then runs each schema migration in order. Idempotent — safe to run on every startup, on a fresh database or one already migrated by an earlier run.</summary>
+    /// <summary>
+    /// [WRITES FILE] Creates every table this app needs if it doesn't exist yet, then runs each schema migration in order.
+    /// Safe to run on every startup, on a fresh or an already-migrated database.
+    /// </summary>
     private void Initialize()
     {
         using var connection = OpenConnection();
@@ -226,86 +244,54 @@ public sealed class PatternDatabase
             """;
         command.ExecuteNonQuery();
 
-        // First schema migration this project has needed. CREATE TABLE IF
-        // NOT EXISTS only guards table creation — a database that already
-        // had CurrentBalance from before HorizonEndDate existed won't pick up
-        // the new column from the statement above.
+        // CREATE TABLE IF NOT EXISTS doesn't add new columns to an existing table, so each column added later goes through EnsureColumn.
         EnsureColumn(connection, "CurrentBalance", "HorizonEndDate", "TEXT NULL");
         EnsureColumn(connection, "CurrentBalance", "IdealSafetyCushion", "TEXT NULL");
         EnsureColumn(connection, "EarMarkPatterns", "StartingAllocation", "TEXT NOT NULL DEFAULT '0'");
 
-        // Which account each pattern is FILED UNDER. This is storage only — the
-        // domain FinancialPattern has no account property; a pattern belongs
-        // to an account by living in that account's page. Pages are never
-        // persisted, so this column is the only place that containment can
-        // be recorded and rebuilt from on load. The DEFAULT 1 *is* the
-        // migration: every pre-existing pattern files under the seeded
-        // "primary" account.
+        // Which account each pattern is filed under; storage only, since the domain FinancialPattern has no account and account pages aren't saved.
+        // DEFAULT 1 files older patterns under the "primary" account.
         EnsureColumn(connection, "FinancialPatterns", "AccountId", "INTEGER NOT NULL DEFAULT 1");
 
-        // Which transfer a pattern is a pattern of, if any. NULL for ordinary
-        // user-created patterns; set for a transfer's two patterns, which are
-        // hidden from the pattern list and shown as one transfer instead. The
-        // engine still reads every pattern, transfer patterns included.
+        // Which transfer a pattern belongs to, or NULL for an ordinary pattern.
+        // A transfer's two patterns are hidden from the pattern list and shown as one transfer, but the forecast still reads them.
         EnsureColumn(connection, "FinancialPatterns", "TransferId", "INTEGER NULL");
 
-        // The ActiveFrom lead-in: a nullable date on a pattern's rrule,
-        // earlier than its first occurrence, so a jar can exist before the
-        // pattern's occurrences begin. NULL for every pre-existing pattern —
-        // the migration is simply the absence of a value (no lead-in).
+        // The ActiveFrom lead-in: a date before a rule's first occurrence, so a jar can exist before its occurrences begin.
+        // NULL means no lead-in, which is what older rows get.
         EnsureColumn(connection, "FinancialPatterns", "ActiveFrom", "TEXT NULL");
         EnsureColumn(connection, "EarMarkPatterns", "ActiveFrom", "TEXT NULL");
         EnsureColumn(connection, "Transfers", "ActiveFrom", "TEXT NULL");
 
-        // The AutoRenew marker: set invisibly when the user answers "it just
-        // keeps going" at creation. DEFAULT 0 *is* the migration — every
-        // pre-existing pattern was created before this question existed, so
-        // none of them opted in.
+        // The AutoRenew flag, set when the user answers "it just keeps going".
+        // DEFAULT 0, since older patterns never opted in.
         EnsureColumn(connection, "FinancialPatterns", "AutoRenew", "INTEGER NOT NULL DEFAULT 0");
 
-        // RFC 5545's own EXDATE: specific dates a schedule otherwise would
-        // land on, skipped anyway ("the glut case,"
-        // mechanism C). NULL for every pre-existing pattern — the migration
-        // is simply the absence of any exclusion, same shape as ActiveFrom's
-        // own migration above. Only the Earmark form's own recurrence editor
-        // exposes a way to set this today; FinancialPatterns/Transfers carry
-        // the column for schema symmetry with the shared RecurrenceRule type
-        // (same reasoning as their own unused-so-far ActiveFrom column), not
-        // because either form offers a way to populate it yet.
+        // RFC 5545's EXDATE: dates a schedule would land on but skips ("the glut case," mechanism C).
+        // NULL means none, which is what older rows get.
+        // Only the Earmark form's recurrence editor can set it; the other two tables have the column because they store the same RecurrenceRule.
         EnsureColumn(connection, "FinancialPatterns", "ExcludedDates", "TEXT NULL");
         EnsureColumn(connection, "EarMarkPatterns", "ExcludedDates", "TEXT NULL");
         EnsureColumn(connection, "Transfers", "ExcludedDates", "TEXT NULL");
 
-        // EarMarkPattern.ExplicitlyCreated — whether the user made this savings
-        // plan their own. Pre-existing rows predate the distinction, so they
-        // migrate as 1 (explicit);
+        // EarMarkPattern.ExplicitlyCreated: whether the user made this savings plan their own.
+        // Older rows become 1 (explicit), since they predate the distinction.
         EnsureColumn(connection, "EarMarkPatterns", "ExplicitlyCreated", "INTEGER NOT NULL DEFAULT 1");
 
-        // FinancialPattern.Notes — the user's free-form notes. NULL for every
-        // pre-existing pattern, meaning no notes.
+        // FinancialPattern.Notes, the user's free-form notes; NULL means none.
         EnsureColumn(connection, "FinancialPatterns", "Notes", "TEXT NULL");
 
-        // More than one EarMarkPattern may now share a finance_id, so
-        // FinanceId alone can no longer be the table's key. Run after the
-        // EnsureColumn calls above so a pre-existing table already has every
-        // column before it's copied across.
+        // Several EarMarkPatterns can share a FinanceId, so the key is (FinanceId, StartDate).
+        // Must run after the EnsureColumn calls above, so an older table has every column before it's copied across.
         EnsureEarMarkPatternsAllowMultiplePerFinanceId(connection);
 
-        // A manual earmark is about the GOAL (the jar), not any one plan
-        // segment, so it always should have referenced FinancialPatterns —
-        // but now it MUST: SQLite rejects any statement touching a table
-        // declaring REFERENCES EarMarkPatterns(FinanceId) once FinanceId
-        // alone is no longer that table's key ("foreign key mismatch",
-        // checked at prepare time regardless of PRAGMA foreign_keys).
+        // A manual earmark belongs to the goal (the jar), not one plan, so it references FinancialPatterns.
+        // It must: with EarMarkPatterns keyed on (FinanceId, StartDate), SQLite rejects any statement touching a table that declares REFERENCES EarMarkPatterns(FinanceId) ("foreign key mismatch", checked even without PRAGMA foreign_keys).
         EnsureManualEarmarksReferenceFinancialPatterns(connection);
 
-        // One-time backfill for the 3.11.2.a2 front-half check: a
-        // pre-existing goal whose savings plan starts before the goal's own
-        // Start had no ActiveFrom, which the check rejects on load. Give
-        // each such goal an ActiveFrom equal to its plan's Start —
-        // matching what creation now sets. Dates are stored as yyyy-MM-dd TEXT, so
-        // the string comparison sorts chronologically. Idempotent: only touches
-        // rows still NULL, so re-running does nothing.
+        // Backfill for the 3.11.2.a2 front-half check: an older goal whose savings plan starts before the goal's Start has no ActiveFrom, which the check rejects on load.
+        // Each such goal gets ActiveFrom equal to its plan's Start, as creation sets.
+        // Dates are yyyy-MM-dd text, so the string comparison sorts by date; only rows still NULL are touched, so re-running does nothing.
         using var backfill = connection.CreateCommand();
         backfill.CommandText = """
             UPDATE FinancialPatterns
@@ -321,17 +307,15 @@ public sealed class PatternDatabase
         backfill.ExecuteNonQuery();
     }
 
-    /// <summary>[WRITES FILE] Migrates the EarMarkPatterns table to its composite (FinanceId, StartDate) primary key, rebuilding the table if it's still on the old single-column key. Idempotent — a no-op on a fresh install or an already-migrated database.</summary>
+    /// <summary>
+    /// [WRITES FILE] Moves the EarMarkPatterns table to its (FinanceId, StartDate) primary key, rebuilding it if it's still keyed on FinanceId alone.
+    /// Does nothing on a fresh install or an already-migrated database.
+    /// </summary>
     /// <param name="connection">The open database connection to migrate.</param>
     private static void EnsureEarMarkPatternsAllowMultiplePerFinanceId(SqliteConnection connection)
     {
-        // SQLite can't alter a primary key in place, so this renames the
-        // old table aside, recreates it with the composite key the CREATE
-        // TABLE statement in Initialize() now declares, copies the data
-        // across, and drops the old copy. Checked via PRAGMA table_info
-        // rather than a version flag, so it's a no-op both on a fresh
-        // install (already created with the composite key) and on a
-        // database already migrated by an earlier run.
+        // SQLite can't change a primary key in place, so this renames the old table aside, recreates it with the key Initialize() declares, copies the rows, and drops the old table.
+        // Checks PRAGMA table_info rather than a version flag, so it does nothing on a fresh install or an already-migrated database.
         var startDateIsPartOfPrimaryKey = false;
         using (var checkCommand = connection.CreateCommand())
         {
@@ -353,11 +337,7 @@ public sealed class PatternDatabase
             return;
         }
 
-        // Columns beyond the original single-key shape (ActiveFrom,
-        // StartingAllocation, ExcludedDates) are already guaranteed present
-        // on the old table by the EnsureColumn calls that ran before this —
-        // carried across explicitly here so a database still old enough to
-        // need this migration doesn't lose them in the rebuild.
+        // Copies ActiveFrom, StartingAllocation, and ExcludedDates explicitly; the EnsureColumn calls before this have already added them to the old table.
         using var migrate = connection.CreateCommand();
         migrate.CommandText = """
             ALTER TABLE EarMarkPatterns RENAME TO EarMarkPatterns_old_singlekey;
@@ -388,19 +368,14 @@ public sealed class PatternDatabase
         migrate.ExecuteNonQuery();
     }
 
-    /// <summary>[WRITES FILE] Repoints ManualEarmarks at FinancialPatterns if it isn't already, rebuilding the table if needed. Idempotent — a no-op on a fresh install or an already-migrated database.</summary>
+    /// <summary>
+    /// [WRITES FILE] Repoints ManualEarmarks at FinancialPatterns if it isn't already, rebuilding the table if needed.
+    /// Does nothing on a fresh install or an already-migrated database.
+    /// </summary>
     /// <param name="connection">The open database connection to migrate.</param>
     private static void EnsureManualEarmarksReferenceFinancialPatterns(SqliteConnection connection)
     {
-        // Checked via PRAGMA foreign_key_list rather than a version flag,
-        // so it's a no-op both on a fresh install (already created
-        // referencing FinancialPatterns) and on a database already
-        // migrated by an earlier run. Checks for the one thing that
-        // actually matters — does it already correctly reference
-        // FinancialPatterns — so it self-heals from any stale target left
-        // behind by an interrupted migration, not just one specific name
-        // (see PatternRepositoryTests:
-        // A_manual_earmarks_table_referencing_a_stale_leftover_table_is_repointed_at_financial_patterns).
+        // Checks PRAGMA foreign_key_list for a reference to FinancialPatterns rather than a version flag, so it does nothing on an already-correct table and also repairs one left pointing at a stale table by an interrupted migration.
         var alreadyReferencesFinancialPatterns = false;
         using (var checkCommand = connection.CreateCommand())
         {

@@ -4,10 +4,10 @@ using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.Persistence;
 
-// A transfer is stored as its canonical Transfers row PLUS two ordinary
-// FinancialPatterns — a withdrawal and a deposit (saved through
-// FinancialPatternRepository, tagged with this transfer's id). The row is the
-// definition; the patterns are what the cascade actually consumes.
+/// <summary>
+/// Stores a transfer as its Transfers row plus two ordinary FinancialPatterns, a withdrawal and a deposit, saved through FinancialPatternRepository and tagged with the transfer's id.
+/// The row defines the transfer; the patterns are what the forecast uses.
+/// </summary>
 public sealed class TransferRepository(PatternDatabase database, FinancialPatternRepository financialPatterns)
 {
     /// <summary>[WRITES FILE] Saves a transfer's canonical row plus its withdrawal and deposit patterns.</summary>
@@ -16,9 +16,7 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
     {
         var transfer = result.Transfer;
 
-        // Not wrapped in one transaction — matching the rest of this
-        // single-user layer; a torn write leaves the pair inconsistent,
-        // which the validation sweep is there to catch.
+        // Not one transaction, like the rest of this single-user layer, so an interrupted write can leave the row and its two patterns out of step.
         using (var connection = database.OpenConnection())
         using (var command = connection.CreateCommand())
         {
@@ -80,7 +78,7 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
-    /// <summary>[DELETES] Removes a transfer, along with its withdrawal and deposit patterns — the pair is always managed through the transfer, never edited on its own.</summary>
+    /// <summary>[DELETES] Removes a transfer along with its withdrawal and deposit patterns; the pair is only ever managed through the transfer.</summary>
     /// <param name="id">The transfer to delete.</param>
     public void Delete(int id)
     {
@@ -93,7 +91,10 @@ public sealed class TransferRepository(PatternDatabase database, FinancialPatter
         command.ExecuteNonQuery();
     }
 
-    /// <summary>[READS FILE] Reports whether any transfer moves money in or out of an account — checked before an account can be deleted, for a clearer message than the generic pattern guard alone would give.</summary>
+    /// <summary>
+    /// [READS FILE] Whether any transfer moves money in or out of an account.
+    /// Checked before an account can be deleted, for a clearer message than the general pattern check gives.
+    /// </summary>
     /// <param name="accountId">The account to check.</param>
     public bool IsAccountReferenced(int accountId)
     {

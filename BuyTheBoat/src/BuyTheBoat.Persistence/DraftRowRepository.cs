@@ -2,10 +2,10 @@ using Microsoft.Data.Sqlite;
 
 namespace BuyTheBoat.Persistence;
 
-// One draft row from the Bills & Paychecks › Spreadsheet subtab: a bill or paycheck
-// jotted down but not yet saved through the Form. Every cell is kept exactly as typed,
-// invalid text included, so nothing the user wrote is lost between runs.
-// Blank cells are "", never null.
+/// <summary>
+/// One draft row from the Bills &amp; Paychecks › Spreadsheet subtab: a bill or paycheck jotted down but not yet saved through the Form.
+/// Every cell is kept exactly as typed, invalid text included, so nothing the user wrote is lost between runs; blank cells are "", never null.
+/// </summary>
 public sealed record DraftRow
 {
     public required int Id { get; init; }
@@ -23,8 +23,10 @@ public sealed record DraftRow
     public string Notes { get; init; } = "";
 }
 
-// Storage for draft rows (the DraftPatterns table). Ids are app-assigned (NextId = max + 1), like accounts.
-// Drafts come back in Id order, so a new draft lands at the bottom of the drafts section.
+/// <summary>
+/// Stores draft rows (the DraftPatterns table), with Ids assigned by the app (NextId = max + 1) like accounts.
+/// Drafts come back in Id order, so a new draft lands at the bottom of the drafts section.
+/// </summary>
 public sealed class DraftRowRepository(PatternDatabase database)
 {
     private const string Columns =
