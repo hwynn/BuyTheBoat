@@ -45,14 +45,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-launch report is resolved.
-        // File-based (not MessageBox) so this can be launched and inspected non-interactively.
-        // Logs at every step between opening the database and RefreshGrids populating the grids, to find exactly where a fresh read stops matching what's on disk.
-        Log("=== MainWindow constructor start ===");
-        Log($"PID: {Environment.ProcessId}, UserName: {Environment.UserName}");
-        var diagnosticPath = PatternDatabase.DefaultDatabasePath();
-        Log($"Resolved path: {diagnosticPath}, Exists: {File.Exists(diagnosticPath)}, Size: {(File.Exists(diagnosticPath) ? new FileInfo(diagnosticPath).Length : -1)}");
-
         // In the portable demo, make the labeled data\/logs\/backups\/exports\ folders exist from first launch so the tester can see where things live; a no-op on a normal LocalAppData run.
         AppPaths.EnsurePortableFoldersExist();
 
@@ -65,15 +57,10 @@ public partial class MainWindow : Window
         _manualEarmarks = new ManualEarmarkRepository(database, _earMarkPatterns);
         _draftRows = new DraftRowRepository(database);
 
-        Log($"Immediately after construction — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, EarMarkPatterns.GetAll().Count: {_earMarkPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
-
         // Migration: there is always at least one account.
         // On the first run after accounts were added, the old single balance/cushion becomes the "primary" account, so nothing the user already entered is lost.
         var legacy = _currentBalance.GetCurrent();
         _accounts.EnsureDefaultAccount(legacy?.Balance ?? 0m, legacy?.IdealSafetyCushion ?? 0m);
-
-        Log($"After EnsureDefaultAccount — FinancialPatterns.GetAll().Count: {_financialPatterns.GetAll().Count}, Accounts.GetAll().Count: {_accounts.GetAll().Count}");
-
         // The permanent Earmark tab persists through these callbacks instead of a ShowDialog() == true check — this panel owns no repository itself.
         EarmarkForm.PatternSaved = OnEarmarkPatternSaved;
         EarmarkForm.ManualEarmarksSaved = (saved, deleted) =>
@@ -165,22 +152,6 @@ public partial class MainWindow : Window
         RefreshGrids();
         RefreshAccountsGrid();
         LoadSavedBalance();
-        Log("=== MainWindow constructor end ===");
-    }
-
-    // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-launch report is resolved.
-    private static readonly string DiagnosticLogPath = Path.Combine(Path.GetTempPath(), "mmf-diagnostic.log");
-
-    private static void Log(string message)
-    {
-        try
-        {
-            File.AppendAllText(DiagnosticLogPath, $"{DateTime.Now:HH:mm:ss.fff} {message}\n");
-        }
-        catch
-        {
-            // Diagnostic logging itself must never be why the app fails.
-        }
     }
 
     /// <summary>[UI] Snapshots the panel needs before every Load* call — repeated rather than held live.</summary>
@@ -1039,7 +1010,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             // A single malformed ongoing pattern must not break the whole forecast.
-            Log($"Skipped renewing ongoing pattern {segment.FinanceId} ({segment.Source}): {ex.Message}");
+            ErrorLog.Record($"renewing ongoing pattern {segment.FinanceId} ({segment.Source}); skipped it", ex);
         }
     }
 
@@ -1106,7 +1077,7 @@ public partial class MainWindow : Window
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {
                 // A single malformed transfer must not break the whole forecast.
-                Log($"Skipped extending ongoing transfer {transfer.Id}: {ex.Message}");
+                ErrorLog.Record($"extending ongoing transfer {transfer.Id}; skipped it", ex);
             }
         }
     }
@@ -1775,9 +1746,6 @@ public partial class MainWindow : Window
     {
         var financialPatterns = _financialPatterns.GetAll();
         var earMarkPatterns = _earMarkPatterns.GetAll();
-
-        // TEMPORARY DIAGNOSTIC — remove once the empty-grids-on-launch report is resolved.
-        Log($"RefreshGrids — financialPatterns.Count: {financialPatterns.Count}, earMarkPatterns.Count: {earMarkPatterns.Count}");
 
         // financeId -> the name of the account it's filed under, so the grid can show where each bill/paycheck/goal lives — never a mystery.
         var accountNamesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
