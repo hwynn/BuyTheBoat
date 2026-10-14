@@ -28,10 +28,7 @@ public sealed record ForecastResult
     /// <summary>The household roll-up across all accounts: each day's summed free and set-aside amounts and which accounts are short.</summary>
     public required HouseholdSummary Household { get; init; }
 
-    /// <summary>
-    /// The "Primary" account's page, or the first account's when there's no "Primary", so the single-account spreadsheet export always finds a page.
-    /// The exporter has no multi-account form yet.
-    /// </summary>
+    /// <summary>The "Primary" account's page, or the first account's when there's no "Primary", so a caller with no account in mind always finds a page.</summary>
     public AccountTransactionPage PrimaryAccountPage =>
         Book.LogPages[0].AccountPages.TryGetValue(TransactionLogBookFactory.PrimaryAccountName, out var primary)
             ? primary
@@ -39,6 +36,9 @@ public sealed record ForecastResult
 
     /// <summary>[CALC] Returns the primary account's page rendered as timeline rows.</summary>
     public IReadOnlyList<TimelineEntry> GetTimeline() => BuildTimeline(PrimaryAccountPage);
+
+    /// <summary>[CALC] Returns one account's page rendered as timeline rows.</summary>
+    public IReadOnlyList<TimelineEntry> GetTimeline(AccountForecast account) => BuildTimeline(account.Page);
 
     /// <summary>
     /// [CALC] Returns timeline rows for the account whose page holds this finance id's savings plan, rather than the primary account.
