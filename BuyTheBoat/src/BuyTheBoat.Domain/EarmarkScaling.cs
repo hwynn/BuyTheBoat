@@ -62,6 +62,7 @@ public static class EarmarkScaling
         var start = plan.DatePattern.ActiveStart > goal.DatePattern.ActiveStart ? plan.DatePattern.ActiveStart : goal.DatePattern.ActiveStart;
         var end = goal.DatePattern.Until;
 
+        // Leaves out the goal's manual earmarks, the same gap as ScaleToMeetGoal's alreadyBanked.
         var neededTotal = Math.Max(0m, Math.Abs(goal.Amount) * goal.DatePattern.GetOccurrences(start, end).Count - plan.StartingAllocation);
         var currentTotal = perContribution * plan.DatePattern.WithExcludedDates([]).GetOccurrences(start, end).Count;
         var surplus = currentTotal - neededTotal;
@@ -150,6 +151,8 @@ public static class EarmarkScaling
 
         var releaseCount = goal.DatePattern.GetOccurrences(start, end).Count;
         var totalReleases = Math.Abs(goal.Amount) * releaseCount;
+        // Leaves out the goal's manual earmarks, which EarmarkConsolidation counts: after a one-off add the suggested rate runs high, after a withdrawal it runs low.
+        // The forecast's health checks still count them, so a plan saved at a wrong rate shows as over- or underfunded afterwards.
         var alreadyBanked = plans.Sum(plan => plan.StartingAllocation);
         var neededTotal = Math.Max(0m, totalReleases - alreadyBanked);
 
