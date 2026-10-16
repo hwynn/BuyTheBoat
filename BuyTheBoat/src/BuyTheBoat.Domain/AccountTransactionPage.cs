@@ -24,7 +24,6 @@ public sealed record AccountTransactionPage
 
     /// <summary>
     /// The cushion's priority (3.9.a1: can't be None), always 0 so it's drained first.
-    /// Not yet enforced: no finance pattern may share this exact value.
     /// </summary>
     public int SafetyPriority { get; init; }
 

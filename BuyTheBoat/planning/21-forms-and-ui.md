@@ -191,10 +191,6 @@ differ per page.
   gap (the engine only walks forward from the as-of date), which **actual transactions**
   ([12](12-actual-transactions-deferred-design.md)) would provide; deferred with them. The current
   build is the older "dates a release came up short" definition.
-- **The transient "fixed" message** on the RRule preview (clears an at-open warning as the user types)
-  — its wording constants exist (`PlanHealthMessages.FixedNoLonger*`) but nothing diffs at-open vs.
-  live health to show them yet.
 - **`MaybeStartingEarmark` auto-saves its starting earmark** though no assumption requires it — by the
-  Forced/Suggested rule that's Suggested (should stay pending), not Forced. Left auto-saved
-  deliberately (the urgency that motivates it argues for not risking it going unconfirmed); flagged as
-  a known exception, not decided.
+  Forced/Suggested rule that's Suggested (should stay pending), not Forced.
+  Decided 2026-10-15: make it a suggestion ([22](22-unfinished-work.md)).

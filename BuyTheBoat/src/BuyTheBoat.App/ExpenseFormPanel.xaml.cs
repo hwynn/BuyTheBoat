@@ -14,9 +14,7 @@ namespace BuyTheBoat.App;
 /// <remarks>
 /// The Summary region shows the linked plan from the forecast, the plan Save would propose when there's none yet (AllocationPlanProposer.Propose), or just the goal when several plans fund it (see UpdateSummary).
 /// TODO:
-/// - The break-off-mode toggle (existing, repeating instances only) isn't wired.
 /// - The Save button's outline only reflects the plan's saved health; checking whether the typed edit would newly cause a problem isn't built.
-/// - There's no advanced way to hand-build a single occurrence; a one-time Expense only gets the plain Due-date field.
 /// </remarks>
 public partial class ExpenseFormPanel : UserControl
 {

@@ -95,11 +95,6 @@ public static class PlanHealthMessages
     /// </summary>
     public const string UnderfundedReleaseHighlightLegend = "Highlighted: this release came up short of what it needed.";
 
-    // Placeholder copy for a not-yet-built mechanism (the form's at-open-vs-live diff).
-    // Unused for now; the strings exist so whoever builds that diff needn't invent the copy.
-    public const string FixedNoLongerShort = "Fixed — no longer short";
-    public const string FixedNoLongerOverfunded = "Fixed — no longer overfunded";
-
     /// <summary>
     /// [CALC] The Starting-point region's warning, taking raw values so an unsaved plan's live check can use it as well as a saved reading.
     /// A one-time goal names the goal rather than "the first payment", since it's the only one.

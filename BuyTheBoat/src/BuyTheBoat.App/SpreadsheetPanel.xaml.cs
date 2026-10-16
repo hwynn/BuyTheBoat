@@ -20,8 +20,6 @@ namespace BuyTheBoat.App;
 /// This panel has no repository: MainWindow stores the drafts through the callbacks below, like the form panels.
 /// </summary>
 /// <remarks>
-/// TODO: make saved rows editable here once this grid runs the same checks and confirmations the Form does on save.
-/// TODO: after fixing one red cell, offer to apply the same fix to every other draft cell in that column with the same text.
 /// Ideas, not planned: remember fixes so future pastes tidy them automatically (needs its own table); a suggestion that fills two cells at once ("every 2 weeks" → Frequency Weekly and Every 2).
 /// </remarks>
 public partial class SpreadsheetPanel : UserControl

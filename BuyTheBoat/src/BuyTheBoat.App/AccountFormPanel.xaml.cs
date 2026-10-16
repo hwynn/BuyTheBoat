@@ -10,9 +10,6 @@ namespace BuyTheBoat.App;
 /// AccountRepository's UNIQUE column is the backstop; it's case-sensitive, matched here with StringComparison.Ordinal.
 /// IsPopulated means an existing account is loaded; IsDirty and IsPopulated drive MainWindow's tab-header styling and this form's Save button.
 /// </summary>
-/// <remarks>
-/// TODO: two helper regions for editing an account: "cushion held vs. target" (needs a live forecast read) and "Referenced by: N Expenses, M Transfers".
-/// </remarks>
 public partial class AccountFormPanel : UserControl
 {
     private IReadOnlyList<Account> _existingAccounts = [];

@@ -14,11 +14,6 @@ namespace BuyTheBoat.App;
 /// PerformImplicitEarmarkChanges carries out that break-off: a newly proposed successor (PerformSingleSuccessorBreakOff), or, when more than one plan funds the goal, one combined successor (PerformMultiPlanBreakOff) or the plans kept separate (PerformMultiPlanKeepSeparateBreakOff), with a shape or start change forcing the combine.
 /// After every save, whatever was asked, two checks keep each plan's span inside its goal's (3.11.2.a2): the back truncations for Until and the front truncations for Start.
 /// FinancePatternSaveConfirmationTests drives Run() with real repositories and a real forecast.
-///
-/// TODO:
-/// - A recurrence-shape change still forces plans to be combined; keeping them separate is offered otherwise. Kept as is for now.
-/// - Chain side effects beyond the cascade-forward built here are on hold for now.
-/// - A one-time catch-up for an underfunded goal could be added as another correction in DetermineGoalHealthSuggestionIfApplicable.
 /// </remarks>
 public sealed class FinancePatternSaveConfirmation
 {
@@ -532,7 +527,7 @@ public sealed class FinancePatternSaveConfirmation
 
         HasExplicitEarmarkPattern = savingsPlan.Any(plan => plan.ExplicitlyCreated);
 
-        // Plans can only keep their own dates on a break-off when the successor keeps the same shape and start, so a change to either forces them to combine (see the TODO in the class remarks).
+        // Plans can only keep their own dates on a break-off when the successor keeps the same shape and start, so a change to either forces them to combine.
         ConsolidationNeeded = HasMultipleEarmarkPatterns && (_recurrenceShapeChanged || _startChanged);
 
         ChangeWarrantsSuggestions = forecast.PlanHealthStates
@@ -578,7 +573,6 @@ public sealed class FinancePatternSaveConfirmation
         // Editing a segment that has a later segment is saved in place, even when it reaches past history: the user opens the earliest segment to change, and the change flows forward (PerformSave and PerformImplicitEarmarkChanges also check hasSuccessor).
         // Only a Critical edit of the current segment breaks off from today; its typed Start and Until never land on the chain, so the boundary question is skipped for it.
         TouchesChainBoundary = (!IsChangeCritical || hasSuccessor) && ((startChanged && hasPredecessor) || (untilChanged && hasSuccessor));
-        // TODO: compose the cascade question onto a Critical edit's break-off successor too, not just an existing forward segment.
         ChangeCanCascade = (_amountChanged || _recurrenceShapeChanged) && hasSuccessor;
         TrivialFieldsCanCascade = trivialFieldsChanged && hasSuccessor;
 

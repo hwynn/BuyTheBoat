@@ -27,7 +27,6 @@ public sealed record ProposedAllocationPlan(FinancialPattern Outflow, EarMarkPat
 /// The save confirmation offers ProposeSameSchedule and ProposeSameAmount on a break-off, alongside Propose's default.
 /// Each returns null when its result wouldn't be ideal, or would match Propose's default.
 /// Both take carriedOverJarBalance rather than reading existingPlan.StartingAllocation, which is frozen when the plan was created; the caller reads the jar's real balance off the forecast, as for BreakOffRequest.CarriedOverJarBalance.
-/// TODO: the goal-health suggestion doesn't offer these alternatives yet; only the break-off's plan-shape picker does.
 ///
 /// IsPacedAgainst and FindPlansPacedAgainst find which existing plans were paced against an income, since no stored field records that link.
 /// They're a deliberately narrow heuristic; FinancePatternSaveConfirmation.PerformPaycheckAssociationCascadeIfApplicable uses them to re-propose those plans when the user opts in.
