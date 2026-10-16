@@ -92,6 +92,41 @@ public sealed record ForecastOptions
             }).ToList(),
         };
     }
+
+    /// <summary>
+    /// [CALC] Returns a copy of these options with one bill or paycheck swapped for an unsaved version, filed under the given account.
+    /// The saved pattern with the same finance id is dropped; when the account changes, its savings plans and manual earmarks move with it, as saving would move them.
+    /// Forecasting the result previews "what if I saved this edit in place", so the Expense form's status can react to what's typed.
+    /// </summary>
+    /// <param name="proposed">The not-yet-saved pattern to fold in.</param>
+    /// <param name="accountId">The account the pattern would be filed under; ignored when Accounts isn't used.</param>
+    public ForecastOptions WithProposedPattern(FinancialPattern proposed, int accountId)
+    {
+        var financeId = proposed.FinanceId;
+        var movingPlans = Accounts?.SelectMany(account => account.EarMarkPatterns).Where(plan => plan.FinanceId == financeId).ToList() ?? [];
+        var movingManuals = Accounts?.SelectMany(account => account.ManualEarmarks).Where(manual => manual.FinanceId == financeId).ToList() ?? [];
+
+        return this with
+        {
+            FinancialPatterns = FinancialPatterns.Where(existing => existing.FinanceId != financeId).Append(proposed).ToList(),
+            Accounts = Accounts?.Select(account =>
+            {
+                var withoutIt = account with
+                {
+                    FinancialPatterns = account.FinancialPatterns.Where(pattern => pattern.FinanceId != financeId).ToList(),
+                    EarMarkPatterns = account.EarMarkPatterns.Where(plan => plan.FinanceId != financeId).ToList(),
+                    ManualEarmarks = account.ManualEarmarks.Where(manual => manual.FinanceId != financeId).ToList(),
+                };
+
+                return account.AccountId != accountId ? withoutIt : withoutIt with
+                {
+                    FinancialPatterns = [.. withoutIt.FinancialPatterns, proposed],
+                    EarMarkPatterns = [.. withoutIt.EarMarkPatterns, .. movingPlans],
+                    ManualEarmarks = [.. withoutIt.ManualEarmarks, .. movingManuals],
+                };
+            }).ToList(),
+        };
+    }
 }
 
 /// <summary>

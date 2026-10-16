@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using BuyTheBoat.Domain;
 
 namespace BuyTheBoat.App;
@@ -13,8 +14,6 @@ namespace BuyTheBoat.App;
 /// </summary>
 /// <remarks>
 /// The Summary region shows the linked plan from the forecast, the plan Save would propose when there's none yet (AllocationPlanProposer.Propose), or just the goal when several plans fund it (see UpdateSummary).
-/// TODO:
-/// - The Save button's outline only reflects the plan's saved health; checking whether the typed edit would newly cause a problem isn't built.
 /// </remarks>
 public partial class ExpenseFormPanel : UserControl
 {
@@ -49,6 +48,12 @@ public partial class ExpenseFormPanel : UserControl
 
     /// <summary>Gets the live forecast, computing it if needed (MainWindow.EnsureForecast, which always succeeds).</summary>
     public Func<ForecastResult>? RequestForecast { get; set; }
+
+    /// <summary>Forecasts with the typed pattern swapped in, filed under the given account (MainWindow.ForecastWithProposedPattern), so the status message reacts to unsaved edits.</summary>
+    public Func<FinancialPattern, int, ForecastResult>? RequestForecastWithProposedPattern { get; set; }
+
+    /// <summary>Delays the status message's what-if forecast until typing pauses, since a forecast is too heavy for every keystroke.</summary>
+    private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1.2) };
 
     /// <summary>
     /// Saves the pattern: (pattern, accountId, isNew, jumpToEarmark), returning whether the save went through.
@@ -86,6 +91,7 @@ public partial class ExpenseFormPanel : UserControl
         // Subscribed once, ever, not per-load — RuleEditor is one long-lived
         // instance, not a fresh control each time.
         RuleEditor.ResultChanged += (_, _) => MarkDirtyIfNotSuppressed();
+        _statusTimer.Tick += (_, _) => UpdateStatusIndicator();
 
         _initialized = true;
     }
@@ -668,15 +674,11 @@ public partial class ExpenseFormPanel : UserControl
             .ToList();
     }
 
-    /// <summary>
-    /// [UI] Shows the linked plan's health state next to the save buttons (PlanHealthMessages.ExpenseStatusLabel), and outlines "Save and Plan" when the plan isn't healthy.
-    /// It only reflects the saved plan; checking whether the typed edit would newly cause a problem isn't built.
-    /// </summary>
+    /// <summary>[UI] Shows the linked plan's health next to the save buttons (PlanHealthMessages.ExpenseStatusLabel), as the typed edit would leave it, and outlines "Save and Plan" when the plan isn't healthy.</summary>
     private void UpdateStatusIndicator()
     {
-        var health = _loadedExisting is { } existing
-            ? RequestForecast?.Invoke()?.PlanHealthStates.FirstOrDefault(p => p.FinanceId == existing.FinanceId)
-            : null;
+        _statusTimer.Stop();
+        var health = LiveHealth();
         var label = health is null ? null : PlanHealthMessages.ExpenseStatusLabel(health.MostImportantHealthState);
 
         if (label is null)
@@ -691,6 +693,43 @@ public partial class ExpenseFormPanel : UserControl
             StatusText.Visibility = Visibility.Visible;
             SaveAndPlanButton.BorderBrush = new SolidColorBrush(Color.FromRgb(0x9A, 0x4F, 0x08));
             SaveAndPlanButton.BorderThickness = new Thickness(2);
+        }
+    }
+
+    /// <summary>
+    /// [CALC] The loaded Expense's plan health as saving the typed edit in place would leave it: the saved reading until something changes, then a what-if forecast.
+    /// Null for a new Expense, an edit that can't be built yet, or one Save would break off from today, since Save then proposes a fresh plan for the new amount and the save confirmation checks that.
+    /// </summary>
+    private PlanHealthState? LiveHealth()
+    {
+        if (_loadedExisting is not { } existing || RequestForecast?.Invoke() is not { } forecast)
+        {
+            return null;
+        }
+
+        PlanHealthState? HealthIn(ForecastResult result) =>
+            result.PlanHealthStates.FirstOrDefault(state => state.FinanceId == existing.FinanceId);
+
+        if (!_isDirty || RequestForecastWithProposedPattern is not { } requestWhatIf)
+        {
+            return HealthIn(forecast);
+        }
+
+        if (TryBuildPattern() is not { } typed
+            || AccountComboBox.SelectedValue is not int accountId
+            || FinancePatternSaveConfirmation.WillBreakOff(existing, typed, forecast.Book.AllFinancialPatterns(), forecast.AsOfDate))
+        {
+            return null;
+        }
+
+        try
+        {
+            return HealthIn(requestWhatIf(typed, accountId));
+        }
+        catch (ArgumentException)
+        {
+            // The typed edit breaks a forecast rule, such as moving the bill's dates out from under its plan; Save fixes those, so there's no reading to show yet.
+            return null;
         }
     }
 
@@ -718,6 +757,8 @@ public partial class ExpenseFormPanel : UserControl
         if (_initialized && !_suppressEvents)
         {
             MarkDirty();
+            _statusTimer.Stop();
+            _statusTimer.Start();
         }
     }
 

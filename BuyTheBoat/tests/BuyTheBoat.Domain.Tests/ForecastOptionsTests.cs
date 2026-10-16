@@ -152,6 +152,57 @@ public class ForecastOptionsTests
         result.EarMarkPatterns.Select(plan => plan.FinanceId).OrderBy(id => id).ShouldBe([1, 2]);
     }
 
+    [Fact]
+    public void WithProposedPattern_swaps_the_goal_so_its_health_follows_the_typed_amount()
+    {
+        // The plan sets aside $550 by Dec 1: short of the saved $600 goal, exactly enough for a typed $550 one.
+        var options = Options([Goal(1)], [Plan(1)]);
+        var typed = FinancialPattern.Create(new FinancialPatternOptions
+        {
+            FinanceId = 1,
+            Source = "goal1",
+            DatePattern = Goal(1).DatePattern,
+            Amount = -550m,
+        });
+
+        TransactionLogBookFactory.CreateForecast(options).GoalShortfalls.Single().ShortfallAmount.ShouldBe(50m);
+        TransactionLogBookFactory.CreateForecast(options.WithProposedPattern(typed, accountId: 0))
+            .GoalShortfalls.Single().ShortfallAmount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void WithProposedPattern_moves_the_plans_and_manual_earmarks_to_a_new_account()
+    {
+        var manual = ManualEarmark.Create(
+            new ManualEarmarkOptions { FinanceId = 1, Date = new DateOnly(2026, 3, 1), Amount = 20m },
+            Plan(1));
+        var options = Options([], []) with
+        {
+            Accounts =
+            [
+                new AccountForecastInput
+                {
+                    AccountId = 1, Name = "Checking", StartingBalance = 1000m,
+                    FinancialPatterns = [Goal(1)], EarMarkPatterns = [Plan(1)], ManualEarmarks = [manual],
+                },
+                new AccountForecastInput
+                {
+                    AccountId = 2, Name = "Savings", StartingBalance = 1000m,
+                    FinancialPatterns = [], EarMarkPatterns = [],
+                },
+            ],
+        };
+
+        var moved = options.WithProposedPattern(Goal(1), accountId: 2).Accounts!;
+
+        moved[0].FinancialPatterns.ShouldBeEmpty();
+        moved[0].EarMarkPatterns.ShouldBeEmpty();
+        moved[0].ManualEarmarks.ShouldBeEmpty();
+        moved[1].FinancialPatterns.ShouldHaveSingleItem().FinanceId.ShouldBe(1);
+        moved[1].EarMarkPatterns.ShouldHaveSingleItem().FinanceId.ShouldBe(1);
+        moved[1].ManualEarmarks.ShouldHaveSingleItem().ShouldBe(manual);
+    }
+
     private static decimal JarExpectedOn(ForecastResult forecast, int financeId, DateOnly date) =>
         forecast.GetTimeline(financeId)
             .Where(entry => entry.Date <= date)

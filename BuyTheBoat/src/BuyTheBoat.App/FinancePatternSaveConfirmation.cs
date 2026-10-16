@@ -483,9 +483,53 @@ public sealed class FinancePatternSaveConfirmation
     private static ConsolidationSpread ChoseConsolidationSpread(ConfirmationOutcome outcome) =>
         Chosen(outcome, ConfirmationRowIds.ConsolidationSpread) == 1 ? ConsolidationSpread.Evenly : ConsolidationSpread.AcrossPaydays;
 
+    /// <summary>[CALC] Whether an edit changes the pattern's frequency, interval, weekdays or month days.</summary>
+    private static bool RecurrenceShapeChanged(FinancialPattern saved, FinancialPattern proposed) =>
+        saved.DatePattern.Frequency != proposed.DatePattern.Frequency ||
+        saved.DatePattern.Interval != proposed.DatePattern.Interval ||
+        !saved.DatePattern.ByDay.SequenceEqual(proposed.DatePattern.ByDay) ||
+        !saved.DatePattern.ByMonthDay.SequenceEqual(proposed.DatePattern.ByMonthDay);
+
+    /// <summary>[CALC] Whether an edit changes the start, amount or schedule of a pattern that already has an occurrence on or before today, so it reaches history (IsChangeCritical).</summary>
+    /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
+    internal static bool IsCriticalChange(FinancialPattern saved, FinancialPattern proposed, DateOnly asOfDate)
+    {
+        var restrictedFieldChanged = RecurrenceShapeChanged(saved, proposed)
+            || saved.DatePattern.ActiveStart != proposed.DatePattern.ActiveStart
+            || saved.Amount != proposed.Amount;
+
+        // 1.2.3.10.a5: an occurrence on or before the as-of date counts as "an expected transaction on an expired page in the past" with today's single page.
+        // Checked on the saved pattern, since what already happened doesn't depend on the edit.
+        var hasPastOccurrence = saved.DatePattern.GetOccurrences(to: asOfDate).Count > 0;
+
+        // A pattern that started today or yesterday has no history worth keeping, so the edit replaces it in place instead of breaking off.
+        // That skips the "you're changing history" confirmation and avoids BreakOffFactory rejecting a cut on the pattern's own start date.
+        var negligibleHistoryToPreserve = asOfDate <= saved.DatePattern.ActiveStart.AddDays(1);
+
+        return restrictedFieldChanged && hasPastOccurrence && !negligibleHistoryToPreserve;
+    }
+
+    /// <summary>
+    /// [CALC] Whether saving this edit would break the pattern off from today instead of changing it in place: a Critical edit of the chain's latest segment.
+    /// A Critical edit of an earlier segment is saved in place and flows forward, as DetermineChainConditionsIfApplicable explains.
+    /// </summary>
+    /// <param name="allPatterns">Every saved pattern, to look for a later segment of the same chain.</param>
+    /// <param name="asOfDate">Today, or the forecast's as-of date.</param>
+    internal static bool WillBreakOff(FinancialPattern saved, FinancialPattern proposed, IReadOnlyList<FinancialPattern> allPatterns, DateOnly asOfDate)
+    {
+        // The same later-segment test as DetermineChainConditionsIfApplicable's hasSuccessor.
+        var hasLaterSegment = allPatterns.Any(pattern =>
+            pattern.Source == saved.Source
+            && pattern.FinanceId != saved.FinanceId
+            && !BreakOffFactory.SpansOverlap(pattern, saved)
+            && pattern.DatePattern.ActiveStart > saved.DatePattern.ActiveStart);
+
+        return IsCriticalChange(saved, proposed, asOfDate) && !hasLaterSegment;
+    }
+
     /// <summary>
     /// [CALC] Works out the conditions above from the saved plan and the proposed edit.
-    /// It reads the current forecast rather than simulating the edit, so ChangeWarrantsSuggestions only catches a plan that's already concerning, not one this edit would newly make concerning (the Expense form's status indicator has the same gap).
+    /// It reads the current forecast rather than simulating the edit, so ChangeWarrantsSuggestions only catches a plan that's already concerning, not one this edit would newly make concerning.
     /// Internal so FinancePatternSaveConfirmationTests can call it directly.
     /// </summary>
     internal void DetermineConditions()
@@ -499,28 +543,15 @@ public sealed class FinancePatternSaveConfirmation
 
         var forecast = _requestForecast();
 
-        _recurrenceShapeChanged =
-            saved.DatePattern.Frequency != _proposedPattern.DatePattern.Frequency ||
-            saved.DatePattern.Interval != _proposedPattern.DatePattern.Interval ||
-            !saved.DatePattern.ByDay.SequenceEqual(_proposedPattern.DatePattern.ByDay) ||
-            !saved.DatePattern.ByMonthDay.SequenceEqual(_proposedPattern.DatePattern.ByMonthDay);
+        _recurrenceShapeChanged = RecurrenceShapeChanged(saved, _proposedPattern);
 
         // Counts ActiveFrom as well as Start, since either moves the active span and can strand a plan or manual earmark outside it.
         _startChanged = saved.DatePattern.ActiveStart != _proposedPattern.DatePattern.ActiveStart;
 
         _amountChanged = saved.Amount != _proposedPattern.Amount;
-        var restrictedFieldChanged = _recurrenceShapeChanged || _startChanged || _amountChanged;
         _isAmountOnlyChange = _amountChanged && !_startChanged && !_recurrenceShapeChanged;
 
-        // 1.2.3.10.a5: an occurrence on or before the as-of date counts as "an expected transaction on an expired page in the past" with today's single page.
-        // Checked on the saved pattern, since what already happened doesn't depend on the edit.
-        var hasPastOccurrence = saved.DatePattern.GetOccurrences(to: forecast.AsOfDate).Count > 0;
-
-        // A pattern that started today or yesterday has no history worth keeping, so the edit replaces it in place instead of breaking off.
-        // That skips the "you're changing history" confirmation and avoids BreakOffFactory rejecting a cut on the pattern's own start date.
-        var negligibleHistoryToPreserve = forecast.AsOfDate <= saved.DatePattern.ActiveStart.AddDays(1);
-
-        IsChangeCritical = restrictedFieldChanged && hasPastOccurrence && !negligibleHistoryToPreserve;
+        IsChangeCritical = IsCriticalChange(saved, _proposedPattern, forecast.AsOfDate);
 
         var savingsPlan = forecast.Book.EarMarkPatternsFor(_financeId);
         HasMultipleEarmarkPatterns = savingsPlan.Count > 1;

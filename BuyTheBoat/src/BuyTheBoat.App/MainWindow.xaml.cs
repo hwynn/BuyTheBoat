@@ -103,6 +103,7 @@ public partial class MainWindow : Window
             SwitchToTab("Accounts");
         };
         ExpenseForm.RequestForecast = EnsureForecast;
+        ExpenseForm.RequestForecastWithProposedPattern = ForecastWithProposedPattern;
         ExpenseForm.PatternSaved = OnExpensePatternSaved;
         ExpenseForm.PickChainSegment = PickChainSegmentToEdit;
 
@@ -1137,6 +1138,20 @@ public partial class MainWindow : Window
         var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
         return TransactionLogBookFactory.CreateForecast(
             BuildForecastOptions(asOfDate, horizonEnd).WithManualEarmark(oneOff));
+    }
+
+    /// <summary>
+    /// [CALC] Re-runs the forecast with the Expense form's typed bill or paycheck swapped in — the live "what if I saved this edit" reading behind the form's status message and "Save and Plan" outline.
+    /// Same inputs and window as the shown forecast; a throwaway calculation, never stored on _lastForecast.
+    /// </summary>
+    /// <param name="proposed">The typed, not-yet-saved pattern.</param>
+    /// <param name="accountId">The account picked on the form.</param>
+    private ForecastResult ForecastWithProposedPattern(FinancialPattern proposed, int accountId)
+    {
+        var asOfDate = _lastForecast?.AsOfDate ?? CurrentAsOfDate();
+        var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
+        return TransactionLogBookFactory.CreateForecast(
+            BuildForecastOptions(asOfDate, horizonEnd).WithProposedPattern(proposed, accountId));
     }
 
     /// <summary>
