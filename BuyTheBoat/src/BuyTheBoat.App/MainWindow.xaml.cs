@@ -2023,7 +2023,15 @@ public partial class MainWindow : Window
                 // AutoCreateAllocationPlan does nothing for income, so plan stays null and the income branch below handles it; the plan is re-read afterward.
                 if (plan is null)
                 {
-                    AutoCreateAllocationPlan(pattern, accountId);
+                    // A suggested starting earmark opens in the form as an unsaved edit, so it's saved only if the user saves the plan.
+                    if (AutoCreateAllocationPlan(pattern, accountId) is { } suggestedStart)
+                    {
+                        suggestedOverrides = new Dictionary<string, object?>(suggestedOverrides ?? new Dictionary<string, object?>())
+                        {
+                            [EarmarkFieldOverrideKeys.StartingEarmarkAmount] = suggestedStart.Amount,
+                        };
+                    }
+
                     plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
                 }
 
@@ -2075,6 +2083,7 @@ public partial class MainWindow : Window
         if (!jumpToEarmark)
         {
             // The NavigateToEarmarkForm callback above never fires for "Save and Skip planning" (Run() only invokes it when planning wasn't skipped) — same AutoCreateAllocationPlan-then-refresh sequence, just without any Earmark-tab navigation at the end.
+            // Skipping planning leaves out the suggested starting earmark; the first bill shows as short until the user covers it.
             if (isNew)
             {
                 AutoCreateAllocationPlan(pattern, accountId);
@@ -2214,25 +2223,23 @@ public partial class MainWindow : Window
     /// <summary>
     /// [CALC] Every scheduled expense reserves through its own Allocation Plan (the allocation model), proposed at creation from the current as-of date and the user's income.
     /// Income never gets one.
-    /// The plan (and any starting earmark, for a bill due before its first paycheck) is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed.
+    /// The plan is persisted like a savings plan and appears in the earmark grid, where it can be edited or removed.
+    /// A starting earmark, for a bill due before its first paycheck, is only suggested: it's returned unsaved for the Earmark form to offer, or null when none is needed.
     /// Transfer patterns are excluded from the income scan so a deposit isn't mistaken for a paycheck, and the scan is scoped to this expense's own account — a paycheck filed under a different account never actually funds this one.
     /// </summary>
     /// <param name="pattern">The newly-created expense to propose an allocation plan for.</param>
     /// <param name="accountId">Which account the expense is filed under — scopes the income scan.</param>
-    private void AutoCreateAllocationPlan(FinancialPattern pattern, int accountId)
+    private ManualEarmark? AutoCreateAllocationPlan(FinancialPattern pattern, int accountId)
     {
         if (ProposeAllocationPlanFor(pattern, accountId, CurrentAsOfDate()) is not { } proposal)
         {
-            return;
+            return null;
         }
 
         // The proposer may stretch the expense's active span back to the as-of date (its ActiveFrom) so its plan fits — persist that prepared expense, not the original, or the plan reads short against a goal whose own Start is later.
         _financialPatterns.Save(proposal.Outflow, accountId);
         _earMarkPatterns.Save(proposal.Plan);
-        if (proposal.StartingEarmark is { } starting)
-        {
-            _manualEarmarks.Save(starting);
-        }
+        return proposal.StartingEarmark;
     }
 
     /// <summary>

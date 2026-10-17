@@ -191,6 +191,6 @@ differ per page.
   gap (the engine only walks forward from the as-of date), which **actual transactions**
   ([12](12-actual-transactions-deferred-design.md)) would provide; deferred with them. The current
   build is the older "dates a release came up short" definition.
-- **`MaybeStartingEarmark` auto-saves its starting earmark** though no assumption requires it — by the
-  Forced/Suggested rule that's Suggested (should stay pending), not Forced.
-  Decided 2026-10-15: make it a suggestion ([22](22-unfinished-work.md)).
+- **`MaybeStartingEarmark`'s starting earmark is Suggested, not Forced**, since no assumption requires it.
+  For a new bill it opens in the Earmark form as an unsaved edit after "Save and Plan", and is left out after "Save and Skip planning".
+  One proposed inside a dialog the user confirms (re-proposing plans paced against a changed paycheck, a bill or transfer break-off) counts as accepted and is saved with it.

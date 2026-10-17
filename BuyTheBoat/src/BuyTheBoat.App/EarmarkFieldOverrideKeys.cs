@@ -11,4 +11,7 @@ public static class EarmarkFieldOverrideKeys
 
     /// <summary>IReadOnlyList&lt;DateOnly&gt;: contribution dates to skip (RFC 5545 EXDATE), for a "skip some events" correction, filled into the skip list as if picked by hand.</summary>
     public const string ExcludedDates = "excludedDates";
+
+    /// <summary>decimal: a starting earmark's amount (positive = into the jar), filled into the Starting-point box as if typed, so it saves only when the user saves.</summary>
+    public const string StartingEarmarkAmount = "startingEarmarkAmount";
 }

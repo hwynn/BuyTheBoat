@@ -246,6 +246,11 @@ public partial class EarmarkFormPanel : UserControl
         {
             RuleEditor.SetExcludedDates(excludedDates);
         }
+
+        if (overrides.TryGetValue(EarmarkFieldOverrideKeys.StartingEarmarkAmount, out var startingValue) && startingValue is decimal startingAmount)
+        {
+            StartingEarmarkAmountTextBox.Text = startingAmount.ToString(CultureInfo.InvariantCulture);
+        }
     }
 
     /// <summary>[STEP] One-off adjustment mode, blank (add, with an optional goal preselected) or pre-filled (edit). A withdrawal or move exceeding what the fund holds is blocked; an add exceeding free balance warns but is allowed.</summary>
@@ -381,24 +386,38 @@ public partial class EarmarkFormPanel : UserControl
             ? _allPlansByFinanceId[goal.FinanceId].Where(plan => plan.DatePattern.ActiveSpansOverlap(newest.DatePattern)).ToList()
             : [];
 
+    /// <summary>[CALC] The days a one-off on this goal can fall on: from the earliest start to the latest end of its plans running at the same time (ConcurrentPlans); null when the goal has no plan.</summary>
+    private (DateOnly Start, DateOnly Until)? OneOffSpan(FinancialPattern goal) =>
+        ConcurrentPlans(goal) is { Count: > 0 } plans
+            ? (plans.Min(plan => plan.DatePattern.ActiveStart), plans.Max(plan => plan.DatePattern.Until))
+            : null;
+
+    /// <summary>
+    /// [CALC] A plan whose span holds this date, for ManualEarmark.Create's check that a one-off falls inside a plan.
+    /// The goal's most recently started plan when none does, so Create gives its usual out-of-span error; null when the goal has no plan.
+    /// </summary>
+    private EarMarkPattern? PlanCovering(FinancialPattern goal, DateOnly date) =>
+        ConcurrentPlans(goal).FirstOrDefault(plan => plan.DatePattern.ActiveSpanContains(date))
+            ?? _patternsByFinanceId.GetValueOrDefault(goal.FinanceId);
+
     /// <summary>[UI] Asks whether to discard unsaved changes; the same helper as ExpenseFormPanel's, since the panels share no base class.</summary>
     /// <param name="message">The confirmation prompt to show.</param>
     private bool ConfirmDiscard(string message) =>
         MessageBox.Show(Window.GetWindow(this), message, "Unsaved changes", MessageBoxButton.YesNo, MessageBoxImage.Warning)
             == MessageBoxResult.Yes;
 
-    /// <summary>[UI] Limits the one-off date picker to the goal's plan span, clearing a picked date that no longer fits after the goal changes.</summary>
+    /// <summary>[UI] Limits the one-off date picker to the days the goal's plans cover (OneOffSpan), clearing a picked date that no longer fits after the goal changes.</summary>
     private void UpdateEarmarkDatePickerBounds()
     {
-        if (_selectedGoal is not { } goal || !_patternsByFinanceId.TryGetValue(goal.FinanceId, out var pattern))
+        if (_selectedGoal is not { } goal || OneOffSpan(goal) is not { } span)
         {
             EarmarkDatePicker.DisplayDateStart = null;
             EarmarkDatePicker.DisplayDateEnd = null;
             return;
         }
 
-        EarmarkDatePicker.DisplayDateStart = pattern.DatePattern.ActiveStart.ToDateTime(TimeOnly.MinValue);
-        EarmarkDatePicker.DisplayDateEnd = pattern.DatePattern.Until.ToDateTime(TimeOnly.MinValue);
+        EarmarkDatePicker.DisplayDateStart = span.Start.ToDateTime(TimeOnly.MinValue);
+        EarmarkDatePicker.DisplayDateEnd = span.Until.ToDateTime(TimeOnly.MinValue);
 
         if (EarmarkDatePicker.SelectedDate is { } selected
             && (selected < EarmarkDatePicker.DisplayDateStart || selected > EarmarkDatePicker.DisplayDateEnd))
@@ -670,10 +689,9 @@ public partial class EarmarkFormPanel : UserControl
 
         var date = DateOnly.FromDateTime(selectedDate);
         var (jarBalance, free) = BalancesOn(date, goal.FinanceId);
-        var pattern = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId);
-        var span = pattern is null
-            ? string.Empty
-            : $" The fund's plan runs {pattern.DatePattern.ActiveStart:MMM d, yyyy} – {pattern.DatePattern.Until:MMM d, yyyy}.";
+        var span = OneOffSpan(goal) is { } days
+            ? $" The fund's {(ConcurrentPlans(goal).Count > 1 ? "plans run" : "plan runs")} {days.Start:MMM d, yyyy} – {days.Until:MMM d, yyyy}."
+            : string.Empty;
         BalanceInfoText.Text = $"On {date:MMMM d, yyyy}: this fund holds {jarBalance:C} · free balance {free:C}.{span}";
     }
 
@@ -793,7 +811,7 @@ public partial class EarmarkFormPanel : UserControl
     /// </summary>
     private void SaveOneOff()
     {
-        if (_selectedGoal is not { } goal || !_patternsByFinanceId.TryGetValue(goal.FinanceId, out var sourcePattern))
+        if (_selectedGoal is not { } goal || !_patternsByFinanceId.ContainsKey(goal.FinanceId))
         {
             throw new InvalidOperationException("Pick a goal with a savings plan to adjust.");
         }
@@ -803,6 +821,7 @@ public partial class EarmarkFormPanel : UserControl
             throw new InvalidOperationException("Pick a day.");
         }
         var date = DateOnly.FromDateTime(selectedDate);
+        var sourcePattern = PlanCovering(goal, date)!;
 
         if (!decimal.TryParse(OneOffAmountTextBox.Text, out var amount) || amount <= 0m)
         {
@@ -818,7 +837,7 @@ public partial class EarmarkFormPanel : UserControl
             {
                 throw new InvalidOperationException("Pick a different fund to move to.");
             }
-            if (!_patternsByFinanceId.TryGetValue(targetGoal.Pattern.FinanceId, out var targetPattern))
+            if (PlanCovering(targetGoal.Pattern, date) is not { } targetPattern)
             {
                 throw new InvalidOperationException("That goal has no savings plan to move funds into.");
             }
@@ -1068,9 +1087,10 @@ public partial class EarmarkFormPanel : UserControl
         var signedAmount = IsWithdraw || IsMove ? -typedAmount : typedAmount;
         try
         {
+            var date = DateOnly.FromDateTime(picked);
             return ManualEarmark.Create(
-                new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = DateOnly.FromDateTime(picked), Amount = signedAmount },
-                plan);
+                new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = date, Amount = signedAmount },
+                PlanCovering(goal, date) ?? plan);
         }
         catch (ArgumentException)
         {
@@ -1105,7 +1125,7 @@ public partial class EarmarkFormPanel : UserControl
         var signedAmount = IsWithdraw || IsMove ? -typedAmount : typedAmount;
         withoutThisEntry.Add(ManualEarmark.Create(
             new ManualEarmarkOptions { FinanceId = goal.FinanceId, Date = date, Amount = signedAmount },
-            plan));
+            PlanCovering(goal, date) ?? plan));
         return withoutThisEntry;
     }
 
@@ -1365,16 +1385,11 @@ public partial class EarmarkFormPanel : UserControl
             }
         }
 
-        // TODO: the narrative and chart describe only this plan, but the aside and its health figures add up every plan for this goal, so a verdict can look wrong without knowing another plan exists.
-        // How to show that is undecided (every plan, a combined chart, a picker?); for now the narrative just says another plan exists.
-        var hasConcurrentPlan = patternsForMilestone.Any(other =>
-            other.DatePattern.ActiveStart != plan.DatePattern.ActiveStart && // a different plan, not this one read back
-            // Overlapping means it runs at the same time; chain segments never overlap.
-            other.DatePattern.ActiveSpansOverlap(plan.DatePattern));
-        if (hasConcurrentPlan)
-        {
-            narrative += " Another earmark pattern is allocating funds alongside this one.";
-        }
+        // The chart and the aside add up every plan running at the same time (overlapping spans; chain segments never overlap), so the narrative names them too.
+        var concurrentPlans = patternsForMilestone
+            .Where(other => other.DatePattern.ActiveSpansOverlap(plan.DatePattern))
+            .ToList();
+        narrative += ConcurrentPlansSentence(concurrentPlans, plan, isOneOff);
 
         // Dates for up to 3 chart gridlines; empty for a one-time goal, which gets a plain "Due" label.
         var peakDates = isOneTime
@@ -1464,6 +1479,38 @@ public partial class EarmarkFormPanel : UserControl
             _ => "occurrence",
         };
         return interval <= 1 ? $"a {unit}" : $"every {interval} {unit}s";
+    }
+
+    /// <summary>
+    /// [CALC] The narrative's sentence naming the other plans running at the same time, like " Another plan also sets aside $50 a month toward it; the chart and the figures beside it count both."
+    /// In One-off mode no plan is open, so it names them all; empty when only one plan funds the goal.
+    /// </summary>
+    /// <param name="concurrentPlans">Every saved plan running at the same time as plan, plan's saved version included.</param>
+    /// <param name="plan">The plan the Summary is built around.</param>
+    /// <param name="isOneOff">Whether the form is in One-off mode.</param>
+    internal static string ConcurrentPlansSentence(IReadOnlyList<EarMarkPattern> concurrentPlans, EarMarkPattern plan, bool isOneOff)
+    {
+        static string Describe(EarMarkPattern other) =>
+            $"{Math.Abs(other.Amount):C0} {ContributionCadencePhrase(other.DatePattern.Frequency, other.DatePattern.Interval)}";
+
+        static string JoinWithAnd(IReadOnlyList<string> parts) =>
+            parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts.Take(parts.Count - 1))} and {parts[^1]}";
+
+        if (isOneOff)
+        {
+            return concurrentPlans.Count < 2
+                ? string.Empty
+                : $" {concurrentPlans.Count} plans fund it — {JoinWithAnd(concurrentPlans.Select(Describe).ToList())}; the chart and the figures beside it count them all.";
+        }
+
+        // Matched by start, since the open plan's saved version is in the list too.
+        var others = concurrentPlans.Where(other => other.DatePattern.ActiveStart != plan.DatePattern.ActiveStart).ToList();
+        return others.Count switch
+        {
+            0 => string.Empty,
+            1 => $" Another plan also sets aside {Describe(others[0])} toward it; the chart and the figures beside it count both.",
+            _ => $" {others.Count} other plans also set aside {JoinWithAnd(others.Select(Describe).ToList())} toward it; the chart and the figures beside it count them all.",
+        };
     }
 
     /// <summary>
