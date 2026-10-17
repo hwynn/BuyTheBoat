@@ -25,6 +25,9 @@ public partial class EarmarkFormPanel : UserControl
 
     private IReadOnlyList<FinancialPattern> _goals = [];
     private IReadOnlyDictionary<int, EarMarkPattern> _patternsByFinanceId = new Dictionary<int, EarMarkPattern>();
+
+    /// <summary>Every saved plan, grouped by goal, so Change... can offer a choice when several run at the same time.</summary>
+    private ILookup<int, EarMarkPattern> _allPlansByFinanceId = Array.Empty<EarMarkPattern>().ToLookup(plan => plan.FinanceId);
     private IReadOnlyList<ManualEarmark> _existingManualEarmarks = [];
     private IReadOnlySet<int> _transferFinanceIds = new HashSet<int>();
     private ForecastResult? _forecast;
@@ -59,6 +62,9 @@ public partial class EarmarkFormPanel : UserControl
     /// PatternSaved needs this original value to find the right row, since the plan it's handed carries the Start the form now shows.
     /// </summary>
     private DateOnly? _loadedPlanStart;
+
+    /// <summary>The saved plan open in Savings-plan mode, or null for a new one; a goal with several plans running at the same time can have an older one open.</summary>
+    private EarMarkPattern? _loadedPlan;
 
     /// <summary>
     /// False until the constructor finishes, because SavingsPlanRadio's IsChecked="True" in XAML fires Checked during InitializeComponent, before the other controls exist.
@@ -149,7 +155,7 @@ public partial class EarmarkFormPanel : UserControl
         _goals = goals;
 
         // Keeps each goal's most recently started plan, since a goal can have several.
-        // TODO: a picker for plans that run at the same time.
+        _allPlansByFinanceId = patterns.ToLookup(pattern => pattern.FinanceId);
         _patternsByFinanceId = patterns
             .GroupBy(pattern => pattern.FinanceId)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(p => p.DatePattern.ActiveStart).First());
@@ -175,6 +181,7 @@ public partial class EarmarkFormPanel : UserControl
         StartingEarmarkAmountTextBox.Text = string.Empty;
         _loadedActiveStart = null;
         _loadedPlanStart = null;
+        _loadedPlan = null;
 
         _suppressEvents = false;
         UpdateModeVisibility();
@@ -205,6 +212,7 @@ public partial class EarmarkFormPanel : UserControl
         StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
         _loadedActiveStart = existing.DatePattern.ActiveStart;
         _loadedPlanStart = existing.DatePattern.DtStart;
+        _loadedPlan = existing;
         RuleEditor.LoadFrom(existing.DatePattern);
         InferMatchToggle(goal, Math.Abs(existing.Amount));
 
@@ -249,6 +257,7 @@ public partial class EarmarkFormPanel : UserControl
         _suppressEvents = true;
         ErrorText.Text = string.Empty;
         _oneOffEditTarget = editTarget;
+        _loadedPlan = null;
         OneOffRadio.IsChecked = true;
 
         var goalsWithPlans = _goals.Where(goal => _patternsByFinanceId.ContainsKey(goal.FinanceId)).ToList();
@@ -330,6 +339,18 @@ public partial class EarmarkFormPanel : UserControl
             return;
         }
 
+        // Several plans running at the same time: asks which one to open, then loads it as Allocations › List › Edit Selected does.
+        if (SavingsPlanRadio.IsChecked == true && ConcurrentPlans(picked) is { Count: > 1 } concurrent)
+        {
+            var planPicker = new EarmarkPatternPickerWindow(concurrent) { Owner = Window.GetWindow(this) };
+            if (planPicker.ShowDialog() == true && planPicker.SelectedPlan is { } plan)
+            {
+                LoadPattern(plan, picked);
+            }
+
+            return;
+        }
+
         SetGoal(picked);
         MarkDirtyIfNotSuppressed();
 
@@ -347,6 +368,18 @@ public partial class EarmarkFormPanel : UserControl
 
         UpdateModeVisibility();
     }
+
+    /// <summary>[CALC] The saved plan an edit would replace: the one open in Savings-plan mode, otherwise the goal's most recently started plan; null when the goal has none.</summary>
+    private EarMarkPattern? OpenPlanFor(FinancialPattern goal) =>
+        SavingsPlanRadio.IsChecked == true && _loadedPlan?.FinanceId == goal.FinanceId
+            ? _loadedPlan
+            : _patternsByFinanceId.GetValueOrDefault(goal.FinanceId);
+
+    /// <summary>[CALC] The goal's saved plans that run at the same time as its most recently started one, that one included; empty when the goal has no plan.</summary>
+    private IReadOnlyList<EarMarkPattern> ConcurrentPlans(FinancialPattern goal) =>
+        _patternsByFinanceId.TryGetValue(goal.FinanceId, out var newest)
+            ? _allPlansByFinanceId[goal.FinanceId].Where(plan => plan.DatePattern.ActiveSpansOverlap(newest.DatePattern)).ToList()
+            : [];
 
     /// <summary>[UI] Asks whether to discard unsaved changes; the same helper as ExpenseFormPanel's, since the panels share no base class.</summary>
     /// <param name="message">The confirmation prompt to show.</param>
@@ -383,6 +416,7 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = GetStartingEarmarkAmount(existing);
             StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
             _loadedActiveStart = existing.DatePattern.ActiveStart;
+            _loadedPlan = existing;
             RuleEditor.LoadFrom(existing.DatePattern);
         }
         else if (RequestProposedPlan?.Invoke(goal) is { } proposal)
@@ -394,6 +428,7 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = proposal.StartingEarmark?.Amount ?? 0m;
             StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
             _loadedActiveStart = null;
+            _loadedPlan = null;
             RuleEditor.LoadFrom(proposal.Plan.DatePattern);
         }
         else
@@ -403,6 +438,7 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = 0m;
             StartingEarmarkAmountTextBox.Text = string.Empty;
             _loadedActiveStart = null;
+            _loadedPlan = null;
             // No plan and no proposer wired: resets the schedule to monthly through the goal's due date, rather than leave the last plan on screen.
             var defaultStart = DateOnly.FromDateTime(DateTime.Today);
             var defaultUntil = goal.DatePattern.Until > defaultStart ? goal.DatePattern.Until : defaultStart.AddYears(1);
@@ -914,7 +950,7 @@ public partial class EarmarkFormPanel : UserControl
         StartingEarmarkEditPanel.Visibility = UsersCanEditFundStartPoint ? Visibility.Visible : Visibility.Collapsed;
 
         // No goal or no saved plan: shows $0 with no date.
-        if (_selectedGoal is not { } goal || !_patternsByFinanceId.TryGetValue(goal.FinanceId, out var pattern))
+        if (_selectedGoal is not { } goal || OpenPlanFor(goal) is not { } pattern)
         {
             StartingAmountText.Text = $"{0m:C}";
             StartingDateText.Text = "no savings plan saved yet";
@@ -959,7 +995,7 @@ public partial class EarmarkFormPanel : UserControl
             var payment = Math.Abs(goal.Amount);
 
             // Prefers a forecast with this plan swapped in, which gives the free-funds figure; otherwise falls back to the set-aside gap alone.
-            var editedStart = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId)?.DatePattern.ActiveStart;
+            var editedStart = OpenPlanFor(goal)?.DatePattern.ActiveStart;
             var health = RequestForecastWithProposedPlan is { } request
                 ? request(proposed, editedStart, proposedManuals).PlanHealthStates.FirstOrDefault(state => state.FinanceId == goal.FinanceId)
                 : null;
@@ -1117,7 +1153,7 @@ public partial class EarmarkFormPanel : UserControl
 
         // A goal with no saved plan still previews in Savings-plan mode, from the plan built from the typed fields; One-off mode needs a saved plan, so it shows a placeholder.
         // savedPlan (the segment Save would replace) is kept apart from plan (what the chart draws).
-        var savedPlan = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId);
+        var savedPlan = OpenPlanFor(goal);
         var plan = savedPlan ?? (isOneOff ? null : TryBuildProposedPattern(goal));
         if (plan is null)
         {
@@ -1608,7 +1644,7 @@ public partial class EarmarkFormPanel : UserControl
     /// <param name="proposed">The not-yet-saved version of the pattern currently being edited.</param>
     private IReadOnlyList<EarMarkPattern> GetPatternsForLiveCheck(FinancialPattern goal, EarMarkPattern proposed)
     {
-        var editedStart = _patternsByFinanceId.GetValueOrDefault(goal.FinanceId)?.DatePattern.ActiveStart;
+        var editedStart = OpenPlanFor(goal)?.DatePattern.ActiveStart;
         var otherSavedPatterns = _forecast?.Accounts
             .SelectMany(account => account.Page.EarmarkPatterns)
             .Where(p => p.FinanceId == goal.FinanceId && p.DatePattern.ActiveStart != editedStart)

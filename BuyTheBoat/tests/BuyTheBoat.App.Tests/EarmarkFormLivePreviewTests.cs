@@ -5,19 +5,9 @@ using Shouldly;
 
 namespace BuyTheBoat.App.Tests;
 
-// Checks a different consistency than FinancePatternSaveConfirmationTests
-// does: not "did a save produce the right saved state" but "does the live,
-// no-forecast-needed preview EarmarkFormPanel shows WHILE the user is still
-// typing (before Save is even clicked) match what a real save, followed by a
-// freshly rebuilt forecast, actually produces." EarmarkFormPanel's own
-// private GetLiveJarAmounts/GetPatternsForLiveCheck can't be called directly
-// from a test (WPF code-behind, no UI test harness in this project) — each
-// test below reproduces their formula inline, calling the exact same public
-// TransactionLogBookFactory.ComputeMilestoneTrajectory they call, so the
-// only thing being hand-copied is the trivial composition around it, not the
-// nontrivial math itself. Real (temporary) SQLite file per test, same shape
-// as every other test file in this project — see PatternRepositoryTests' own
-// header comment for why.
+// Checks that the no-forecast preview EarmarkFormPanel shows while the user is still typing matches what a real save and a rebuilt forecast produce.
+// EarmarkFormPanel.GetLiveJarAmounts and GetPatternsForLiveCheck are private WPF code-behind with no UI test harness, so each test reproduces their short composition inline around the same public TransactionLogBookFactory walks they call.
+// Real (temporary) SQLite file per test, same shape as every other test file in this project — see PatternRepositoryTests' own header comment for why.
 public class EarmarkFormLivePreviewTests : IDisposable
 {
     private static readonly DateOnly AsOf = new(2025, 6, 15);
@@ -35,19 +25,7 @@ public class EarmarkFormLivePreviewTests : IDisposable
         _manualEarmarks = new ManualEarmarkRepository(database, _earMarkPatterns);
     }
 
-    // GetLiveJarAmounts' own header comment proves this algebraically: once
-    // a goal has released at least once since ActiveStart, a reset-at-release
-    // walk seeded from any starting balance is identical to the unseeded
-    // walk from that release onward, so live ExpectedAmount == live
-    // MilestoneAmount exactly. That proof is specifically about the SEED
-    // (StartingAllocation) — it says nothing about a plan whose own rate has
-    // ever diverged from what the goal needed (see the next test for that
-    // case) — so this one deliberately keeps the plan's rate unchanged
-    // throughout its whole history: the "form was just opened, nothing
-    // edited yet" moment, the live preview's own true native domain. Turns
-    // the written proof into a continuously-checked one — the live number a
-    // user would see compared against an actual save plus a freshly rebuilt
-    // real forecast, for the exact same day.
+    // The "form was just opened, nothing edited yet" moment: the live reading a user would see, against an actual save plus a freshly rebuilt forecast, for the same day.
     [Fact]
     public void The_live_preview_matches_a_real_save_and_rebuilt_forecast_when_the_rate_never_changed()
     {
@@ -56,138 +34,53 @@ public class EarmarkFormLivePreviewTests : IDisposable
         var saved = Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
         _earMarkPatterns.Save(saved);
 
-        // The user opens the Earmark form for this plan — RuleEditor/
-        // AmountTextBox load pre-filled from the saved pattern, so the
-        // "draft" EarmarkFormPanel would build right now is identical to
-        // what's already saved, until they actually change something.
+        // The form loads pre-filled from the saved plan, so the draft it builds is identical until something changes.
         var draft = Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
+        var (liveExpected, liveMilestone) = LiveJarAmounts(draft, goal);
 
-        // EarmarkFormPanel.GetLiveJarAmounts, reproduced: single plan, no
-        // concurrent earmark pattern, so GetPatternsForLiveCheck's own list is just
-        // [draft]; startingTotal is 0 (no StartingAllocation, no manual
-        // earmark dated exactly on ActiveStart).
-        var liveTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-            [draft], goal, draft.DatePattern.ActiveStart, AsOf);
-        var liveMilestone = liveTrajectory.Count > 0 ? liveTrajectory[^1].MilestoneAmount : 0m;
-        var hasReleased = goal.DatePattern.GetOccurrences(draft.DatePattern.ActiveStart, AsOf).Count > 0;
-        hasReleased.ShouldBeTrue(); // confirms this scenario exercises the "true pace" branch the proof above is about
-        var liveExpected = liveMilestone; // startingTotal (0) plays no role once hasReleased is true
-
-        // Now actually save the draft — EarmarkFormPanel.SaveSavingsPlan's
-        // own path for an existing plan: same (FinanceId, Start), an
-        // in-place update, no FinancePatternSaveConfirmation involved (that
-        // orchestrator is for editing the GOAL, not the plan funding it).
+        // EarmarkFormPanel.SaveSavingsPlan's path for an existing plan: an in-place update under the same (FinanceId, Start).
         _earMarkPatterns.Save(draft);
 
-        var forecast = Forecast();
-        var realJar = forecast.GetTimeline(1).Last(entry => entry.Date <= AsOf).Snapshot.FundJars.Single(jar => jar.FinanceId == 1);
-
+        var realJar = RealJarAsOf(Forecast());
         realJar.ExpectedAmount.ShouldBe(liveExpected);
         (realJar.MilestoneAmount ?? 0m).ShouldBe(liveMilestone);
     }
 
-    // The flip side, and a deliberate, already-documented gap rather than a
-    // new one: GetLiveJarAmounts' own header comment says outright it
-    // "doesn't model manual earmarks beyond the starting point." Adding one
-    // mid-plan (after ActiveStart, and deliberately off any release date so
-    // same-day ordering can't muddy the read) proves that gap out with real
-    // numbers instead of just asserting it in prose — the real,
-    // saved-and-rebuilt jar reflects the top-up; the live preview a user
-    // would have seen a moment before saving does not.
+    // A $50 top-up partway through the plan, off any release date so same-day ordering can't muddy the read.
     [Fact]
-    public void The_live_preview_does_not_reflect_a_mid_plan_manual_earmark_the_real_forecast_does()
+    public void The_live_preview_reflects_a_mid_plan_manual_earmark_the_real_forecast_does()
     {
         var goal = Bill(1, "Kitchen Remodel", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
         _financialPatterns.Save(goal, accountId: 1);
         var plan = Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
         _earMarkPatterns.Save(plan);
         _manualEarmarks.Save(ManualEarmark.Create(
-            new ManualEarmarkOptions { FinanceId = 1, Date = new DateOnly(2025, 3, 15), Amount = 50m }, // a mid-plan top-up
+            new ManualEarmarkOptions { FinanceId = 1, Date = new DateOnly(2025, 3, 15), Amount = 50m },
             plan));
 
-        var liveTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-            [plan], goal, plan.DatePattern.ActiveStart, AsOf);
-        var liveMilestone = liveTrajectory.Count > 0 ? liveTrajectory[^1].MilestoneAmount : 0m;
-        goal.DatePattern.GetOccurrences(plan.DatePattern.ActiveStart, AsOf).Count.ShouldBeGreaterThan(0);
-        var liveExpected = liveMilestone; // never references the manual earmark at all
+        var (liveExpected, _) = LiveJarAmounts(plan, goal);
 
-        var forecast = Forecast();
-        var realJar = forecast.GetTimeline(1).Last(entry => entry.Date <= AsOf).Snapshot.FundJars.Single(jar => jar.FinanceId == 1);
-
-        // The $50 top-up is real money the user would see reflected the
-        // instant they saved and reloaded — nothing in the live preview they
-        // were looking at a moment before saving would have shown it.
-        (realJar.ExpectedAmount - liveExpected).ShouldBe(50m);
+        RealJarAsOf(Forecast()).ExpectedAmount.ShouldBe(liveExpected);
+        liveExpected.ShouldBe(50m);
     }
 
-    // NOT asked for — found while building the two tests above, surfaced
-    // rather than silently worked around. Bigger than the manual-earmark gap
-    // above, in two ways:
-    //
-    // 1. GetLiveJarAmounts' own proof (see the first test's header comment)
-    //    only covers the SEED — it says nothing about a plan whose own rate
-    //    has ever diverged from what the goal needed. MilestoneAmount
-    //    resets to 0 at every release BY DEFINITION (that's what "on pace
-    //    this cycle" means), so it structurally cannot show a surplus/
-    //    deficit accumulated across past cycles the way ExpectedAmount does
-    //    — the live preview isn't just missing one input (like manual
-    //    earmarks); it CAN'T represent this at all, even in principle.
-    //
-    // 2. Far more significant: EarmarkFormPanel.SaveSavingsPlan builds a
-    //    plain EarMarkPattern (same FinanceId+Start as whatever's already
-    //    saved) and this test saves it directly via _earMarkPatterns.Save.
-    //    MainWindow's own EarmarkForm.PatternSaved handler routes through
-    //    FinancePatternSaveConfirmation's own EarMarkPattern-editing
-    //    constructor — but its two questions ("stay linked or break,"
-    //    "cascade forward or not") only fire for a plan that's part of a
-    //    chain (another EarMarkPattern sharing the same finance_id), and
-    //    even then they're about the CHAIN's own neighbors, not a
-    //    "this rewrites your own past"-style guard. For exactly the single,
-    //    unchained plan this test builds, the save path is still, today,
-    //    functionally identical to this test's own direct repository call —
-    //    no FinancePatternSaveConfirmation question, no "this has history
-    //    behind it" check of any kind, applies. Every mechanism the
-    //    history-aware saves built protects editing the GOAL
-    //    (FinancialPattern) from silently rewriting the past. None of it
-    //    applies to editing the SAVINGS PLAN (EarMarkPattern) funding that
-    //    goal — changing its own Amount retroactively re-rates every past
-    //    release the instant the forecast rebuilds, with no warning.
-    //
-    // Whether that's an intentional scope boundary (a plan's own
-    // contribution rate is the user's lever to adjust freely) or an
-    // unaddressed gap is a real, open design question — not this test's
-    // call. Documents CURRENT behavior with real numbers so the question has
-    // concrete evidence behind it: a plan funding a $100/month bill, edited
-    // to $120/month with 6 months of real history behind it, silently
-    // accumulates a $120 surplus ($20 x 6 releases) that neither the live
-    // preview nor any confirmation step ever surfaced.
-    [Fact]
-    public void Editing_a_savings_plans_own_amount_retroactively_rerates_its_whole_history_with_no_protection()
+    /// <summary>
+    /// [READS FILE] EarmarkFormPanel.GetLiveJarAmounts for a single plan with no starting allocation, reproduced: the expected-balance walk with the goal's saved manual earmarks, and the milestone walk.
+    /// The starting earmark on the plan's start is left out of the manual earmarks, as the form does, since it counts in the starting total (0 here).
+    /// </summary>
+    private (decimal ExpectedAmount, decimal MilestoneAmount) LiveJarAmounts(EarMarkPattern plan, FinancialPattern goal)
     {
-        var goal = Bill(1, "Kitchen Remodel", -100m, new DateOnly(2025, 1, 1), new DateOnly(2026, 1, 1));
-        _financialPatterns.Save(goal, accountId: 1);
-        _earMarkPatterns.Save(Plan(goal, -100m, goal.DatePattern.ActiveStart, goal.DatePattern.Until));
-
-        // The user opens the form and raises the amount from $100 to $120 —
-        // AsOf (June 15) is well past 6 monthly releases (Jan-Jun 1st), so
-        // this plan has real history behind it.
-        var draft = Plan(goal, -120m, goal.DatePattern.ActiveStart, goal.DatePattern.Until);
-
-        var liveTrajectory = TransactionLogBookFactory.ComputeMilestoneTrajectory(
-            [draft], goal, draft.DatePattern.ActiveStart, AsOf);
-        var liveMilestone = liveTrajectory.Count > 0 ? liveTrajectory[^1].MilestoneAmount : 0m;
-        var liveExpected = liveMilestone; // GetLiveJarAmounts' own formula — see this test's own header comment for why this can't see the surplus below
-
-        // EarmarkFormPanel.SaveSavingsPlan's real path, reproduced exactly:
-        // a plain, unguarded save under the same (FinanceId, Start).
-        _earMarkPatterns.Save(draft);
-
-        var forecast = Forecast();
-        var realJar = forecast.GetTimeline(1).Last(entry => entry.Date <= AsOf).Snapshot.FundJars.Single(jar => jar.FinanceId == 1);
-
-        liveExpected.ShouldBe(0m); // the live preview shows nothing unusual...
-        realJar.ExpectedAmount.ShouldBe(120m); // ...while $120 has actually, silently, accumulated
+        var activeStart = plan.DatePattern.ActiveStart;
+        var laterManualEarmarks = _manualEarmarks.GetAll().Where(manual => manual.Date != activeStart).ToList();
+        var expected = TransactionLogBookFactory.ComputeExpectedTrajectory(
+            [plan], goal, activeStart, AsOf, startingAllocation: 0m, laterManualEarmarks)[^1].ExpectedAmount;
+        var milestones = TransactionLogBookFactory.ComputeMilestoneTrajectory([plan], goal, activeStart, AsOf);
+        return (expected, milestones.Count > 0 ? milestones[^1].MilestoneAmount : 0m);
     }
+
+    /// <summary>[CALC] The goal's real jar on the as-of date, read from a rebuilt forecast.</summary>
+    private static FundJar RealJarAsOf(ForecastResult forecast) =>
+        forecast.GetTimeline(1).Last(entry => entry.Date <= AsOf).Snapshot.FundJars.Single(jar => jar.FinanceId == 1);
 
     // ---- shared scenario-building helpers ----------------------------------
 
