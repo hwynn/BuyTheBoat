@@ -49,9 +49,13 @@ public abstract class FormListRow : System.ComponentModel.INotifyPropertyChanged
     protected void RaisePropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
 }
-public sealed class FinancialPatternRow(FinancialPattern pattern, string accountName) : FormListRow
+/// <summary>One row of the Bills &amp; Paychecks list: a bill or paycheck shown once for its whole break-off chain, with the latest segment's values.</summary>
+public sealed class FinancialPatternRow(FinancialPattern pattern, string accountName, IReadOnlyList<FinancialPattern>? segments = null) : FormListRow
 {
     public FinancialPattern Pattern { get; } = pattern;
+
+    /// <summary>Every segment of the chain this row stands for (same Source), oldest first; just Pattern when there's one.</summary>
+    public IReadOnlyList<FinancialPattern> Segments { get; } = segments ?? [pattern];
     public int FinanceId => Pattern.FinanceId;
     public string Source => Pattern.Source;
     public string? Description => Pattern.Description;
@@ -64,15 +68,32 @@ public sealed class FinancialPatternRow(FinancialPattern pattern, string account
     public string Repeats => Pattern.DatePattern.ToRruleString();
 }
 
-public sealed class EarMarkPatternRow(EarMarkPattern pattern, FinancialPattern? goal) : FormListRow
+/// <summary>
+/// One row of the Allocations list: a goal shown once, standing for every plan it has across its break-off segments and any running at the same time.
+/// Amount, Already Saved and Repeats describe Pattern together with the plans running alongside it.
+/// </summary>
+public sealed class EarMarkPatternRow(EarMarkPattern pattern, FinancialPattern? goal, IReadOnlyList<EarMarkPattern>? plans = null) : FormListRow
 {
+    /// <summary>The goal's latest plan, which opens when the row has no other plans to choose from.</summary>
     public EarMarkPattern Pattern { get; } = pattern;
+
+    /// <summary>Every plan this row stands for, oldest first; just Pattern when there's one.</summary>
+    public IReadOnlyList<EarMarkPattern> Plans { get; } = plans ?? [pattern];
+
     public string Goal => goal?.Description is { Length: > 0 } description
         ? description
         : goal?.Source ?? $"(finance id {Pattern.FinanceId} — goal not found)";
-    public decimal Amount => Pattern.Amount;
-    public decimal StartingAllocation => Pattern.StartingAllocation;
-    public string Repeats => Pattern.DatePattern.ToRruleString();
+
+    /// <summary>Pattern and the plans running at the same time as it.</summary>
+    private IReadOnlyList<EarMarkPattern> RunningTogether => Plans
+        .Where(plan => plan.FinanceId == Pattern.FinanceId && plan.DatePattern.ActiveSpansOverlap(Pattern.DatePattern))
+        .ToList();
+
+    public decimal Amount => RunningTogether.Sum(plan => plan.Amount);
+    public decimal StartingAllocation => RunningTogether.Sum(plan => plan.StartingAllocation);
+    public string Repeats => RunningTogether.Count == 1
+        ? Pattern.DatePattern.ToRruleString()
+        : $"{RunningTogether.Count} plans at once";
 }
 
 /// <summary>

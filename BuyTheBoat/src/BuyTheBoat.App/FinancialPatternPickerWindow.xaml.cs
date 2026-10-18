@@ -7,20 +7,20 @@ namespace BuyTheBoat.App;
 
 /// <summary>
 /// A popup to pick one of the user's Bills, Paychecks, or Goals, for linking something to it or switching which one a form shows; creating and editing stay on their tabs.
-/// Lists TransactionLogBook.AllFinancialPatterns(), the forecast's record of everything the user has.
-/// Always leaves out ended patterns and transfers.
+/// Lists TransactionLogBook.AllFinancialPatterns(), the forecast's record of everything the user has, once per break-off chain (segments sharing a Source).
+/// Always leaves out ended chains and transfers.
 /// </summary>
 public partial class FinancialPatternPickerWindow : Window
 {
-    private sealed class Row(FinancialPattern pattern)
+    private sealed class Row(FinancialPattern pattern, DateOnly chainStart, DateOnly chainUntil)
     {
         public FinancialPattern Pattern { get; } = pattern;
         public string Description => string.IsNullOrWhiteSpace(Pattern.Description) ? "—" : Pattern.Description;
         public string Source => Pattern.Source;
-        public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
+        public string DateRangeText => $"{chainStart:MMM d, yyyy} – {chainUntil:MMM d, yyyy}";
     }
 
-    /// <summary>The pattern the user picked, or null if they cancelled.</summary>
+    /// <summary>The picked chain's segment running today, or its next one when none is, or null if the user cancelled.</summary>
     public FinancialPattern? SelectedPattern { get; private set; }
 
     public FinancialPatternPickerWindow(TransactionLogBook book, IReadOnlySet<int> transferFinanceIds, DateOnly today)
@@ -28,11 +28,16 @@ public partial class FinancialPatternPickerWindow : Window
         InitializeComponent();
 
         var rows = book.AllFinancialPatterns()
-            .Where(pattern => pattern.DatePattern.Until >= today)
             .Where(pattern => !transferFinanceIds.Contains(pattern.FinanceId))
-            .OrderBy(pattern => pattern.Source)
-            .ThenBy(pattern => pattern.DatePattern.ActiveStart)
-            .Select(pattern => new Row(pattern))
+            .GroupBy(pattern => pattern.Source)
+            .Select(chain => chain.OrderBy(pattern => pattern.DatePattern.ActiveStart).ToList())
+            .Where(segments => segments[^1].DatePattern.Until >= today)
+            .OrderBy(segments => segments[0].Source)
+            .Select(segments => new Row(
+                segments.FirstOrDefault(segment => segment.DatePattern.ActiveSpanContains(today))
+                    ?? segments.First(segment => segment.DatePattern.ActiveStart > today || segment == segments[^1]),
+                segments[0].DatePattern.ActiveStart,
+                segments[^1].DatePattern.Until))
             .ToList();
 
         PatternsGrid.ItemsSource = rows;

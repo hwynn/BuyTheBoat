@@ -12,7 +12,6 @@ namespace BuyTheBoat.App;
 /// The Earmark form (Allocations › Form): pick a goal (loads its savings plan if one exists), or switch into a One-off adjustment on the same goal.
 /// MainWindow's only way to create or edit savings plans and manual adjustments.
 /// </summary>
-/// <remarks>TODO: the merged "what can I allocate today" region isn't built yet; this still uses the simpler BalanceInfoText.</remarks>
 public partial class EarmarkFormPanel : UserControl
 {
     private sealed class GoalOption(FinancialPattern pattern)
@@ -38,7 +37,7 @@ public partial class EarmarkFormPanel : UserControl
 
     /// <summary>
     /// Delays the one-off live preview until typing pauses (~1.2s), since its forecast-backed jar reading is too heavy for every keystroke.
-    /// BalanceInfoText and the dirty state still update on every change.
+    /// The "What can I allocate today?" text and the dirty state still update on every change.
     /// </summary>
     private readonly DispatcherTimer _oneOffPreviewTimer = new() { Interval = TimeSpan.FromSeconds(1.2) };
 
@@ -89,7 +88,7 @@ public partial class EarmarkFormPanel : UserControl
         RuleEditor.ResultChanged += (_, _) => { if (!_suppressEvents) { if (MatchGoalCheckBox.IsChecked == true) { RecomputeMatch(); } UpdateSummary(); MarkDirtyIfNotSuppressed(); } };
 
         // Runs the one-off preview once typing pauses; stops first so it fires only once.
-        _oneOffPreviewTimer.Tick += (_, _) => { _oneOffPreviewTimer.Stop(); UpdateSummary(); };
+        _oneOffPreviewTimer.Tick += (_, _) => { _oneOffPreviewTimer.Stop(); UpdateSummary(); UpdateAllocateTodayWarning(); };
 
         _initialized = true;
     }
@@ -174,7 +173,6 @@ public partial class EarmarkFormPanel : UserControl
         SavingsPlanRadio.IsChecked = true;
 
         SetGoal(null);
-        ChangeGoalButton.IsEnabled = true;
         AmountTextBox.Text = string.Empty;
         _startingAllocation = 0m;
         _startingEarmarkAmount = 0m;
@@ -204,7 +202,6 @@ public partial class EarmarkFormPanel : UserControl
         SavingsPlanRadio.IsChecked = true;
 
         SetGoal(goal);
-        ChangeGoalButton.IsEnabled = false;
 
         AmountTextBox.Text = Math.Abs(existing.Amount).ToString(CultureInfo.InvariantCulture);
         _startingAllocation = existing.StartingAllocation;
@@ -268,7 +265,6 @@ public partial class EarmarkFormPanel : UserControl
         var goalsWithPlans = _goals.Where(goal => _patternsByFinanceId.ContainsKey(goal.FinanceId)).ToList();
         var targetFinanceId = editTarget?.FinanceId ?? preselectFinanceId ?? goalsWithPlans.FirstOrDefault()?.FinanceId;
         SetGoal(goalsWithPlans.FirstOrDefault(goal => goal.FinanceId == targetFinanceId));
-        ChangeGoalButton.IsEnabled = editTarget is null;
 
         TargetComboBox.ItemsSource = goalsWithPlans.Select(goal => new GoalOption(goal)).ToList();
 
@@ -293,9 +289,8 @@ public partial class EarmarkFormPanel : UserControl
         _suppressEvents = false;
         UpdateModeVisibility();
         UpdateOneOffInfo();
-        // UpdateOneOffInfo only populates the older BalanceInfoText control —
-        // Summary needs its own explicit refresh too.
         UpdateSummary();
+        UpdateAllocateTodayWarning();
         ClearDirty();
     }
 
@@ -344,13 +339,13 @@ public partial class EarmarkFormPanel : UserControl
             return;
         }
 
-        // Several plans running at the same time: asks which one to open, then loads it as Allocations › List › Edit Selected does.
-        if (SavingsPlanRadio.IsChecked == true && ConcurrentPlans(picked) is { Count: > 1 } concurrent)
+        // Several plans across the goal's break-off segments or running at the same time: asks which one to open, then loads it as Allocations › List › Edit Selected does.
+        if (SavingsPlanRadio.IsChecked == true && ChainPlans(picked) is { Count: > 1 } chainPlans)
         {
-            var planPicker = new EarmarkPatternPickerWindow(concurrent) { Owner = Window.GetWindow(this) };
+            var planPicker = new EarmarkPatternPickerWindow(chainPlans) { Owner = Window.GetWindow(this) };
             if (planPicker.ShowDialog() == true && planPicker.SelectedPlan is { } plan)
             {
-                LoadPattern(plan, picked);
+                LoadPattern(plan, _goals.FirstOrDefault(goal => goal.FinanceId == plan.FinanceId) ?? picked);
             }
 
             return;
@@ -366,6 +361,16 @@ public partial class EarmarkFormPanel : UserControl
         }
         else
         {
+            // An open one-off belongs to its own goal, so picking another starts a new one-off there.
+            if (_oneOffEditTarget is not null)
+            {
+                _oneOffEditTarget = null;
+                ((ComboBoxItem)ActionComboBox.Items[2]).IsEnabled = true;
+                OneOffAmountTextBox.Text = string.Empty;
+            }
+
+            // The form now belongs to this goal, so the Savings-plan fields follow it too.
+            PopulateSavingsPlanFields(picked);
             UpdateEarmarkDatePickerBounds();
             UpdateOneOffInfo();
             UpdateSummary();
@@ -385,6 +390,14 @@ public partial class EarmarkFormPanel : UserControl
         _patternsByFinanceId.TryGetValue(goal.FinanceId, out var newest)
             ? _allPlansByFinanceId[goal.FinanceId].Where(plan => plan.DatePattern.ActiveSpansOverlap(newest.DatePattern)).ToList()
             : [];
+
+    /// <summary>[CALC] Every saved plan for the goal across all its break-off segments (goals sharing its Source), oldest first.</summary>
+    private IReadOnlyList<EarMarkPattern> ChainPlans(FinancialPattern goal) =>
+        _goals
+            .Where(segment => segment.Source == goal.Source)
+            .SelectMany(segment => _allPlansByFinanceId[segment.FinanceId])
+            .OrderBy(plan => plan.DatePattern.ActiveStart)
+            .ToList();
 
     /// <summary>[CALC] The days a one-off on this goal can fall on: from the earliest start to the latest end of its plans running at the same time (ConcurrentPlans); null when the goal has no plan.</summary>
     private (DateOnly Start, DateOnly Until)? OneOffSpan(FinancialPattern goal) =>
@@ -435,6 +448,7 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = GetStartingEarmarkAmount(existing);
             StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
             _loadedActiveStart = existing.DatePattern.ActiveStart;
+            _loadedPlanStart = existing.DatePattern.DtStart;
             _loadedPlan = existing;
             RuleEditor.LoadFrom(existing.DatePattern);
         }
@@ -447,6 +461,7 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = proposal.StartingEarmark?.Amount ?? 0m;
             StartingEarmarkAmountTextBox.Text = _startingEarmarkAmount == 0m ? string.Empty : _startingEarmarkAmount.ToString(CultureInfo.InvariantCulture);
             _loadedActiveStart = null;
+            _loadedPlanStart = null;
             _loadedPlan = null;
             RuleEditor.LoadFrom(proposal.Plan.DatePattern);
         }
@@ -457,6 +472,7 @@ public partial class EarmarkFormPanel : UserControl
             _startingEarmarkAmount = 0m;
             StartingEarmarkAmountTextBox.Text = string.Empty;
             _loadedActiveStart = null;
+            _loadedPlanStart = null;
             _loadedPlan = null;
             // No plan and no proposer wired: resets the schedule to monthly through the goal's due date, rather than leave the last plan on screen.
             var defaultStart = DateOnly.FromDateTime(DateTime.Today);
@@ -674,25 +690,117 @@ public partial class EarmarkFormPanel : UserControl
         }
     }
 
+    /// <summary>[UI] Fills the "What can I allocate today?" region for the picked goal and day from the current forecast; hidden until both are picked.</summary>
     private void UpdateOneOffInfo()
     {
-        if (BalanceInfoText is null)
+        if (AllocateTodayRegion is null)
         {
             return;
         }
 
-        if (_forecast is null || _selectedGoal is not { } goal || EarmarkDatePicker.SelectedDate is not { } selectedDate)
+        if (_forecast is null || _selectedGoal is not { } goal || EarmarkDatePicker.SelectedDate is not { } selectedDate
+            || _forecast.GetTimeline(goal.FinanceId) is not { Count: > 0 } timeline)
         {
-            BalanceInfoText.Text = string.Empty;
+            AllocateTodayRegion.Visibility = Visibility.Collapsed;
             return;
         }
 
+        // The forecast starts today, so a one-off dated earlier reads today's figures.
         var date = DateOnly.FromDateTime(selectedDate);
-        var (jarBalance, free) = BalancesOn(date, goal.FinanceId);
-        var span = OneOffSpan(goal) is { } days
-            ? $" The fund's {(ConcurrentPlans(goal).Count > 1 ? "plans run" : "plan runs")} {days.Start:MMM d, yyyy} – {days.Until:MMM d, yyyy}."
-            : string.Empty;
-        BalanceInfoText.Text = $"On {date:MMMM d, yyyy}: this fund holds {jarBalance:C} · free balance {free:C}.{span}";
+        var beforeForecast = date < _forecast.AsOfDate;
+        var entry = beforeForecast ? timeline[0] : timeline.Last(candidate => candidate.Date <= date);
+        AllocateTodayHeader.Text = beforeForecast || date == DateOnly.FromDateTime(DateTime.Today)
+            ? "What can I allocate today?"
+            : $"What can I allocate on {date:MMM d, yyyy}?";
+
+        var priorityById = _goals.ToDictionary(pattern => pattern.FinanceId, pattern => pattern.Priority);
+        var sameDayEntry = _existingManualEarmarks.FirstOrDefault(m => m.FinanceId == goal.FinanceId && m.Date == date && m != _oneOffEditTarget);
+        var text = AllocateTodayText(entry.Snapshot, goal, priorityById, sameDayEntry?.Amount);
+        if (beforeForecast)
+        {
+            text = $"This one-off is dated {date:MMM d, yyyy}, before the forecast starts, so these are today's figures.{Environment.NewLine}{text}";
+        }
+        if (OneOffSpan(goal) is { } days)
+        {
+            text += $"{Environment.NewLine}This goal's {(ConcurrentPlans(goal).Count > 1 ? "plans run" : "plan runs")} {days.Start:MMM d, yyyy} – {days.Until:MMM d, yyyy}.";
+        }
+
+        AllocateTodayBody.Text = text;
+        AllocateTodayRegion.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// [CALC] The "What can I allocate today?" lines for one day: free funds, what's set aside and how it splits by importance against this goal, and any one-off this goal already has that day.
+    /// More or less important means a higher or lower Priority; the safety cushion is listed on its own.
+    /// </summary>
+    /// <param name="snapshot">The goal's account on the picked day.</param>
+    /// <param name="priorityById">Each pattern's Priority, by finance id.</param>
+    /// <param name="sameDayOneOff">The amount of a one-off this goal already has that day, other than the one being edited, or null.</param>
+    internal static string AllocateTodayText(BalanceSnapshot snapshot, FinancialPattern goal, IReadOnlyDictionary<int, int> priorityById, decimal? sameDayOneOff)
+    {
+        decimal Held(Func<int, bool> include) => snapshot.FundJars
+            .Where(jar => jar.FinanceId is { } id && id != goal.FinanceId && include(priorityById.GetValueOrDefault(id)))
+            .Sum(jar => jar.ExpectedAmount);
+
+        var thisGoal = snapshot.FundJars.FirstOrDefault(jar => jar.FinanceId == goal.FinanceId)?.ExpectedAmount ?? 0m;
+        var cushion = snapshot.FundJars.Where(jar => jar.FinanceId is null).Sum(jar => jar.ExpectedAmount);
+        var totalSetAside = snapshot.FundJars.Sum(jar => jar.ExpectedAmount);
+
+        var lines = new List<string>
+        {
+            $"Free: {snapshot.ExpectedFreeAmount ?? 0m:C}",
+            $"Set aside: {totalSetAside:C} — {thisGoal:C} for this goal, {Held(p => p > goal.Priority):C} for more important goals, "
+                + $"{Held(p => p == goal.Priority):C} for equally important ones, {Held(p => p < goal.Priority):C} for less important ones"
+                + (cushion > 0m ? $", {cushion:C} in the safety cushion." : "."),
+        };
+
+        if (sameDayOneOff is { } existing)
+        {
+            lines.Add($"This goal already has a one-off of {existing:C} on this day; saving adds to it.");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// [UI] Warns, once typing pauses, when the typed add would leave free funds short so the forecast takes money back out of other savings (a deallocation day).
+    /// Reads a what-if forecast with the one-off folded in, and only flags a shortfall the current forecast doesn't already have.
+    /// </summary>
+    private void UpdateAllocateTodayWarning()
+    {
+        AllocateTodayWarningText.Visibility = Visibility.Collapsed;
+        if (OneOffRadio.IsChecked != true || IsWithdraw || IsMove || _forecast is null || _selectedGoal is not { } goal
+            || OpenPlanFor(goal) is not { } plan
+            || TryBuildProposedOneOff(goal, plan) is not { } proposed
+            || RequestForecastWithOneOff is not { } requestWithOneOff)
+        {
+            return;
+        }
+
+        ForecastResult whatIf;
+        try
+        {
+            whatIf = requestWithOneOff(proposed);
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        var alreadyShort = _forecast.GetTimeline(goal.FinanceId)
+            .Where(entry => entry.Snapshot.IsDeallocationDay)
+            .Select(entry => entry.Date)
+            .ToHashSet();
+        var newShortDay = whatIf.GetTimeline(goal.FinanceId)
+            .FirstOrDefault(entry => entry.Date >= proposed.Date && entry.Snapshot.IsDeallocationDay && !alreadyShort.Contains(entry.Date));
+        if (newShortDay is null)
+        {
+            return;
+        }
+
+        AllocateTodayWarningText.Text =
+            $"This is more than free funds can cover: on {newShortDay.Date:MMM d, yyyy} the forecast would take money back out of other savings to make up the difference — the safety cushion first, then goals not marked Mandatory, least important first.";
+        AllocateTodayWarningText.Visibility = Visibility.Visible;
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)

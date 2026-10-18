@@ -48,7 +48,7 @@
                     <!-- Savings-plan mode -->
                     <StackPanel x:Name="SavingsPlanPanel">
                         <!-- The goal's span, which caps the plan's dates (EarMarkPattern.Create rejects a plan outside its goal).
-                             Shown only in savings-plan mode once a goal is picked; one-off mode shows the span in BalanceInfoText. -->
+                             Shown only in savings-plan mode once a goal is picked; one-off mode shows the span in its "What can I allocate today?" region. -->
                         <TextBlock x:Name="GoalSpanText" Margin="0,0,0,10" FontSize="11" Foreground="Gray"
                                    TextWrapping="Wrap" Visibility="Collapsed"
                                    AutomationProperties.AutomationId="GoalSpanText"/>
@@ -124,7 +124,13 @@
                                            FontSize="10.5" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,10"/>
                                 <TextBlock Text="How much?"/>
                                 <TextBox x:Name="OneOffAmountTextBox" Margin="0,2,0,10" TextChanged="OnInputsChanged"/>
-                                <TextBlock x:Name="BalanceInfoText" TextWrapping="Wrap" FontStyle="Italic" Foreground="Gray"/>
+                                <!-- "What can I allocate today?": how much there is to work with on the picked day, for funding something important when money is tight.
+                                     The text updates on every change (UpdateOneOffInfo); the warning waits for typing to pause, since it reads a what-if forecast (UpdateAllocateTodayWarning). -->
+                                <StackPanel x:Name="AllocateTodayRegion" Visibility="Collapsed">
+                                    <TextBlock x:Name="AllocateTodayHeader" FontWeight="Bold"/>
+                                    <TextBlock x:Name="AllocateTodayBody" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="AllocateTodayWarningText" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="#9A4F08" Visibility="Collapsed"/>
+                                </StackPanel>
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>

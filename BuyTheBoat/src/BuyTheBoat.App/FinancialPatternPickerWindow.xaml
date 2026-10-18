@@ -8,7 +8,7 @@
             <Button Content="Cancel" Width="90" Margin="0,0,8,0" Padding="0,5" Click="OnCancelClick"/>
             <Button x:Name="SelectButton" Content="Select" Width="90" Padding="0,5" Click="OnSelectClick" IsDefault="True" IsEnabled="False"/>
         </StackPanel>
-        <!-- Description, Source, and date range are all that's needed to tell patterns apart, including two segments of the same broken-up pattern. -->
+        <!-- One row per break-off chain; the date range spans the whole chain, and the form that opens it asks which segment when there's a choice. -->
         <DataGrid x:Name="PatternsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                   SelectionChanged="OnSelectionChanged" MouseDoubleClick="OnGridDoubleClick"
                   AutomationProperties.AutomationId="FinancialPatternPickerGrid">

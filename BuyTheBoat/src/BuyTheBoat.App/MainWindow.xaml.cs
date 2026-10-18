@@ -271,8 +271,8 @@ public partial class MainWindow : Window
     {
         MarkRows<AccountRow>(AccountsGrid, AccountForm.IsDirty, row => row.Account.Id == AccountForm.LoadedAccountId);
         MarkRows<TransferRow>(TransfersGrid, TransferForm.IsDirty, row => row.Transfer.Id == TransferForm.EditingTransferId);
-        MarkRows<FinancialPatternRow>(FinancialPatternsGrid, ExpenseForm.IsDirty, row => row.FinanceId == ExpenseForm.LoadedFinanceId);
-        MarkRows<EarMarkPatternRow>(EarMarkPatternsGrid, EarmarkForm.IsDirty, row => row.Pattern.FinanceId == EarmarkForm.LoadedPlanFinanceId);
+        MarkRows<FinancialPatternRow>(FinancialPatternsGrid, ExpenseForm.IsDirty, row => row.Segments.Any(segment => segment.FinanceId == ExpenseForm.LoadedFinanceId));
+        MarkRows<EarMarkPatternRow>(EarMarkPatternsGrid, EarmarkForm.IsDirty, row => row.Plans.Any(plan => plan.FinanceId == EarmarkForm.LoadedPlanFinanceId));
         MarkRows<ManualEarmarkRow>(ManualEarmarksGrid, EarmarkForm.IsDirty, row => EarmarkForm.EditingOneOff is { } oneOff
             && row.Earmark.FinanceId == oneOff.FinanceId
             && row.Earmark.Date == oneOff.Date);
@@ -1770,20 +1770,34 @@ public partial class MainWindow : Window
 
         // A transfer's two patterns are hidden from this list — a transfer shows on its own tab as one thing, not as its two underlying patterns.
         // The engine still reads every pattern when forecasting.
+        // A break-off chain shows as one row (its segments share a Source, as BreakOffFactory.FindCurrentSegment reads them); opening it asks which segment.
         FinancialPatternsGrid.ItemsSource = _financialPatterns.GetAllExcludingTransferPatterns()
-            .Select(pattern => new FinancialPatternRow(pattern, accountNameByFinanceId.GetValueOrDefault(pattern.FinanceId, "(unknown)")))
+            .GroupBy(pattern => pattern.Source)
+            .Select(chain =>
+            {
+                var segments = chain.OrderBy(pattern => pattern.DatePattern.ActiveStart).ToList();
+                var latest = segments[^1];
+                return new FinancialPatternRow(latest, accountNameByFinanceId.GetValueOrDefault(latest.FinanceId, "(unknown)"), segments);
+            })
             .ToList();
 
         RefreshTransfersGrid();
 
         // Every expense that reserves has its own Allocation Plan (an EarMarkPattern, per the allocation model), so the grid just shows those; nothing here is a synthesized "automatic" row.
         // A transfer's withdrawal reserves through a plan too, but it's hidden here for the same reason its patterns are: a transfer is shown as one thing on its own tab, not as its underlying reservation machinery.
+        // One row per goal, across its break-off segments (shared Source) and any plans running at the same time; opening it asks which plan.
+        // A plan whose goal is missing gets a row of its own.
         var transferWithdrawalIds = _financialPatterns.GetTransferWithdrawalFinanceIds();
+        var goalsByFinanceId = financialPatterns.ToDictionary(goal => goal.FinanceId);
         EarMarkPatternsGrid.ItemsSource = earMarkPatterns
             .Where(pattern => !transferWithdrawalIds.Contains(pattern.FinanceId))
-            .Select(pattern => new EarMarkPatternRow(
-                pattern,
-                financialPatterns.FirstOrDefault(goal => goal.FinanceId == pattern.FinanceId)))
+            .GroupBy(pattern => goalsByFinanceId.TryGetValue(pattern.FinanceId, out var goal) ? goal.Source : $"(finance id {pattern.FinanceId})")
+            .Select(group =>
+            {
+                var plans = group.OrderBy(plan => plan.DatePattern.ActiveStart).ToList();
+                var latest = plans[^1];
+                return new EarMarkPatternRow(latest, goalsByFinanceId.GetValueOrDefault(latest.FinanceId), plans);
+            })
             .ToList();
 
         ManualEarmarksGrid.ItemsSource = _manualEarmarks.GetAll()
@@ -2313,15 +2327,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        var label = row.Description is { Length: > 0 } description ? description : row.Source;
+        // A row standing for a break-off chain asks which segment to delete.
+        var segment = row.Segments.Count > 1 ? PickChainSegmentToEdit(row.Segments) : row.Pattern;
+        if (segment is null)
+        {
+            return;
+        }
+
+        var label = segment.Description is { Length: > 0 } description ? description : segment.Source;
 
         // A savings plan whose goal no longer exists is invalid by 3.10.a3, not merely untidy, so deleting a pattern removes its linked plan too — we still say what is about to happen rather than doing it silently.
-        var hasSavingsPlan = _financialPatterns.HasLinkedEarMarkPattern(row.FinanceId);
+        var hasSavingsPlan = _financialPatterns.HasLinkedEarMarkPattern(segment.FinanceId);
         if (hasSavingsPlan)
         {
             // Nothing is actually moved by this — a jar was never a real transfer of money (FundJar's own class doc), so once its plan is gone the amount simply reads as free again on the next forecast.
             // Naming it here says what "continue" actually does, rather than leaving the user to notice their free funds went up.
-            var freed = CurrentJarAmount(row.FinanceId);
+            var freed = CurrentJarAmount(segment.FinanceId);
             var freedNote = freed > 0m
                 ? $" and free up {freed:C} currently set aside"
                 : string.Empty;
@@ -2343,10 +2364,10 @@ public partial class MainWindow : Window
 
         if (hasSavingsPlan)
         {
-            _earMarkPatterns.Delete(row.FinanceId);
+            _earMarkPatterns.Delete(segment.FinanceId);
         }
 
-        _financialPatterns.Delete(row.FinanceId);
+        _financialPatterns.Delete(segment.FinanceId);
         RefreshGrids();
         RefreshExpenseFormContext();
         RefreshEarmarkFormContext();
@@ -2415,7 +2436,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        var goal = _financialPatterns.GetByFinanceId(row.Pattern.FinanceId);
+        if (PickPlanFromRow(row) is not { } plan)
+        {
+            return;
+        }
+
+        var goal = _financialPatterns.GetByFinanceId(plan.FinanceId);
         if (goal is null)
         {
             MessageBox.Show(
@@ -2428,8 +2454,20 @@ public partial class MainWindow : Window
         }
 
         RefreshEarmarkFormContext();
-        EarmarkForm.LoadPattern(row.Pattern, goal);
+        EarmarkForm.LoadPattern(plan, goal);
         SwitchToTab("Earmark");
+    }
+
+    /// <summary>[UI] The plan an Allocations row should act on: its only plan, or the one picked in EarmarkPatternPickerWindow when it stands for several; null on Cancel.</summary>
+    private EarMarkPattern? PickPlanFromRow(EarMarkPatternRow row)
+    {
+        if (row.Plans.Count == 1)
+        {
+            return row.Pattern;
+        }
+
+        var picker = new EarmarkPatternPickerWindow(row.Plans) { Owner = this };
+        return picker.ShowDialog() == true ? picker.SelectedPlan : null;
     }
 
     private void OnDeleteEarMarkPatternClick(object sender, RoutedEventArgs e)
@@ -2446,12 +2484,34 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!ConfirmDelete(row.Goal))
+        if (PickPlanFromRow(row) is not { } plan || !ConfirmDelete(row.Goal))
         {
             return;
         }
 
-        _earMarkPatterns.Delete(row.Pattern.FinanceId);
+        // Deletes just the picked plan; when it's the goal's last one, its manual earmarks go too, since they'd point at a jar that no longer exists.
+        var otherPlans = _earMarkPatterns.GetAll()
+            .Where(other => other.FinanceId == plan.FinanceId && other.DatePattern.DtStart != plan.DatePattern.DtStart)
+            .ToList();
+        if (otherPlans.Count == 0)
+        {
+            _earMarkPatterns.Delete(plan.FinanceId);
+        }
+        else
+        {
+            _earMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+            var repositories = new FinancePatternRepositories
+            {
+                FinancialPatterns = _financialPatterns,
+                EarMarkPatterns = _earMarkPatterns,
+                ManualEarmarks = _manualEarmarks,
+            };
+            foreach (var date in repositories.FindOrphanedManualEarmarkDates(otherPlans, plan.FinanceId))
+            {
+                _manualEarmarks.Delete(plan.FinanceId, date);
+            }
+        }
+
         RefreshGrids();
     }
 

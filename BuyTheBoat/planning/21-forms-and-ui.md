@@ -135,6 +135,8 @@ Distilled from the forecast-tab and plan-health passes; apply to all UI work:
   out-of-range date at all); a true disabled control is right only for a loaded row's **identity-key**
   fields (an existing isolated earmark's Date and goal — changing either would be a different row, not
   an edit).
+  The Earmark form's Change... stays enabled anyway: it opens a different goal (asking to discard unsaved
+  edits), not an edit of the open item's goal.
 
 ## Plan-health content (the Earmark form's helper regions)
 
