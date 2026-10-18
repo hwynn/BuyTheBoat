@@ -13,7 +13,7 @@ namespace BuyTheBoat.App;
 /// </remarks>
 public static class ForecastSpreadsheetExporter
 {
-    private const string MoneyFormat = "$#,##0.00";
+    private const string MoneyFormat = "#,##0.00";
 
     // Excel caps a sheet name at 31 characters.
     private const int MaxSheetNameLength = 31;

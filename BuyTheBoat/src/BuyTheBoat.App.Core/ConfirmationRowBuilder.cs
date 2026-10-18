@@ -29,7 +29,7 @@ internal sealed record RowInputs
     /// <summary>For an underfunded goal: one option label per correction, in recommendation order, before a final "leave it as is"; currently just "Load the suggested amount".</summary>
     public IReadOnlyList<string> GoalHealthCorrectionLabels { get; init; } = [];
 
-    // For an overfunded goal: the "lower the contribution to $X" option (its presence turns this case on), the "keep saving at this rate" option, and the skip question and options nested under it; all empty otherwise.
+    // For an overfunded goal: the "lower the contribution to X" option (its presence turns this case on), the "keep saving at this rate" option, and the skip question and options nested under it; all empty otherwise.
     public string GoalHealthLowerRateLabel { get; init; } = "";
     public string GoalHealthKeepRateLabel { get; init; } = "";
     public string GoalHealthSkipQuestion { get; init; } = "";

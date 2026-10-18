@@ -14,9 +14,9 @@ public partial class EarmarkPatternPickerWindow : Window
     private sealed class Row(EarMarkPattern pattern)
     {
         public EarMarkPattern Pattern { get; } = pattern;
-        public string AmountText => $"{Math.Abs(Pattern.Amount):C}{(Pattern.Amount < 0 ? " / occurrence" : "")}";
+        public string AmountText => $"{Math.Abs(Pattern.Amount):N2}{(Pattern.Amount < 0 ? " / occurrence" : "")}";
         public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
-        public string StartingAllocationText => Pattern.StartingAllocation.ToString("C");
+        public string StartingAllocationText => Pattern.StartingAllocation.ToString("N2");
     }
 
     /// <summary>The plan the user picked, or null if they cancelled.</summary>

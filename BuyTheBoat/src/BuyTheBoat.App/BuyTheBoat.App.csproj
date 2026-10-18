@@ -6,11 +6,6 @@
     <ProjectReference Include="..\BuyTheBoat.App.Core\BuyTheBoat.App.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Lets the App tests call EarmarkFormPanel's internal static text builders (AllocateTodayText, ConcurrentPlansSentence) directly. -->
-    <InternalsVisibleTo Include="BuyTheBoat.App.Tests" />
-  </ItemGroup>
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

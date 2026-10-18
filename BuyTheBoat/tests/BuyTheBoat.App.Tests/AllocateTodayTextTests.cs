@@ -45,9 +45,9 @@ public class AllocateTodayTextTests
     {
         var day = Day(40m, Jar(null, 200m), Jar(1, 100m), Jar(2, 300m), Jar(3, 50m), Jar(4, 25m));
 
-        EarmarkFormPanel.AllocateTodayText(day, Goal(1, priority: 3), Priorities, sameDayOneOff: null).ShouldBe(string.Join(Environment.NewLine,
-            "Free: $40.00",
-            "Set aside: $675.00 — $100.00 for this goal, $300.00 for more important goals, $50.00 for equally important ones, $25.00 for less important ones, $200.00 in the safety cushion."));
+        EarmarkFormText.AllocateTodayText(day, Goal(1, priority: 3), Priorities, sameDayOneOff: null).ShouldBe(string.Join(Environment.NewLine,
+            "Free: 40.00",
+            "Set aside: 675.00 — 100.00 for this goal, 300.00 for more important goals, 50.00 for equally important ones, 25.00 for less important ones, 200.00 in the safety cushion."));
     }
 
     [Fact]
@@ -55,8 +55,8 @@ public class AllocateTodayTextTests
     {
         var day = Day(40m, Jar(null, 0m), Jar(1, 100m));
 
-        EarmarkFormPanel.AllocateTodayText(day, Goal(1, priority: 3), Priorities, sameDayOneOff: null)
-            .ShouldEndWith("$0.00 for less important ones.");
+        EarmarkFormText.AllocateTodayText(day, Goal(1, priority: 3), Priorities, sameDayOneOff: null)
+            .ShouldEndWith("0.00 for less important ones.");
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class AllocateTodayTextTests
     {
         var day = Day(40m, Jar(null, 0m), Jar(1, 100m));
 
-        EarmarkFormPanel.AllocateTodayText(day, Goal(1, priority: 3), Priorities, sameDayOneOff: 75m)
-            .ShouldEndWith("This goal already has a one-off of $75.00 on this day; saving adds to it.");
+        EarmarkFormText.AllocateTodayText(day, Goal(1, priority: 3), Priorities, sameDayOneOff: 75m)
+            .ShouldEndWith("This goal already has a one-off of 75.00 on this day; saving adds to it.");
     }
 }

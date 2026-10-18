@@ -211,7 +211,7 @@
                                                 <GroupStyle.HeaderTemplate>
                                                     <DataTemplate>
                                                         <!-- A group header tells the whole story here:
-                                                             line one is the account, its balance ("how much money is in the account"), and — when short — the "Short $X" warning to the right of it;
+                                                             line one is the account, its balance ("how much money is in the account"), and — when short — the "Short X" warning to the right of it;
                                                              line two is which rung it's on (money in another account, or none can cover it), and the lever pre-fills a transfer into it (the shortfall ladder).
                                                              Every account always appears in this pane, so the balance, narrative, and lever can never go missing. -->
                                                         <StackPanel Margin="0,8,0,3">
@@ -573,9 +573,9 @@
                                       AutomationProperties.AutomationId="MoneyFlowGrid">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
-                                    <DataGridTextColumn Header="Comes in / month" Binding="{Binding MonthlyIn, StringFormat={}{0:C}}" Width="150"/>
-                                    <DataGridTextColumn Header="Goes out / month" Binding="{Binding MonthlyOut, StringFormat={}{0:C}}" Width="150"/>
-                                    <DataGridTextColumn Header="Net / month" Binding="{Binding MonthlyNet, StringFormat={}{0:C}}" Width="*">
+                                    <DataGridTextColumn Header="Comes in / month" Binding="{Binding MonthlyIn, StringFormat={}{0:N2}}" Width="150"/>
+                                    <DataGridTextColumn Header="Goes out / month" Binding="{Binding MonthlyOut, StringFormat={}{0:N2}}" Width="150"/>
+                                    <DataGridTextColumn Header="Net / month" Binding="{Binding MonthlyNet, StringFormat={}{0:N2}}" Width="*">
                                         <DataGridTextColumn.ElementStyle>
                                             <Style TargetType="TextBlock">
                                                 <Style.Triggers>
@@ -616,7 +616,7 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="From" Binding="{Binding From}" Width="220"/>
                                     <DataGridTextColumn Header="To" Binding="{Binding To}" Width="220"/>
-                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="130"/>
+                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="130"/>
                                     <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
                                 </DataGrid.Columns>
                             </DataGrid>
@@ -652,7 +652,7 @@
                                     <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160"/>
                                     <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="200"/>
                                     <DataGridTextColumn Header="Account" Binding="{Binding Account}" Width="120"/>
-                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="110"/>
+                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="110"/>
                                     <DataGridTextColumn Header="Mandatory" Binding="{Binding Mandatory}" Width="80"/>
                                     <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="70"/>
                                     <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
@@ -701,7 +701,7 @@
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="110"/>
                                         <DataGridTextColumn Header="Fund" Binding="{Binding Target}" Width="260"/>
-                                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="120"/>
+                                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="120"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </DockPanel>
@@ -709,8 +709,8 @@
                             <DataGrid x:Name="EarMarkPatternsGrid" SelectionChanged="OnListRowSelected" AutoGenerateColumns="False" IsReadOnly="True" RowStyle="{StaticResource OpenInFormRowStyle}">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Allocation target" Binding="{Binding Goal}" Width="280"/>
-                                    <DataGridTextColumn Header="Amount per occurrence" Binding="{Binding Amount, StringFormat={}{0:C}}" Width="160"/>
-                                    <DataGridTextColumn Header="Already Saved" Binding="{Binding StartingAllocation, StringFormat={}{0:C}}" Width="120"/>
+                                    <DataGridTextColumn Header="Amount per occurrence" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="160"/>
+                                    <DataGridTextColumn Header="Already Saved" Binding="{Binding StartingAllocation, StringFormat={}{0:N2}}" Width="120"/>
                                     <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
                                 </DataGrid.Columns>
                             </DataGrid>

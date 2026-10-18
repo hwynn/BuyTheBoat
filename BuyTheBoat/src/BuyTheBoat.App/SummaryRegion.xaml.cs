@@ -58,7 +58,7 @@ public partial class SummaryRegion : UserControl
     /// <param name="peakDates">Which of the goal's own occurrence dates to label on the chart with their own gridline, most-recent-first from Start — empty for a one-time goal, which already has its single real due date labeled separately. Caller decides how many; this control just draws whatever list it's given.</param>
     /// <param name="highlightDate">One of peakDates (or Start-of-window's own first upcoming occurrence) to mark in the same color as the first-payment warning text, when that warning is showing — so the reader can tell which gridline it's about instead of guessing. Null when no such warning is showing.</param>
     /// <param name="proposedTrajectory">Savings-plan mode's own "proposed — rough, live estimate" line: the projected jar ExpectedAmount for whatever's currently typed in Amount/Recurrence/Starting-point, computed via TransactionLogBookFactory.ComputeExpectedTrajectory, no forecast needed. Pass empty in One-off mode (nothing there is proposing a new rate) — DrawChart falls back to drawing the real, saved ActualTrajectory instead; the two are never drawn together.</param>
-    /// <param name="additionAmount">One-off mode's own "+ $X today" line: the signed amount the currently-typed one-off would add, drawn as ActualTrajectory shifted by this much from Today onward. Null in Savings-plan mode, or whenever nothing valid is typed yet.</param>
+    /// <param name="additionAmount">One-off mode's own "+ X today" line: the signed amount the currently-typed one-off would add, drawn as ActualTrajectory shifted by this much from Today onward. Null in Savings-plan mode, or whenever nothing valid is typed yet.</param>
     public void Load(
         string narrative,
         DateOnly start, DateOnly asOfDate, DateOnly dueDate,
@@ -132,7 +132,7 @@ public partial class SummaryRegion : UserControl
             X1 = leftMargin, Y1 = goalY, X2 = width - rightMargin, Y2 = goalY,
             Stroke = Brushes.Gray, StrokeThickness = 1, StrokeDashArray = [4, 3],
         });
-        ChartCanvas.Children.Add(TextAt($"{chart.GoalAmount:C0} goal", width - rightMargin, goalY - 12, right: true, width));
+        ChartCanvas.Children.Add(TextAt($"{chart.GoalAmount:N0} goal", width - rightMargin, goalY - 12, right: true, width));
         legendEntries.Add(("Goal", Brushes.Gray, true));
 
         // The "proposed" line, only passed in Savings-plan mode, so it never appears with One-off mode's line; both use solid SteelBlue.
@@ -177,7 +177,7 @@ public partial class SummaryRegion : UserControl
                 StrokeThickness = 2,
                 StrokeDashArray = [6, 4],
             });
-            legendEntries.Add(($"With today's addition ({(addition >= 0 ? "+" : string.Empty)}{addition:C0})", AdditionBrush, true));
+            legendEntries.Add(($"With today's addition ({(addition >= 0 ? "+" : string.Empty)}{addition:N0})", AdditionBrush, true));
         }
 
         // Draws a labeled gridline at each date the caller supplies; a one-time goal has none and gets a plain "Due" label below.

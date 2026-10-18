@@ -19,7 +19,7 @@ public partial class EarmarkFormPanel : UserControl
         public FinancialPattern Pattern { get; } = pattern;
 
         public string DisplayText { get; } =
-            $"{(string.IsNullOrWhiteSpace(pattern.Description) ? pattern.Source : pattern.Description)} (id {pattern.FinanceId}, {pattern.Amount:C})";
+            $"{(string.IsNullOrWhiteSpace(pattern.Description) ? pattern.Source : pattern.Description)} (id {pattern.FinanceId}, {pattern.Amount:N2})";
     }
 
     private IReadOnlyList<FinancialPattern> _goals = [];
@@ -715,7 +715,7 @@ public partial class EarmarkFormPanel : UserControl
 
         var priorityById = _goals.ToDictionary(pattern => pattern.FinanceId, pattern => pattern.Priority);
         var sameDayEntry = _existingManualEarmarks.FirstOrDefault(m => m.FinanceId == goal.FinanceId && m.Date == date && m != _oneOffEditTarget);
-        var text = AllocateTodayText(entry.Snapshot, goal, priorityById, sameDayEntry?.Amount);
+        var text = EarmarkFormText.AllocateTodayText(entry.Snapshot, goal, priorityById, sameDayEntry?.Amount);
         if (beforeForecast)
         {
             text = $"This one-off is dated {date:MMM d, yyyy}, before the forecast starts, so these are today's figures.{Environment.NewLine}{text}";
@@ -727,39 +727,6 @@ public partial class EarmarkFormPanel : UserControl
 
         AllocateTodayBody.Text = text;
         AllocateTodayRegion.Visibility = Visibility.Visible;
-    }
-
-    /// <summary>
-    /// [CALC] The "What can I allocate today?" lines for one day: free funds, what's set aside and how it splits by importance against this goal, and any one-off this goal already has that day.
-    /// More or less important means a higher or lower Priority; the safety cushion is listed on its own.
-    /// </summary>
-    /// <param name="snapshot">The goal's account on the picked day.</param>
-    /// <param name="priorityById">Each pattern's Priority, by finance id.</param>
-    /// <param name="sameDayOneOff">The amount of a one-off this goal already has that day, other than the one being edited, or null.</param>
-    internal static string AllocateTodayText(BalanceSnapshot snapshot, FinancialPattern goal, IReadOnlyDictionary<int, int> priorityById, decimal? sameDayOneOff)
-    {
-        decimal Held(Func<int, bool> include) => snapshot.FundJars
-            .Where(jar => jar.FinanceId is { } id && id != goal.FinanceId && include(priorityById.GetValueOrDefault(id)))
-            .Sum(jar => jar.ExpectedAmount);
-
-        var thisGoal = snapshot.FundJars.FirstOrDefault(jar => jar.FinanceId == goal.FinanceId)?.ExpectedAmount ?? 0m;
-        var cushion = snapshot.FundJars.Where(jar => jar.FinanceId is null).Sum(jar => jar.ExpectedAmount);
-        var totalSetAside = snapshot.FundJars.Sum(jar => jar.ExpectedAmount);
-
-        var lines = new List<string>
-        {
-            $"Free: {snapshot.ExpectedFreeAmount ?? 0m:C}",
-            $"Set aside: {totalSetAside:C} — {thisGoal:C} for this goal, {Held(p => p > goal.Priority):C} for more important goals, "
-                + $"{Held(p => p == goal.Priority):C} for equally important ones, {Held(p => p < goal.Priority):C} for less important ones"
-                + (cushion > 0m ? $", {cushion:C} in the safety cushion." : "."),
-        };
-
-        if (sameDayOneOff is { } existing)
-        {
-            lines.Add($"This goal already has a one-off of {existing:C} on this day; saving adds to it.");
-        }
-
-        return string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>
@@ -999,7 +966,7 @@ public partial class EarmarkFormPanel : UserControl
         var existing = _existingManualEarmarks.FirstOrDefault(m => m.FinanceId == financeId && m.Date == date)?.Amount ?? 0m;
         if (withdrawal - Math.Min(existing, 0m) > jarBalance)
         {
-            throw new InvalidOperationException($"This fund only holds {jarBalance:C} on that day — a fund can't go below zero.");
+            throw new InvalidOperationException($"This fund only holds {jarBalance:N2} on that day — a fund can't go below zero.");
         }
     }
 
@@ -1018,7 +985,7 @@ public partial class EarmarkFormPanel : UserControl
 
         var proceed = MessageBox.Show(
             Window.GetWindow(this),
-            $"Free balance on that day is only {free:C}. Setting aside {addition:C} over-commits the plan — " +
+            $"Free balance on that day is only {free:N2}. Setting aside {addition:N2} over-commits the plan — " +
             "the forecast will show a negative free balance, and money may be pulled back out of " +
             "lower-priority funds to cover it. Add it anyway?",
             "More than the free balance",
@@ -1076,10 +1043,10 @@ public partial class EarmarkFormPanel : UserControl
         StartingPointRegion.Visibility = Visibility.Visible;
         StartingEarmarkEditPanel.Visibility = UsersCanEditFundStartPoint ? Visibility.Visible : Visibility.Collapsed;
 
-        // No goal or no saved plan: shows $0 with no date.
+        // No goal or no saved plan: shows 0 with no date.
         if (_selectedGoal is not { } goal || OpenPlanFor(goal) is not { } pattern)
         {
-            StartingAmountText.Text = $"{0m:C}";
+            StartingAmountText.Text = $"{0m:N2}";
             StartingDateText.Text = "no savings plan saved yet";
         }
         else
@@ -1087,12 +1054,12 @@ public partial class EarmarkFormPanel : UserControl
             var total = GetStartingPointTotal(pattern);
             if (total <= 0m)
             {
-                StartingAmountText.Text = $"{0m:C}";
+                StartingAmountText.Text = $"{0m:N2}";
                 StartingDateText.Text = "savings plan started from 0";
             }
             else
             {
-                StartingAmountText.Text = $"{total:C}";
+                StartingAmountText.Text = $"{total:N2}";
                 StartingDateText.Text = $"as of {pattern.DatePattern.ActiveStart:MMM d, yyyy}";
             }
         }
@@ -1338,7 +1305,7 @@ public partial class EarmarkFormPanel : UserControl
                 var dateText = EarmarkDatePicker.SelectedDate is { } picked
                     ? $" on {DateOnly.FromDateTime(picked):MMM d, yyyy}"
                     : string.Empty;
-                narrative += $" This one-off adjustment is {verb} {proposedAmount:C0}{dateText}.";
+                narrative += $" This one-off adjustment is {verb} {proposedAmount:N0}{dateText}.";
             }
 
             var todayDate = DateOnly.FromDateTime(DateTime.Today);
@@ -1413,12 +1380,12 @@ public partial class EarmarkFormPanel : UserControl
             string continuation;
             if (!isOneTime && RuleEditor.Result is { } contributionRule)
             {
-                var contributionCadence = ContributionCadencePhrase(contributionRule.Frequency, contributionRule.Interval);
-                continuation = $"We plan to set aside {enteredAmount:C0} {contributionCadence} toward it.";
+                var contributionCadence = EarmarkFormText.ContributionCadencePhrase(contributionRule.Frequency, contributionRule.Interval);
+                continuation = $"We plan to set aside {enteredAmount:N0} {contributionCadence} toward it.";
             }
             else
             {
-                continuation = $"We plan to set aside {enteredAmount:C0} per occurrence, starting {start:MMM d, yyyy}.";
+                continuation = $"We plan to set aside {enteredAmount:N0} per occurrence, starting {start:MMM d, yyyy}.";
             }
 
             var contributionOccurrenceCount = RuleEditor.Result?.GetOccurrences().Count ?? 1;
@@ -1497,7 +1464,7 @@ public partial class EarmarkFormPanel : UserControl
         var concurrentPlans = patternsForMilestone
             .Where(other => other.DatePattern.ActiveSpansOverlap(plan.DatePattern))
             .ToList();
-        narrative += ConcurrentPlansSentence(concurrentPlans, plan, isOneOff);
+        narrative += EarmarkFormText.ConcurrentPlansSentence(concurrentPlans, plan, isOneOff);
 
         // Dates for up to 3 chart gridlines; empty for a one-time goal, which gets a plain "Due" label.
         var peakDates = isOneTime
@@ -1573,57 +1540,9 @@ public partial class EarmarkFormPanel : UserControl
         return interval <= 1 ? $"every {unit}" : $"every {interval} {unit}s";
     }
 
-    /// <summary>[CALC] The phrase for "We plan to set aside ...", like "a month" or "every 3 months"; "a month" avoids repeating the opening line's "every month".</summary>
-    /// <param name="frequency">The plan's contribution frequency.</param>
-    /// <param name="interval">The plan's contribution interval.</param>
-    private static string ContributionCadencePhrase(RecurrenceFrequency frequency, int interval)
-    {
-        var unit = frequency switch
-        {
-            RecurrenceFrequency.Daily => "day",
-            RecurrenceFrequency.Weekly => "week",
-            RecurrenceFrequency.Monthly => "month",
-            RecurrenceFrequency.Yearly => "year",
-            _ => "occurrence",
-        };
-        return interval <= 1 ? $"a {unit}" : $"every {interval} {unit}s";
-    }
-
     /// <summary>
-    /// [CALC] The narrative's sentence naming the other plans running at the same time, like " Another plan also sets aside $50 a month toward it; the chart and the figures beside it count both."
-    /// In One-off mode no plan is open, so it names them all; empty when only one plan funds the goal.
-    /// </summary>
-    /// <param name="concurrentPlans">Every saved plan running at the same time as plan, plan's saved version included.</param>
-    /// <param name="plan">The plan the Summary is built around.</param>
-    /// <param name="isOneOff">Whether the form is in One-off mode.</param>
-    internal static string ConcurrentPlansSentence(IReadOnlyList<EarMarkPattern> concurrentPlans, EarMarkPattern plan, bool isOneOff)
-    {
-        static string Describe(EarMarkPattern other) =>
-            $"{Math.Abs(other.Amount):C0} {ContributionCadencePhrase(other.DatePattern.Frequency, other.DatePattern.Interval)}";
-
-        static string JoinWithAnd(IReadOnlyList<string> parts) =>
-            parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts.Take(parts.Count - 1))} and {parts[^1]}";
-
-        if (isOneOff)
-        {
-            return concurrentPlans.Count < 2
-                ? string.Empty
-                : $" {concurrentPlans.Count} plans fund it — {JoinWithAnd(concurrentPlans.Select(Describe).ToList())}; the chart and the figures beside it count them all.";
-        }
-
-        // Matched by start, since the open plan's saved version is in the list too.
-        var others = concurrentPlans.Where(other => other.DatePattern.ActiveStart != plan.DatePattern.ActiveStart).ToList();
-        return others.Count switch
-        {
-            0 => string.Empty,
-            1 => $" Another plan also sets aside {Describe(others[0])} toward it; the chart and the figures beside it count both.",
-            _ => $" {others.Count} other plans also set aside {JoinWithAnd(others.Select(Describe).ToList())} toward it; the chart and the figures beside it count them all.",
-        };
-    }
-
-    /// <summary>
-    /// [CALC] The Summary's opening sentence: "We need $X for [goal] by [date]" for a one-time goal.
-    /// A repeating one names its cost, schedule, and next due date instead, like "Car insurance costs $300 every 3 months — next due Oct 1, 2026".
+    /// [CALC] The Summary's opening sentence: "We need X for [goal] by [date]" for a one-time goal.
+    /// A repeating one names its cost, schedule, and next due date instead, like "Car insurance costs 300 every 3 months — next due Oct 1, 2026".
     /// </summary>
     /// <param name="goal">The goal to narrate.</param>
     /// <param name="goalAmount">The full amount needed.</param>
@@ -1636,13 +1555,13 @@ public partial class EarmarkFormPanel : UserControl
     {
         if (isOneTime)
         {
-            return $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.";
+            return $"We need {goalAmount:N0} for {label} by {dueDate:MMM d, yyyy}.";
         }
 
         var cadence = CadencePhrase(goal.DatePattern.Frequency, goal.DatePattern.Interval);
         var upcoming = goal.DatePattern.GetOccurrences(asOfDate, dueDate);
         var nextDueText = upcoming.Count > 0 ? upcoming[0].ToString("MMM d, yyyy") : "no date left in range";
-        return $"{label} costs {goalAmount:C0} {cadence} — next due {nextDueText}.";
+        return $"{label} costs {goalAmount:N0} {cadence} — next due {nextDueText}.";
     }
 
     /// <summary>
@@ -1746,7 +1665,7 @@ public partial class EarmarkFormPanel : UserControl
         return Math.Round(Math.Abs(goal.Amount) * releaseCount / deposits.Count, 2);
     }
 
-    /// <summary>[UI] Shows the little "covers $456.00 / month" line under the amount box while matching is on, hidden otherwise.</summary>
+    /// <summary>[UI] Shows the little "covers 456.00 / month" line under the amount box while matching is on, hidden otherwise.</summary>
     /// <param name="goal">The goal whose own amount and cadence the line names.</param>
     /// <param name="matched">The computed match, or null when there's nothing to cover — hides the line.</param>
     private void UpdateMatchCoverageCaption(FinancialPattern goal, decimal? matched)
@@ -1759,8 +1678,8 @@ public partial class EarmarkFormPanel : UserControl
 
         var cadence = DescribeGoalCadence(goal);
         MatchCoverageText.Text = cadence is null
-            ? $"covers {Math.Abs(goal.Amount):C} in total"
-            : $"covers {Math.Abs(goal.Amount):C} / {cadence}";
+            ? $"covers {Math.Abs(goal.Amount):N2} in total"
+            : $"covers {Math.Abs(goal.Amount):N2} / {cadence}";
         MatchCoverageText.Visibility = Visibility.Visible;
     }
 

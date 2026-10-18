@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <!-- The UI project builds on internal types here (ConfirmationPaginator, ConfirmationRowBuilder's inputs).
-         The App tests reach FinancePatternSaveConfirmation's internal Determine*/Perform* methods directly, so a scenario's confirmation conditions can be exercised without driving the real popup. -->
+         The App tests reach FinancePatternSaveConfirmation's internal Determine*/Perform* methods directly, so a scenario's confirmation conditions can be exercised without driving the real popup, and call EarmarkFormText's internal text builders. -->
     <InternalsVisibleTo Include="BuyTheBoat.App" />
     <InternalsVisibleTo Include="BuyTheBoat.App.Tests" />
   </ItemGroup>

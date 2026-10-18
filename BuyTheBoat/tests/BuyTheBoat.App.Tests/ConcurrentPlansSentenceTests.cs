@@ -44,27 +44,27 @@ public class ConcurrentPlansSentenceTests
     [Fact]
     public void A_lone_plan_adds_nothing()
     {
-        EarmarkFormPanel.ConcurrentPlansSentence([Mine], Mine, isOneOff: false).ShouldBeEmpty();
+        EarmarkFormText.ConcurrentPlansSentence([Mine], Mine, isOneOff: false).ShouldBeEmpty();
     }
 
     [Fact]
     public void One_other_plan_is_named_with_its_amount_and_cadence()
     {
-        EarmarkFormPanel.ConcurrentPlansSentence([Mine, Partners], Mine, isOneOff: false)
-            .ShouldBe(" Another plan also sets aside $50 a month toward it; the chart and the figures beside it count both.");
+        EarmarkFormText.ConcurrentPlansSentence([Mine, Partners], Mine, isOneOff: false)
+            .ShouldBe(" Another plan also sets aside 50 a month toward it; the chart and the figures beside it count both.");
     }
 
     [Fact]
     public void Several_other_plans_are_listed()
     {
-        EarmarkFormPanel.ConcurrentPlansSentence([Mine, Partners, Biweekly], Mine, isOneOff: false)
-            .ShouldBe(" 2 other plans also set aside $50 a month and $20 every 2 weeks toward it; the chart and the figures beside it count them all.");
+        EarmarkFormText.ConcurrentPlansSentence([Mine, Partners, Biweekly], Mine, isOneOff: false)
+            .ShouldBe(" 2 other plans also set aside 50 a month and 20 every 2 weeks toward it; the chart and the figures beside it count them all.");
     }
 
     [Fact]
     public void One_off_mode_names_every_plan()
     {
-        EarmarkFormPanel.ConcurrentPlansSentence([Mine, Partners, Biweekly], Mine, isOneOff: true)
-            .ShouldBe(" 3 plans fund it — $100 a month, $50 a month and $20 every 2 weeks; the chart and the figures beside it count them all.");
+        EarmarkFormText.ConcurrentPlansSentence([Mine, Partners, Biweekly], Mine, isOneOff: true)
+            .ShouldBe(" 3 plans fund it — 100 a month, 50 a month and 20 every 2 weeks; the chart and the figures beside it count them all.");
     }
 }

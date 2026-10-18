@@ -313,7 +313,7 @@ public partial class TransferFormPanel : UserControl
             return;
         }
 
-        SummaryText.Text = $"Moves {amount:C0} from {from.Name} to {to.Name}, on the schedule above.";
+        SummaryText.Text = $"Moves {amount:N0} from {from.Name} to {to.Name}, on the schedule above.";
     }
 
     /// <summary>[CALC] The Account currently chosen in one of the pickers, or null if none.</summary>

@@ -12,26 +12,26 @@ public static class PlanHealthMessages
     /// <param name="state">The plan's current health state.</param>
     public static string? CurrentJarStateDelta(PlanHealthState state) => state.MostImportantHealthState switch
     {
-        PlanHealthCategory.AlreadyMissing => $"{state.CurrentShortfallAmount:C0} short",
-        PlanHealthCategory.CurrentlyOverfunded => $"{state.CurrentOverfundedAmount:C0} over",
+        PlanHealthCategory.AlreadyMissing => $"{state.CurrentShortfallAmount:N0} short",
+        PlanHealthCategory.CurrentlyOverfunded => $"{state.CurrentOverfundedAmount:N0} over",
         _ => null,
     };
 
     /// <summary>
-    /// [CALC] The "Fund jar, today" line: "$X saved of $Y milestone", with no gap shown, since the two numbers make it obvious.
+    /// [CALC] The "Fund jar, today" line: "X saved of Y milestone", with no gap shown, since the two numbers make it obvious.
     /// Takes raw amounts, so both a saved reading and an unsaved plan's live reading can use it.
     /// </summary>
     /// <param name="expectedAmount">What the jar currently holds.</param>
     /// <param name="milestoneAmount">The milestone it's measured against.</param>
     public static string JarStateLine(decimal expectedAmount, decimal milestoneAmount) =>
-        $"{expectedAmount:C0} saved of {milestoneAmount:C0} milestone";
+        $"{expectedAmount:N0} saved of {milestoneAmount:N0} milestone";
 
-    /// <summary>[CALC] The "Fund jar, today" line without the milestone, just "$X saved", for the Expense form, where the milestone isn't helpful while editing the bill.</summary>
+    /// <summary>[CALC] The "Fund jar, today" line without the milestone, just "X saved", for the Expense form, where the milestone isn't helpful while editing the bill.</summary>
     /// <param name="expectedAmount">What the jar currently holds.</param>
     public static string JarSavedLine(decimal expectedAmount) =>
-        $"{expectedAmount:C0} saved";
+        $"{expectedAmount:N0} saved";
 
-    /// <summary>[CALC] "$X saved of $Y milestone — $Z short/over", for the save confirmation's "worth a look" row, which spells out the gap; the Summary uses the plain JarStateLine.</summary>
+    /// <summary>[CALC] "X saved of Y milestone — Z short/over", for the save confirmation's "worth a look" row, which spells out the gap; the Summary uses the plain JarStateLine.</summary>
     /// <param name="jar">This savings plan's own FundJar (today's reading) — PlanHealthState alone doesn't carry the raw saved/milestone amounts.</param>
     /// <param name="state">The plan's current health state.</param>
     public static string CurrentJarStateLine(FundJar jar, PlanHealthState state)
@@ -52,11 +52,11 @@ public static class PlanHealthMessages
         category switch
         {
             PlanHealthCategory.Healthy =>
-                $"{jar.ExpectedAmount:C0} saved, matching the {jar.MilestoneAmount ?? 0m:C0} milestone — on track.",
+                $"{jar.ExpectedAmount:N0} saved, matching the {jar.MilestoneAmount ?? 0m:N0} milestone — on track.",
             PlanHealthCategory.WillMiss =>
-                $"{jar.ExpectedAmount:C0} saved, on pace for {shortfall.AmountAllocatedByDueDate:C0} of {shortfall.AmountNeeded:C0} needed — {shortfall.ShortfallAmount:C0} short in the long run",
+                $"{jar.ExpectedAmount:N0} saved, on pace for {shortfall.AmountAllocatedByDueDate:N0} of {shortfall.AmountNeeded:N0} needed — {shortfall.ShortfallAmount:N0} short in the long run",
             PlanHealthCategory.WillBeOverfunded =>
-                $"{jar.ExpectedAmount:C0} saved, on pace for {shortfall.AmountAllocatedByDueDate:C0} of {shortfall.AmountNeeded:C0} needed — {shortfall.OverfundedAmount:C0} over",
+                $"{jar.ExpectedAmount:N0} saved, on pace for {shortfall.AmountAllocatedByDueDate:N0} of {shortfall.AmountNeeded:N0} needed — {shortfall.OverfundedAmount:N0} over",
             _ => null,
         };
 
@@ -105,13 +105,13 @@ public static class PlanHealthMessages
     public static string? FirstOccurrenceShortfallLine(bool isFirstOccurrencePending, decimal firstOccurrenceShortfall, bool isOneTime) =>
         isFirstOccurrencePending && firstOccurrenceShortfall > 0m
             ? isOneTime
-                ? $"{firstOccurrenceShortfall:C0} short for reaching your goal"
-                : $"{firstOccurrenceShortfall:C0} short for the first payment"
+                ? $"{firstOccurrenceShortfall:N0} short for reaching your goal"
+                : $"{firstOccurrenceShortfall:N0} short for the first payment"
             : null;
 
     /// <summary>
     /// [CALC] The first-payment warning as two lines, a plain verdict and then the facts, about the first pending payment only; the plan's long-run health is shown elsewhere.
-    /// Reassuring when free cash probably covers what isn't set aside yet, worded tentatively since another same-day claim could take that cash, and suggesting "up to $X could be allocated".
+    /// Reassuring when free cash probably covers what isn't set aside yet, worded tentatively since another same-day claim could take that cash, and suggesting "up to X could be allocated".
     /// Urgent when even free cash can't cover it, naming the payment date and how far short it will be.
     /// A null freeFunds (no forecast) falls back to the set-aside gap; returns null when nothing is short or the first payment has happened.
     /// </summary>
@@ -137,15 +137,15 @@ public static class PlanHealthMessages
         if (freeFunds is not decimal free)
         {
             return isOneTime
-                ? $"{setAsideShortfall:C0} short for reaching your goal"
-                : $"{setAsideShortfall:C0} short for the first payment";
+                ? $"{setAsideShortfall:N0} short for reaching your goal"
+                : $"{setAsideShortfall:N0} short for the first payment";
         }
 
         // The money's probably there, just not set aside: free cash covers the gap.
         if (free >= setAsideShortfall)
         {
             return "You'll probably have the free cash — it just isn't set aside." +
-                $"\n{setAside:C0} of {firstPaymentAmount:C0} set aside · up to {free:C0} could be allocated";
+                $"\n{setAside:N0} of {firstPaymentAmount:N0} set aside · up to {free:N0} could be allocated";
         }
 
         // Genuinely short: even free cash can't cover the gap. Firm, and dated —
@@ -153,10 +153,10 @@ public static class PlanHealthMessages
         var stillShort = setAsideShortfall - free;
         var when = paymentDate is { } date ? $"{date:MMM d} " : string.Empty;
         var verdict = isOneTime
-            ? (paymentDate is { } d ? $"By {d:MMM d} you'll be {stillShort:C0} short of your goal, even after free cash."
-                                    : $"You'll be {stillShort:C0} short of your goal, even after free cash.")
-            : $"The {when}payment falls {stillShort:C0} short, even after free cash.";
-        return $"{verdict}\n{setAside:C0} of {firstPaymentAmount:C0} set aside · only {free:C0} free";
+            ? (paymentDate is { } d ? $"By {d:MMM d} you'll be {stillShort:N0} short of your goal, even after free cash."
+                                    : $"You'll be {stillShort:N0} short of your goal, even after free cash.")
+            : $"The {when}payment falls {stillShort:N0} short, even after free cash.";
+        return $"{verdict}\n{setAside:N0} of {firstPaymentAmount:N0} set aside · only {free:N0} free";
     }
 
     /// <summary>[CALC] Is the plan deliberately paused ("the pause case"), so nothing lands in the jar? True when its schedule has no occurrences or its amount is $0.</summary>
@@ -164,7 +164,7 @@ public static class PlanHealthMessages
     /// <param name="occurrenceCount">How many occurrences the plan's own rule actually produces.</param>
     public static bool IsPaused(decimal amount, int occurrenceCount) => amount == 0m || occurrenceCount == 0;
 
-    /// <summary>[CALC] The Summary narrative's own replacement sentence for a paused plan (IsPaused) — reads as a deliberate pause instead of "$0" or a silently dropped continuation sentence.</summary>
+    /// <summary>[CALC] The Summary narrative's own replacement sentence for a paused plan (IsPaused) — reads as a deliberate pause instead of "0" or a silently dropped continuation sentence.</summary>
     public const string PausedFundingSentence = "Funding is currently paused, with nothing scheduled toward it.";
 
     /// <summary>

@@ -470,7 +470,7 @@ public partial class ExpenseFormPanel : UserControl
         {
             // Several plans: a chart of one could show a shape Save might not produce, so this shows the goal and Today lines alone.
             Summary.Load(
-                $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}.",
+                $"We need {goalAmount:N0} for {label} by {dueDate:MMM d, yyyy}.",
                 start: plan.DatePattern.ActiveStart,
                 asOfDate: todayDate,
                 dueDate: dueDate,
@@ -482,7 +482,7 @@ public partial class ExpenseFormPanel : UserControl
         }
 
         var narrative =
-            $"We need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {Math.Abs(plan.Amount):C0} per occurrence, starting {plan.DatePattern.ActiveStart:MMM d, yyyy}.";
+            $"We need {goalAmount:N0} for {label} by {dueDate:MMM d, yyyy}. We plan to set aside {Math.Abs(plan.Amount):N0} per occurrence, starting {plan.DatePattern.ActiveStart:MMM d, yyyy}.";
 
         var forecast = RequestForecast?.Invoke();
         var health = forecast?.PlanHealthStates.FirstOrDefault(p => p.FinanceId == existing.FinanceId);
@@ -596,7 +596,7 @@ public partial class ExpenseFormPanel : UserControl
         var label = string.IsNullOrWhiteSpace(pattern.Description) ? pattern.Source : pattern.Description;
         var todayDate = DateOnly.FromDateTime(DateTime.Today);
         var narrative =
-            $"We'd need {goalAmount:C0} for {label} by {dueDate:MMM d, yyyy}. This is a rough preview of the savings plan Save and Plan would set up — {Math.Abs(proposal.Plan.Amount):C0} per occurrence, starting {proposal.Plan.DatePattern.ActiveStart:MMM d, yyyy}.";
+            $"We'd need {goalAmount:N0} for {label} by {dueDate:MMM d, yyyy}. This is a rough preview of the savings plan Save and Plan would set up — {Math.Abs(proposal.Plan.Amount):N0} per occurrence, starting {proposal.Plan.DatePattern.ActiveStart:MMM d, yyyy}.";
 
         var expected = ComputeLiveJarAmount([proposal.Plan], pattern, proposal.Plan.StartingAllocation, _manualEarmarks, todayDate);
 
@@ -1130,7 +1130,7 @@ public partial class ExpenseFormPanel : UserControl
         TotalOwedTextBox.Text = (paymentsLeft * payment).ToString(CultureInfo.InvariantCulture);
         _suppressEvents = wasSuppressed;
         OwedEstimateNoteText.Text =
-            $"Estimated from the {paymentsLeft} payments of {payment:C} left on the saved schedule — replace it with your real balance if you know it.";
+            $"Estimated from the {paymentsLeft} payments of {payment:N2} left on the saved schedule — replace it with your real balance if you know it.";
         OwedEstimateNoteText.Visibility = Visibility.Visible;
     }
 

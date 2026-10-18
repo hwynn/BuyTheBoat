@@ -128,13 +128,13 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
     // Internal (not private): ForecastSpreadsheetExporter reuses these so the
     // exported file's columns read identically to the on-screen grid.
 
-    /// <summary>[CALC] Lists the day's jars, leaving out empty ones so most days don't read as a wall of "$0.00".</summary>
+    /// <summary>[CALC] Lists the day's jars, leaving out empty ones so most days don't read as a wall of "0.00".</summary>
     /// <param name="snapshot">The day's balance snapshot, for its fund jars.</param>
     /// <param name="jarLabels">Finance id → display label, for naming each jar.</param>
     internal static string FormatReserved(BalanceSnapshot snapshot, IReadOnlyDictionary<int, string> jarLabels) =>
         string.Join(", ", snapshot.FundJars
             .Where(jar => jar.ExpectedAmount > 0m)
-            .Select(jar => $"{JarLabel(jar.FinanceId, jarLabels)} {jar.ExpectedAmount:C}"));
+            .Select(jar => $"{JarLabel(jar.FinanceId, jarLabels)} {jar.ExpectedAmount:N2}"));
 
     /// <summary>
     /// [CALC] Lists the day's scheduled events: expected transactions and planned savings contributions.
@@ -148,13 +148,13 @@ public sealed class TimelineRow(TimelineEntry entry, IReadOnlyDictionary<int, st
 
         foreach (var transaction in snapshot.ExpectedTransactions)
         {
-            parts.Add($"{JarLabel(transaction.FinanceId, jarLabels)} {(transaction.ExpectedAmount >= 0 ? "+" : string.Empty)}{transaction.ExpectedAmount:C}");
+            parts.Add($"{JarLabel(transaction.FinanceId, jarLabels)} {(transaction.ExpectedAmount >= 0 ? "+" : string.Empty)}{transaction.ExpectedAmount:N2}");
         }
 
         foreach (var earmarkEvent in snapshot.EarMarkEvents.Where(e => e.RepeatedEarmark))
         {
             // Shown as its effect on free balance (an allocation reduces it).
-            parts.Add($"{JarLabel(earmarkEvent.FinanceId, jarLabels)} {-earmarkEvent.ExpectedAmount:C}");
+            parts.Add($"{JarLabel(earmarkEvent.FinanceId, jarLabels)} {-earmarkEvent.ExpectedAmount:N2}");
         }
 
         return string.Join(", ", parts);
@@ -274,8 +274,8 @@ public sealed class DayCellRow : System.ComponentModel.INotifyPropertyChanged
         AutomationId = $"Day_{date:yyyy-MM-dd}";
         HasSnapshot = true;
 
-        TotalText = total.ToString("C0");
-        FreeText = free.ToString("C0");
+        TotalText = total.ToString("N0");
+        FreeText = free.ToString("N0");
         FreeNegative = free < 0m;
 
         TopEventText = topEvent;
@@ -364,7 +364,7 @@ public sealed class JarDetailRow
             // label + amount beats a crash if data drifts.
             return new JarDetailRow
             {
-                Jar = label, AmountText = saved.ToString("C"), StatusKind = "Neutral",
+                Jar = label, AmountText = saved.ToString("N2"), StatusKind = "Neutral",
                 StatusText = string.Empty, SubText = string.Empty, Drained = drained, Floored = floored,
             };
         }
@@ -377,7 +377,7 @@ public sealed class JarDetailRow
             ExpenseKind.RepeatingGoal => Goal(label, pattern, jar, saved, context, drained, floored, oneTime: false),
             _ => new JarDetailRow
             {
-                Jar = label, AmountText = saved.ToString("C"), StatusKind = "Neutral",
+                Jar = label, AmountText = saved.ToString("N2"), StatusKind = "Neutral",
                 StatusText = string.Empty, SubText = string.Empty, Drained = drained, Floored = floored,
             },
         };
@@ -411,7 +411,7 @@ public sealed class JarDetailRow
         }
         else if (jar.MilestoneAmount is { } milestone && saved < milestone)
         {
-            (statusKind, statusText) = ("Behind", $"Behind {milestone - saved:C0}");
+            (statusKind, statusText) = ("Behind", $"Behind {milestone - saved:N0}");
         }
         else
         {
@@ -423,13 +423,13 @@ public sealed class JarDetailRow
         return new JarDetailRow
         {
             Jar = label,
-            AmountText = saved.ToString("C"),
+            AmountText = saved.ToString("N2"),
             StatusKind = statusKind,
             StatusText = statusText,
             SubText = WithFlooredWarning(
                 nextDue == default
-                    ? $"amount due {amountDue:C0} · no upcoming due date"
-                    : $"amount due {amountDue:C0} · due {nextDue:MMMM d}",
+                    ? $"amount due {amountDue:N0} · no upcoming due date"
+                    : $"amount due {amountDue:N0} · due {nextDue:MMMM d}",
                 floored),
             ProgressFraction = amountDue > 0m ? Math.Min(1.0, (double)(saved / amountDue)) : 0.0,
             ShowProgress = true,
@@ -465,10 +465,10 @@ public sealed class JarDetailRow
         return new JarDetailRow
         {
             Jar = label,
-            AmountText = saved.ToString("C"),
+            AmountText = saved.ToString("N2"),
             StatusKind = behind ? "Behind" : "OnTrack",
-            StatusText = behind ? $"Behind {shortfall!.ShortfallAmount:C0}" : "On track",
-            SubText = WithFlooredWarning($"milestone {milestone:C0} · goal {goalAmount:C0} · {dueText}", floored),
+            StatusText = behind ? $"Behind {shortfall!.ShortfallAmount:N0}" : "On track",
+            SubText = WithFlooredWarning($"milestone {milestone:N0} · goal {goalAmount:N0} · {dueText}", floored),
             ProgressFraction = milestone > 0m
                 ? Math.Min(1.0, (double)(saved / milestone))
                 : saved > 0m ? 1.0 : 0.0,
@@ -492,16 +492,16 @@ public sealed class JarDetailRow
         }
         else
         {
-            (statusKind, statusText) = ("Behind", $"Below target by {target - saved:C0}");
+            (statusKind, statusText) = ("Behind", $"Below target by {target - saved:N0}");
         }
 
         return new JarDetailRow
         {
             Jar = "Safety cushion",
-            AmountText = saved.ToString("C"),
+            AmountText = saved.ToString("N2"),
             StatusKind = statusKind,
             StatusText = statusText,
-            SubText = target > 0m ? $"target {target:C0}" : "set a cushion amount above to reserve a buffer",
+            SubText = target > 0m ? $"target {target:N0}" : "set a cushion amount above to reserve a buffer",
             ProgressFraction = target > 0m ? Math.Min(1.0, (double)(saved / target)) : 0.0,
             ShowProgress = target > 0m,
             Drained = drained,
@@ -557,18 +557,18 @@ public sealed record AccountGroupKey(
 
     // How much money the account actually holds on the day, shown right after the
     // name — the header's own total, above the jar breakdown below it.
-    public string BalanceText => Balance.ToString("C0");
+    public string BalanceText => Balance.ToString("N0");
     public bool BalanceNegative => Balance < 0m;
 
     // Rung 2 only: a transfer can actually close the gap, so the lever appears.
     public bool ShowCoverButton => IsShort && CanCoverElsewhere;
 
-    // "Short $2,000" — the how-bad, shown in red to the right of the balance.
-    public string ShortText => $"Short {Shortfall:C0}";
+    // "Short 2,000" — the how-bad, shown in red to the right of the balance.
+    public string ShortText => $"Short {Shortfall:N0}";
 
     // The lever's label, direction-explicit ("in" = into this account): the app
     // pre-fills only the destination and amount, so the user picks the source.
-    public string MoveInText => $"Move {Shortfall:C0} in →";
+    public string MoveInText => $"Move {Shortfall:N0} in →";
 
     // Line two of the header: which rung, and where the money is (rung 2) or that
     // there is none to be had (rung 3). Empty when the account isn't short.
@@ -634,7 +634,7 @@ public sealed class DayEventRow
                 income.Add(new DayEventRow
                 {
                     Event = label, Chip = "IN", ChipKind = "In",
-                    AmountText = $"+{transaction.ExpectedAmount:C}", IsPositive = true,
+                    AmountText = $"+{transaction.ExpectedAmount:N2}", IsPositive = true,
                 });
             }
             else
@@ -644,7 +644,7 @@ public sealed class DayEventRow
                 expenses.Add(new DayEventRow
                 {
                     Event = label, Chip = mandatory ? "BILL" : "EXPENSE", ChipKind = "Out",
-                    AmountText = transaction.ExpectedAmount.ToString("C"),
+                    AmountText = transaction.ExpectedAmount.ToString("N2"),
                 });
             }
         }
@@ -659,8 +659,8 @@ public sealed class DayEventRow
                 {
                     Event = label, Chip = "MANUAL", ChipKind = "Manual",
                     AmountText = earmark.ExpectedAmount >= 0m
-                        ? $"+{earmark.ExpectedAmount:C}"
-                        : earmark.ExpectedAmount.ToString("C"),
+                        ? $"+{earmark.ExpectedAmount:N2}"
+                        : earmark.ExpectedAmount.ToString("N2"),
                 });
             }
             else if (earmark.RepeatedEarmark || earmark.ExpectedAmount >= 0m)
@@ -668,7 +668,7 @@ public sealed class DayEventRow
                 asides.Add(new DayEventRow
                 {
                     Event = label, Chip = "SET ASIDE", ChipKind = "Aside",
-                    AmountText = earmark.ExpectedAmount.ToString("C"),
+                    AmountText = earmark.ExpectedAmount.ToString("N2"),
                 });
             }
             else if (snapshot.IsDeallocationDay)
@@ -676,7 +676,7 @@ public sealed class DayEventRow
                 pulls.Add(new DayEventRow
                 {
                     Event = label, Chip = "PULLED", ChipKind = "Pull",
-                    AmountText = earmark.ExpectedAmount.ToString("C"), IsPull = true,
+                    AmountText = earmark.ExpectedAmount.ToString("N2"), IsPull = true,
                 });
             }
             else
@@ -685,7 +685,7 @@ public sealed class DayEventRow
                 releases.Add(new DayEventRow
                 {
                     Event = label, Chip = "RELEASED", ChipKind = "Release",
-                    AmountText = earmark.ExpectedAmount.ToString("C"),
+                    AmountText = earmark.ExpectedAmount.ToString("N2"),
                 });
             }
         }
@@ -725,12 +725,12 @@ public sealed class GoalStatusRow(GoalShortfall status)
     public string Status => FormatStatus(status);
 
     internal static string FormatStatus(GoalShortfall status) => status.ShortfallAmount > 0m
-        ? $"Short by {status.ShortfallAmount:C}"
+        ? $"Short by {status.ShortfallAmount:N2}"
         : "On track";
 }
 
 /// <summary>
-/// One row of the Accounts tab; the cushion shows blank rather than "$0.00" when the user hasn't set one.
+/// One row of the Accounts tab; the cushion shows blank rather than "0.00" when the user hasn't set one.
 /// The balance is typed straight into the list, so a saved Account replaces the row in place (ReplaceAccount) rather than rebuilding the list under the box.
 /// </summary>
 public sealed class AccountRow(Account account) : FormListRow
@@ -738,7 +738,7 @@ public sealed class AccountRow(Account account) : FormListRow
     public Account Account { get; private set; } = account;
     public string Name => Account.Name;
     public decimal Balance => Account.Balance;
-    public string BalanceText => Account.Balance.ToString("C");
+    public string BalanceText => Account.Balance.ToString("N2");
 
     /// <summary>[UI] Shows the account's newly saved balance in this row.</summary>
     public void ReplaceAccount(Account saved)
@@ -750,7 +750,7 @@ public sealed class AccountRow(Account account) : FormListRow
 
     public string Cushion => Account.IdealSafetyCushion == 0m
         ? "—"
-        : Account.IdealSafetyCushion.ToString("C");
+        : Account.IdealSafetyCushion.ToString("N2");
 }
 
 /// <summary>One row of the Accounts tab's Money flow subtab: an account's average monthly money in and out over the forecast window.</summary>

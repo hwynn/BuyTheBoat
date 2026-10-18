@@ -1046,7 +1046,7 @@ public sealed class FinancePatternSaveConfirmation
         if (_goalHealthCorrections.Count > 0)
         {
             return _goalHealthCorrections.Count == 1
-                ? $"This change leaves the savings plan out of step with the goal. Load a suggested contribution of {Math.Abs(_goalHealthCorrections[0].Plan.Amount):C} into the plan?"
+                ? $"This change leaves the savings plan out of step with the goal. Load a suggested contribution of {Math.Abs(_goalHealthCorrections[0].Plan.Amount):N2} into the plan?"
                 : "This change leaves the savings plan out of step with the goal. How do you want to handle it?";
         }
 
@@ -1058,7 +1058,7 @@ public sealed class FinancePatternSaveConfirmation
     /// <summary>[CALC] The overfunded goal-health "lower the rate" option's own label, naming the reduced contribution — "" when this save doesn't leave the plan overfunded.</summary>
     private string DescribeGoalHealthLowerRateLabel() =>
         _goalHealthLowerRatePlan is { } lowerRate
-            ? $"Lower the contribution to {Math.Abs(lowerRate.Amount):C} to meet the goal"
+            ? $"Lower the contribution to {Math.Abs(lowerRate.Amount):N2} to meet the goal"
             : "";
 
     /// <summary>[CALC] The consequence shown under the "leave it" or "keep the rate" option: the goal falling short, or money tied up; "" when there's no suggestion.</summary>

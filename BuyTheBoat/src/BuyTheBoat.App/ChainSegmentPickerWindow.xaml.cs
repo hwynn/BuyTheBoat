@@ -19,7 +19,7 @@ public partial class ChainSegmentPickerWindow : Window
 
         public string DateRangeText => $"{Pattern.DatePattern.ActiveStart:MMM d, yyyy} – {Pattern.DatePattern.Until:MMM d, yyyy}";
 
-        public string AmountText => $"{Math.Abs(Pattern.Amount):C}{(Pattern.Amount < 0 ? " / occurrence" : "")}";
+        public string AmountText => $"{Math.Abs(Pattern.Amount):N2}{(Pattern.Amount < 0 ? " / occurrence" : "")}";
     }
 
     /// <summary>The segment the user picked, or null if they cancelled.</summary>

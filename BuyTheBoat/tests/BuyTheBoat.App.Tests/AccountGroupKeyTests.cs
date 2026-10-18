@@ -13,7 +13,7 @@ public class AccountGroupKeyTests
     {
         var key = new AccountGroupKey(AccountId: 1, Name: "Bill Pool", Balance: 2987m, Shortfall: 0m);
 
-        key.BalanceText.ShouldBe("$2,987");                          // how much money is in the account
+        key.BalanceText.ShouldBe("2,987");                          // how much money is in the account
         key.IsShort.ShouldBeFalse();
         key.BalanceNegative.ShouldBeFalse();
         key.ShowCoverButton.ShouldBeFalse();
@@ -27,11 +27,11 @@ public class AccountGroupKeyTests
             AccountId: 1, Name: "primary", Balance: 0m, Shortfall: 2000m,
             CanCoverElsewhere: true, DonorName: "Bill Pool");
 
-        key.BalanceText.ShouldBe("$0");                              // the account holds $0...
+        key.BalanceText.ShouldBe("0");                              // the account holds 0...
         key.IsShort.ShouldBeTrue();
         key.ShowCoverButton.ShouldBeTrue();                          // a transfer can fix it
-        key.ShortText.ShouldBe("Short $2,000");                      // ...yet is short, shown to the right
-        key.MoveInText.ShouldBe("Move $2,000 in →");                 // direction-explicit lever
+        key.ShortText.ShouldBe("Short 2,000");                      // ...yet is short, shown to the right
+        key.MoveInText.ShouldBe("Move 2,000 in →");                 // direction-explicit lever
         key.RungText.ShouldBe("In another account — the money's in Bill Pool.");
     }
 
@@ -70,7 +70,7 @@ public class AccountGroupKeyTests
     {
         var key = new AccountGroupKey(AccountId: 1, Name: "Bill Pool", Balance: 2987m, Shortfall: 0m);
 
-        key.AccessibleSummary.ShouldBe("Bill Pool, balance $2,987");
+        key.AccessibleSummary.ShouldBe("Bill Pool, balance 2,987");
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class AccountGroupKeyTests
             CanCoverElsewhere: true, DonorName: "Bill Pool");
 
         key.AccessibleSummary.ShouldBe(
-            "primary, balance $0, Short $2,000. In another account — the money's in Bill Pool.");
+            "primary, balance 0, Short 2,000. In another account — the money's in Bill Pool.");
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class AccountGroupKeyTests
     {
         var key = new AccountGroupKey(AccountId: 1, Name: "primary", Balance: 50m, Shortfall: 0m, IsThin: true);
 
-        key.AccessibleSummary.ShouldBe("primary, balance $50, funds running low");
+        key.AccessibleSummary.ShouldBe("primary, balance 50, funds running low");
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class AccountGroupKeyTests
             CanCoverElsewhere: false, DonorName: null, IsThin: true);
 
         key.AccessibleSummary.ShouldBe(
-            "primary, balance $0, Short $2,000, funds running low. No other account can cover it.");
+            "primary, balance 0, Short 2,000, funds running low. No other account can cover it.");
     }
 
     [Fact]
@@ -116,6 +116,6 @@ public class AccountGroupKeyTests
             CanCoverElsewhere: true, DonorName: "Bill Pool");
 
         key.BalanceNegative.ShouldBeTrue();
-        key.BalanceText.ShouldBe("($359)");
+        key.BalanceText.ShouldBe("-359");
     }
 }

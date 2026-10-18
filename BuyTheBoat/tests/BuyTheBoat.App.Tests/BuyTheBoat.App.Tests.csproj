@@ -1,10 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- net10.0-windows only because the tests still call EarmarkFormPanel's static text builders (AllocateTodayText, ConcurrentPlansSentence) in BuyTheBoat.App, and a plain net10.0 project can't reference a net10.0-windows one.
-         Everything else tested here lives in BuyTheBoat.App.Core, which is plain net10.0.
-         No UseWPF: no test creates a WPF control. -->
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -23,7 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\BuyTheBoat.App\BuyTheBoat.App.csproj" />
     <ProjectReference Include="..\..\src\BuyTheBoat.App.Core\BuyTheBoat.App.Core.csproj" />
     <ProjectReference Include="..\..\src\BuyTheBoat.Domain\BuyTheBoat.Domain.csproj" />
     <ProjectReference Include="..\..\src\BuyTheBoat.Persistence\BuyTheBoat.Persistence.csproj" />

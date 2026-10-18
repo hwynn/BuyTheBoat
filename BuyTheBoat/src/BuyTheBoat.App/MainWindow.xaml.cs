@@ -356,7 +356,7 @@ public partial class MainWindow : Window
         grid.ItemsSource?.OfType<FormListRow>().FirstOrDefault(row => row.IsOpenInForm) switch
         {
             AccountRow row => $"“{row.Name}”",
-            TransferRow row => $"the {row.Amount:C} transfer from {row.From} to {row.To}",
+            TransferRow row => $"the {row.Amount:N2} transfer from {row.From} to {row.To}",
             FinancialPatternRow row => $"“{(row.Description is { Length: > 0 } description ? description : row.Source)}”",
             EarMarkPatternRow row => $"the allocation for “{row.Goal}”",
             ManualEarmarkRow row => $"the {row.Target} adjustment on {row.Date}",
@@ -552,7 +552,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var confirm = MessageBox.Show(this, $"Delete the transfer of {row.Amount:C} from \"{row.From}\" to \"{row.To}\"?", "Delete transfer", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var confirm = MessageBox.Show(this, $"Delete the transfer of {row.Amount:N2} from \"{row.From}\" to \"{row.To}\"?", "Delete transfer", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
         {
             return;
@@ -587,8 +587,8 @@ public partial class MainWindow : Window
         var cushion = accounts.Sum(account => account.IdealSafetyCushion);
         AccountsSummaryText.Text = accounts.Count == 0
             ? "—"
-            : $"{total:C} in {accounts.Count} account{(accounts.Count == 1 ? string.Empty : "s")}"
-                + (cushion > 0m ? $" · {cushion:C} cushion" : string.Empty);
+            : $"{total:N2} in {accounts.Count} account{(accounts.Count == 1 ? string.Empty : "s")}"
+                + (cushion > 0m ? $" · {cushion:N2} cushion" : string.Empty);
     }
 
     /// <summary>[UI] Fills the Accounts tab's Money flow subtab with each account's average monthly money in and out, from the current saved data.</summary>
@@ -610,7 +610,7 @@ public partial class MainWindow : Window
 
         // Transfers cancel out across all accounts, so the household net is earnings minus spending.
         var householdNet = rows.Sum(row => row.MonthlyNet);
-        MoneyFlowTotalText.Text = $"All accounts together: {householdNet:C} per month "
+        MoneyFlowTotalText.Text = $"All accounts together: {householdNet:N2} per month "
             + (householdNet < 0m ? "more going out than coming in." : "left over after spending.");
     }
 
@@ -704,7 +704,7 @@ public partial class MainWindow : Window
 
         if (balance == row.Account.Balance)
         {
-            // Re-shows "500" as "$500.00".
+            // Re-shows "500" as "500.00".
             ResetAccountBalanceBox(box);
             return true;
         }
@@ -1434,7 +1434,7 @@ public partial class MainWindow : Window
             ? $"Selected day — {date:D}  ·  {string.Join(", ", shortAccounts)} short on cash"
             : $"Selected day — {date:D}";
 
-        FreeToSpendText.Text = householdFree.ToString("C");
+        FreeToSpendText.Text = householdFree.ToString("N2");
         FreeToSpendText.Foreground = householdFree < 0m
             ? (Brush)FindResource("RedTextBrush")
             : Brushes.Black;
@@ -2344,7 +2344,7 @@ public partial class MainWindow : Window
             // Naming it here says what "continue" actually does, rather than leaving the user to notice their free funds went up.
             var freed = CurrentJarAmount(segment.FinanceId);
             var freedNote = freed > 0m
-                ? $" and free up {freed:C} currently set aside"
+                ? $" and free up {freed:N2} currently set aside"
                 : string.Empty;
             var answer = MessageBox.Show(
                 this,
