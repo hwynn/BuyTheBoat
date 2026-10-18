@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/BuyTheBoat.App/BuyTheBoat.App.csproj" />
+    <Project Path="src/BuyTheBoat.App.Core/BuyTheBoat.App.Core.csproj" />
     <Project Path="src/BuyTheBoat.Domain/BuyTheBoat.Domain.csproj" />
     <Project Path="src/BuyTheBoat.Persistence/BuyTheBoat.Persistence.csproj" />
   </Folder>

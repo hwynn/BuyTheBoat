@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The app's code that doesn't touch the UI: save confirmations, spreadsheet model and exporters, message text.
+       Plain net10.0, so it and its tests build on Windows and Linux alike.
+       Its files keep the BuyTheBoat.App namespace, so the UI project uses them without extra usings. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\BuyTheBoat.Domain\BuyTheBoat.Domain.csproj" />
+    <ProjectReference Include="..\BuyTheBoat.Persistence\BuyTheBoat.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The UI project builds on internal types here (ConfirmationPaginator, ConfirmationRowBuilder's inputs).
+         The App tests reach FinancePatternSaveConfirmation's internal Determine*/Perform* methods directly, so a scenario's confirmation conditions can be exercised without driving the real popup. -->
+    <InternalsVisibleTo Include="BuyTheBoat.App" />
+    <InternalsVisibleTo Include="BuyTheBoat.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>BuyTheBoat.App</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

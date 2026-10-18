@@ -3,17 +3,12 @@
   <ItemGroup>
     <ProjectReference Include="..\BuyTheBoat.Domain\BuyTheBoat.Domain.csproj" />
     <ProjectReference Include="..\BuyTheBoat.Persistence\BuyTheBoat.Persistence.csproj" />
+    <ProjectReference Include="..\BuyTheBoat.App.Core\BuyTheBoat.App.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Lets the App tests reach FinancePatternSaveConfirmation's internal
-         Determine*/Perform* methods directly, so a scenario's confirmation
-         conditions can be exercised without driving the real WPF popup. -->
+    <!-- Lets the App tests call EarmarkFormPanel's internal static text builders (AllocateTodayText, ConcurrentPlansSentence) directly. -->
     <InternalsVisibleTo Include="BuyTheBoat.App.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="ClosedXML" Version="0.105.0" />
   </ItemGroup>
 
   <PropertyGroup>
