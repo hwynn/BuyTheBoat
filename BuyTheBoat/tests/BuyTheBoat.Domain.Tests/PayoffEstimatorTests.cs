@@ -41,6 +41,40 @@ public class PayoffEstimatorTests
     }
 
     [Fact]
+    public void Counts_the_remaining_payments_from_CountFrom_for_a_loan_already_partway_paid()
+    {
+        // A loan paying $350 on the 1st since Jan 2025, edited mid-June 2025 with $3,500 still owed:
+        // 10 more payments, the first on Jul 1, so the last is Apr 1, 2026 — not counted from January.
+        var estimate = PayoffEstimator.Estimate(new PayoffRequest
+        {
+            TotalOwed = 3_500m,
+            Payment = 350m,
+            Frequency = RecurrenceFrequency.Monthly,
+            Start = new DateOnly(2025, 1, 1),
+            ByMonthDay = [1],
+            CountFrom = new DateOnly(2025, 6, 15),
+        });
+
+        estimate.PaymentCount.ShouldBe(10);
+        estimate.PayoffDate.ShouldBe(new DateOnly(2026, 4, 1));
+    }
+
+    [Fact]
+    public void A_CountFrom_on_or_before_the_start_counts_from_the_start()
+    {
+        var estimate = PayoffEstimator.Estimate(new PayoffRequest
+        {
+            TotalOwed = 1_000m,
+            Payment = 250m,
+            Frequency = RecurrenceFrequency.Monthly,
+            Start = new DateOnly(2025, 1, 1),
+            CountFrom = new DateOnly(2024, 12, 1),
+        });
+
+        estimate.PayoffDate.ShouldBe(new DateOnly(2025, 4, 1));
+    }
+
+    [Fact]
     public void A_single_payment_clears_a_balance_smaller_than_the_payment()
     {
         // Owe less than one payment and it is paid off on the very first payment

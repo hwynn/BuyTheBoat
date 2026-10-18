@@ -13,6 +13,9 @@ public sealed record PayoffRequest
     public int Interval { get; init; } = 1;
     public IReadOnlyList<DayOfWeek> ByDay { get; init; } = [];
     public IReadOnlyList<int> ByMonthDay { get; init; } = [];
+
+    /// <summary>Counts payments from the first one on or after this date, for a loan already partway paid; null counts from Start.</summary>
+    public DateOnly? CountFrom { get; init; }
 }
 
 /// <summary>
@@ -48,6 +51,21 @@ public static class PayoffEstimator
         // Rounds up, since a final partial payment still needs its own date ($12,000 at $350 a month is 34.28, so 35 payments).
         var paymentCount = (int)Math.Ceiling(request.TotalOwed / request.Payment);
 
+        // Payments before CountFrom already happened, so they're added to the Count to keep the schedule's own start.
+        var earlierPayments = 0;
+        if (request.CountFrom is { } countFrom && countFrom > request.Start)
+        {
+            earlierPayments = RecurrenceRule.Create(new RecurrenceRuleOptions
+            {
+                Frequency = request.Frequency,
+                DtStart = request.Start,
+                Interval = request.Interval,
+                ByDay = request.ByDay,
+                ByMonthDay = request.ByMonthDay,
+                Until = countFrom.AddDays(-1),
+            }).GetOccurrences().Count;
+        }
+
         // RecurrenceRule.Create turns the Count into the last payment's date.
         var schedule = RecurrenceRule.Create(new RecurrenceRuleOptions
         {
@@ -56,7 +74,7 @@ public static class PayoffEstimator
             Interval = request.Interval,
             ByDay = request.ByDay,
             ByMonthDay = request.ByMonthDay,
-            Count = paymentCount,
+            Count = earlierPayments + paymentCount,
         });
 
         return new PayoffEstimate(paymentCount, schedule.Until);

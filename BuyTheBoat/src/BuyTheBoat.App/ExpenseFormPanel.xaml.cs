@@ -410,6 +410,7 @@ public partial class ExpenseFormPanel : UserControl
         PriorityTextBox.Text = "5";
         DueDatePicker.SelectedDate = null;
         TotalOwedTextBox.Text = string.Empty;
+        OwedEstimateNoteText.Visibility = Visibility.Collapsed;
         PayoffReadoutText.Text = string.Empty;
         StopEndDatePicker.SelectedDate = DateTime.Today.AddYears(3);
         PopulateAccounts(selectedAccountId);
@@ -1073,6 +1074,12 @@ public partial class ExpenseFormPanel : UserControl
             return;
         }
 
+        // The user's own balance replaces the filled-in estimate.
+        if (!_suppressEvents)
+        {
+            OwedEstimateNoteText.Visibility = Visibility.Collapsed;
+        }
+
         MarkDirtyIfNotSuppressed();
         if (RepeatingRadioButton.IsChecked == true)
         {
@@ -1091,7 +1098,40 @@ public partial class ExpenseFormPanel : UserControl
         StopPaidOffPanel.Visibility = paidOff ? Visibility.Visible : Visibility.Collapsed;
         KeepsGoingNote.Visibility = keepsGoing ? Visibility.Visible : Visibility.Collapsed;
         AmountLabel.Text = paidOff ? "Payment amount" : "Amount owed";
+        if (paidOff)
+        {
+            FillOwedFromSavedSchedule();
+        }
+
         UpdateStopEnd();
+    }
+
+    /// <summary>
+    /// [UI] When a saved bill switches to "When I've paid it off" with nothing owed typed yet, fills in the balance its saved schedule implies (payments left from today × the saved amount) and says so.
+    /// The form doesn't keep the owed amount, so this is the best starting point it has.
+    /// </summary>
+    private void FillOwedFromSavedSchedule()
+    {
+        if (_loadedExisting is not { } existing || !string.IsNullOrWhiteSpace(TotalOwedTextBox.Text))
+        {
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var paymentsLeft = existing.DatePattern.GetOccurrences(today, existing.DatePattern.Until).Count;
+        if (paymentsLeft == 0)
+        {
+            return;
+        }
+
+        var payment = Math.Abs(existing.Amount);
+        var wasSuppressed = _suppressEvents;
+        _suppressEvents = true;
+        TotalOwedTextBox.Text = (paymentsLeft * payment).ToString(CultureInfo.InvariantCulture);
+        _suppressEvents = wasSuppressed;
+        OwedEstimateNoteText.Text =
+            $"Estimated from the {paymentsLeft} payments of {payment:C} left on the saved schedule — replace it with your real balance if you know it.";
+        OwedEstimateNoteText.Visibility = Visibility.Visible;
     }
 
     /// <summary>[UI] Hands the schedule editor the end date the chosen answer implies — the picked date, the computed loan payoff date, or, for "keeps going", the forecast horizon plus a cycle.</summary>
@@ -1170,6 +1210,8 @@ public partial class ExpenseFormPanel : UserControl
                 throw new InvalidOperationException("Enter the regular payment amount above.");
             }
 
+            // A saved bill is already partway paid, so what's still owed is counted from today's payments onward.
+            var editingSaved = _loadedExisting is not null;
             var schedule = RuleEditor.ReadScheduleParts();
             var estimate = PayoffEstimator.Estimate(new PayoffRequest
             {
@@ -1180,10 +1222,12 @@ public partial class ExpenseFormPanel : UserControl
                 Interval = schedule.Interval,
                 ByDay = schedule.ByDay,
                 ByMonthDay = schedule.ByMonthDay,
+                CountFrom = editingSaved ? DateOnly.FromDateTime(DateTime.Today) : null,
             });
 
-            PayoffReadoutText.Text =
-                $"Paid off at least by {estimate.PayoffDate:D} — {estimate.PaymentCount} payments.";
+            PayoffReadoutText.Text = editingSaved
+                ? $"Paid off at least by {estimate.PayoffDate:D} — {estimate.PaymentCount} more payments from today."
+                : $"Paid off at least by {estimate.PayoffDate:D} — {estimate.PaymentCount} payments.";
             RuleEditor.SetHostEndDate(estimate.PayoffDate);
         }
         catch (Exception ex)

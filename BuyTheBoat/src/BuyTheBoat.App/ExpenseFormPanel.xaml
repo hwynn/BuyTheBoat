@@ -146,6 +146,8 @@
                             <TextBlock Text="Total still owed"/>
                             <TextBox x:Name="TotalOwedTextBox" Width="180" HorizontalAlignment="Left" Margin="0,2,0,0"
                                      TextChanged="OnTotalOwedChanged"/>
+                            <!-- Editing an existing bill fills the box in from its saved schedule (FillOwedFromSavedSchedule); this says so until the user types their own. -->
+                            <TextBlock x:Name="OwedEstimateNoteText" TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" Visibility="Collapsed"/>
                             <TextBlock x:Name="PayoffReadoutText" TextWrapping="Wrap" Foreground="DimGray" FontSize="12" Margin="0,6,0,0"/>
                             <TextBlock Text="A rough floor — interest and fees will push the real payoff date later."
                                        FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
