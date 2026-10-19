@@ -147,8 +147,43 @@
                 </TabControl>
             </TabItem>
 
-            <TabItem Header="Transfers">
-                <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Transfers tab hasn't been ported to this version yet."/>
+            <!-- TRANSFERS: moving money between accounts, shown as one thing but stored as a paired withdrawal and deposit. -->
+            <TabItem Tag="Transfers">
+                <TabItem.Header>
+                    <TextBlock x:Name="TransfersTabHeaderText" Text="Transfers"/>
+                </TabItem.Header>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Schedule Transfer..." Padding="12,5" Click="OnAddTransferClick"
+                                        AutomationProperties.AutomationId="AddTransferButton"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditTransferClick"
+                                        AutomationProperties.AutomationId="EditTransferButton"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteTransferClick"
+                                        AutomationProperties.AutomationId="DeleteTransferButton"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="Money you move between your own accounts, once or on a schedule. Each transfer takes from one account and adds the same amount to another — it never changes your household total, only which account the money sits in."/>
+                            <DataGrid x:Name="TransfersGrid" SelectionChanged="OnListRowSelected" LoadingRow="OnLoadingFormListRow"
+                                      AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
+                                      AutomationProperties.AutomationId="TransfersGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="From" Binding="{Binding From}" Width="220"/>
+                                    <DataGridTextColumn Header="To" Binding="{Binding To}" Width="220"/>
+                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="130"/>
+                                    <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Tag="Transfer">
+                        <TabItem.Header>
+                            <TextBlock x:Name="TransferTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:TransferFormPanel x:Name="TransferForm"/>
+                    </TabItem>
+                </TabControl>
             </TabItem>
             <TabItem Tag="Bills &amp; Paychecks">
                 <TabItem.Header>

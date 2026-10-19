@@ -14,7 +14,7 @@ namespace BuyTheBoat.App;
 
 // The app's one main window: the Forecast tab, a list tab for each kind of thing (Accounts, Transfers, Bills & Paychecks, Allocations),
 // and a form tab for creating or editing each (Account, Transfer, Expense, Earmark).
-// Ported so far: Accounts, Bills & Paychecks (all but its Spreadsheet subtab), and Allocations; the Forecast and Transfers tabs are placeholders.
+// Ported so far: Accounts, Transfers, Bills & Paychecks (all but its Spreadsheet subtab), and Allocations; the Forecast tab is a placeholder.
 public partial class MainWindow : Window
 {
     private readonly FinancialPatternRepository _financialPatterns;
@@ -102,6 +102,10 @@ public partial class MainWindow : Window
         ExpenseForm.PatternSaved = OnExpensePatternSaved;
         ExpenseForm.PickChainSegment = PickChainSegmentToEdit;
 
+        // The permanent Transfer tab: the panel collects from/to/amount/schedule, this callback does the id assignment, paired-pattern expansion, and save.
+        TransferForm.TransferSaved = OnTransferSaved;
+        TransferForm.RequestForecast = EnsureForecast;
+
         EarmarkForm.RequestForecast = EnsureForecast;
         EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
         EarmarkForm.RequestForecastWithProposedPlan = ForecastWithProposedPlan;
@@ -120,11 +124,13 @@ public partial class MainWindow : Window
         AccountForm.StateChanged += (_, _) => UpdateTabHeaderStyle(AccountTabHeaderText, AccountsTabHeaderText, AccountForm.IsPopulated, AccountForm.IsDirty);
         ExpenseForm.StateChanged += (_, _) => UpdateTabHeaderStyle(ExpenseTabHeaderText, BillsAndPaychecksTabHeaderText, ExpenseForm.IsPopulated, ExpenseForm.IsDirty);
         EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, AllocationsTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
+        TransferForm.StateChanged += (_, _) => UpdateTabHeaderStyle(TransferTabHeaderText, TransfersTabHeaderText, TransferForm.IsPopulated, TransferForm.IsDirty);
 
         // Same live trigger for the list rows: loading a different item moves the highlight; an edit turns it orange.
         AccountForm.StateChanged += (_, _) => MarkRowsOpenInForms();
         ExpenseForm.StateChanged += (_, _) => MarkRowsOpenInForms();
         EarmarkForm.StateChanged += (_, _) => MarkRowsOpenInForms();
+        TransferForm.StateChanged += (_, _) => MarkRowsOpenInForms();
 
         // The balance boxes' keys and focus are caught on the grid, since the boxes are made by the cell template.
         // Keys are caught on the way down (Tunnel), so Enter and Tab reach the box's handler before the grid or focus navigation acts on them.
@@ -158,6 +164,8 @@ public partial class MainWindow : Window
         EarmarkForm.SetContext(_financialPatterns.GetAll(), _earMarkPatterns.GetAll(), _manualEarmarks.GetAll(), _financialPatterns.GetTransferFinanceIds(), _lastForecast);
 
     private void RefreshAccountFormContext() => AccountForm.SetContext(_accounts.GetAll());
+
+    private void RefreshTransferFormContext() => TransferForm.SetContext(_accounts.GetAll());
 
     /// <summary>[READS FILE] Gives the Expense form the saved accounts, plans, and patterns it reads from.</summary>
     private void RefreshExpenseFormContext()
@@ -231,6 +239,9 @@ public partial class MainWindow : Window
             case "Earmark":
                 RefreshEarmarkFormContext();
                 break;
+            case "Transfer":
+                RefreshTransferFormContext();
+                break;
         }
     }
 
@@ -264,6 +275,7 @@ public partial class MainWindow : Window
     private void MarkRowsOpenInForms()
     {
         MarkRows<AccountRow>(AccountsGrid, AccountForm.IsDirty, row => row.Account.Id == AccountForm.LoadedAccountId);
+        MarkRows<TransferRow>(TransfersGrid, TransferForm.IsDirty, row => row.Transfer.Id == TransferForm.EditingTransferId);
         MarkRows<FinancialPatternRow>(FinancialPatternsGrid, ExpenseForm.IsDirty, row => row.Segments.Any(segment => segment.FinanceId == ExpenseForm.LoadedFinanceId));
         MarkRows<EarMarkPatternRow>(EarMarkPatternsGrid, EarmarkForm.IsDirty, row => row.Plans.Any(plan => plan.FinanceId == EarmarkForm.LoadedPlanFinanceId));
         MarkRows<ManualEarmarkRow>(ManualEarmarksGrid, EarmarkForm.IsDirty, row => EarmarkForm.EditingOneOff is { } oneOff
@@ -347,6 +359,7 @@ public partial class MainWindow : Window
         var (formIsDirty, formName, formTab, loadPicked) = grid.Name switch
         {
             nameof(AccountsGrid) => (AccountForm.IsDirty, "Account", "Account", (Action)(() => EditSelectedAccount())),
+            nameof(TransfersGrid) => (TransferForm.IsDirty, "Transfer", "Transfer", () => EditSelectedTransfer()),
             nameof(FinancialPatternsGrid) => (ExpenseForm.IsDirty, "Bills & Paychecks", "Expense", () => EditSelectedFinancialPattern()),
             nameof(EarMarkPatternsGrid) => (EarmarkForm.IsDirty, "Allocations", "Earmark", () => EditSelectedEarMarkPattern()),
             nameof(ManualEarmarksGrid) => (EarmarkForm.IsDirty, "Allocations", "Earmark", () => EditSelectedManualEarmark()),
@@ -380,6 +393,7 @@ public partial class MainWindow : Window
     private string DescribeItemInForm(string formTab) => formTab switch
     {
         "Account" => OpenRowName(AccountsGrid) ?? "a new account",
+        "Transfer" => OpenRowName(TransfersGrid) ?? "a new transfer",
         "Expense" => OpenRowName(FinancialPatternsGrid) ?? "a new bill or paycheck",
         // In one-off mode the form has no plan picked, so an unmatched item there is a new manual adjustment.
         "Earmark" => OpenRowName(EarMarkPatternsGrid) ?? OpenRowName(ManualEarmarksGrid)
@@ -392,6 +406,7 @@ public partial class MainWindow : Window
         grid.ItemsSource?.OfType<FormListRow>().FirstOrDefault(row => row.IsOpenInForm) switch
         {
             AccountRow row => $"“{row.Name}”",
+            TransferRow row => $"the {row.Amount:N2} transfer from {row.From} to {row.To}",
             FinancialPatternRow row => $"“{(row.Description is { Length: > 0 } description ? description : row.Source)}”",
             EarMarkPatternRow row => $"the allocation for “{row.Goal}”",
             ManualEarmarkRow row => $"the {row.Target} adjustment on {row.Date}",
@@ -682,6 +697,144 @@ public partial class MainWindow : Window
         RefreshExpenseFormContext();
     }
 
+    /// <summary>[READS FILE] Fills the Transfers list from the saved transfers, naming each one's accounts.</summary>
+    private void RefreshTransfersGrid()
+    {
+        var namesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
+        TransfersGrid.ItemsSource = _transfers.GetAll()
+            .Select(transfer => new TransferRow(
+                transfer,
+                namesById.GetValueOrDefault(transfer.FromAccountId, "(unknown)"),
+                namesById.GetValueOrDefault(transfer.ToAccountId, "(unknown)")))
+            .ToList();
+    }
+
+    /// <summary>[STEP] The Transfers list's "Schedule Transfer..." button: opens the Transfer form tab on a blank new transfer.</summary>
+    private async void OnAddTransferClick(object? sender, RoutedEventArgs e)
+    {
+        if (!await EnsureTwoAccountsForTransfer()
+            || !await ConfirmLeavingUnsavedChanges(TransferForm.IsDirty, "Transfer", "Transfer"))
+        {
+            return;
+        }
+
+        RefreshTransferFormContext();
+        TransferForm.LoadForNew();
+        SwitchToTab("Transfer");
+    }
+
+    /// <summary>[STEP] Opens the selected transfer in the Transfer form tab.</summary>
+    private void OnEditTransferClick(object? sender, RoutedEventArgs e) => EditSelectedTransfer();
+
+    /// <summary>
+    /// [STEP] Loads the transfer selected in the list into the Transfer form tab, so the same form that creates a transfer also edits it.
+    /// Saving rewrites that transfer in place.
+    /// </summary>
+    private void EditSelectedTransfer()
+    {
+        if (TransfersGrid.SelectedItem is not TransferRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        // "Keeps going" lives on the legs, not the Transfer record, so read it off the withdrawal (the negative leg) to set the form's toggle.
+        var withdrawal = _financialPatterns.GetByTransferId(row.Transfer.Id).FirstOrDefault(pattern => pattern.Amount < 0m);
+        RefreshTransferFormContext();
+        TransferForm.LoadForEdit(row.Transfer, withdrawal?.AutoRenew ?? false);
+        SwitchToTab("Transfer");
+    }
+
+    /// <summary>[UI] Guards the transfer entry points: a transfer needs two different accounts, so they show the same message and back out when only one account exists.</summary>
+    private async Task<bool> EnsureTwoAccountsForTransfer()
+    {
+        if (_accounts.GetAll().Count >= 2)
+        {
+            return true;
+        }
+
+        await MessageBox.Show(this, "You need at least two accounts to transfer between. Add another on the Accounts tab first.", "Not enough accounts", MessageBoxButton.OK, MessageBoxImage.Information);
+        return false;
+    }
+
+    /// <summary>
+    /// [WRITES FILE] Persists a transfer the Transfer form tab handed back — new or edited: turns from/to/amount/schedule into a Transfer plus its paired patterns, reserves for the withdrawal, saves, and returns the user to the Forecast tab.
+    /// An edit rewrites the same transfer's legs in place; a new transfer gets fresh ids.
+    /// The panel already validated the inputs and cleared itself.
+    /// </summary>
+    /// <param name="inputs">The from/to/amount/schedule the Transfer form collected, plus the id of the transfer being edited (null for a new one).</param>
+    private void OnTransferSaved(TransferFormInputs inputs)
+    {
+        var namesById = _accounts.GetAll().ToDictionary(account => account.Id, account => account.Name);
+
+        // Editing rewrites the existing transfer in place — same transfer id and the same withdrawal/deposit finance ids, so the saved patterns and plan are updated rather than a second set minted (the withdrawal is the negative leg, the deposit the positive).
+        // A new transfer gets a fresh transfer id and two fresh finance ids, which must not collide with any existing pattern's, transfer legs included.
+        int transferId, withdrawalFinanceId, depositFinanceId;
+        if (inputs.EditingTransferId is { } editingId)
+        {
+            var legs = _financialPatterns.GetByTransferId(editingId);
+            transferId = editingId;
+            withdrawalFinanceId = legs.First(pattern => pattern.Amount < 0m).FinanceId;
+            depositFinanceId = legs.First(pattern => pattern.Amount > 0m).FinanceId;
+        }
+        else
+        {
+            var maxFinanceId = _financialPatterns.GetAll().Select(pattern => pattern.FinanceId).DefaultIfEmpty(0).Max();
+            transferId = _transfers.NextId();
+            withdrawalFinanceId = maxFinanceId + 1;
+            depositFinanceId = maxFinanceId + 2;
+        }
+
+        var result = TransferFactory.Create(new TransferRequest
+        {
+            TransferId = transferId,
+            WithdrawalFinanceId = withdrawalFinanceId,
+            DepositFinanceId = depositFinanceId,
+            FromAccountId = inputs.FromAccountId,
+            ToAccountId = inputs.ToAccountId,
+            FromAccountName = namesById[inputs.FromAccountId],
+            ToAccountName = namesById[inputs.ToAccountId],
+            Amount = inputs.Amount,
+            DatePattern = inputs.DatePattern,
+            AutoRenew = inputs.AutoRenew,
+        });
+
+        // The transfer sets money aside in the account it leaves, through a plan on the withdrawal that reserves the full amount from the as-of date, with no income pacing.
+        // spreadEvenlyWithNoIncome: false keeps a transfer plain and immediate, not spread like a one-time goal.
+        // Proposes first, since the proposer may move the withdrawal's start back to the as-of date, and that prepared withdrawal is what must be saved for the plan to fit.
+        var withdrawalPlan = AllocationPlanProposer.Propose(result.Withdrawal, [], CurrentAsOfDate(), spreadEvenlyWithNoIncome: false);
+        _transfers.Save(result with { Withdrawal = withdrawalPlan.Outflow });
+        // Clear any existing withdrawal plan before saving the freshly-proposed one.
+        // Plans are keyed on (FinanceId, StartDate), so an edit whose new schedule moves the plan's start would otherwise leave the old plan behind as a duplicate reservation (a no-op for a brand-new transfer, whose withdrawal id is fresh; the renewal pass clears it the same way).
+        _earMarkPatterns.Delete(withdrawalFinanceId);
+        _earMarkPatterns.Save(withdrawalPlan.Plan);
+
+        RefreshGrids();
+
+        // The transfer's patterns change the cascade, so re-run the forecast, then land on the Forecast tab (matching the other form saves).
+        RefreshShownForecast();
+        SwitchToTab("Forecast");
+    }
+
+    /// <summary>[DELETES] Deletes the selected transfer, both its sides, after asking.</summary>
+    private async void OnDeleteTransferClick(object? sender, RoutedEventArgs e)
+    {
+        if (TransfersGrid.SelectedItem is not TransferRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        var confirm = await MessageBox.Show(this, $"Delete the transfer of {row.Amount:N2} from \"{row.From}\" to \"{row.To}\"?", "Delete transfer", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _transfers.Delete(row.Transfer.Id);
+        RefreshGrids();
+    }
+
     /// <summary>[READS FILE] Fills the Bills &amp; Paychecks list from the saved patterns and re-marks the row open in the Form.</summary>
     private void RefreshGrids()
     {
@@ -703,6 +856,8 @@ public partial class MainWindow : Window
                 return new FinancialPatternRow(latest, accountNameByFinanceId.GetValueOrDefault(latest.FinanceId, "(unknown)"), segments);
             })
             .ToList();
+
+        RefreshTransfersGrid();
 
         // Every expense that reserves has its own Allocation Plan (an EarMarkPattern, per the allocation model), so the grid just shows those; nothing here is a synthesized "automatic" row.
         // A transfer's withdrawal reserves through a plan too, but it's hidden here for the same reason its patterns are: a transfer is shown as one thing on its own tab, not as its underlying reservation machinery.
