@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BuyTheBoat.App.EarmarkPatternPickerWindow"
+        Title="Pick a Savings Plan Segment" Height="360" Width="560"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10"
+                   Text="More than one savings plan segment exists for this goal. Which one do you want to open?"/>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Cancel" Width="90" Margin="0,0,8,0" Padding="0,5" HorizontalContentAlignment="Center" Click="OnCancelClick"/>
+            <Button x:Name="SelectButton" Content="Select" Width="90" Padding="0,5" HorizontalContentAlignment="Center"
+                    Click="OnSelectClick" IsDefault="True" IsEnabled="False"/>
+        </StackPanel>
+        <!-- Laid out like FinancialPatternPickerWindow; EarMarkPattern has no Source or Description, so Amount, date range, and starting allocation tell plans apart. -->
+        <DataGrid x:Name="PlansGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" GridLinesVisibility="All"
+                  SelectionChanged="OnSelectionChanged" DoubleTapped="OnGridDoubleTapped"
+                  AutomationProperties.AutomationId="EarmarkPatternPickerGrid">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Amount" Binding="{Binding AmountText}" Width="*"/>
+                <DataGridTextColumn Header="Date range" Binding="{Binding DateRangeText}" Width="2*"/>
+                <DataGridTextColumn Header="Already saved" Binding="{Binding StartingAllocationText}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

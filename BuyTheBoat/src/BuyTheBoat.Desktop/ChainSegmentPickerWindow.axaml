@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BuyTheBoat.App.ChainSegmentPickerWindow"
+        Title="Pick a Segment" Height="380" Width="600"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10"
+                   Text="This bill or paycheck has more than one segment in its history. Which one do you want to open? The current segment is shown in bold."/>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Cancel" Width="90" Margin="0,0,8,0" Padding="0,5" HorizontalContentAlignment="Center" Click="OnCancelClick"/>
+            <Button x:Name="SelectButton" Content="Select" Width="90" Padding="0,5" HorizontalContentAlignment="Center"
+                    Click="OnSelectClick" IsDefault="True" IsEnabled="False"/>
+        </StackPanel>
+        <!-- The current segment (the one editing would otherwise open) is in bold; OnLoadingRow sets it. -->
+        <DataGrid x:Name="SegmentsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" GridLinesVisibility="All"
+                  SelectionChanged="OnSelectionChanged" DoubleTapped="OnGridDoubleTapped" LoadingRow="OnLoadingRow"
+                  AutomationProperties.AutomationId="ChainSegmentPickerGrid">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="" Binding="{Binding StatusText}" Width="Auto"/>
+                <DataGridTextColumn Header="Date range" Binding="{Binding DateRangeText}" Width="2*"/>
+                <DataGridTextColumn Header="Amount" Binding="{Binding AmountText}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

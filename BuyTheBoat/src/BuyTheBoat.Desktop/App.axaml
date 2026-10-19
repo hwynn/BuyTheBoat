@@ -1,0 +1,29 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BuyTheBoat.App.App"
+             RequestedThemeVariant="Light">
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+    </Application.Styles>
+
+    <Application.Resources>
+        <!-- Avalonia has no GroupBox; a HeaderedContentControl with this theme draws the same titled frame.
+             Use as <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="..."> -->
+        <ControlTheme x:Key="GroupBox" TargetType="HeaderedContentControl">
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border BorderBrush="#FFCCCCCC" BorderThickness="1" CornerRadius="4">
+                        <DockPanel>
+                            <ContentPresenter x:Name="PART_HeaderPresenter" DockPanel.Dock="Top" Content="{TemplateBinding Header}"
+                                              Margin="10,6,10,0" FontWeight="SemiBold"/>
+                            <ContentPresenter x:Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                                              Padding="{TemplateBinding Padding}"/>
+                        </DockPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Application.Resources>
+</Application>

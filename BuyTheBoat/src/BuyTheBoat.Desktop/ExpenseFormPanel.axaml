@@ -1,0 +1,181 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:BuyTheBoat.App"
+             x:Class="BuyTheBoat.App.ExpenseFormPanel">
+    <DockPanel Margin="8">
+        <!-- Bottom bar: the two save buttons save the same way and differ only in where they go afterward.
+             StatusText, docked left, shows the linked plan's health. -->
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="True">
+            <TextBlock x:Name="StatusText" DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold"
+                       Foreground="#FF9A4F08" Background="#FFFBF0E2" Padding="6,4" IsVisible="False"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock x:Name="ErrorText" Foreground="Red" TextWrapping="Wrap" MaxWidth="450"
+                           VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <Button x:Name="SaveAndSkipPlanningButton" Content="Save and Skip planning" Padding="8,5" Margin="0,0,8,0" Click="OnSaveAndSkipPlanningClick"
+                        AutomationProperties.AutomationId="SaveAndSkipPlanningButton"/>
+                <Button x:Name="SaveAndPlanButton" Content="Save and Plan" Padding="8,5" Click="OnSaveAndPlanClick"
+                        AutomationProperties.AutomationId="SaveAndPlanButton"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- The ScrollViewer keeps every region below reachable, as in EarmarkFormPanel. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <!-- REGION 1 — the instance-information-block, always on top: which item is loaded, whether it has unsaved edits, and controls to discard them or start a blank one.
+                     Deleting stays on the Expenses list tab. -->
+                <Border BorderBrush="#FFCCCCCC" BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,10">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="ModifiedIndicatorText" Text="● Unsaved changes" Foreground="DarkOrange"
+                                       FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0" IsVisible="False"/>
+                            <!-- The "Discard changes" wording is provisional. -->
+                            <Button x:Name="DiscardChangesButton" Content="Discard changes" Padding="8,3" Margin="0,0,8,0" Click="OnDiscardChangesClick"/>
+                            <Button Content="Clear form" Padding="8,3" Click="OnClearClick"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Editing" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <!-- Opens FinancialPatternPickerWindow, the picker every form's instance-info-block uses except Account's.
+                                 MainWindow shortcuts ("Edit Selected...", "Create Bill...") set SelectedInstanceText directly instead, without showing the popup. -->
+                            <TextBlock x:Name="SelectedInstanceText" Text="— New Expense —" VerticalAlignment="Center"
+                                       Margin="0,0,8,0" FontWeight="SemiBold" AutomationProperties.AutomationId="SelectedInstanceText"/>
+                            <Button Content="Change..." Padding="8,3" Click="OnChangeInstanceClick"
+                                    AutomationProperties.AutomationId="ChangeInstanceButton"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- REGION 2 — the characterization-field-block.
+                     What KIND of thing this is, plus a computed, always-present label. -->
+                <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="What is this?" Margin="0,0,0,10">
+                    <DockPanel>
+                        <!-- Advanced mode; see OnAdvancedModeChanged in code-behind for what it reveals. -->
+                        <CheckBox x:Name="AdvancedModeCheckBox" DockPanel.Dock="Right" Content="Advanced mode" VerticalAlignment="Center"
+                                  IsCheckedChanged="OnAdvancedModeChanged"/>
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel x:Name="DirectionPanel" Margin="0,0,30,0">
+                                <TextBlock Text="Direction"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <RadioButton x:Name="ExpenseRadioButton" Content="Expense" GroupName="Direction" IsChecked="True" IsCheckedChanged="OnDirectionChanged" Margin="0,0,14,0"/>
+                                    <RadioButton x:Name="IncomeRadioButton" Content="Income" GroupName="Direction" IsCheckedChanged="OnDirectionChanged"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,30,0">
+                                <TextBlock Text="Repeats?"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <RadioButton x:Name="OneTimeRadioButton" Content="One time" GroupName="Repeats" IsCheckedChanged="OnRepeatsChanged" Margin="0,0,14,0"/>
+                                    <RadioButton x:Name="RepeatingRadioButton" Content="Repeating" GroupName="Repeats" IsChecked="True" IsCheckedChanged="OnRepeatsChanged"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Bottom">
+                                <TextBlock Text="This looks like a:" FontSize="11" Foreground="Gray"/>
+                                <TextBlock x:Name="CharacterizationText" Text="Custom" FontWeight="Bold"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </HeaderedContentControl>
+
+                <!-- REGION 3 — the remaining fields, in one group until there's a settled breakdown. -->
+                <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="Details" Margin="0,0,0,10">
+                    <StackPanel>
+                        <UniformGrid Columns="3" Rows="2">
+                            <StackPanel Margin="0,0,10,8">
+                                <TextBlock Text="Source (matches bank/statement text)"/>
+                                <TextBox x:Name="SourceTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="SourceTextBox"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,8">
+                                <TextBlock Text="Description (optional)"/>
+                                <TextBox x:Name="DescriptionTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="DescriptionTextBox"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,8">
+                                <TextBlock Text="Account"/>
+                                <ComboBox x:Name="AccountComboBox" Margin="0,2,0,0" HorizontalAlignment="Stretch"
+                                          DisplayMemberBinding="{Binding Name}" SelectedValueBinding="{Binding Id}"
+                                          SelectionChanged="OnFieldSelectionChanged" AutomationProperties.AutomationId="AccountComboBox"/>
+                                <TextBlock Text="Paid from / into this account." FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock x:Name="AmountLabel" Text="Amount owed"/>
+                                <TextBox x:Name="AmountTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AmountTextBox"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="Priority"/>
+                                <TextBox x:Name="PriorityTextBox" Text="5" Margin="0,2,0,0" AutomationProperties.AutomationId="PriorityTextBox"/>
+                                <TextBlock Text="1 = lowest, 5 = highest       Determines where funds stay when cash is tight" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel/>
+                        </UniformGrid>
+
+                        <!-- Hidden for income, since incoming money is never something you skip paying. -->
+                        <StackPanel x:Name="MandatoryPanel" Margin="0,10,0,0">
+                            <TextBlock Text="If money got tight, could you skip this?"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <RadioButton x:Name="UnskippableRadioButton" Content="I have to pay this" GroupName="Skippable"
+                                             IsChecked="True" IsCheckedChanged="OnMandatoryChanged" Margin="0,0,18,0"/>
+                                <RadioButton x:Name="SkippableRadioButton" Content="I could skip or delay it" GroupName="Skippable" IsCheckedChanged="OnMandatoryChanged"/>
+                            </StackPanel>
+                            <TextBlock TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" FontSize="11" Margin="0,4,0,0"
+                                       Text="If your plan ever needs more money than you have, anything you could skip gives its money back first — what you have to pay is protected until everything skippable is empty. Both still get money set aside for them; this only decides what gives way when something has to."/>
+                        </StackPanel>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- One-time: a single date instead of the recurrence editor, saved as a one-occurrence RecurrenceRule. -->
+                <StackPanel x:Name="DueDatePanel" Margin="0,0,0,10">
+                    <TextBlock Text="Due date"/>
+                    <CalendarDatePicker x:Name="DueDatePicker" Width="180" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <!-- Repeating: "when does this stop?" supplies the schedule's end date, so the editor's own Ends controls are hidden. -->
+                <HeaderedContentControl x:Name="StopQuestionBox" Theme="{StaticResource GroupBox}" Header="When does this stop?" Margin="0,0,0,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="StopOnDateRadio" Content="On a date I know" GroupName="Stop" IsChecked="True" IsCheckedChanged="OnStopModeChanged" Margin="0,0,18,0"/>
+                            <RadioButton x:Name="StopPaidOffRadio" Content="When I've paid it off (a loan)" GroupName="Stop" IsCheckedChanged="OnStopModeChanged" Margin="0,0,18,0"/>
+                            <!-- "Keeps going": sets a hidden AutoRenew flag with nothing to configure.
+                                 Its end date is pushed one cycle past the forecast horizon and renewed as the horizon advances (MainWindow.RenewOngoingPatternsToHorizon). -->
+                            <RadioButton x:Name="StopKeepsGoingRadio" Content="It just keeps going" GroupName="Stop" IsCheckedChanged="OnStopModeChanged"/>
+                        </StackPanel>
+                        <TextBlock x:Name="KeepsGoingNote" IsVisible="False"
+                                   Text="No end date to set — it keeps going, renewing on its own as your forecast reaches further out."
+                                   FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                        <StackPanel x:Name="StopOnDatePanel" Margin="0,8,0,0">
+                            <TextBlock Text="End date"/>
+                            <CalendarDatePicker x:Name="StopEndDatePicker" Width="180" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <StackPanel x:Name="StopPaidOffPanel" Margin="0,8,0,0" IsVisible="False">
+                            <TextBlock Text="Total still owed"/>
+                            <TextBox x:Name="TotalOwedTextBox" Width="180" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                            <!-- Editing an existing bill fills the box in from its saved schedule (FillOwedFromSavedSchedule); this says so until the user types their own. -->
+                            <TextBlock x:Name="OwedEstimateNoteText" TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" IsVisible="False"/>
+                            <TextBlock x:Name="PayoffReadoutText" TextWrapping="Wrap" Foreground="DimGray" FontSize="12" Margin="0,6,0,0"/>
+                            <TextBlock Text="A rough floor — interest and fees will push the real payoff date later."
+                                       FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <local:RecurrenceRuleEditor x:Name="RuleEditor" Margin="0,0,0,10"/>
+
+                <!-- Continuity note: a break-off or restructure creates a new FinanceId, so this says whether the pattern continues from, or is continued by, another one.
+                     Both hidden by default; UpdateContinuityNote shows whichever apply. -->
+                <TextBlock x:Name="PredecessorNoteText" Margin="0,0,0,4" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" IsVisible="False"/>
+                <TextBlock x:Name="SuccessorNoteText" Margin="0,0,0,10" FontStyle="Italic" Foreground="Gray" FontSize="11" TextWrapping="Wrap" IsVisible="False"/>
+
+                <!-- Free-form notes. No MaxHeight, so the box grows with each new
+                     line and the outer ScrollViewer scrolls instead. -->
+                <StackPanel Margin="0,0,0,10">
+                    <TextBlock Text="Notes (optional)"/>
+                    <TextBox x:Name="NotesTextBox" Margin="0,2,0,0" MinHeight="54" AcceptsReturn="True" AcceptsTab="False"
+                             TextWrapping="Wrap" VerticalContentAlignment="Top"
+                             AutomationProperties.AutomationId="NotesTextBox"/>
+                </StackPanel>
+
+                <!-- This Expense's linked savings plan, shown as the Earmark tab shows it, even when healthy.
+                     Read-only here; the plan is edited on the Earmark tab. -->
+                <local:SummaryRegion x:Name="Summary"/>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

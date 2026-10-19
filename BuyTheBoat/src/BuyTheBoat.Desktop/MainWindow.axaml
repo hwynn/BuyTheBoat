@@ -1,0 +1,204 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:BuyTheBoat.App"
+        x:Class="BuyTheBoat.App.MainWindow"
+        Title="Buy The Boat" Height="820" Width="1100"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <!-- Semantic palette shared by the calendar + selected-day templates.
+             Green = good, amber = watch, red = short/raided; the indigo accent (today frame, selection) stays separate from the semantic colors. -->
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF1E66D0"/>
+        <SolidColorBrush x:Key="SelectionBrush" Color="#FFE3EDFB"/>
+        <SolidColorBrush x:Key="GoodTextBrush" Color="#FF1E7B45"/>
+        <SolidColorBrush x:Key="GoodBgBrush" Color="#FFDCF2E4"/>
+        <SolidColorBrush x:Key="WatchTextBrush" Color="#FF8A6A00"/>
+        <SolidColorBrush x:Key="WatchBgBrush" Color="#FFFBF0D0"/>
+        <SolidColorBrush x:Key="RedTextBrush" Color="#FFB00020"/>
+        <SolidColorBrush x:Key="RedBgBrush" Color="#FFF6E0E0"/>
+        <SolidColorBrush x:Key="NeutralBgBrush" Color="#FFECECEF"/>
+        <SolidColorBrush x:Key="NeutralTextBrush" Color="#FF555560"/>
+        <SolidColorBrush x:Key="CellBorderBrush" Color="#FFE3E3E8"/>
+        <SolidColorBrush x:Key="ManualBgBrush" Color="#FFEDE4F7"/>
+        <SolidColorBrush x:Key="ManualTextBrush" Color="#FF6A3FA0"/>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- Fluent's tab headers are sized for touch; these match the WPF app's compact strip. -->
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Padding" Value="10,4"/>
+        </Style>
+
+        <!-- List subtab rows: the item currently open in the Form subtab is bold on the selection tint, plus orange text while it has unsaved changes, matching the Form tab header.
+             MainWindow.TrackOpenInFormRow sets these classes from each row's IsOpenInForm/IsDirty. -->
+        <Style Selector="DataGridRow.openInForm">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+        </Style>
+        <Style Selector="DataGridRow.dirty">
+            <Setter Property="Foreground" Value="DarkOrange"/>
+        </Style>
+
+        <!-- An Accounts balance box holding text that isn't a number. -->
+        <Style Selector="TextBox.invalid /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+        <Style Selector="TextBox.invalid:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+        <Style Selector="TextBox.invalid:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+
+        <!-- Money flow: an account losing money each month. -->
+        <Style Selector="TextBlock.draining">
+            <Setter Property="Foreground" Value="Firebrick"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="14" RowDefinitions="Auto,*">
+        <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
+            <TabItem Header="Forecast">
+                <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Forecast tab hasn't been ported to this version yet."/>
+            </TabItem>
+
+            <!-- Accounts, Transfers, Bills & Paychecks and Allocations each hold a List subtab and a Form subtab.
+                 The list's Add/Edit buttons fill the Form subtab and switch to it (MainWindow.SwitchToTab, matched on the Form subtab's Tag: Account/Transfer/Expense/Earmark).
+                 Headers are TextBlocks so MainWindow.UpdateTabHeaderStyle can restyle both the Form subtab and its main tab:
+                 bold when an existing item is loaded, accent color on top when it has unsaved changes. -->
+
+            <!-- ACCOUNTS: each account is its own silo with its own balance and its own optional cushion. -->
+            <TabItem Tag="Accounts">
+                <TabItem.Header>
+                    <TextBlock x:Name="AccountsTabHeaderText" Text="Accounts"/>
+                </TabItem.Header>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem x:Name="AccountsListTab" Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Add Account..." Padding="12,5" Click="OnAddAccountClick"
+                                        AutomationProperties.AutomationId="AddAccountButton"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditAccountClick"
+                                        AutomationProperties.AutomationId="EditAccountButton"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteAccountClick"
+                                        AutomationProperties.AutomationId="DeleteAccountButton"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="Your real accounts, each with its own balance and its own optional safety cushion. Type what each one holds right now straight into its Current balance box — Enter saves it and jumps to the next account. The forecast uses these. Bills, paychecks and goals each belong to a single account, because having enough money means having enough in the right account."/>
+                            <DataGrid x:Name="AccountsGrid" SelectionChanged="OnListRowSelected" LoadingRow="OnLoadingFormListRow"
+                                      AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
+                                      AutomationProperties.AutomationId="AccountsGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
+                                    <!-- Unlike every other list, this one column is edited right in the list: balances get re-entered on every run, so it skips the Form.
+                                         Saves on Enter/Tab or leaving the box (MainWindow.CommitAccountBalance); Esc puts the saved value back.
+                                         The Form has this account open with unsaved changes while IsDirty; saving it there would overwrite a balance typed here, so the box is off. -->
+                                    <DataGridTemplateColumn Header="Current balance" Width="170">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBox Text="{Binding BalanceText, Mode=OneWay}" Padding="4,2" MinHeight="0" Margin="2"
+                                                         IsEnabled="{Binding !IsDirty}"
+                                                         ToolTip.Tip="This account has unsaved changes in the Form tab — save or clear them there first."
+                                                         ToolTip.ServiceEnabled="{Binding IsDirty}"
+                                                         ToolTip.ShowOnDisabled="True"
+                                                         AutomationProperties.AutomationId="AccountBalanceBox"
+                                                         AutomationProperties.Name="{Binding Name, StringFormat='Current balance of {0}'}"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Safety cushion" Binding="{Binding Cushion}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Tag="Account">
+                        <TabItem.Header>
+                            <TextBlock x:Name="AccountTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:AccountFormPanel x:Name="AccountForm"/>
+                    </TabItem>
+                    <TabItem Header="Money flow" Tag="MoneyFlow">
+                        <DockPanel Margin="8">
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="How much comes into and goes out of each account in an average month, so you can spot an account that is slowly draining while another piles up. Transfers count on both sides: out of the account they leave, into the one they reach. One-time goals are left out. Averages cover the forecast window, so a horizon of a year or more evens out yearly bills."/>
+                            <TextBlock x:Name="MoneyFlowWindowText" DockPanel.Dock="Top" Margin="0,0,0,8"
+                                       AutomationProperties.AutomationId="MoneyFlowWindowText"/>
+                            <TextBlock x:Name="MoneyFlowTotalText" DockPanel.Dock="Bottom" Margin="0,8,0,0" FontWeight="SemiBold"
+                                       AutomationProperties.AutomationId="MoneyFlowTotalText"/>
+                            <DataGrid x:Name="MoneyFlowGrid" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
+                                      AutomationProperties.AutomationId="MoneyFlowGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding Name}" Width="260"/>
+                                    <DataGridTextColumn Header="Comes in / month" Binding="{Binding MonthlyIn, StringFormat={}{0:N2}}" Width="150"/>
+                                    <DataGridTextColumn Header="Goes out / month" Binding="{Binding MonthlyOut, StringFormat={}{0:N2}}" Width="150"/>
+                                    <DataGridTemplateColumn Header="Net / month" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding MonthlyNet, StringFormat={}{0:N2}}" Margin="12,0" VerticalAlignment="Center"
+                                                           Classes.draining="{Binding IsDraining}"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Transfers">
+                <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Transfers tab hasn't been ported to this version yet."/>
+            </TabItem>
+            <TabItem Tag="Bills &amp; Paychecks">
+                <TabItem.Header>
+                    <TextBlock x:Name="BillsAndPaychecksTabHeaderText" Text="Bills &amp; Paychecks"/>
+                </TabItem.Header>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Create Bill..." Padding="12,5" Click="OnCreateBillClick"
+                                        AutomationProperties.AutomationId="CreateBillButton"/>
+                                <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddFinancialPatternClick"
+                                        AutomationProperties.AutomationId="AddFinancialPatternButton"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditFinancialPatternClick"
+                                        AutomationProperties.AutomationId="EditFinancialPatternButton"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteFinancialPatternClick"
+                                        AutomationProperties.AutomationId="DeleteFinancialPatternButton"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="A bill and a paycheck are the same kind of thing here — just a negative vs. positive amount. &quot;Create Bill&quot; is the simple path for a recurring expense you're obligated to pay; &quot;Add New (advanced)&quot; also covers paychecks, one-time goals, and anything discretionary."/>
+                            <DataGrid x:Name="FinancialPatternsGrid" SelectionChanged="OnListRowSelected" LoadingRow="OnLoadingFormListRow"
+                                      AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
+                                      AutomationProperties.AutomationId="FinancialPatternsGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Finance ID" Binding="{Binding FinanceId}" Width="80"/>
+                                    <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160"/>
+                                    <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="200"/>
+                                    <DataGridTextColumn Header="Account" Binding="{Binding Account}" Width="120"/>
+                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="110"/>
+                                    <DataGridTextColumn Header="Mandatory" Binding="{Binding Mandatory}" Width="80"/>
+                                    <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="70"/>
+                                    <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Header="Spreadsheet" Tag="Spreadsheet">
+                        <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Spreadsheet subtab hasn't been ported to this version yet."/>
+                    </TabItem>
+                    <TabItem Tag="Expense">
+                        <TabItem.Header>
+                            <TextBlock x:Name="ExpenseTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:ExpenseFormPanel x:Name="ExpenseForm"/>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+            <TabItem Header="Allocations">
+                <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Allocations tab hasn't been ported to this version yet."/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

@@ -2,7 +2,7 @@
 
   <!-- The app's code that doesn't touch the UI: save confirmations, spreadsheet model and exporters, message text.
        Plain net10.0, so it and its tests build on Windows and Linux alike.
-       Its files keep the BuyTheBoat.App namespace, so the UI project uses them without extra usings. -->
+       Its files keep the BuyTheBoat.App namespace, so the UI projects use them without extra usings. -->
 
   <ItemGroup>
     <ProjectReference Include="..\BuyTheBoat.Domain\BuyTheBoat.Domain.csproj" />
@@ -10,9 +10,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The UI project builds on internal types here (ConfirmationPaginator, ConfirmationRowBuilder's inputs).
+    <!-- Both UI projects (WPF and Avalonia) build on internal types here (ConfirmationPaginator, ConfirmationRowBuilder's inputs).
          The App tests reach FinancePatternSaveConfirmation's internal Determine*/Perform* methods directly, so a scenario's confirmation conditions can be exercised without driving the real popup, and call EarmarkFormText's internal text builders. -->
     <InternalsVisibleTo Include="BuyTheBoat.App" />
+    <InternalsVisibleTo Include="BuyTheBoat.Desktop" />
     <InternalsVisibleTo Include="BuyTheBoat.App.Tests" />
   </ItemGroup>
 
