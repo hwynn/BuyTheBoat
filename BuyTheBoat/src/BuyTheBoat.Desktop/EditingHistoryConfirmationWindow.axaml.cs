@@ -145,9 +145,8 @@ public partial class EditingHistoryConfirmationWindow : Window
             var radio = new RadioButton
             {
                 Content = new TextBlock { Text = option.Label, TextWrapping = TextWrapping.Wrap },
-                // Unique GroupName per row keeps each question's radios
-                // mutually exclusive without bleeding into the next question's.
-                GroupName = row.Id,
+                // No GroupName: a row's radios share optionsPanel as their parent, which keeps each question's radios
+                // mutually exclusive without bleeding into the next question's (a nested question's radios sit in their own child panel).
                 IsChecked = i == row.DefaultIndex,
                 Margin = sideBySide ? new Thickness(0, 0, 12, 0) : new Thickness(0, 0, 0, 4),
                 Tag = row.Id,
@@ -206,7 +205,6 @@ public partial class EditingHistoryConfirmationWindow : Window
             var radio = new RadioButton
             {
                 Content = new TextBlock { Text = row.Candidates[i].Label, TextWrapping = TextWrapping.Wrap },
-                GroupName = row.Id,
                 IsChecked = i == row.DefaultIndex,
                 Margin = new Thickness(0, 0, 0, 4),
             };
@@ -221,8 +219,9 @@ public partial class EditingHistoryConfirmationWindow : Window
     /// <summary>[UI] Updates a row's consequence footer and child rows once an option becomes checked; the sender's Tag names the row.</summary>
     private void OnOptionCheckedChanged(object? sender, RoutedEventArgs e)
     {
-        if (sender is RadioButton { IsChecked: true, Tag: string rowId } && _choiceRows.TryGetValue(rowId, out var controls))
+        if (sender is RadioButton { IsChecked: true, Tag: string rowId } picked && _choiceRows.TryGetValue(rowId, out var controls))
         {
+            picked.UncheckSiblingRadios();
             UpdateConsequenceFooter(controls);
             RefreshChildPanels(controls);
         }

@@ -5,9 +5,20 @@
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+
+        <!-- Plain text inherits its size from the window, so the window carries the same 12-point default as the controls. -->
+        <Style Selector="Window">
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style Selector="DataGridCell">
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
     </Application.Styles>
 
     <Application.Resources>
+        <!-- The forms were laid out for WPF's 12-point default text; Fluent's 14 makes them wider than the window. -->
+        <x:Double x:Key="ControlContentThemeFontSize">12</x:Double>
+
         <!-- Avalonia has no GroupBox; a HeaderedContentControl with this theme draws the same titled frame.
              Use as <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="..."> -->
         <ControlTheme x:Key="GroupBox" TargetType="HeaderedContentControl">

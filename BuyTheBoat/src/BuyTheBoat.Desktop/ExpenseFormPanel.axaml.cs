@@ -852,10 +852,12 @@ public partial class ExpenseFormPanel : UserControl
     /// <summary>[UI] Relabels the amount and shows or hides the skippable question once Expense or Income is picked.</summary>
     private void OnDirectionChanged(object? sender, RoutedEventArgs e)
     {
-        if (!_initialized || sender is not RadioButton { IsChecked: true })
+        if (!_initialized || sender is not RadioButton { IsChecked: true } picked)
         {
             return;
         }
+
+        picked.UncheckSiblingRadios();
 
         UpdateDirectionDependentUi();
         MarkDirtyIfNotSuppressed();
@@ -864,10 +866,12 @@ public partial class ExpenseFormPanel : UserControl
     /// <summary>[UI] Updates the "This looks like a:" label once a skippable answer is picked.</summary>
     private void OnMandatoryChanged(object? sender, RoutedEventArgs e)
     {
-        if (!_initialized || sender is not RadioButton { IsChecked: true })
+        if (!_initialized || sender is not RadioButton { IsChecked: true } picked)
         {
             return;
         }
+
+        picked.UncheckSiblingRadios();
 
         UpdateCharacterizationText();
         MarkDirtyIfNotSuppressed();
@@ -876,10 +880,12 @@ public partial class ExpenseFormPanel : UserControl
     /// <summary>[UI] Swaps between the due-date and repeating-schedule fields once One time or Repeating is picked.</summary>
     private void OnRepeatsChanged(object? sender, RoutedEventArgs e)
     {
-        if (!_initialized || sender is not RadioButton { IsChecked: true })
+        if (!_initialized || sender is not RadioButton { IsChecked: true } picked)
         {
             return;
         }
+
+        picked.UncheckSiblingRadios();
 
         UpdateRepeatsVisibility();
         MarkDirtyIfNotSuppressed();
@@ -1062,10 +1068,12 @@ public partial class ExpenseFormPanel : UserControl
     /// </summary>
     private void OnStopModeChanged(object? sender, RoutedEventArgs e)
     {
-        if (!_initialized || sender is not RadioButton { IsChecked: true })
+        if (!_initialized || sender is not RadioButton { IsChecked: true } picked)
         {
             return;
         }
+
+        picked.UncheckSiblingRadios();
 
         MarkDirtyIfNotSuppressed();
         if (RepeatingRadioButton.IsChecked == true)

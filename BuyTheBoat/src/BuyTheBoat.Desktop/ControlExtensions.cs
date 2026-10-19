@@ -33,6 +33,21 @@ internal static class ControlExtensions
             }
         };
 
+    /// <summary>
+    /// [UI] Turns off the other radio buttons beside this one, so a handler reacting to this one turning on sees the settled choice.
+    /// Avalonia turns the siblings off only after announcing the new choice, where WPF did it before.
+    /// </summary>
+    public static void UncheckSiblingRadios(this RadioButton picked)
+    {
+        foreach (var sibling in (picked.Parent as Panel)?.Children.OfType<RadioButton>() ?? [])
+        {
+            if (sibling != picked)
+            {
+                sibling.IsChecked = false;
+            }
+        }
+    }
+
     /// <summary>[UI] Runs the handler whenever the box's text changes, at the moment it changes (see WhenChanged).</summary>
     public static void WhenTextChanged(this TextBox box, Action handler) => box.WhenChanged(TextBox.TextProperty, handler);
 

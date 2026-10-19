@@ -61,14 +61,15 @@
             </Grid>
 
             <!-- Ends shares its row with a slot for host content (SetLeadingContent), where Earmark's Amount sits; it's empty and hidden for Expense and Transfer.
-                 EndsAfterCountRadio's label wraps to fit the half-width column. -->
+                 EndsAfterCountRadio's label wraps to fit the half-width column.
+                 The two Ends radios have no GroupName, so Avalonia groups them by their shared parent: a GroupName is shared across the whole window, and several forms each hold an editor of their own. -->
             <Grid ColumnDefinitions="*,16,*" Margin="0,4,0,10">
                 <StackPanel Grid.Column="0">
                     <TextBlock x:Name="EndsHeader" Text="Ends" FontWeight="Bold"/>
-                    <RadioButton x:Name="EndsOnDateRadio" Content="On date" GroupName="EndCondition" IsChecked="True"
+                    <RadioButton x:Name="EndsOnDateRadio" Content="On date" IsChecked="True"
                                  Margin="0,4,0,0" IsCheckedChanged="OnCheckChanged"/>
                     <CalendarDatePicker x:Name="UntilDatePicker" Margin="20,2,0,6" HorizontalAlignment="Stretch"/>
-                    <RadioButton x:Name="EndsAfterCountRadio" GroupName="EndCondition" IsCheckedChanged="OnCheckChanged">
+                    <RadioButton x:Name="EndsAfterCountRadio" IsCheckedChanged="OnCheckChanged">
                         <TextBlock Text="After this many occurrences" TextWrapping="Wrap" MaxWidth="180"/>
                     </RadioButton>
                     <TextBox x:Name="CountTextBox" Width="60" HorizontalAlignment="Left" Margin="20,2,0,0"/>

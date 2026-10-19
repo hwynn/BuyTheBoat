@@ -196,8 +196,68 @@
                     </TabItem>
                 </TabControl>
             </TabItem>
-            <TabItem Header="Allocations">
-                <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Allocations tab hasn't been ported to this version yet."/>
+            <TabItem Tag="Allocations">
+                <TabItem.Header>
+                    <TextBlock x:Name="AllocationsTabHeaderText" Text="Allocations"/>
+                </TabItem.Header>
+                <TabControl Margin="0,4,0,0">
+                    <TabItem Header="List">
+                        <DockPanel Margin="8">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Create One-Time Goal..." Padding="12,5" Click="OnCreateOneTimeGoalClick"
+                                        AutomationProperties.AutomationId="CreateOneTimeGoalButton"/>
+                                <Button Content="Add New (advanced)..." Padding="12,5" Margin="8,0,0,0" Click="OnAddEarMarkPatternClick"
+                                        AutomationProperties.AutomationId="AddEarMarkPatternButton"/>
+                                <Button Content="Edit Selected..." Padding="12,5" Margin="8,0,0,0" Click="OnEditEarMarkPatternClick"
+                                        AutomationProperties.AutomationId="EditEarMarkPatternButton"/>
+                                <Button Content="Delete Selected" Padding="12,5" Margin="8,0,0,0" Click="OnDeleteEarMarkPatternClick"
+                                        AutomationProperties.AutomationId="DeleteEarMarkPatternButton"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                                       Text="Setting money aside ahead of an expense — the same mechanism (a fund jar fed by an earmark pattern) covers bills and one-time goals alike. &quot;Create One-Time Goal&quot; is the simple path for a single future expense; &quot;Add New (advanced)&quot; links a custom allocation schedule to any existing Bill/Paycheck/Goal entry. Every new expense gets an allocation here automatically when you save it — edit it to change how money is set aside, or delete it and the expense just comes out of your free balance on its due date."/>
+
+                            <!-- Manual adjustments: one-off, user-made jar changes on top of the automatic plans above.
+                                 Also creatable from the Forecast tab's selected-day pane. -->
+                            <DockPanel DockPanel.Dock="Bottom" Height="170" Margin="0,10,0,0">
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="Manual adjustments" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                    <Button Content="Add..." Padding="10,3" Click="OnAddManualEarmarkClick"
+                                            AutomationProperties.AutomationId="AddManualEarmarkButton"/>
+                                    <Button Content="Edit Selected..." Padding="10,3" Margin="6,0,0,0" Click="OnEditManualEarmarkClick"
+                                            AutomationProperties.AutomationId="EditManualEarmarkButton"/>
+                                    <Button Content="Delete Selected" Padding="10,3" Margin="6,0,0,0" Click="OnDeleteManualEarmarkClick"
+                                            AutomationProperties.AutomationId="DeleteManualEarmarkButton"/>
+                                </StackPanel>
+                                <DataGrid x:Name="ManualEarmarksGrid" SelectionChanged="OnListRowSelected" LoadingRow="OnLoadingFormListRow"
+                                          AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
+                                          AutomationProperties.AutomationId="ManualEarmarksGrid">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="110"/>
+                                        <DataGridTextColumn Header="Fund" Binding="{Binding Target}" Width="260"/>
+                                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="120"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+
+                            <DataGrid x:Name="EarMarkPatternsGrid" SelectionChanged="OnListRowSelected" LoadingRow="OnLoadingFormListRow"
+                                      AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="All"
+                                      AutomationProperties.AutomationId="EarMarkPatternsGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Allocation target" Binding="{Binding Goal}" Width="280"/>
+                                    <DataGridTextColumn Header="Amount per occurrence" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="160"/>
+                                    <DataGridTextColumn Header="Already Saved" Binding="{Binding StartingAllocation, StringFormat={}{0:N2}}" Width="120"/>
+                                    <DataGridTextColumn Header="Repeats" Binding="{Binding Repeats}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Tag="Earmark">
+                        <TabItem.Header>
+                            <TextBlock x:Name="EarmarkTabHeaderText" Text="Form"/>
+                        </TabItem.Header>
+                        <local:EarmarkFormPanel x:Name="EarmarkForm"/>
+                    </TabItem>
+                </TabControl>
             </TabItem>
         </TabControl>
     </Grid>

@@ -14,7 +14,7 @@ namespace BuyTheBoat.App;
 
 // The app's one main window: the Forecast tab, a list tab for each kind of thing (Accounts, Transfers, Bills & Paychecks, Allocations),
 // and a form tab for creating or editing each (Account, Transfer, Expense, Earmark).
-// Ported so far: the Accounts tab; the other tabs are placeholders.
+// Ported so far: Accounts, Bills & Paychecks (all but its Spreadsheet subtab), and Allocations; the Forecast and Transfers tabs are placeholders.
 public partial class MainWindow : Window
 {
     private readonly FinancialPatternRepository _financialPatterns;
@@ -57,6 +57,28 @@ public partial class MainWindow : Window
         var legacy = _currentBalance.GetCurrent();
         _accounts.EnsureDefaultAccount(legacy?.Balance ?? 0m, legacy?.IdealSafetyCushion ?? 0m);
 
+        // The permanent Earmark tab persists through these callbacks instead of a dialog result — this panel owns no repository itself.
+        EarmarkForm.PatternSaved = OnEarmarkPatternSaved;
+        EarmarkForm.ManualEarmarksSaved = (saved, deleted) =>
+        {
+            foreach (var earmark in saved)
+            {
+                _manualEarmarks.Save(earmark);
+            }
+
+            foreach (var (financeId, date) in deleted)
+            {
+                _manualEarmarks.Delete(financeId, date);
+            }
+
+            RefreshGrids();
+            RefreshEarmarkFormContext();
+            RefreshShownForecast();
+
+            // Same settled rule as the Savings-plan save path — one plain save button for the whole Earmark form, one destination, regardless of which mode was active.
+            SwitchToTab("Forecast");
+        };
+
         // Each panel does its own validation (AccountFormPanel's uniqueness check included); these callbacks save what came back and refresh.
         // Both recompute the shown forecast after saving, since an account's starting balance feeds it.
         AccountForm.AccountSaved = account =>
@@ -80,13 +102,29 @@ public partial class MainWindow : Window
         ExpenseForm.PatternSaved = OnExpensePatternSaved;
         ExpenseForm.PickChainSegment = PickChainSegmentToEdit;
 
+        EarmarkForm.RequestForecast = EnsureForecast;
+        EarmarkForm.RequestForecastWithOneOff = ForecastWithOneOff;
+        EarmarkForm.RequestForecastWithProposedPlan = ForecastWithProposedPlan;
+
+        // Picking a plan-less goal in the Earmark form proposes a real, affordability-capped plan (the same one "Save and Plan" would create) as unsaved draft values to edit — not a bare monthly skeleton.
+        // Paced from the goal's own start when that's still in the future, so the proposed plan fits the goal's span without the proposer stretching the goal (which a draft can't persist).
+        EarmarkForm.RequestProposedPlan = goal =>
+        {
+            var accountId = _financialPatterns.GetAccountId(goal.FinanceId) ?? DefaultAccountId();
+            var today = CurrentAsOfDate();
+            var asOf = goal.DatePattern.ActiveStart > today ? goal.DatePattern.ActiveStart : today;
+            return ProposeAllocationPlanFor(goal, accountId, asOf);
+        };
+
         // Tab-header styling stays live, not just at save/load: each panel raises StateChanged on every field edit (via MarkDirty/ClearDirty), not only when its own Load*/Save runs, so the header updates while the user is still typing.
         AccountForm.StateChanged += (_, _) => UpdateTabHeaderStyle(AccountTabHeaderText, AccountsTabHeaderText, AccountForm.IsPopulated, AccountForm.IsDirty);
         ExpenseForm.StateChanged += (_, _) => UpdateTabHeaderStyle(ExpenseTabHeaderText, BillsAndPaychecksTabHeaderText, ExpenseForm.IsPopulated, ExpenseForm.IsDirty);
+        EarmarkForm.StateChanged += (_, _) => UpdateTabHeaderStyle(EarmarkTabHeaderText, AllocationsTabHeaderText, EarmarkForm.IsPopulated, EarmarkForm.IsDirty);
 
         // Same live trigger for the list rows: loading a different item moves the highlight; an edit turns it orange.
         AccountForm.StateChanged += (_, _) => MarkRowsOpenInForms();
         ExpenseForm.StateChanged += (_, _) => MarkRowsOpenInForms();
+        EarmarkForm.StateChanged += (_, _) => MarkRowsOpenInForms();
 
         // The balance boxes' keys and focus are caught on the grid, since the boxes are made by the cell template.
         // Keys are caught on the way down (Tunnel), so Enter and Tab reach the box's handler before the grid or focus navigation acts on them.
@@ -114,6 +152,10 @@ public partial class MainWindow : Window
         Width = Math.Min(Width, MaxWidth);
         Height = Math.Min(Height, MaxHeight);
     }
+
+    /// <summary>[READS FILE] Gives the Earmark form the saved goals, plans, and manual adjustments it reads from, plus the forecast on screen.</summary>
+    private void RefreshEarmarkFormContext() =>
+        EarmarkForm.SetContext(_financialPatterns.GetAll(), _earMarkPatterns.GetAll(), _manualEarmarks.GetAll(), _financialPatterns.GetTransferFinanceIds(), _lastForecast);
 
     private void RefreshAccountFormContext() => AccountForm.SetContext(_accounts.GetAll());
 
@@ -186,6 +228,9 @@ public partial class MainWindow : Window
             case "Expense":
                 RefreshExpenseFormContext();
                 break;
+            case "Earmark":
+                RefreshEarmarkFormContext();
+                break;
         }
     }
 
@@ -220,6 +265,10 @@ public partial class MainWindow : Window
     {
         MarkRows<AccountRow>(AccountsGrid, AccountForm.IsDirty, row => row.Account.Id == AccountForm.LoadedAccountId);
         MarkRows<FinancialPatternRow>(FinancialPatternsGrid, ExpenseForm.IsDirty, row => row.Segments.Any(segment => segment.FinanceId == ExpenseForm.LoadedFinanceId));
+        MarkRows<EarMarkPatternRow>(EarMarkPatternsGrid, EarmarkForm.IsDirty, row => row.Plans.Any(plan => plan.FinanceId == EarmarkForm.LoadedPlanFinanceId));
+        MarkRows<ManualEarmarkRow>(ManualEarmarksGrid, EarmarkForm.IsDirty, row => EarmarkForm.EditingOneOff is { } oneOff
+            && row.Earmark.FinanceId == oneOff.FinanceId
+            && row.Earmark.Date == oneOff.Date);
     }
 
     /// <summary>[UI] Sets the open-in-form highlight, and its unsaved-changes color, on each of one grid's rows.</summary>
@@ -299,6 +348,8 @@ public partial class MainWindow : Window
         {
             nameof(AccountsGrid) => (AccountForm.IsDirty, "Account", "Account", (Action)(() => EditSelectedAccount())),
             nameof(FinancialPatternsGrid) => (ExpenseForm.IsDirty, "Bills & Paychecks", "Expense", () => EditSelectedFinancialPattern()),
+            nameof(EarMarkPatternsGrid) => (EarmarkForm.IsDirty, "Allocations", "Earmark", () => EditSelectedEarMarkPattern()),
+            nameof(ManualEarmarksGrid) => (EarmarkForm.IsDirty, "Allocations", "Earmark", () => EditSelectedManualEarmark()),
             _ => (false, string.Empty, string.Empty, () => { }),
         };
         if (!formIsDirty)
@@ -330,6 +381,9 @@ public partial class MainWindow : Window
     {
         "Account" => OpenRowName(AccountsGrid) ?? "a new account",
         "Expense" => OpenRowName(FinancialPatternsGrid) ?? "a new bill or paycheck",
+        // In one-off mode the form has no plan picked, so an unmatched item there is a new manual adjustment.
+        "Earmark" => OpenRowName(EarMarkPatternsGrid) ?? OpenRowName(ManualEarmarksGrid)
+            ?? (EarmarkForm.LoadedPlanFinanceId is null ? "a new manual adjustment" : "a new allocation"),
         _ => "this item",
     };
 
@@ -339,6 +393,8 @@ public partial class MainWindow : Window
         {
             AccountRow row => $"“{row.Name}”",
             FinancialPatternRow row => $"“{(row.Description is { Length: > 0 } description ? description : row.Source)}”",
+            EarMarkPatternRow row => $"the allocation for “{row.Goal}”",
+            ManualEarmarkRow row => $"the {row.Target} adjustment on {row.Date}",
             _ => null,
         };
 
@@ -648,6 +704,32 @@ public partial class MainWindow : Window
             })
             .ToList();
 
+        // Every expense that reserves has its own Allocation Plan (an EarMarkPattern, per the allocation model), so the grid just shows those; nothing here is a synthesized "automatic" row.
+        // A transfer's withdrawal reserves through a plan too, but it's hidden here for the same reason its patterns are: a transfer is shown as one thing on its own tab, not as its underlying reservation machinery.
+        // One row per goal, across its break-off segments (shared Source) and any plans running at the same time; opening it asks which plan.
+        // A plan whose goal is missing gets a row of its own.
+        var financialPatterns = _financialPatterns.GetAll();
+        var transferWithdrawalIds = _financialPatterns.GetTransferWithdrawalFinanceIds();
+        var goalsByFinanceId = financialPatterns.ToDictionary(goal => goal.FinanceId);
+        EarMarkPatternsGrid.ItemsSource = _earMarkPatterns.GetAll()
+            .Where(pattern => !transferWithdrawalIds.Contains(pattern.FinanceId))
+            .GroupBy(pattern => goalsByFinanceId.TryGetValue(pattern.FinanceId, out var goal) ? goal.Source : $"(finance id {pattern.FinanceId})")
+            .Select(group =>
+            {
+                var plans = group.OrderBy(plan => plan.DatePattern.ActiveStart).ToList();
+                var latest = plans[^1];
+                return new EarMarkPatternRow(latest, goalsByFinanceId.GetValueOrDefault(latest.FinanceId), plans);
+            })
+            .ToList();
+
+        ManualEarmarksGrid.ItemsSource = _manualEarmarks.GetAll()
+            .Select(earmark => new ManualEarmarkRow(
+                earmark,
+                financialPatterns.FirstOrDefault(pattern => pattern.FinanceId == earmark.FinanceId) is { } owner
+                    ? owner.Description ?? owner.Source
+                    : $"(finance id {earmark.FinanceId})"))
+            .ToList();
+
         MarkRowsOpenInForms();
     }
 
@@ -751,6 +833,7 @@ public partial class MainWindow : Window
         _financialPatterns.Delete(segment.FinanceId);
         RefreshGrids();
         RefreshExpenseFormContext();
+        RefreshEarmarkFormContext();
     }
 
     /// <summary>
@@ -781,7 +864,6 @@ public partial class MainWindow : Window
     /// <summary>
     /// [STEP] Saves an Expense form pattern (ExpenseForm.PatternSaved) through FinancePatternSaveConfirmation, so a Critical edit against existing history goes through EditingHistoryConfirmationWindow first.
     /// A new expense always gets a proposed plan (AutoCreateAllocationPlan), called from two places below: inside the NavigateToEarmarkForm callback for "Save and Plan", since that fires before Run() returns (re-reading the plan afterward), and here after Run() for "Save and Skip planning".
-    /// The Earmark form isn't ported yet, so "Save and Plan" ends on the Allocations tab instead of opening the plan.
     /// </summary>
     /// <param name="pattern">The form's current field values — what the user typed, before any implicit break-off/correction Run() might apply.</param>
     /// <param name="accountId">Which account the pattern is filed under.</param>
@@ -811,14 +893,24 @@ public partial class MainWindow : Window
             NavigateToEarmarkForm = (plan, suggestedOverrides) =>
             {
                 // No plan yet but the user asked to plan: proposes the same affordability-capped plan a new expense gets, for a new pattern or an existing one with no plan.
-                // AutoCreateAllocationPlan does nothing for income.
+                // AutoCreateAllocationPlan does nothing for income, so plan stays null and the income branch below handles it; the plan is re-read afterward.
                 if (plan is null)
                 {
-                    AutoCreateAllocationPlan(pattern, accountId);
+                    // A suggested starting earmark opens in the form as an unsaved edit, so it's saved only if the user saves the plan.
+                    if (AutoCreateAllocationPlan(pattern, accountId) is { } suggestedStart)
+                    {
+                        suggestedOverrides = new Dictionary<string, object?>(suggestedOverrides ?? new Dictionary<string, object?>())
+                        {
+                            [EarmarkFieldOverrideKeys.StartingEarmarkAmount] = suggestedStart.Amount,
+                        };
+                    }
+
+                    plan = _earMarkPatterns.GetAll().FirstOrDefault(p => p.FinanceId == pattern.FinanceId);
                 }
 
                 // The save (and any AutoCreateAllocationPlan just above) changed the data, but _lastForecast is still the pre-save snapshot the confirmation ran against.
-                // Recompute it BEFORE refreshing the form contexts, so what we land on shows the post-save state rather than a stale reading.
+                // Recompute it BEFORE refreshing the form contexts, so the Earmark Summary we're about to land on shows the post-save state rather than a stale reading.
+                // Guarded on there being a forecast to re-run at all — with none, the Summary already shows its own no-forecast state.
                 if (_lastForecast is { } shown)
                 {
                     RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
@@ -826,9 +918,26 @@ public partial class MainWindow : Window
 
                 RefreshGrids();
                 RefreshExpenseFormContext();
+                RefreshEarmarkFormContext();
 
-                // Income never gets a savings plan of its own, so "Save and Plan" lands on the Forecast tab, as "Save and Skip planning" does.
-                SwitchToTab(pattern.Amount < 0m ? "Allocations" : "Forecast");
+                if (plan is not null)
+                {
+                    // Looked up by the PLAN's own FinanceId, not pattern's — after a break-off, plan belongs to the new successor, and pattern is still the original, now-superseded values.
+                    var goal = _financialPatterns.GetByFinanceId(plan.FinanceId) ?? pattern;
+                    EarmarkForm.LoadPattern(plan, goal, suggestedOverrides);
+                    SwitchToTab("Earmark");
+                }
+                else if (pattern.Amount < 0m)
+                {
+                    // Defensive fallback: an expense should have a plan by now (AutoCreateAllocationPlan above always saves one for Amount < 0), but if the proposal somehow produced none, open a blank Earmark form so the user can still create one by hand rather than landing nowhere.
+                    EarmarkForm.LoadForNewPattern();
+                    SwitchToTab("Earmark");
+                }
+                else
+                {
+                    // Income never gets a savings plan of its own, so there's nothing to open on the Earmark tab — "Save and Plan" lands back on the Forecast tab, the same as "Save and Skip planning" already does.
+                    SwitchToTab("Forecast");
+                }
             },
         };
 
@@ -860,10 +969,305 @@ public partial class MainWindow : Window
 
             RefreshGrids();
             RefreshExpenseFormContext();
+            RefreshEarmarkFormContext();
             SwitchToTab("Forecast");
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// [STEP] Saves a savings plan from the Earmark form (EarmarkForm.PatternSaved) through EarmarkPatternSaveConfirmation.
+    /// A Start or Until edit that touches a chain neighbor, or an Amount or schedule edit with later segments, goes through EditingHistoryConfirmationWindow first.
+    /// </summary>
+    /// <param name="pattern">The form's current field values — what the user typed, before any stay-linked/cascade resolution Run() might apply.</param>
+    /// <param name="savedStart">The plan's own Start as it's actually saved today, or the same as pattern's own Start for a brand-new plan (EarmarkFormPanel's own _loadedPlanStart).</param>
+    private bool OnEarmarkPatternSaved(EarMarkPattern pattern, DateOnly savedStart)
+    {
+        var goal = _financialPatterns.GetByFinanceId(pattern.FinanceId)
+            ?? throw new InvalidOperationException(
+                $"No FinancialPattern found for finance_id {pattern.FinanceId} — a savings plan's own goal should always exist by the time it's saved.");
+
+        var confirmation = new EarmarkPatternSaveConfirmation(
+            pattern,
+            savedStart,
+            goal,
+            EnsureForecast,
+            new FinancePatternRepositories
+            {
+                FinancialPatterns = _financialPatterns,
+                EarMarkPatterns = _earMarkPatterns,
+                ManualEarmarks = _manualEarmarks,
+            })
+        {
+            ConfirmImplicitChanges = ShowEditingHistoryConfirmation,
+        };
+
+        if (!confirmation.Run())
+        {
+            return false; // user cancelled — nothing saved; the form keeps the user's edits and the tab stays as-is
+        }
+
+        RefreshGrids();
+        RefreshEarmarkFormContext();
+        if (_lastForecast is { } shown)
+        {
+            RefreshForecast(shown.AsOfDate, shown.HorizonEndDate);
+        }
+
+        // Earmark's own save "returns to the Forecast tab — no onward hop from there to anywhere else."
+        SwitchToTab("Forecast");
+
+        return true;
+    }
+
+    /// <summary>
+    /// [STEP] Opens a blank Allocations › Form for a new savings plan; the user picks its goal there with Change....
+    /// Says so instead when there's no bill, paycheck, or goal to save toward yet.
+    /// </summary>
+    private async void OnAddEarMarkPatternClick(object? sender, RoutedEventArgs e)
+    {
+        var goals = _financialPatterns.GetAll();
+        if (goals.Count == 0)
+        {
+            await MessageBox.Show(
+                this,
+                "Create a Bill/Paycheck pattern first — an earmark pattern needs an existing goal to save toward.",
+                "No goals yet",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        if (!await ConfirmLeavingUnsavedChanges(EarmarkForm.IsDirty, "Allocations", "Earmark"))
+        {
+            return;
+        }
+
+        RefreshEarmarkFormContext();
+        EarmarkForm.LoadForNewPattern();
+        SwitchToTab("Earmark");
+    }
+
+    /// <summary>[STEP] Opens the selected savings plan in Allocations › Form.</summary>
+    private void OnEditEarMarkPatternClick(object? sender, RoutedEventArgs e) => EditSelectedEarMarkPattern();
+
+    /// <summary>[STEP] Loads the savings plan selected in the list (asking which one when the row stands for several) into the Form and shows it.</summary>
+    private async void EditSelectedEarMarkPattern()
+    {
+        if (EarMarkPatternsGrid.SelectedItem is AutomaticBillEarmarkRow)
+        {
+            await ShowAutomaticRowIsNotManageable();
+            return;
+        }
+
+        if (EarMarkPatternsGrid.SelectedItem is not EarMarkPatternRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        if (await PickPlanFromRow(row) is not { } plan)
+        {
+            return;
+        }
+
+        var goal = _financialPatterns.GetByFinanceId(plan.FinanceId);
+        if (goal is null)
+        {
+            await MessageBox.Show(
+                this,
+                "The goal this was linked to no longer exists — this earmark pattern can only be deleted.",
+                "Linked goal missing",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        RefreshEarmarkFormContext();
+        EarmarkForm.LoadPattern(plan, goal);
+        SwitchToTab("Earmark");
+    }
+
+    /// <summary>[UI] The plan an Allocations row should act on: its only plan, or the one picked in EarmarkPatternPickerWindow when it stands for several; null on Cancel.</summary>
+    private async Task<EarMarkPattern?> PickPlanFromRow(EarMarkPatternRow row)
+    {
+        if (row.Plans.Count == 1)
+        {
+            return row.Pattern;
+        }
+
+        var picker = new EarmarkPatternPickerWindow(row.Plans);
+        return await picker.ShowDialog<bool>(this) ? picker.SelectedPlan : null;
+    }
+
+    /// <summary>[DELETES] Deletes the selected savings plan after asking; deleting a goal's last plan removes its manual adjustments too, since they'd have no jar left.</summary>
+    private async void OnDeleteEarMarkPatternClick(object? sender, RoutedEventArgs e)
+    {
+        if (EarMarkPatternsGrid.SelectedItem is AutomaticBillEarmarkRow)
+        {
+            await ShowAutomaticRowIsNotManageable();
+            return;
+        }
+
+        if (EarMarkPatternsGrid.SelectedItem is not EarMarkPatternRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        if (await PickPlanFromRow(row) is not { } plan || !await ConfirmDelete(row.Goal))
+        {
+            return;
+        }
+
+        // Deletes just the picked plan; when it's the goal's last one, its manual earmarks go too, since they'd point at a jar that no longer exists.
+        var otherPlans = _earMarkPatterns.GetAll()
+            .Where(other => other.FinanceId == plan.FinanceId && other.DatePattern.DtStart != plan.DatePattern.DtStart)
+            .ToList();
+        if (otherPlans.Count == 0)
+        {
+            _earMarkPatterns.Delete(plan.FinanceId);
+        }
+        else
+        {
+            _earMarkPatterns.Delete(plan.FinanceId, plan.DatePattern.DtStart);
+            var repositories = new FinancePatternRepositories
+            {
+                FinancialPatterns = _financialPatterns,
+                EarMarkPatterns = _earMarkPatterns,
+                ManualEarmarks = _manualEarmarks,
+            };
+            foreach (var date in repositories.FindOrphanedManualEarmarkDates(otherPlans, plan.FinanceId))
+            {
+                _manualEarmarks.Delete(plan.FinanceId, date);
+            }
+        }
+
+        RefreshGrids();
+    }
+
+    /// <summary>[WRITES FILE] Opens the one-time goal popup and saves the goal and its savings plan it builds.</summary>
+    private async void OnCreateOneTimeGoalClick(object? sender, RoutedEventArgs e)
+    {
+        var window = new CreateOneTimeGoalWindow(_financialPatterns.GetAll(), _accounts.GetAll());
+        if (await window.ShowDialog<bool>(this) && window.CreatedGoal is { } goal && window.CreatedEarMarkPattern is { } earmark)
+        {
+            // The goal (a finance pattern) is filed under the chosen account; its earmark reaches the same account through finance_id.
+            _financialPatterns.Save(goal, window.SelectedAccountId);
+            _earMarkPatterns.Save(earmark);
+            RefreshGrids();
+        }
+    }
+
+    /// <summary>[STEP] Opens a blank one-off adjustment in Allocations › Form.</summary>
+    private async void OnAddManualEarmarkClick(object? sender, RoutedEventArgs e)
+    {
+        if (!await ConfirmLeavingUnsavedChanges(EarmarkForm.IsDirty, "Allocations", "Earmark"))
+        {
+            return;
+        }
+
+        await ShowManualEarmarkForm(initialDate: null, editTarget: null);
+    }
+
+    /// <summary>[STEP] Opens the selected manual adjustment in Allocations › Form.</summary>
+    private void OnEditManualEarmarkClick(object? sender, RoutedEventArgs e) => EditSelectedManualEarmark();
+
+    /// <summary>[STEP] Loads the manual adjustment selected in the list into the Form and shows it, or says nothing is selected.</summary>
+    private async void EditSelectedManualEarmark()
+    {
+        if (ManualEarmarksGrid.SelectedItem is not ManualEarmarkRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        await ShowManualEarmarkForm(initialDate: null, editTarget: row.Earmark);
+    }
+
+    /// <summary>[DELETES] Deletes the selected manual adjustment after asking.</summary>
+    private async void OnDeleteManualEarmarkClick(object? sender, RoutedEventArgs e)
+    {
+        if (ManualEarmarksGrid.SelectedItem is not ManualEarmarkRow row)
+        {
+            ShowNothingSelected();
+            return;
+        }
+
+        if (!await ConfirmDelete($"the {row.Target} adjustment on {row.Date}"))
+        {
+            return;
+        }
+
+        _manualEarmarks.Delete(row.Earmark.FinanceId, row.Earmark.Date);
+        RefreshGrids();
+        RefreshShownForecast();
+    }
+
+    /// <summary>
+    /// [STEP] Opens Allocations › Form in One-off mode, blank or loaded with the adjustment being edited.
+    /// Refuses with a "no funds yet" message when there is no savings plan to adjust.
+    /// </summary>
+    /// <param name="initialDate">Day to pre-select, if any.</param>
+    /// <param name="editTarget">The existing manual earmark being edited, or null to add a new one.</param>
+    private async Task ShowManualEarmarkForm(DateOnly? initialDate, ManualEarmark? editTarget)
+    {
+        if (_earMarkPatterns.GetAll().Count == 0)
+        {
+            await MessageBox.Show(
+                this,
+                "Create a savings plan first — manual adjustments live inside a fund's plan (its timeline is the fund's lifetime).",
+                "No funds yet", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        RefreshEarmarkFormContext();
+        EarmarkForm.LoadOneOff(editTarget, initialDate);
+        SwitchToTab("Earmark");
+    }
+
+    /// <summary>[UI] Explains that an automatic bill funding row has nothing to edit or delete.</summary>
+    private Task<MessageBoxResult> ShowAutomaticRowIsNotManageable() => MessageBox.Show(
+        this,
+        "This is an automatic funding for a mandatory bill, not a real earmark pattern — there's nothing to edit or delete here. " +
+        "It disappears on its own if you delete the bill or give it a real earmark, on the Bills & Paychecks tab.",
+        "Automatic — nothing to manage",
+        MessageBoxButton.OK,
+        MessageBoxImage.Information);
+
+    /// <summary>
+    /// [CALC] Re-runs the forecast with one not-yet-saved one-off earmark folded in — the live "what if I saved this one-off" preview the Earmark form's summary reads its jar off.
+    /// Same inputs and window as the shown forecast, just with the proposed earmark added; a throwaway calculation, never stored on _lastForecast.
+    /// </summary>
+    /// <param name="oneOff">The proposed one-off earmark to include.</param>
+    private ForecastResult ForecastWithOneOff(ManualEarmark oneOff)
+    {
+        var asOfDate = _lastForecast?.AsOfDate ?? CurrentAsOfDate();
+        var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
+        return TransactionLogBookFactory.CreateForecast(
+            BuildForecastOptions(asOfDate, horizonEnd).WithManualEarmark(oneOff));
+    }
+
+    /// <summary>
+    /// [CALC] Re-runs the forecast with a not-yet-saved savings plan substituted in (plus any proposed manual earmarks that go with it, e.g. a starting earmark) — the live "what if I saved this plan" preview the Earmark form's first-payment warning reads its free-funds figure off.
+    /// Same inputs and window as the shown forecast; a throwaway calculation, never stored on _lastForecast.
+    /// </summary>
+    /// <param name="proposed">The proposed plan to substitute in.</param>
+    /// <param name="replacedActiveStart">The saved segment it replaces, or null for a brand-new plan.</param>
+    /// <param name="proposedManualEarmarks">Any proposed manual earmarks to fold in alongside it.</param>
+    private ForecastResult ForecastWithProposedPlan(
+        EarMarkPattern proposed, DateOnly? replacedActiveStart, IReadOnlyList<ManualEarmark> proposedManualEarmarks)
+    {
+        var asOfDate = _lastForecast?.AsOfDate ?? CurrentAsOfDate();
+        var horizonEnd = _lastForecast?.HorizonEndDate ?? CurrentAsOfDate().AddMonths(3);
+        var options = BuildForecastOptions(asOfDate, horizonEnd).WithProposedPlan(proposed, replacedActiveStart);
+        foreach (var earmark in proposedManualEarmarks)
+        {
+            options = options.WithManualEarmark(earmark);
+        }
+
+        return TransactionLogBookFactory.CreateForecast(options);
     }
 
     /// <summary>
