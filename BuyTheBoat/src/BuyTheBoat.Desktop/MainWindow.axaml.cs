@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -15,7 +16,7 @@ namespace BuyTheBoat.App;
 
 // The app's one main window: the Forecast tab, a list tab for each kind of thing (Accounts, Transfers, Bills & Paychecks, Allocations),
 // and a form tab for creating or editing each (Account, Transfer, Expense, Earmark).
-// Ported so far: every tab; the window's Export Data / Import Data buttons are still to come.
+// Ported: every tab and the window's Export Data / Import Data buttons.
 public partial class MainWindow : Window
 {
     private readonly FinancialPatternRepository _financialPatterns;
@@ -1524,6 +1525,145 @@ public partial class MainWindow : Window
         RefreshExpenseFormContext();
         ExpenseForm.LoadDraft(values, draftId);
         SwitchToTab("Expense");
+    }
+
+    // The "BuyTheBoat database" choice in the Export / Import Data file pickers.
+    private static readonly FilePickerFileType DatabaseFileType = new("BuyTheBoat database") { Patterns = ["*.db"] };
+
+    /// <summary>
+    /// [WRITES FILE] Exports the data by copying the SQLite file as is.
+    /// Export and Import move the raw file rather than another format, since it's the single source of truth and a straight copy can't lose anything.
+    /// </summary>
+    private async void OnExportClick(object? sender, RoutedEventArgs e)
+    {
+        IStorageFolder? startFolder = null;
+        if (AppPaths.DefaultExportFolder is { } exportFolder)
+        {
+            Directory.CreateDirectory(exportFolder);
+            startFolder = await StorageProvider.TryGetFolderFromPathAsync(exportFolder);
+        }
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export BuyTheBoat data",
+            SuggestedFileName = $"buytheboat-backup-{DateTime.Today:yyyy-MM-dd}.db",
+            DefaultExtension = "db",
+            FileTypeChoices = [DatabaseFileType, FilePickerFileTypes.All],
+            SuggestedStartLocation = startFolder,
+        });
+
+        // The copy needs a path; a picked location with none (not a real folder on this machine) can't be written to.
+        if (file?.TryGetLocalPath() is not { } path)
+        {
+            return;
+        }
+
+        try
+        {
+            File.Copy(PatternDatabase.DefaultDatabasePath(), path, overwrite: true);
+        }
+        catch (IOException ex)
+        {
+            ErrorLog.Record("exporting the database", ex);
+            await MessageBox.Show(this, $"Couldn't export: {ex.Message}", "Export failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        await MessageBox.Show(
+            this,
+            $"Exported to {path}. Copy this file to another computer and use Import Data there to restore it.",
+            "Export complete",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+
+    /// <summary>[WRITES FILE] Replaces all of the app's data with a file from Export Data, after checking it loads and backing up the current data, then restarts the app on it.</summary>
+    private async void OnImportClick(object? sender, RoutedEventArgs e)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import BuyTheBoat data",
+            FileTypeFilter = [DatabaseFileType, FilePickerFileTypes.All],
+        });
+
+        if (files is not [var file] || file.TryGetLocalPath() is not { } importPath)
+        {
+            return;
+        }
+
+        if (!PatternDatabase.LooksLikeValidDatabaseFile(importPath))
+        {
+            await MessageBox.Show(
+                this,
+                "That file doesn't look like a BuyTheBoat export — it's missing the expected data.",
+                "Import failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        // Deeper than the table-presence check above: confirm the file actually LOADS (migrations run, every row re-validates) before touching the live database, so an incompatible or corrupted export is rejected here rather than crashing the app on the restart below.
+        if (PatternDatabase.DescribeLoadFailure(importPath) is { } loadFailure)
+        {
+            ErrorLog.Record("validating a database import", new InvalidOperationException(loadFailure));
+            await MessageBox.Show(
+                this,
+                "That file couldn't be loaded — it may be from an incompatible version or corrupted. " +
+                "Your current data was left unchanged.\n\nDetails: " + loadFailure,
+                "Import failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        var confirmed = await MessageBox.Show(
+            this,
+            "Importing replaces everything currently in this app with the contents of the selected file. " +
+            "Your current data will be backed up first, but this can't be undone from inside the app. Continue?",
+            "Confirm import",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var liveDatabasePath = PatternDatabase.DefaultDatabasePath();
+        try
+        {
+            PatternDatabase.ReleasePooledConnections();
+
+            if (File.Exists(liveDatabasePath))
+            {
+                // A safety net taken before the overwrite.
+                // In the demo this is a timestamped copy in backups\ (older ones are kept); off-demo it's the single "<db>.bak" beside the database.
+                File.Copy(liveDatabasePath, AppPaths.NextImportBackupPath(), overwrite: true);
+            }
+
+            // Overwrites the live file AND removes its leftover -wal/-shm/-journal scratch files, so no stale journal can be rolled back into the imported data the next time it opens.
+            PatternDatabase.ReplaceDatabaseFile(importPath, liveDatabasePath);
+        }
+        catch (IOException ex)
+        {
+            ErrorLog.Record("importing the database", ex);
+            await MessageBox.Show(this, $"Couldn't import: {ex.Message}", "Import failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        await MessageBox.Show(
+            this,
+            "Import complete. The app will now restart to load the imported data.",
+            "Import complete",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+
+        if (Environment.ProcessPath is { } processPath)
+        {
+            System.Diagnostics.Process.Start(processPath);
+        }
+
+        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
 
     /// <summary>

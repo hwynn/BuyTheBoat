@@ -204,6 +204,11 @@
     </Window.Styles>
 
     <Grid Margin="14" RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+            <Button Content="Export Data..." Padding="12,5" Click="OnExportClick" AutomationProperties.AutomationId="ExportDataButton"/>
+            <Button Content="Import Data..." Padding="12,5" Margin="8,0,0,0" Click="OnImportClick" AutomationProperties.AutomationId="ImportDataButton"/>
+        </StackPanel>
+
         <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
             <TabItem Header="Forecast">
                 <!-- Three regions with distinct jobs —
