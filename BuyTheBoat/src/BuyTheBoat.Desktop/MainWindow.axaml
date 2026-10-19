@@ -20,6 +20,9 @@
         <SolidColorBrush x:Key="CellBorderBrush" Color="#FFE3E3E8"/>
         <SolidColorBrush x:Key="ManualBgBrush" Color="#FFEDE4F7"/>
         <SolidColorBrush x:Key="ManualTextBrush" Color="#FF6A3FA0"/>
+
+        <!-- Amounts line up in a fixed-width font; the first one installed wins (Consolas on Windows, Menlo on macOS, DejaVu or Liberation on Linux). -->
+        <FontFamily x:Key="NumberFont">Consolas, Menlo, DejaVu Sans Mono, Liberation Mono, monospace</FontFamily>
     </Window.Resources>
 
     <Window.Styles>
@@ -55,12 +58,458 @@
         <Style Selector="TextBlock.draining">
             <Setter Property="Foreground" Value="Firebrick"/>
         </Style>
+
+        <!-- ===== Forecast tab: the cells', events', and jars' states, set as style classes in MainWindow.axaml's templates (Avalonia has no DataTrigger). ===== -->
+
+        <!-- Calendar: months are plain sections, not selectable list items. -->
+        <Style Selector="ListBox.timeline > ListBoxItem">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+
+        <!-- A day cell fills its slot in the week row; Avalonia's buttons otherwise size to their content. -->
+        <Style Selector="Button.dayCell">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+        </Style>
+
+        <!-- Day cells. Later rules win, so a selected day's tint covers the attention tint, as in the WPF app. -->
+        <Style Selector="Border.cell">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CellBorderBrush}"/>
+        </Style>
+        <Style Selector="Border.cell.padding">
+            <Setter Property="Opacity" Value="0"/>
+        </Style>
+        <!-- Event-less days: present but faint. -->
+        <Style Selector="Border.cell.inactive">
+            <Setter Property="Opacity" Value="0.45"/>
+        </Style>
+        <Style Selector="Border.cell.padding.inactive">
+            <Setter Property="Opacity" Value="0"/>
+        </Style>
+        <!-- A day worth a closer look. -->
+        <Style Selector="Border.cell.attention">
+            <Setter Property="Background" Value="{StaticResource RedBgBrush}"/>
+        </Style>
+        <Style Selector="Border.cell.selected">
+            <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+        </Style>
+        <Style Selector="Button.dayCell:pointerover /template/ Border.cell">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+        </Style>
+        <Style Selector="Border.cell TextBlock.dayNumber">
+            <Setter Property="Foreground" Value="Gray"/>
+        </Style>
+        <!-- TODAY is unmistakable. -->
+        <Style Selector="Border.cell.today">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+        <Style Selector="Border.cell.today TextBlock.dayNumber">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="TextBlock.flowGlyph">
+            <Setter Property="Foreground" Value="Gray"/>
+        </Style>
+        <Style Selector="TextBlock.flowGlyph.in">
+            <Setter Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.flowGlyph.out">
+            <Setter Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.negative">
+            <Setter Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+
+        <!-- "What happened today" rows. -->
+        <Style Selector="Grid.eventRow.indented">
+            <Setter Property="Margin" Value="20,1,0,1"/>
+        </Style>
+        <Style Selector="Border.chip">
+            <Setter Property="Background" Value="{StaticResource NeutralBgBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource NeutralTextBrush}"/>
+        </Style>
+        <Style Selector="Border.chip.in">
+            <Setter Property="Background" Value="{StaticResource GoodBgBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource GoodTextBrush}"/>
+        </Style>
+        <Style Selector="Border.chip.aside">
+            <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource AccentBrush}"/>
+        </Style>
+        <Style Selector="Border.chip.pull">
+            <Setter Property="Background" Value="{StaticResource RedBgBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+        <Style Selector="Border.chip.manual">
+            <Setter Property="Background" Value="{StaticResource ManualBgBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource ManualTextBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.positive">
+            <Setter Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.pull">
+            <Setter Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+
+        <!-- Fund jar rows: the status pill and progress bar take the status color. -->
+        <Style Selector="Border.jarRow Border.statusPill">
+            <Setter Property="Background" Value="{StaticResource NeutralBgBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource NeutralTextBrush}"/>
+        </Style>
+        <Style Selector="Border.jarRow ProgressBar.jarProgress">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+        </Style>
+        <Style Selector="Border.jarRow.fullyCovered Border.statusPill">
+            <Setter Property="Background" Value="{StaticResource GoodTextBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Border.jarRow.fullyCovered ProgressBar.jarProgress">
+            <Setter Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+        </Style>
+        <Style Selector="Border.jarRow.onTrack Border.statusPill">
+            <Setter Property="Background" Value="{StaticResource GoodBgBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource GoodTextBrush}"/>
+        </Style>
+        <Style Selector="Border.jarRow.onTrack ProgressBar.jarProgress">
+            <Setter Property="Foreground" Value="{StaticResource GoodTextBrush}"/>
+        </Style>
+        <Style Selector="Border.jarRow.behind Border.statusPill">
+            <Setter Property="Background" Value="{StaticResource WatchBgBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{StaticResource WatchTextBrush}"/>
+        </Style>
+        <Style Selector="Border.jarRow.behind ProgressBar.jarProgress">
+            <Setter Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+        </Style>
+        <!-- Raided on a deallocation day: the red treatment. -->
+        <Style Selector="Border.jarRow.drained">
+            <Setter Property="Background" Value="{StaticResource RedBgBrush}"/>
+        </Style>
+        <Style Selector="Border.jarRow.drained TextBlock.jarName">
+            <Setter Property="Foreground" Value="{StaticResource RedTextBrush}"/>
+        </Style>
+        <!-- A manual withdrawal that exceeded the jar: amber warning. -->
+        <Style Selector="Border.jarRow.floored TextBlock.jarSubText">
+            <Setter Property="Foreground" Value="{StaticResource WatchTextBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
     </Window.Styles>
 
     <Grid Margin="14" RowDefinitions="Auto,*">
         <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
             <TabItem Header="Forecast">
-                <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Forecast tab hasn't been ported to this version yet."/>
+                <!-- Three regions with distinct jobs —
+                     TOP CONTROLS (forecast range + a Forecast button that should only look active when the shown forecast's range differs from the fields),
+                     the OVERVIEW timeline (many days at a glance: totals, allocations, trends, and days worth a closer look — NOT every allocation or every actual transaction),
+                     and the SELECTED-DAY detail (the full snapshot: every transaction, every jar, and per-goal health answering "am I on track?").
+                     Whatever element represents TODAY must be visually distinct from all other days. -->
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="As of" FontSize="11" Foreground="Gray"/>
+                            <CalendarDatePicker x:Name="AsOfDatePicker" Width="140" CalendarOpened="OnAsOfCalendarOpened"
+                                                AutomationProperties.AutomationId="AsOfDatePicker"/>
+                        </StackPanel>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Show forecast through" FontSize="11" Foreground="Gray"/>
+                            <CalendarDatePicker x:Name="HorizonEndDatePicker" Width="140" CalendarOpened="OnHorizonCalendarOpened"
+                                                AutomationProperties.AutomationId="HorizonEndDatePicker"/>
+                        </StackPanel>
+                        <!-- Balances and cushions are per account and live on the Accounts tab; the forecast reads them from there.
+                             This is a read-only summary of exactly what it will use. -->
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Across all accounts" FontSize="11" Foreground="Gray"/>
+                            <TextBlock x:Name="AccountsSummaryText" Text="—" FontWeight="SemiBold" VerticalAlignment="Bottom"
+                                       Padding="0,8,0,0" MinWidth="230"
+                                       AutomationProperties.AutomationId="AccountsSummaryText"/>
+                        </StackPanel>
+                        <!-- Pending-state affordance: looks active only while an input differs from the forecast on screen. -->
+                        <Button x:Name="ForecastButton" Content="Forecast" Padding="16,5" VerticalAlignment="Bottom" Click="OnForecastClick"
+                                AutomationProperties.AutomationId="ForecastButton"/>
+                        <Button x:Name="ExportForecastSpreadsheetButton" Content="Export as Spreadsheet..." Padding="16,5" Margin="8,0,0,0"
+                                VerticalAlignment="Bottom" IsEnabled="False" Click="OnExportForecastSpreadsheetClick"
+                                AutomationProperties.AutomationId="ExportForecastSpreadsheetButton"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,12" FontStyle="Italic" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Forecast only — assumes every bill and paycheck happens exactly as scheduled. No real transactions are tracked yet. Select a day in the calendar to see everything that day holds."/>
+
+                    <!-- SELECTED DAY: the full snapshot.
+                         Two panes, "What happened today" LEFT and fund jars RIGHT (the author's chosen direction).
+                         Both group their rows under an account header; the groups (AccountGroup) are built in ShowDayDetail, since Avalonia has no grouping collection view. -->
+                    <Grid DockPanel.Dock="Bottom" Height="205" Margin="0,10,0,0" RowDefinitions="Auto,*">
+                        <DockPanel Margin="0,0,0,6">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="AdjustFundsButton" Content="Adjust funds..." Padding="10,2" Margin="0,0,16,0"
+                                        IsEnabled="False" Click="OnAdjustFundsClick"
+                                        AutomationProperties.AutomationId="AdjustFundsButton"/>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Text="FREE TO SPEND" FontSize="10" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="FreeToSpendText" FontSize="16" FontWeight="Bold" AutomationProperties.AutomationId="FreeToSpendText"/>
+                                    </StackPanel>
+                                    <!-- Rung-1 nudge: spare cash on hand, but nothing the user set aside is reserved, so "free" is really just the balance.
+                                         A reminder, not per-expense math.
+                                         Set from code-behind; hidden when it doesn't apply. -->
+                                    <TextBlock x:Name="FreeNudgeText" HorizontalAlignment="Right" TextAlignment="Right" MaxWidth="300"
+                                               TextWrapping="Wrap" FontSize="10" FontStyle="Italic" Foreground="Gray" Margin="0,2,0,0"
+                                               IsVisible="False" AutomationProperties.AutomationId="FreeNudgeText"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="DayDetailHeader" Text="Selected day" FontWeight="Bold" VerticalAlignment="Center"
+                                           AutomationProperties.AutomationId="DayDetailHeader"/>
+                                <Border x:Name="DeallocationDayChip" Background="{StaticResource RedBgBrush}" CornerRadius="3"
+                                        Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center" IsVisible="False"
+                                        AutomationProperties.AutomationId="DeallocationDayChip">
+                                    <TextBlock Text="DEALLOCATION DAY" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource RedTextBrush}"/>
+                                </Border>
+                            </StackPanel>
+                        </DockPanel>
+                        <Grid Grid.Row="1" ColumnDefinitions="2*,12,3*">
+                            <DockPanel Grid.Column="0">
+                                <TextBlock DockPanel.Dock="Top" Text="WHAT HAPPENED TODAY" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="DayEventsList" AutomationProperties.AutomationId="DayEventsList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name.Name}" FontWeight="Bold" FontSize="11" Margin="0,8,0,3"
+                                                               Foreground="{StaticResource AccentBrush}"/>
+                                                    <ItemsControl ItemsSource="{Binding Rows}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid ColumnDefinitions="78,*,Auto" Margin="0,1" Classes.indented="{Binding Indented}" Classes="eventRow">
+                                                                    <Border Classes="chip"
+                                                                            Classes.in="{Binding ChipKind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=In}"
+                                                                            Classes.aside="{Binding ChipKind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Aside}"
+                                                                            Classes.pull="{Binding ChipKind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Pull}"
+                                                                            Classes.manual="{Binding ChipKind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Manual}"
+                                                                            CornerRadius="3" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding Chip}" FontSize="9" FontWeight="SemiBold"/>
+                                                                    </Border>
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Event}" VerticalAlignment="Center" Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                                                    <TextBlock Grid.Column="2" Text="{Binding AmountText}" VerticalAlignment="Center"
+                                                                               FontFamily="{StaticResource NumberFont}" FontSize="13"
+                                                                               Classes.positive="{Binding IsPositive}" Classes.pull="{Binding IsPull}"/>
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+
+                            <DockPanel Grid.Column="2">
+                                <TextBlock DockPanel.Dock="Top" Text="FUND JARS — WHERE IT ALL SITS" FontSize="10" Foreground="Gray" Margin="0,0,0,4"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="JarDetailList" AutomationProperties.AutomationId="JarDetailList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <!-- A group header tells the whole story here:
+                                                     line one is the account, its balance ("how much money is in the account"), and — when short — the "Short X" warning to the right of it;
+                                                     line two is which rung it's on (money in another account, or none can cover it), and the lever pre-fills a transfer into it (the shortfall ladder).
+                                                     Every account always appears in this pane, so the balance, narrative, and lever can never go missing.
+                                                     The account's whole story is also its screen-reader name (AccountGroupKey.AccessibleSummary). -->
+                                                <StackPanel AutomationProperties.Name="{Binding Name.AccessibleSummary}">
+                                                    <StackPanel Margin="0,8,0,3">
+                                                        <DockPanel>
+                                                            <Button DockPanel.Dock="Right" Content="{Binding Name.MoveInText}"
+                                                                    Padding="8,1" FontSize="10" Click="OnCoverShortfallClick"
+                                                                    AutomationProperties.AutomationId="CoverShortfallButton"
+                                                                    IsVisible="{Binding Name.ShowCoverButton}"/>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding Name.Name}" FontWeight="Bold" FontSize="11"
+                                                                           VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
+                                                                <!-- An overdrawn account: the balance itself reads red. -->
+                                                                <TextBlock Text="{Binding Name.BalanceText}" FontWeight="SemiBold"
+                                                                           FontSize="11" FontFamily="{StaticResource NumberFont}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                                           Classes.negative="{Binding Name.BalanceNegative}"
+                                                                           AutomationProperties.AutomationId="AccountBalanceText"/>
+                                                                <TextBlock Text="{Binding Name.ShortText}" FontWeight="SemiBold" FontSize="11"
+                                                                           VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource RedTextBrush}"
+                                                                           IsVisible="{Binding Name.IsShort}"/>
+                                                                <!-- "Funds running low": the free-funds warning a step below "short".
+                                                                     Also stands in for a dipped safety cushion, which always co-occurs with thin, so it's folded into this one warning. -->
+                                                                <TextBlock Text="Funds running low" FontWeight="SemiBold" FontSize="11"
+                                                                           VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource WatchTextBrush}"
+                                                                           IsVisible="{Binding Name.IsThin}"
+                                                                           AutomationProperties.AutomationId="AccountThinText"/>
+                                                            </StackPanel>
+                                                        </DockPanel>
+                                                        <TextBlock Text="{Binding Name.RungText}" FontSize="10" Foreground="Gray" TextWrapping="Wrap"
+                                                                   Margin="0,1,0,0" IsVisible="{Binding Name.IsShort}"/>
+                                                    </StackPanel>
+                                                    <ItemsControl ItemsSource="{Binding Rows}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Padding="6,4" BorderBrush="{StaticResource CellBorderBrush}" BorderThickness="0,0,0,1"
+                                                                        Classes="jarRow" Classes.drained="{Binding Drained}"
+                                                                        Classes.fullyCovered="{Binding StatusKind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=FullyCovered}"
+                                                                        Classes.onTrack="{Binding StatusKind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=OnTrack}"
+                                                                        Classes.behind="{Binding StatusKind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Behind}"
+                                                                        Classes.floored="{Binding Floored}">
+                                                                    <StackPanel>
+                                                                        <Grid ColumnDefinitions="*,Auto">
+                                                                            <StackPanel Orientation="Horizontal">
+                                                                                <TextBlock Classes="jarName" Text="{Binding Jar}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                                                <Border Classes="statusPill" CornerRadius="8" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                                        IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                                                    <TextBlock Text="{Binding StatusText}" FontSize="10"/>
+                                                                                </Border>
+                                                                                <Border Background="{StaticResource WatchBgBrush}" CornerRadius="8" Padding="7,1" Margin="6,0,0,0"
+                                                                                        VerticalAlignment="Center" IsVisible="{Binding ShowAdjustNudge}">
+                                                                                    <!-- The readjustment on-ramp: inert for now — clicking it doesn't open the plan on the Earmark tab yet. -->
+                                                                                    <TextBlock Text="Adjust the plan →" FontSize="10" Foreground="{StaticResource WatchTextBrush}"/>
+                                                                                </Border>
+                                                                            </StackPanel>
+                                                                            <TextBlock Grid.Column="1" Text="{Binding AmountText}" FontFamily="{StaticResource NumberFont}" FontSize="14" FontWeight="SemiBold"/>
+                                                                        </Grid>
+                                                                        <ProgressBar Classes="jarProgress" Height="5" MinHeight="5" Minimum="0" Maximum="1" Value="{Binding ProgressFraction, Mode=OneWay}"
+                                                                                     Margin="0,4,0,2" Background="{StaticResource NeutralBgBrush}"
+                                                                                     IsVisible="{Binding ShowProgress}"/>
+                                                                        <TextBlock Classes="jarSubText" Text="{Binding SubText}" FontSize="10" Foreground="Gray" TextWrapping="Wrap"/>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Grid>
+                    </Grid>
+
+                    <!-- OVERVIEW: the chosen calendar direction — month sections of day cells; per-day free + total set aside; every day in range present; attention tints; TODAY framed.
+                         Outer ListBox = virtualization + ScrollIntoView;
+                         months themselves are not selectable (bare item template) — day-cell Buttons are the interactive unit, selection handled manually in code-behind. -->
+                    <Grid RowDefinitions="Auto,*">
+                        <DockPanel Margin="0,0,0,4">
+                            <!-- Account filter: All = the household roll-up; picking an account re-scopes every number below. -->
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <TextBlock Text="Show" FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox x:Name="AccountFilterComboBox" Width="170" DisplayMemberBinding="{Binding Name}"
+                                          SelectionChanged="OnAccountFilterChanged"
+                                          AutomationProperties.AutomationId="AccountFilterComboBox"/>
+                            </StackPanel>
+                            <TextBlock Text="Overview" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <ListBox x:Name="TimelineCalendar" Grid.Row="1" Classes="timeline"
+                                 AutomationProperties.AutomationId="TimelineCalendar"
+                                 BorderThickness="0" Background="Transparent"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,16" AutomationProperties.AutomationId="{Binding MonthAutomationId}">
+                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13" Margin="2,0,0,3"/>
+                                        <UniformGrid Columns="7" Margin="0,0,0,2">
+                                            <TextBlock Text="SU" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="MO" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="TU" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="WE" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="TH" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="FR" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="SA" FontSize="9" Foreground="Gray" HorizontalAlignment="Center"/>
+                                        </UniformGrid>
+                                        <ItemsControl ItemsSource="{Binding Cells}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Columns="7"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Classes="dayCell" Click="OnDayCellClick"
+                                                            IsEnabled="{Binding HasSnapshot}"
+                                                            Focusable="{Binding HasSnapshot}"
+                                                            AutomationProperties.AutomationId="{Binding AutomationId}"
+                                                            AutomationProperties.Name="{Binding AutomationName}">
+                                                        <Button.Template>
+                                                            <ControlTemplate>
+                                                                <!-- The cell's states are style classes (see MainWindow.Styles): padding, inactive, attention, selected, today. -->
+                                                                <Border x:Name="CellBorder" BorderThickness="1" Margin="1" MinHeight="86" Padding="4,2"
+                                                                        Classes="cell"
+                                                                        Classes.padding="{Binding IsPadding}"
+                                                                        Classes.inactive="{Binding !HasSnapshot}"
+                                                                        Classes.attention="{Binding NeedsAttention}"
+                                                                        Classes.selected="{Binding IsSelected}"
+                                                                        Classes.today="{Binding IsToday}">
+                                                                    <StackPanel>
+                                                                        <!-- Day number left, explicit event count right. -->
+                                                                        <DockPanel>
+                                                                            <TextBlock DockPanel.Dock="Right" Text="{Binding EventCountText}" FontSize="8"
+                                                                                       Foreground="Gray" VerticalAlignment="Center"/>
+                                                                            <TextBlock Classes="dayNumber" Text="{Binding DayNumber}" FontSize="10"/>
+                                                                        </DockPanel>
+
+                                                                        <!-- Per-account flow: letter + ↑ in / ↓ out / • none. -->
+                                                                        <ItemsControl ItemsSource="{Binding Flows}" Margin="0,1,0,0">
+                                                                            <ItemsControl.ItemsPanel>
+                                                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                                                            </ItemsControl.ItemsPanel>
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                    <StackPanel Orientation="Horizontal" Margin="0,0,5,0">
+                                                                                        <TextBlock Text="{Binding Letter}" FontSize="9" FontFamily="{StaticResource NumberFont}" Foreground="Gray"/>
+                                                                                        <TextBlock Classes="flowGlyph" Text="{Binding Glyph}" FontSize="9" FontFamily="{StaticResource NumberFont}" FontWeight="Bold"
+                                                                                                   Classes.in="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=In}"
+                                                                                                   Classes.out="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Out}"/>
+                                                                                    </StackPanel>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+
+                                                                        <!-- The day's top event, by name — not "set aside". -->
+                                                                        <TextBlock Text="{Binding TopEventText}" FontSize="9" Margin="0,1,0,0"
+                                                                                   Foreground="{StaticResource NeutralTextBrush}" TextTrimming="CharacterEllipsis"/>
+
+                                                                        <!-- Warning: symbol + WORDS, never color alone. -->
+                                                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,0" IsVisible="{Binding ShowWarning}">
+                                                                            <TextBlock Text="&#x26A0;" FontSize="9" Margin="0,0,2,0" Foreground="{StaticResource RedTextBrush}"/>
+                                                                            <TextBlock Text="{Binding WarningText}" FontSize="8" FontWeight="SemiBold"
+                                                                                       Foreground="{StaticResource RedTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                                        </StackPanel>
+
+                                                                        <!-- Two LABELED numbers, so neither has to be guessed.
+                                                                             Hidden entirely on an event-less day — bare labels with no figures under them are just noise. -->
+                                                                        <Grid Margin="0,2,0,0" ColumnDefinitions="*,*" IsVisible="{Binding HasSnapshot}">
+                                                                            <StackPanel>
+                                                                                <TextBlock Text="TOTAL" FontSize="7" Foreground="Gray"/>
+                                                                                <TextBlock Text="{Binding TotalText}" FontSize="10" FontFamily="{StaticResource NumberFont}"/>
+                                                                            </StackPanel>
+                                                                            <StackPanel Grid.Column="1">
+                                                                                <TextBlock Text="FREE" FontSize="7" Foreground="Gray"/>
+                                                                                <TextBlock Text="{Binding FreeText}" FontSize="11" FontWeight="SemiBold" FontFamily="{StaticResource NumberFont}"
+                                                                                           Classes.negative="{Binding FreeNegative}"/>
+                                                                            </StackPanel>
+                                                                        </Grid>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </DockPanel>
             </TabItem>
 
             <!-- Accounts, Transfers, Bills & Paychecks and Allocations each hold a List subtab and a Form subtab.
@@ -221,7 +670,7 @@
                         </DockPanel>
                     </TabItem>
                     <TabItem Header="Spreadsheet" Tag="Spreadsheet">
-                        <TextBlock Margin="8" FontStyle="Italic" Foreground="Gray" Text="The Spreadsheet subtab hasn't been ported to this version yet."/>
+                        <local:SpreadsheetPanel x:Name="Spreadsheet"/>
                     </TabItem>
                     <TabItem Tag="Expense">
                         <TabItem.Header>

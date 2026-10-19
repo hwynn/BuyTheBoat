@@ -1,0 +1,127 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BuyTheBoat.App.SpreadsheetPanel">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="DraftRowBrush" Color="#FFEAF2FD"/>
+        <SolidColorBrush x:Key="DraftBorderBrush" Color="#FF7FA8E0"/>
+        <SolidColorBrush x:Key="InvalidTextBrush" Color="#FFB00020"/>
+        <SolidColorBrush x:Key="InvalidBgBrush" Color="#FFF6E0E0"/>
+
+        <!-- Cell templates: SpreadsheetPanel.BuildColumns gives each one its row's cell as DataContext. -->
+
+        <!-- The checkbox column; only draft rows show it. Its DataContext is the row. -->
+        <DataTemplate x:Key="CheckCell">
+            <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center"
+                      IsChecked="{Binding IsChecked, Mode=TwoWay}" IsVisible="{Binding IsDraft}"/>
+        </DataTemplate>
+
+        <!-- A cell as it reads when not being edited: red and underlined, with the problem on hover, when it's invalid. -->
+        <DataTemplate x:Key="CellText">
+            <TextBlock Text="{Binding Text}" Padding="4,2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       Classes.invalid="{Binding HasProblem}" ToolTip.Tip="{Binding ProblemTip}"/>
+        </DataTemplate>
+
+        <!-- A plain text box for editing free text and numbers. -->
+        <DataTemplate x:Key="CellTextEditor">
+            <TextBox Text="{Binding Text, Mode=TwoWay}" BorderThickness="0" Padding="2,1" MinHeight="0"/>
+        </DataTemplate>
+
+        <!-- A text box with a dropdown: typing anything is allowed, and the suggested fix sits first in the list, highlighted. -->
+        <DataTemplate x:Key="CellPickListEditor">
+            <ComboBox IsEditable="True" HorizontalAlignment="Stretch" MinHeight="0" Padding="2,1"
+                      Text="{Binding Text, Mode=TwoWay}" ItemsSource="{Binding Choices}" TextSearch.TextBinding="{Binding Value}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Classes.suggested="{Binding IsSuggested}">
+                            <TextBlock DockPanel.Dock="Right" Text="suggested" Foreground="Gray" FontSize="10" Margin="10,0,0,0"
+                                       VerticalAlignment="Center" IsVisible="{Binding IsSuggested}"/>
+                            <TextBlock Text="{Binding Value}"/>
+                        </DockPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </DataTemplate>
+
+        <!-- A text box with a calendar dropdown. Typed text is kept even when it isn't a date; picking a day writes it as yyyy-MM-dd. -->
+        <DataTemplate x:Key="CellDateEditor">
+            <DockPanel>
+                <ToggleButton x:Name="CalendarToggle" DockPanel.Dock="Right" Content="▾" Width="18" Padding="0" MinHeight="0"
+                              Focusable="False" ToolTip.Tip="Pick a date"/>
+                <Popup IsOpen="{Binding #CalendarToggle.IsChecked, Mode=TwoWay}" IsLightDismissEnabled="True"
+                       PlacementTarget="{Binding #CalendarToggle}" Placement="Bottom">
+                    <Calendar/>
+                </Popup>
+                <TextBox Text="{Binding Text, Mode=TwoWay}" BorderThickness="0" Padding="2,1" MinHeight="0"/>
+            </DockPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- Draft rows are tinted; saved rows keep the grid's plain white. -->
+        <Style Selector="DataGridRow.draft">
+            <Setter Property="Background" Value="{StaticResource DraftRowBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.invalid">
+            <Setter Property="Foreground" Value="{StaticResource InvalidTextBrush}"/>
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
+        <Style Selector="DockPanel.suggested">
+            <Setter Property="Background" Value="#FFE3EDFB"/>
+        </Style>
+        <Style Selector="DockPanel.suggested > TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel Margin="8">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6" LastChildFill="False">
+            <Button x:Name="AddDraftButton" Content="Add draft row" Padding="12,5" Click="OnAddDraftClick"
+                    AutomationProperties.AutomationId="AddDraftButton"/>
+            <Button x:Name="OpenInFormButton" Content="Open selected in form" Padding="12,5" Margin="8,0,0,0" IsEnabled="False" Click="OnOpenInFormClick"
+                    AutomationProperties.AutomationId="OpenDraftInFormButton"/>
+            <Button x:Name="DeleteDraftsButton" Content="Delete selected" Padding="12,5" Margin="8,0,0,0" IsEnabled="False" Click="OnDeleteDraftsClick"
+                    AutomationProperties.AutomationId="DeleteDraftsButton"/>
+            <Button x:Name="InvalidCounter" Margin="16,0,0,0" Padding="8,2" CornerRadius="3" VerticalAlignment="Center"
+                    Background="{StaticResource InvalidBgBrush}" BorderBrush="{StaticResource InvalidTextBrush}" BorderThickness="1"
+                    IsVisible="False" Cursor="Hand" Click="OnInvalidCounterClick"
+                    ToolTip.Tip="See every red cell and its suggested fix" AutomationProperties.AutomationId="InvalidCounter">
+                <TextBlock x:Name="InvalidCounterText" Foreground="{StaticResource InvalidTextBrush}"/>
+            </Button>
+            <Button x:Name="NextInvalidButton" Content="Next (F8)" Padding="10,5" Margin="6,0,0,0" IsVisible="False" Click="OnNextInvalidClick"/>
+            <Button DockPanel.Dock="Right" Content="Download as spreadsheet..." Padding="12,5" Click="OnDownloadClick"
+                    AutomationProperties.AutomationId="DownloadSpreadsheetButton"/>
+        </DockPanel>
+
+        <!-- The legend stays on screen: it's how the two row styles, red text, and the Amount sign get explained. -->
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,2">
+                <Border Width="16" Height="11" Background="White" BorderBrush="Gray" BorderThickness="1" Margin="0,0,5,0"/>
+                <TextBlock Text="Saved bill or paycheck (read-only)" Foreground="DimGray"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,2">
+                <Border Width="16" Height="11" Background="{StaticResource DraftRowBrush}" BorderBrush="{StaticResource DraftBorderBrush}" BorderThickness="1" Margin="0,0,5,0"/>
+                <TextBlock Text="Draft row (editable)" Foreground="DimGray"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,18,2">
+                <TextBlock Text="red text" Foreground="{StaticResource InvalidTextBrush}" TextDecorations="Underline" Margin="0,0,5,0"/>
+                <TextBlock Text="invalid cell, hover to see why" Foreground="DimGray"/>
+            </StackPanel>
+            <TextBlock Text="Bills are negative amounts. Paychecks are positive." Foreground="DimGray" Margin="0,0,0,2"/>
+        </WrapPanel>
+
+        <!-- What's stopping the one checked draft from opening in the Form. Only shown while exactly one draft is checked and it has red cells. -->
+        <Border x:Name="ProblemStrip" DockPanel.Dock="Bottom" Margin="0,6,0,0" Padding="10,6" CornerRadius="3"
+                Background="{StaticResource InvalidBgBrush}" BorderBrush="{StaticResource InvalidTextBrush}" BorderThickness="1"
+                IsVisible="False">
+            <StackPanel x:Name="ProblemList"/>
+        </Border>
+
+        <DataGrid x:Name="SheetGrid"
+                  AutoGenerateColumns="False" CanUserSortColumns="False"
+                  SelectionMode="Extended" HeadersVisibility="Column" FrozenColumnCount="1"
+                  ClipboardCopyMode="ExcludeHeader" GridLinesVisibility="All"
+                  HorizontalGridLinesBrush="#FFE3E3E8" VerticalGridLinesBrush="#FFE3E3E8" Background="White"
+                  BeginningEdit="OnBeginningEdit" PreparingCellForEdit="OnPreparingCellForEdit" CellEditEnding="OnCellEditEnding"
+                  LoadingRow="OnLoadingRow" AutomationProperties.AutomationId="SpreadsheetGrid"/>
+    </DockPanel>
+</UserControl>

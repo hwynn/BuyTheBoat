@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BuyTheBoat.App.CellFixesWindow"
+        Title="Fix invalid cells" Width="760" Height="460" MinWidth="520" MinHeight="260"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10"
+                   Text="Every red cell in your drafts. Checked fixes replace the cell's text when you click Apply. Cells with no suggestion have to be fixed by hand — Go to cell takes you there."/>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Cancel" Padding="14,5" IsCancel="True" Click="OnCancelClick"/>
+            <Button x:Name="ApplyButton" Padding="14,5" Margin="8,0,0,0" IsDefault="True" Click="OnApplyClick"
+                    AutomationProperties.AutomationId="ApplyFixesButton"/>
+        </StackPanel>
+
+        <DataGrid x:Name="FixesGrid" AutoGenerateColumns="False" CanUserSortColumns="False" HeadersVisibility="Column"
+                  SelectionMode="Single" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE3E3E8" Background="White"
+                  AutomationProperties.AutomationId="FixesGrid">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Fix" Width="40">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" IsEnabled="{Binding HasSuggestion}"
+                                      IsCheckedChanged="OnCheckChanged"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Draft" Binding="{Binding DraftName}" Width="130" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Column" Binding="{Binding ColumnHeader}" Width="100" IsReadOnly="True"/>
+                <DataGridTemplateColumn Header="Now" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding CurrentText}" Foreground="#FFB00020" Margin="4,0" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Fix to" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid Margin="4,0">
+                                <TextBlock Text="{Binding Suggestion}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <Button Content="Go to cell" Padding="6,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                        IsVisible="{Binding !HasSuggestion}" Click="OnGoToCellClick"/>
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Why" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="DimGray" Margin="4,2" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>
