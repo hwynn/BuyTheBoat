@@ -3,7 +3,8 @@
              x:Class="BuyTheBoat.App.App"
              RequestedThemeVariant="Light">
     <Application.Styles>
-        <FluentTheme />
+        <!-- Compact: Fluent normally sizes text boxes, dropdowns and buttons for touch (about 32 pixels tall); compact brings them nearer the WPF app's size. -->
+        <FluentTheme DensityStyle="Compact"/>
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
 
         <!-- Plain text inherits its size from the window, so the window carries the same 12-point default as the controls. -->
@@ -13,26 +14,162 @@
         <Style Selector="DataGridCell">
             <Setter Property="FontSize" Value="12"/>
         </Style>
+
+        <!-- Scrollbars take their own strip, as in the WPF app, instead of floating over the right edge of the content. -->
+        <Style Selector="ScrollViewer">
+            <Setter Property="AllowAutoHide" Value="False"/>
+        </Style>
+
+        <!-- Dropdowns you can type into keep a white text area, like WPF's; the plain ones take the grey from ComboBoxBackground below. -->
+        <Style Selector="ComboBox[IsEditable=True]">
+            <Setter Property="Background" Value="White"/>
+        </Style>
+
+        <!-- A disabled calendar fades out like WPF's, instead of keeping its colors. -->
+        <Style Selector="Calendar:disabled">
+            <Setter Property="Opacity" Value="0.45"/>
+        </Style>
     </Application.Styles>
 
     <Application.Resources>
         <!-- The forms were laid out for WPF's 12-point default text; Fluent's 14 makes them wider than the window. -->
         <x:Double x:Key="ControlContentThemeFontSize">12</x:Double>
 
-        <!-- Avalonia has no GroupBox; a HeaderedContentControl with this theme draws the same titled frame.
-             Use as <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="..."> -->
+        <!-- Field heights near the WPF app's (text boxes 18, dropdowns 22); compact density alone leaves them at 24. -->
+        <x:Double x:Key="TextControlThemeMinHeight">20</x:Double>
+        <Thickness x:Key="TextControlThemePadding">4,1,4,1</Thickness>
+        <x:Double x:Key="ComboBoxMinHeight">22</x:Double>
+        <Thickness x:Key="ComboBoxPadding">6,1,6,1</Thickness>
+        <x:Double x:Key="CalendarDatePickerMinHeight">22</x:Double>
+
+        <!-- Plain dropdowns are grey, like WPF's. -->
+        <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFEBEBEB"/>
+        <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FFACACAC"/>
+        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FFE5F1FB"/>
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#FF7EB4EA"/>
+
+        <!-- Disabled fields fade, like WPF's, instead of filling with solid grey. -->
+        <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="White"/>
+        <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#FFD9D9D9"/>
+        <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="#FF9E9E9E"/>
+        <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="#FFF4F4F4"/>
+        <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="#FFD9D9D9"/>
+        <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#FF9E9E9E"/>
+        <SolidColorBrush x:Key="CalendarDatePickerBackgroundDisabled" Color="White"/>
+        <SolidColorBrush x:Key="CalendarDatePickerBorderBrushDisabled" Color="#FFD9D9D9"/>
+        <SolidColorBrush x:Key="CalendarDatePickerForegroundDisabled" Color="#FF9E9E9E"/>
+        <SolidColorBrush x:Key="CalendarDatePickerTextForegroundDisabled" Color="#FF9E9E9E"/>
+        <SolidColorBrush x:Key="CalendarDatePickerCalendarGlyphForegroundDisabled" Color="#FFBCBCBC"/>
+        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#FFF4F4F4"/>
+        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#FFD9D9D9"/>
+        <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#FF9E9E9E"/>
+
+        <!-- Radio buttons and checkboxes at the WPF app's size: a 13-pixel circle or box beside the text.
+             Fluent's own are 20 pixels in a 24-pixel row, sized inside its template where styles can't reach, so these replace the whole look. -->
+        <ControlTheme x:Key="{x:Type RadioButton}" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="5,0,0,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid ColumnDefinitions="Auto,*" Background="{TemplateBinding Background}">
+                        <Panel Width="13" Height="13" VerticalAlignment="Center">
+                            <Ellipse x:Name="OuterEllipse" Fill="White" Stroke="#FF707070" StrokeThickness="1"/>
+                            <Ellipse x:Name="CheckGlyph" Width="7" Height="7" Fill="#FF212121" IsVisible="False"/>
+                        </Panel>
+                        <ContentPresenter x:Name="PART_ContentPresenter" Grid.Column="1"
+                                          Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Ellipse#CheckGlyph">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Ellipse#OuterEllipse">
+                <Setter Property="Fill" Value="#FFF3F9FF"/>
+                <Setter Property="Stroke" Value="#FF3C7FB1"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Ellipse#OuterEllipse">
+                <Setter Property="Fill" Value="#FFD9ECFF"/>
+                <Setter Property="Stroke" Value="#FF3C77DD"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Ellipse#OuterEllipse">
+                <Setter Property="Fill" Value="#FFF4F4F4"/>
+                <Setter Property="Stroke" Value="#FFBCBCBC"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Ellipse#CheckGlyph">
+                <Setter Property="Fill" Value="#FF9E9E9E"/>
+            </Style>
+            <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Foreground" Value="#FF9E9E9E"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="{x:Type CheckBox}" TargetType="CheckBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="5,0,0,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid ColumnDefinitions="Auto,*" Background="{TemplateBinding Background}">
+                        <Border x:Name="Box" Width="13" Height="13" VerticalAlignment="Center"
+                                Background="White" BorderBrush="#FF707070" BorderThickness="1">
+                            <Panel>
+                                <Path x:Name="CheckGlyph" Data="M 1.5,5.5 L 4.2,8.2 L 9.5,2.2" Stroke="#FF212121" StrokeThickness="1.6" IsVisible="False"/>
+                                <Rectangle x:Name="IndeterminateGlyph" Width="7" Height="7" Fill="#FF212121" IsVisible="False"/>
+                            </Panel>
+                        </Border>
+                        <ContentPresenter x:Name="PART_ContentPresenter" Grid.Column="1"
+                                          Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Path#CheckGlyph">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+            <Style Selector="^:indeterminate /template/ Rectangle#IndeterminateGlyph">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#Box">
+                <Setter Property="Background" Value="#FFF3F9FF"/>
+                <Setter Property="BorderBrush" Value="#FF3C7FB1"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Border#Box">
+                <Setter Property="Background" Value="#FFD9ECFF"/>
+                <Setter Property="BorderBrush" Value="#FF3C77DD"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Border#Box">
+                <Setter Property="Background" Value="#FFF4F4F4"/>
+                <Setter Property="BorderBrush" Value="#FFBCBCBC"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Path#CheckGlyph">
+                <Setter Property="Stroke" Value="#FF9E9E9E"/>
+            </Style>
+            <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Foreground" Value="#FF9E9E9E"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- Avalonia has no GroupBox; a HeaderedContentControl with this theme draws WPF's titled frame, with the title sitting on the frame's top line.
+             Use as <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="...">.
+             Padding is the gap inside the frame, as on WPF's GroupBox; the frame adds 6 more at the sides, as WPF's does. -->
         <ControlTheme x:Key="GroupBox" TargetType="HeaderedContentControl">
             <Setter Property="Padding" Value="10"/>
             <Setter Property="Template">
                 <ControlTemplate>
-                    <Border BorderBrush="#FFCCCCCC" BorderThickness="1" CornerRadius="4">
-                        <DockPanel>
-                            <ContentPresenter x:Name="PART_HeaderPresenter" DockPanel.Dock="Top" Content="{TemplateBinding Header}"
-                                              Margin="10,6,10,0" FontWeight="SemiBold"/>
-                            <ContentPresenter x:Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
-                                              Padding="{TemplateBinding Padding}"/>
-                        </DockPanel>
-                    </Border>
+                    <Grid RowDefinitions="Auto,*">
+                        <!-- Starts halfway down the title, so the title's white backing cuts the line. -->
+                        <Border Grid.RowSpan="2" Margin="0,8,0,0" BorderBrush="#FFD5DFE5" BorderThickness="1" CornerRadius="3"/>
+                        <Border Grid.Row="0" Margin="6,0,0,0" Padding="3,0" HorizontalAlignment="Left" Background="White">
+                            <ContentPresenter x:Name="PART_HeaderPresenter" Content="{TemplateBinding Header}"/>
+                        </Border>
+                        <ContentPresenter x:Name="PART_ContentPresenter" Grid.Row="1" Margin="6,1,6,1"
+                                          Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}"/>
+                    </Grid>
                 </ControlTemplate>
             </Setter>
         </ControlTheme>

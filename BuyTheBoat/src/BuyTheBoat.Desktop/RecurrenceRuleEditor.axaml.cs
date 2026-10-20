@@ -44,6 +44,7 @@ public partial class RecurrenceRuleEditor : UserControl
     public RecurrenceRuleEditor()
     {
         InitializeComponent();
+        PreviewCalendar.Loaded += (_, _) => ShrinkPreviewCalendar();
 
         StartDatePicker.SelectedDate = DateTime.Today;
         UntilDatePicker.SelectedDate = DateTime.Today.AddYears(3);
@@ -60,6 +61,37 @@ public partial class RecurrenceRuleEditor : UserControl
 
         _initialized = true;
         Recalculate();
+    }
+
+    /// <summary>
+    /// [UI] Shrinks the preview calendar to the WPF app's size (about 180 × 170); the day and header buttons are sized by the styles in RecurrenceRuleEditor.axaml.
+    /// Fluent's calendar template sets its header row, weekday row and minimum sizes directly on its parts, which styles can't override, so they're changed here once it has loaded.
+    /// </summary>
+    private void ShrinkPreviewCalendar()
+    {
+        const double headerRow = 26;
+        const double weekdayRow = 18;
+        foreach (var part in PreviewCalendar.GetVisualDescendants().OfType<Control>())
+        {
+            switch (part)
+            {
+                case Grid { Name: "PART_MonthView" } monthView:
+                    monthView.MinHeight = 0;
+                    monthView.RowDefinitions[0].Height = new GridLength(weekdayRow);
+                    break;
+                case Grid { Name: "PART_YearView" } yearView:
+                    yearView.MinHeight = 0;
+                    break;
+                case Border { Name: "BackgroundLayer" } backgroundLayer:
+                    // Shades the area under the weekday names, so it starts where that row ends.
+                    backgroundLayer.Margin = new Avalonia.Thickness(0, weekdayRow, 0, 0);
+                    break;
+                case Grid { MinWidth: > 0 } frame when frame.Children.OfType<Grid>().Any(child => child.Name == "PART_MonthView"):
+                    frame.MinWidth = 0;
+                    frame.RowDefinitions[0].Height = new GridLength(headerRow);
+                    break;
+            }
+        }
     }
 
     /// <summary>
