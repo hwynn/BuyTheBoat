@@ -38,25 +38,8 @@
             </Style.Triggers>
         </Style>
     </Window.Resources>
-    <Grid Margin="14">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <Grid Grid.Row="0" Margin="0,0,0,10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Content="Export Data..." Padding="12,5" Click="OnExportClick"/>
-                <Button Content="Import Data..." Padding="12,5" Margin="8,0,0,0" Click="OnImportClick"/>
-            </StackPanel>
-        </Grid>
-
-        <TabControl x:Name="MainTabControl" Grid.Row="1" SelectionChanged="OnMainTabControlSelectionChanged">
+    <Grid Margin="14,6,14,14">
+        <TabControl x:Name="MainTabControl" SelectionChanged="OnMainTabControlSelectionChanged">
             <TabItem Header="Forecast">
                 <!-- Three regions with distinct jobs —
                      TOP CONTROLS (forecast range + a Forecast button that should only look active when the shown forecast's range differs from the fields),
@@ -725,5 +708,12 @@
                 </TabControl>
             </TabItem>
         </TabControl>
+
+        <!-- Export / Import Data sit at the right end of the main tab strip, on the same line as the tabs, instead of on a row of their own above them.
+             Declared after the TabControl so they draw on top of the strip's empty end and get its clicks; their small padding keeps them within the strip's height. -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+            <Button Content="Export Data..." Padding="12,1" Click="OnExportClick"/>
+            <Button Content="Import Data..." Padding="12,1" Margin="8,0,0,0" Click="OnImportClick"/>
+        </StackPanel>
     </Grid>
 </Window>
