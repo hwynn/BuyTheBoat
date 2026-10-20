@@ -26,7 +26,33 @@
             <Setter Property="MinHeight" Value="0"/>
             <Setter Property="Height" Value="24"/>
             <Setter Property="Padding" Value="6,0"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <!-- Day colors as in WPF's calendar: plain white days, faded out-of-month days, today a grey square with white text, and the highlighted occurrences pale blue. -->
+        <Style Selector="Calendar#PreviewCalendar CalendarDayButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <!-- Fluent colors these states on the parts inside each day (Root and its text), so these reach in there. Later rules win: a selected today stays pale blue, as in WPF. -->
+        <Style Selector="Calendar#PreviewCalendar CalendarDayButton:inactive /template/ Border#Root">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Calendar#PreviewCalendar CalendarDayButton:inactive /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="#FFA0A0A0"/>
+        </Style>
+        <Style Selector="Calendar#PreviewCalendar CalendarDayButton:today /template/ Border#Root">
+            <Setter Property="Background" Value="#FFAAAAAA"/>
+        </Style>
+        <Style Selector="Calendar#PreviewCalendar CalendarDayButton:today /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Calendar#PreviewCalendar CalendarDayButton:selected /template/ Border#Root">
+            <Setter Property="Background" Value="#FFBADDE9"/>
+        </Style>
+        <Style Selector="Calendar#PreviewCalendar CalendarDayButton:selected /template/ Border#Border">
+            <Setter Property="BorderBrush" Value="Transparent"/>
         </Style>
         <Style Selector="Calendar#PreviewCalendar Button#PART_PreviousButton, Calendar#PreviewCalendar Button#PART_NextButton">
             <Setter Property="MinWidth" Value="0"/>
@@ -168,7 +194,7 @@
                 <StackPanel Grid.Column="2">
                     <TextBlock Text="All occurrences" FontWeight="Bold"/>
                     <!-- Always capped, so a long list scrolls inside itself instead of growing. -->
-                    <ListBox x:Name="OccurrencesListBox" Margin="0,4,0,0" MaxHeight="220"/>
+                    <ListBox x:Name="OccurrencesListBox" Margin="0,4,0,0" MaxHeight="220" Background="White" BorderBrush="#FF828790" BorderThickness="1"/>
                     <!-- Shown when a valid rule lands on no dates, usually an end date on or before the start, which RecurrenceRule.Create accepts.
                          The date pickers block that; this catches what they can't, like a typed end date. -->
                     <TextBlock x:Name="EmptyScheduleNote" Margin="0,4,0,0" TextWrapping="Wrap"

@@ -123,7 +123,7 @@
                                 </StackPanel>
                                 <TextBlock Text="On what day?"/>
                                 <!-- Days that already have an isolated earmark for the goal are marked when the dropdown opens (OnEarmarkDatePickerCalendarOpened); clicking one loads that entry (see OnInputsChanged). -->
-                                <CalendarDatePicker x:Name="EarmarkDatePicker" Margin="0,2,0,10" Width="180" HorizontalAlignment="Left"
+                                <CalendarDatePicker x:Name="EarmarkDatePicker" Margin="0,2,0,10"
                                                     CalendarOpened="OnEarmarkDatePickerCalendarOpened"
                                                     AutomationProperties.AutomationId="OneOffDatePicker"/>
                                 <TextBlock Text="Existing entries on this goal are shaded — pick one to edit it, or any other day to start a new one."

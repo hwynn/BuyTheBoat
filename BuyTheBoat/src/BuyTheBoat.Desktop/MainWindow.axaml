@@ -253,7 +253,7 @@
                         <DockPanel Margin="0,0,0,6">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button x:Name="AdjustFundsButton" Content="Adjust funds..." Padding="10,2" Margin="0,0,16,0"
-                                        IsEnabled="False" Click="OnAdjustFundsClick"
+                                        VerticalAlignment="Stretch" VerticalContentAlignment="Center" IsEnabled="False" Click="OnAdjustFundsClick"
                                         AutomationProperties.AutomationId="AdjustFundsButton"/>
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -551,7 +551,7 @@
                                     <DataGridTemplateColumn Header="Current balance" Width="170">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <TextBox Text="{Binding BalanceText, Mode=OneWay}" Padding="4,2" MinHeight="0" Margin="2"
+                                                <TextBox Text="{Binding BalanceText, Mode=OneWay}" Padding="2,1" MinHeight="0" Margin="0,1"
                                                          IsEnabled="{Binding !IsDirty}"
                                                          ToolTip.Tip="This account has unsaved changes in the Form tab — save or clear them there first."
                                                          ToolTip.ServiceEnabled="{Binding IsDirty}"
@@ -589,8 +589,7 @@
                                     <DataGridTemplateColumn Header="Net / month" Width="*">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding MonthlyNet, StringFormat={}{0:N2}}" Margin="12,0" VerticalAlignment="Center"
-                                                           Classes.draining="{Binding IsDraining}"/>
+                                                <TextBlock Text="{Binding MonthlyNet, StringFormat={}{0:N2}}" Classes.draining="{Binding IsDraining}"/>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>

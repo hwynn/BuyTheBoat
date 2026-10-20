@@ -53,8 +53,8 @@ public static class MessageBox
         {
             Title = caption,
             SizeToContent = SizeToContent.WidthAndHeight,
-            MaxWidth = 560,
             CanResize = false,
+            Background = Brushes.White,
             ShowInTaskbar = owner is null,
             WindowStartupLocation = owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner,
         };
@@ -64,7 +64,7 @@ public static class MessageBox
         // Each button records its answer and closes the box.
         Button MakeButton(string label, MessageBoxResult answer, bool isDefault)
         {
-            var created = new Button { Content = label, MinWidth = 80, IsDefault = isDefault, HorizontalContentAlignment = HorizontalAlignment.Center };
+            var created = new Button { Content = label, MinWidth = 88, IsDefault = isDefault, HorizontalContentAlignment = HorizontalAlignment.Center };
             created.Click += (_, _) =>
             {
                 result = answer;
@@ -89,17 +89,21 @@ public static class MessageBox
                 break;
         }
 
-        var message = new DockPanel { LastChildFill = true };
+        // Laid out like Windows' own message box: the symbol and text on white, wrapped at about the same width, and the buttons in a grey strip along the bottom.
+        var message = new DockPanel { LastChildFill = true, Margin = new Thickness(24, 26, 24, 26) };
         if (Symbol(image) is { } symbol)
         {
             DockPanel.SetDock(symbol, Dock.Left);
             message.Children.Add(symbol);
         }
-        message.Children.Add(new SelectableTextBlock { Text = text, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+        message.Children.Add(new SelectableTextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 300, VerticalAlignment = VerticalAlignment.Center });
 
-        var layout = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
+        var buttonStrip = new Border { Background = Brush.Parse("#FFF0F0F0"), Padding = new Thickness(10), Child = buttons };
+        DockPanel.SetDock(buttonStrip, Dock.Bottom);
+
+        var layout = new DockPanel();
+        layout.Children.Add(buttonStrip);
         layout.Children.Add(message);
-        layout.Children.Add(buttons);
         window.Content = layout;
 
         // Esc dismisses, same as the window's close button.
@@ -126,39 +130,48 @@ public static class MessageBox
         return answered.Task;
     }
 
-    /// <summary>[CALC] The round colored symbol for the message's kind, or null for none.</summary>
+    /// <summary>[CALC] The symbol for the message's kind, drawn like Windows' own: a yellow warning triangle, a red error circle, or a blue information or question circle; null for none.</summary>
     private static Control? Symbol(MessageBoxImage image)
     {
-        (string glyph, string color)? look = image switch
-        {
-            MessageBoxImage.Information => ("i", "#FF1E66D0"),
-            MessageBoxImage.Question => ("?", "#FF1E66D0"),
-            MessageBoxImage.Warning => ("!", "#FF8A6A00"),
-            MessageBoxImage.Error => ("×", "#FFB00020"),
-            _ => null,
-        };
-        if (look is not { } chosen)
+        if (image == MessageBoxImage.None)
         {
             return null;
         }
 
-        return new Border
+        var symbol = new Panel { Width = 32, Height = 32, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Top };
+        if (image == MessageBoxImage.Warning)
         {
-            Width = 32,
-            Height = 32,
-            CornerRadius = new CornerRadius(16),
-            Background = Brush.Parse(chosen.color),
-            Margin = new Thickness(0, 0, 14, 0),
-            VerticalAlignment = VerticalAlignment.Top,
-            Child = new TextBlock
+            symbol.Children.Add(new Avalonia.Controls.Shapes.Path
             {
-                Text = chosen.glyph,
-                Foreground = Brushes.White,
-                FontWeight = FontWeight.Bold,
-                FontSize = 18,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
+                Data = Geometry.Parse("M 16,2 L 31,29 L 1,29 Z"),
+                Fill = Brush.Parse("#FFFFCC33"),
+                Stroke = Brush.Parse("#FF8A6A00"),
+                StrokeThickness = 1,
+            });
+            symbol.Children.Add(Glyph("!", Brushes.Black, top: 6));
+            return symbol;
+        }
+
+        var (glyph, color) = image switch
+        {
+            MessageBoxImage.Error => ("✕", "#FFE81123"),
+            MessageBoxImage.Question => ("?", "#FF0063B1"),
+            _ => ("i", "#FF0063B1"),
         };
+        symbol.Children.Add(new Avalonia.Controls.Shapes.Ellipse { Fill = Brush.Parse(color) });
+        symbol.Children.Add(Glyph(glyph, Brushes.White, top: 0));
+        return symbol;
     }
+
+    /// <summary>[CALC] The bold character drawn on a message-box symbol.</summary>
+    private static TextBlock Glyph(string text, IBrush color, double top) => new()
+    {
+        Text = text,
+        Foreground = color,
+        FontWeight = FontWeight.Bold,
+        FontSize = 18,
+        Margin = new Thickness(0, top, 0, 0),
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
 }

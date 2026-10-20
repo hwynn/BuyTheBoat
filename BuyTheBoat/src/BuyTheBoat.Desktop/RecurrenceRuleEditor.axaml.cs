@@ -64,8 +64,9 @@ public partial class RecurrenceRuleEditor : UserControl
     }
 
     /// <summary>
-    /// [UI] Shrinks the preview calendar to the WPF app's size (about 180 × 170); the day and header buttons are sized by the styles in RecurrenceRuleEditor.axaml.
-    /// Fluent's calendar template sets its header row, weekday row and minimum sizes directly on its parts, which styles can't override, so they're changed here once it has loaded.
+    /// [UI] Shrinks the preview calendar to the WPF app's size (about 180 × 170) and lays out its header like WPF's: ◀ month ▶, month name centred in bold.
+    /// The day colors and the header's font come from the styles in RecurrenceRuleEditor.axaml.
+    /// Fluent's calendar template sets its header layout, row heights, minimum sizes and shaded day area directly on its parts, which styles can't override, so they're changed here once it has loaded.
     /// </summary>
     private void ShrinkPreviewCalendar()
     {
@@ -83,16 +84,54 @@ public partial class RecurrenceRuleEditor : UserControl
                     yearView.MinHeight = 0;
                     break;
                 case Border { Name: "BackgroundLayer" } backgroundLayer:
-                    // Shades the area under the weekday names, so it starts where that row ends.
+                    // The grey behind the month's days; WPF's days sit on plain white.
                     backgroundLayer.Margin = new Avalonia.Thickness(0, weekdayRow, 0, 0);
+                    backgroundLayer.Background = Brushes.Transparent;
                     break;
                 case Grid { MinWidth: > 0 } frame when frame.Children.OfType<Grid>().Any(child => child.Name == "PART_MonthView"):
                     frame.MinWidth = 0;
                     frame.RowDefinitions[0].Height = new GridLength(headerRow);
                     break;
+                case Grid header when header.Children.OfType<Button>().Any(child => child.Name == "PART_HeaderButton"):
+                    LayOutPreviewHeader(header);
+                    break;
             }
         }
     }
+
+    /// <summary>[UI] Puts the preview calendar's arrows at either end of its header, as small ◀ ▶ triangles, with the month name centred between them.</summary>
+    private static void LayOutPreviewHeader(Grid header)
+    {
+        header.ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto");
+        foreach (var button in header.Children.OfType<Button>())
+        {
+            switch (button.Name)
+            {
+                case "PART_PreviousButton":
+                    Grid.SetColumn(button, 0);
+                    button.Content = Triangle("M 5,0 L 0,4.5 L 5,9 Z");
+                    break;
+                case "PART_HeaderButton":
+                    Grid.SetColumn(button, 1);
+                    button.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+                    button.HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center;
+                    break;
+                case "PART_NextButton":
+                    Grid.SetColumn(button, 2);
+                    button.Content = Triangle("M 0,0 L 5,4.5 L 0,9 Z");
+                    break;
+            }
+        }
+    }
+
+    /// <summary>[CALC] A small dark filled triangle for the preview calendar's month arrows.</summary>
+    private static Avalonia.Controls.Shapes.Path Triangle(string data) => new()
+    {
+        Data = Geometry.Parse(data),
+        Fill = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+    };
 
     /// <summary>
     /// [UI] Highlights specific occurrences, with a short caption below the list and a legend explaining what the highlight means, since this control doesn't know.
@@ -329,7 +368,7 @@ public partial class RecurrenceRuleEditor : UserControl
         ApplyLegend();
     }
 
-    /// <summary>[UI] Colors the visible calendar days in _highlightedDates and clears the color from ones no longer in it, leaving other days alone so the calendar's own "today" and selection styling stays.</summary>
+    /// <summary>[UI] Colors the visible calendar days in _highlightedDates and clears the color from ones no longer in it, leaving other days alone so the calendar's own "today" and selection styling stays; a highlighted day shows its color even when it is out of the month, today, or an occurrence.</summary>
     private void ApplyHighlight()
     {
         if (!PreviewCalendar.IsLoaded)
@@ -339,15 +378,21 @@ public partial class RecurrenceRuleEditor : UserControl
 
         foreach (var dayButton in PreviewCalendar.GetVisualDescendants().OfType<CalendarDayButton>())
         {
+            // The color goes on the day's inner Root part: the out-of-month, today and occurrence styles in RecurrenceRuleEditor.axaml color that part, and would cover the button's own Background.
+            if (dayButton.GetVisualDescendants().OfType<Border>().FirstOrDefault(part => part.Name == "Root") is not { } root)
+            {
+                continue;
+            }
+
             var isHighlighted = dayButton.DataContext is DateTime day
                                  && _highlightedDates.Contains(DateOnly.FromDateTime(day));
             if (isHighlighted)
             {
-                dayButton.Background = ShortDateHighlightBrush;
+                root.Background = ShortDateHighlightBrush;
             }
-            else if (ReferenceEquals(dayButton.Background, ShortDateHighlightBrush))
+            else if (ReferenceEquals(root.Background, ShortDateHighlightBrush))
             {
-                dayButton.ClearValue(BackgroundProperty);
+                root.ClearValue(Border.BackgroundProperty);
             }
         }
     }

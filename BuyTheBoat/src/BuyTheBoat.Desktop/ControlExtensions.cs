@@ -10,6 +10,7 @@ internal static class ControlExtensions
     /// <summary>
     /// [UI] Shows the window as a popup over its owner and returns only once it closes, with the value it closed with, like WPF's ShowDialog.
     /// For callers that need the answer right away, such as the save confirmations' callbacks; it keeps the app responding while it waits (Avalonia's DispatcherFrame).
+    /// A button whose Click can reach this before any await posts its work first (Dispatcher.UIThread.Post, or await Dispatcher.Yield): a screen reader pressing the button through UI Automation waits for Click to return, and until it does every UI Automation read of the app times out, the popup included.
     /// </summary>
     public static T? ShowDialogAndWait<T>(this Window dialog, Window owner)
     {

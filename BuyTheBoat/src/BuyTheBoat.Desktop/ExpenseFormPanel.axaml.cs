@@ -807,7 +807,9 @@ public partial class ExpenseFormPanel : UserControl
     }
 
     /// <summary>[STEP] No confirmation called for (unlike Clear) — the whole point of the button is discarding, so a second confirmation would be redundant.</summary>
-    private void OnDiscardChangesClick(object? sender, RoutedEventArgs e) => ReloadCurrentInstance();
+    private void OnDiscardChangesClick(object? sender, RoutedEventArgs e) =>
+        // Posted so a screen reader's press isn't held until the segment picker it may open closes (see ShowDialogAndWait).
+        Dispatcher.UIThread.Post(ReloadCurrentInstance, DispatcherPriority.Input);
 
     /// <summary>[STEP] Reloads whatever was last loaded, throwing away the edits since.</summary>
     private void ReloadCurrentInstance()
@@ -955,10 +957,14 @@ public partial class ExpenseFormPanel : UserControl
     // The two settled save buttons ----------------------------------------
 
     /// <summary>[STEP] Saves and goes to the Forecast tab.</summary>
-    private void OnSaveAndSkipPlanningClick(object? sender, RoutedEventArgs e) => Save(jumpToEarmark: false);
+    private void OnSaveAndSkipPlanningClick(object? sender, RoutedEventArgs e) =>
+        // Posted so a screen reader's press isn't held until the save's confirmation popup closes (see ShowDialogAndWait).
+        Dispatcher.UIThread.Post(() => Save(jumpToEarmark: false), DispatcherPriority.Input);
 
     /// <summary>[STEP] Saves and opens the savings plan on the Earmark tab.</summary>
-    private void OnSaveAndPlanClick(object? sender, RoutedEventArgs e) => Save(jumpToEarmark: true);
+    private void OnSaveAndPlanClick(object? sender, RoutedEventArgs e) =>
+        // Posted so a screen reader's press isn't held until the save's confirmation popup closes (see ShowDialogAndWait).
+        Dispatcher.UIThread.Post(() => Save(jumpToEarmark: true), DispatcherPriority.Input);
 
     /// <summary>[STEP] Hands the typed pattern to MainWindow to save, and clears the form once it's saved; shows the problem below the form instead when it can't be built.</summary>
     private void Save(bool jumpToEarmark)

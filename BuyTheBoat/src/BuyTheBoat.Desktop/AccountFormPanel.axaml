@@ -17,7 +17,7 @@
         </DockPanel>
 
         <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="Account details" DockPanel.Dock="Top"
-                                Width="420" HorizontalAlignment="Left" VerticalAlignment="Top">
+                                Width="420" HorizontalAlignment="Left">
             <StackPanel>
                 <TextBlock Text="Account name"/>
                 <TextBox x:Name="NameTextBox" Margin="0,2,0,0" AutomationProperties.AutomationId="AccountNameTextBox"/>

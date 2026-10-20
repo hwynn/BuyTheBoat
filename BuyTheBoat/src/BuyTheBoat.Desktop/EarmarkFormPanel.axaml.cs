@@ -774,6 +774,9 @@ public partial class EarmarkFormPanel : UserControl
     /// <summary>[STEP] Saves the savings plan or the one-off adjustment, depending on the mode; shows the problem below the form instead when it can't.</summary>
     private async void OnSaveClick(object? sender, RoutedEventArgs e)
     {
+        // Yields so a screen reader's press isn't held until the save's confirmation popup closes (see ShowDialogAndWait).
+        await Dispatcher.Yield(DispatcherPriority.Input);
+
         ErrorText.Text = string.Empty;
         try
         {

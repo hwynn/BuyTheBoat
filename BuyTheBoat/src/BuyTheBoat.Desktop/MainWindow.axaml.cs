@@ -1696,7 +1696,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>[STEP] Opens the selected bill or paycheck in Bills &amp; Paychecks › Form.</summary>
-    private void OnEditFinancialPatternClick(object? sender, RoutedEventArgs e) => EditSelectedFinancialPattern();
+    private void OnEditFinancialPatternClick(object? sender, RoutedEventArgs e) =>
+        // Posted so a screen reader's press isn't held until the segment picker it may open closes (see ShowDialogAndWait).
+        Dispatcher.UIThread.Post(EditSelectedFinancialPattern, DispatcherPriority.Input);
 
     /// <summary>[STEP] Loads the bill or paycheck selected in the list into the Form and shows it, or says nothing is selected.</summary>
     private void EditSelectedFinancialPattern()
@@ -1717,6 +1719,9 @@ public partial class MainWindow : Window
     /// <summary>[DELETES] Deletes the selected bill or paycheck (asking which segment for a chain), and its savings plan with it, after saying what will happen.</summary>
     private async void OnDeleteFinancialPatternClick(object? sender, RoutedEventArgs e)
     {
+        // Yields so a screen reader's press isn't held until the segment picker it may open closes (see ShowDialogAndWait).
+        await Dispatcher.Yield(DispatcherPriority.Input);
+
         if (FinancialPatternsGrid.SelectedItem is not FinancialPatternRow row)
         {
             ShowNothingSelected();
