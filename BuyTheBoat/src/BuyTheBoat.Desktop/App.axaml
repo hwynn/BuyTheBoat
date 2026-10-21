@@ -3,7 +3,7 @@
              x:Class="BuyTheBoat.App.App"
              RequestedThemeVariant="Light">
     <Application.Styles>
-        <!-- Compact: Fluent normally sizes text boxes, dropdowns and buttons for touch (about 32 pixels tall); compact brings them nearer the WPF app's size. -->
+        <!-- Compact: Fluent normally sizes text boxes, dropdowns and buttons for touch (about 32 pixels tall); compact makes them shorter. -->
         <FluentTheme DensityStyle="Compact"/>
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
 
@@ -15,26 +15,26 @@
             <Setter Property="FontSize" Value="12"/>
         </Style>
 
-        <!-- Popups that can't be resized show only the close button, as WPF's do; Windows otherwise shows greyed-out minimize and maximize buttons. -->
+        <!-- Popups that can't be resized show only the close button; Windows otherwise shows greyed-out minimize and maximize buttons. -->
         <Style Selector=":is(Window)[CanResize=False]">
             <Setter Property="CanMinimize" Value="False"/>
             <Setter Property="CanMaximize" Value="False"/>
         </Style>
 
-        <!-- The button Enter presses (IsDefault) has a blue outline, as in WPF. -->
+        <!-- The button Enter presses (IsDefault) has a blue outline. -->
         <Style Selector="Button[IsDefault=True]">
             <Setter Property="BorderBrush" Value="#FF0078D7"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
-        <!-- Grids look like WPF's: a blue-grey frame, a grey area below the last row, and rows sized to their text (about 19 pixels) instead of Fluent's 32.
-             Unlike WPF's, they have no row selector strip on the left, so the cells start right at the frame. -->
+        <!-- Grids have a blue-grey frame, a grey area below the last row, and rows sized to their text (about 19 pixels) instead of Fluent's 32.
+             They have no row selector strip on the left, so the cells start right at the frame. -->
         <Style Selector="DataGrid">
             <Setter Property="BorderBrush" Value="#FF688CAF"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Background" Value="#FFF0F0F0"/>
             <Setter Property="RowBackground" Value="White"/>
-            <!-- Lines between cells are black, as WPF draws them; the lighter DataGridGridLinesBrush below is for the header edges. -->
+            <!-- Lines between cells are black; the lighter DataGridGridLinesBrush below is for the header edges. -->
             <Setter Property="HorizontalGridLinesBrush" Value="Black"/>
             <Setter Property="VerticalGridLinesBrush" Value="Black"/>
         </Style>
@@ -45,13 +45,13 @@
         <Style Selector="DataGridRow, DataGridCell">
             <Setter Property="MinHeight" Value="0"/>
         </Style>
-        <!-- Text cells: 2 pixels in from the edge, a pixel above and below so a row is 19 tall, and at the top of a taller row, as in WPF.
+        <!-- Text cells: 2 pixels in from the edge, a pixel above and below so a row is 19 tall, and at the top of a taller row.
              Set here because the grid reads its DataGridTextColumnCellTextBlockMargin resource before the app's resources apply. -->
         <Style Selector="DataGridCell > TextBlock">
             <Setter Property="Margin" Value="2,1,2,1"/>
             <Setter Property="VerticalAlignment" Value="Top"/>
         </Style>
-        <!-- While a list has focus anywhere inside it, its selected row is solid Windows blue with white text, as in WPF.
+        <!-- While a list has focus anywhere inside it, its selected row is solid Windows blue with white text.
              Fluent counts a row as focused only when the row itself holds focus, which a click on a cell doesn't do, so its own focused colors (the resources below) would almost never show. -->
         <Style Selector="DataGrid:focus-within DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
             <Setter Property="Fill" Value="#FF0078D7"/>
@@ -64,7 +64,7 @@
             <Setter Property="SeparatorBrush" Value="#FFD5D5D5"/>
         </Style>
 
-        <!-- Scrollbars take their own strip, as in the WPF app, instead of floating over the right edge of the content. -->
+        <!-- Scrollbars take their own strip instead of floating over the right edge of the content. -->
         <Style Selector="ScrollViewer">
             <Setter Property="AllowAutoHide" Value="False"/>
         </Style>
@@ -73,12 +73,12 @@
             <Setter Property="ScrollViewer.AllowAutoHide" Value="False"/>
         </Style>
 
-        <!-- Dropdowns and date boxes fill the width they're given, as WPF's do; Fluent's shrink to fit their text. One with a Width set in the XAML keeps that width. -->
+        <!-- Dropdowns and date boxes fill the width they're given; Fluent's shrink to fit their text. One with a Width set in the XAML keeps that width. -->
         <Style Selector="ComboBox, CalendarDatePicker">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
         </Style>
 
-        <!-- Dropdowns you can type into keep a white text area, like WPF's; the plain ones take the grey from ComboBoxBackground below. -->
+        <!-- Dropdowns you can type into keep a white text area; the plain ones take the grey from ComboBoxBackground below. -->
         <Style Selector="ComboBox[IsEditable=True]">
             <Setter Property="Background" Value="White"/>
         </Style>
@@ -88,25 +88,25 @@
             <Setter Property="RenderTransform" Value="scale(0.8)"/>
         </Style>
 
-        <!-- A disabled calendar fades out like WPF's, instead of keeping its colors. -->
+        <!-- A disabled calendar fades out instead of keeping its colors. -->
         <Style Selector="Calendar:disabled">
             <Setter Property="Opacity" Value="0.45"/>
         </Style>
     </Application.Styles>
 
     <Application.Resources>
-        <!-- The forms were laid out for WPF's 12-point default text; Fluent's 14 makes them wider than the window. -->
+        <!-- The forms are laid out for 12-point text; Fluent's default 14 makes them wider than the window. -->
         <x:Double x:Key="ControlContentThemeFontSize">12</x:Double>
 
-        <!-- Field heights near the WPF app's (text boxes 18, dropdowns 22); compact density alone leaves them at 24. -->
+        <!-- Shorter fields (text boxes 20, dropdowns 22); compact density alone leaves them at 24. -->
         <x:Double x:Key="TextControlThemeMinHeight">20</x:Double>
         <Thickness x:Key="TextControlThemePadding">4,1,4,1</Thickness>
         <x:Double x:Key="ComboBoxMinHeight">22</x:Double>
         <Thickness x:Key="ComboBoxPadding">6,1,6,1</Thickness>
         <x:Double x:Key="CalendarDatePickerMinHeight">22</x:Double>
 
-        <!-- Headers leave no room for a sort arrow, as in WPF; Fluent's extra room cut short names like "Finance ID".
-             The line under the headers and the dividers between them are light grey, as in WPF; the lines between cells are black (set on DataGrid above).
+        <!-- Headers leave no room for a sort arrow; Fluent's extra room cut short names like "Finance ID".
+             The line under the headers and the dividers between them are light grey; the lines between cells are black (set on DataGrid above).
              Headers are black text on white over the grid's grey. -->
         <x:Double x:Key="DataGridSortIconMinWidth">0</x:Double>
         <SolidColorBrush x:Key="DataGridGridLinesBrush" Color="#FFD5D5D5"/>
@@ -114,7 +114,7 @@
         <SolidColorBrush x:Key="DataGridColumnHeaderBackgroundBrush" Color="White"/>
         <SolidColorBrush x:Key="DataGridColumnHeaderForegroundBrush" Color="Black"/>
 
-        <!-- A selected row in a list without focus is light grey with black text, as in WPF; the focused look is the style on DataGrid:focus-within above.
+        <!-- A selected row in a list without focus is light grey with black text; the focused look is the style on DataGrid:focus-within above.
              The Spreadsheet uses a see-through pale blue of its own instead (SpreadsheetPanel.axaml), so its tinted draft rows stay recognizable. -->
         <SolidColorBrush x:Key="DataGridRowSelectedBackgroundBrush" Color="#FFF0F0F0"/>
         <SolidColorBrush x:Key="DataGridRowSelectedHoveredBackgroundBrush" Color="#FFF0F0F0"/>
@@ -124,16 +124,16 @@
         <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
         <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
         <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
-        <!-- No grey highlight under the pointer, as in WPF's grids; it hid a Spreadsheet draft row's tint. -->
+        <!-- No grey highlight under the pointer; it hid a Spreadsheet draft row's tint. -->
         <Color x:Key="DataGridRowHoveredBackgroundColor">Transparent</Color>
 
-        <!-- Plain dropdowns are grey, like WPF's. -->
+        <!-- Plain dropdowns are grey. -->
         <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFEBEBEB"/>
         <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FFACACAC"/>
         <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FFE5F1FB"/>
         <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#FF7EB4EA"/>
 
-        <!-- Disabled fields fade, like WPF's, instead of filling with solid grey. -->
+        <!-- Disabled fields fade instead of filling with solid grey. -->
         <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="White"/>
         <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#FFD9D9D9"/>
         <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="#FF9E9E9E"/>
@@ -149,7 +149,7 @@
         <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#FFD9D9D9"/>
         <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#FF9E9E9E"/>
 
-        <!-- Radio buttons and checkboxes at the WPF app's size: a 13-pixel circle or box beside the text.
+        <!-- Radio buttons and checkboxes at a compact size: a 13-pixel circle or box beside the text.
              Fluent's own are 20 pixels in a 24-pixel row, sized inside its template where styles can't reach, so these replace the whole look. -->
         <ControlTheme x:Key="{x:Type RadioButton}" TargetType="RadioButton">
             <Setter Property="Background" Value="Transparent"/>
@@ -268,7 +268,7 @@
             </Style>
         </ControlTheme>
 
-        <!-- Expanders look like WPF's: one line, a small round arrow on the left, no frame; the content shows below once opened.
+        <!-- Expanders are one line, a small round arrow on the left, no frame; the content shows below once opened.
              Fluent's is a 48-pixel framed card with the arrow on the right. -->
         <ControlTheme x:Key="{x:Type Expander}" TargetType="Expander">
             <Setter Property="Background" Value="Transparent"/>
@@ -286,9 +286,9 @@
             </Setter>
         </ControlTheme>
 
-        <!-- Avalonia has no GroupBox; a HeaderedContentControl with this theme draws WPF's titled frame, with the title sitting on the frame's top line.
+        <!-- Avalonia has no GroupBox; a HeaderedContentControl with this theme draws a titled frame, with the title sitting on the frame's top line.
              Use as <HeaderedContentControl Theme="{StaticResource GroupBox}" Header="...">.
-             Padding is the gap inside the frame, as on WPF's GroupBox; the frame adds 6 more at the sides, as WPF's does. -->
+             Padding is the gap inside the frame; the frame adds 6 more at the sides. -->
         <ControlTheme x:Key="GroupBox" TargetType="HeaderedContentControl">
             <Setter Property="Padding" Value="10"/>
             <Setter Property="Template">

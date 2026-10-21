@@ -1195,7 +1195,7 @@ public partial class MainWindow : Window
         JarDetailList.ItemsSource = GroupByAccount(jarRows, row => row.Account!);
     }
 
-    /// <summary>One account's rows in a selected-day pane, under its header; Name is the account, as WPF's group header called it.</summary>
+    /// <summary>One account's rows in a selected-day pane, under its header; Name is the account.</summary>
     private sealed record AccountGroup(AccountGroupKey Name, IReadOnlyList<object> Rows);
 
     /// <summary>[CALC] Groups a selected-day pane's rows under their account, in the order the accounts first appear.</summary>

@@ -4,7 +4,7 @@ namespace BuyTheBoat.App.Tests;
 
 // The selected-day group header's shortfall narrative — the three-rung ladder's
 // wording. The donor-detection that feeds these lives in
-// MainWindow.ShowDayDetail (WPF, not unit-tested); this pins the strings each
+// MainWindow.ShowDayDetail (UI code, not unit-tested); this pins the strings each
 // resulting state produces, the way PlanHealthMessagesTests pins the forms'.
 public class AccountGroupKeyTests
 {
@@ -61,8 +61,8 @@ public class AccountGroupKeyTests
         key.RungText.ShouldBe("No other account can cover it.");
     }
 
-    // AccessibleSummary rolls the header's separate labels into one line, because a
-    // screen reader can't reach them individually inside the WPF GroupItem header.
+    // AccessibleSummary rolls the header's separate labels into one line, which is
+    // what a screen reader announces for the account header.
     // These pin what each state announces.
 
     [Fact]

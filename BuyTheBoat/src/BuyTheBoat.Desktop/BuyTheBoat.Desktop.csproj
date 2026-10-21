@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The Avalonia version of the app, runs on Windows and Linux; being ported window by window from the WPF project BuyTheBoat.App, which it will replace.
-       Its classes keep the BuyTheBoat.App namespace, so ported code and BuyTheBoat.App.Core's classes need no namespace changes. -->
+  <!-- The app: Avalonia, runs on Windows and Linux.
+       Its classes keep the BuyTheBoat.App namespace, the one BuyTheBoat.App.Core's classes use, so neither needs extra usings. -->
 
   <ItemGroup>
     <ProjectReference Include="..\BuyTheBoat.Domain\BuyTheBoat.Domain.csproj" />
@@ -18,11 +18,15 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <!-- The program file is BuyTheBoat (BuyTheBoat.exe on Windows), not the project's name. -->
+    <AssemblyName>BuyTheBoat</AssemblyName>
+    <!-- The app's version. The build scripts (build/make-portable.*) read it to name their output, like dist/BuyTheBoat-0.9-win-x64. -->
+    <Version>0.9</Version>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>BuyTheBoat.App</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Ported WPF XAML binds by name without declaring each view's data type, which compiled bindings require. -->
+    <!-- The XAML binds by name without declaring each view's data type, which compiled bindings require. -->
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 

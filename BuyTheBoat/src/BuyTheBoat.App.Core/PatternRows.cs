@@ -98,7 +98,7 @@ public sealed class EarMarkPatternRow(EarMarkPattern pattern, FinancialPattern? 
 
 /// <summary>
 /// A row standing in for a mandatory bill's automatic funding, with no saved row behind it.
-/// It has the same property names EarMarkPatternsGrid binds to, so it sits beside real EarMarkPatternRows (WPF binds by name).
+/// It has the same property names EarMarkPatternsGrid binds to, so it sits beside real EarMarkPatternRows (the grid binds by name).
 /// It has no Edit or Delete, and disappears once the bill is deleted or gets its own savings plan.
 /// </summary>
 public sealed class AutomaticBillEarmarkRow(FinancialPattern bill)
@@ -582,7 +582,7 @@ public sealed record AccountGroupKey(
 
     /// <summary>
     /// [CALC] The account's group header as one line for screen readers: name and balance, any "short" or "funds running low" warning, then the shortfall narrative, in the same order as on screen.
-    /// WPF's GroupItem header hides its labels from screen readers, so MainWindow.xaml binds this as the GroupItem's Name instead.
+    /// MainWindow.axaml binds this as the account header's screen-reader name, so the header reads as one line.
     /// </summary>
     public string AccessibleSummary
     {

@@ -4,11 +4,11 @@ using Avalonia.Threading;
 
 namespace BuyTheBoat.App;
 
-/// <summary>Small helpers that cover places where Avalonia behaves differently from WPF, so ported code can keep WPF's flow.</summary>
+/// <summary>Small helpers for places where Avalonia's own behavior doesn't suit the app's code: waiting for a popup's answer, settling radio choices, and reacting to a property the moment it changes.</summary>
 internal static class ControlExtensions
 {
     /// <summary>
-    /// [UI] Shows the window as a popup over its owner and returns only once it closes, with the value it closed with, like WPF's ShowDialog.
+    /// [UI] Shows the window as a popup over its owner and returns only once it closes, with the value it closed with.
     /// For callers that need the answer right away, such as the save confirmations' callbacks; it keeps the app responding while it waits (Avalonia's DispatcherFrame).
     /// A button whose Click can reach this before any await posts its work first (Dispatcher.UIThread.Post, or await Dispatcher.Yield): a screen reader pressing the button through UI Automation waits for Click to return, and until it does every UI Automation read of the app times out, the popup included.
     /// </summary>
@@ -36,7 +36,7 @@ internal static class ControlExtensions
 
     /// <summary>
     /// [UI] Turns off the other radio buttons beside this one, so a handler reacting to this one turning on sees the settled choice.
-    /// Avalonia turns the siblings off only after announcing the new choice, where WPF did it before.
+    /// Avalonia turns the siblings off only after announcing the new choice.
     /// </summary>
     public static void UncheckSiblingRadios(this RadioButton picked)
     {

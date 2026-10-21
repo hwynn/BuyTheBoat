@@ -6,7 +6,7 @@ using Shouldly;
 namespace BuyTheBoat.App.Tests;
 
 // Checks that the no-forecast preview EarmarkFormPanel shows while the user is still typing matches what a real save and a rebuilt forecast produce.
-// EarmarkFormPanel.GetLiveJarAmounts and GetPatternsForLiveCheck are private WPF code-behind with no UI test harness, so each test reproduces their short composition inline around the same public TransactionLogBookFactory walks they call.
+// EarmarkFormPanel.GetLiveJarAmounts and GetPatternsForLiveCheck are private UI code-behind with no UI test harness, so each test reproduces their short composition inline around the same public TransactionLogBookFactory walks they call.
 // Real (temporary) SQLite file per test, same shape as every other test file in this project — see PatternRepositoryTests' own header comment for why.
 public class EarmarkFormLivePreviewTests : IDisposable
 {

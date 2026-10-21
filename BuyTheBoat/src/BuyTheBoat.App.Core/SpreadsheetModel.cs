@@ -140,7 +140,7 @@ public sealed record DraftFormValues
     public string Notes { get; init; } = "";
 }
 
-// Everything the Spreadsheet subtab knows, minus the WPF: its columns, its rows (drafts first, then saved),
+// Everything the Spreadsheet subtab knows, minus the UI: its columns, its rows (drafts first, then saved),
 // checking and tidying cells, and pasting. SpreadsheetPanel draws it; MainWindow stores the drafts.
 public sealed class SpreadsheetModel(IReadOnlyList<ISpreadsheetColumn> columns)
 {

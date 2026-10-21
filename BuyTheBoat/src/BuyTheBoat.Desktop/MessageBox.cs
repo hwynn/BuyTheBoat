@@ -6,7 +6,7 @@ using Avalonia.Media;
 
 namespace BuyTheBoat.App;
 
-/// <summary>Which buttons a MessageBox offers; the same choices WPF's MessageBox had, so ported calls keep their arguments.</summary>
+/// <summary>Which buttons a MessageBox offers.</summary>
 public enum MessageBoxButton
 {
     OK,
@@ -34,8 +34,8 @@ public enum MessageBoxResult
 }
 
 /// <summary>
-/// A small popup with a message and up to two buttons, standing in for WPF's MessageBox, which Avalonia doesn't have.
-/// Unlike WPF's, Show doesn't block: await it to get the user's answer.
+/// A small popup with a message and up to two buttons, since Avalonia has no built-in message box.
+/// Show doesn't block: await it to get the user's answer.
 /// </summary>
 public static class MessageBox
 {

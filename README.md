@@ -17,11 +17,22 @@ You will want to keep track of the current balance of all your accounts.
 And it'll help to write down all of your regular bills, how much they cost on average, what account they come out of, their frequency, and the exact date they tend to come out on.
 It'll make entering it into this program much easier.
 
-## Build/Installation instructions
+## Download/Installation instructions
 
-Read the BUILDING.md file located in BuyTheBoat\build. It should tell you everything. Sorry the process is so cumbersome for now.
+The easy way: download the latest prebuilt version for your platform from the [Releases page](https://github.com/hwynn/BuyTheBoat/releases/latest).
+Pick the file that matches your system:
+- **Windows:** `BuyTheBoat-<version>-win-x64.zip`. Unzip it and double click `BuyTheBoat.exe`.
+- **Linux:** `BuyTheBoat-<version>-linux-x64.tar.gz`. Extract it and run `BuyTheBoat`.
 
-The process will create a portable installation folder you can keep anywhere. You can delete the rest of this stuff once you've made that.
+There's nothing to install. It's a portable folder you can keep anywhere, and the `README.txt` inside it explains the rest.
+
+### Building it yourself
+
+If you'd rather build it from the source code, read the build instructions for your system:
+- **Windows:** [BuyTheBoat/build/BUILDING-windows.md](BuyTheBoat/build/BUILDING-windows.md)
+- **Linux:** [BuyTheBoat/build/BUILDING-linux.md](BuyTheBoat/build/BUILDING-linux.md)
+
+The process will create the same portable folder you'd get from the Releases page. You can delete the rest of this stuff once you've made that.
 
 ## Core concept to understand 
 
@@ -51,5 +62,5 @@ Any subsequent time:
 
 If you see there's an update available on the github page for this project and you want to install it, you'll first have to export your current data. It will make a database file. Hold onto this somewhere.
 You can delete the entire folder for the old version of the program at this point. It won't hurt anything to keep it other than taking up space. 
-Download the zip of the new version of the program. You'll have to build it all over again. Once that's finished, launch the new exe it created. From there, import that database file that was created.
+Download the new version from the [Releases page](https://github.com/hwynn/BuyTheBoat/releases/latest) (or build it again yourself). Launch the new version, and from there, import that database file that was created.
 You now have the latest version of the program. 

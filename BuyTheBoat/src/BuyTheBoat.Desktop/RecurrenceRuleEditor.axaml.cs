@@ -64,7 +64,7 @@ public partial class RecurrenceRuleEditor : UserControl
     }
 
     /// <summary>
-    /// [UI] Shrinks the preview calendar to the WPF app's size (about 180 × 170) and lays out its header like WPF's: ◀ month ▶, month name centred in bold.
+    /// [UI] Shrinks the preview calendar to about 180 × 170 and lays out its header as ◀ month ▶, month name centred in bold.
     /// The day colors and the header's font come from the styles in RecurrenceRuleEditor.axaml.
     /// Fluent's calendar template sets its header layout, row heights, minimum sizes and shaded day area directly on its parts, which styles can't override, so they're changed here once it has loaded.
     /// </summary>
@@ -84,7 +84,7 @@ public partial class RecurrenceRuleEditor : UserControl
                     yearView.MinHeight = 0;
                     break;
                 case Border { Name: "BackgroundLayer" } backgroundLayer:
-                    // The grey behind the month's days; WPF's days sit on plain white.
+                    // The grey behind the month's days; the days sit on plain white instead.
                     backgroundLayer.Margin = new Avalonia.Thickness(0, weekdayRow, 0, 0);
                     backgroundLayer.Background = Brushes.Transparent;
                     break;

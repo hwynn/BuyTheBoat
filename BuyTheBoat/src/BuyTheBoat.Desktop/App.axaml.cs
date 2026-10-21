@@ -21,10 +21,10 @@ public partial class App : Application
     /// </summary>
     public override void OnFrameworkInitializationCompleted()
     {
-        // Window sizes in XAML cover the whole window, title bar and borders included, as they do in the WPF app.
+        // Window sizes in XAML cover the whole window, title bar and borders included.
         Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) => CountFrameInSize(window));
 
-        // Grid rows stop at the vertical scrollbar, as in the WPF app, instead of running underneath it.
+        // Grid rows stop at the vertical scrollbar instead of running underneath it.
         TemplatedControl.TemplateAppliedEvent.AddClassHandler<DataGrid>((_, e) => KeepRowsClearOfScrollbar(e));
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -58,8 +58,8 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// [UI] Shrinks a window that just opened so its XAML Width and Height measure the whole window, as WPF's do, and keeps it centred where it opened.
-    /// Avalonia's Width and Height measure only the inside, so every window came out 16 pixels wider and about 39 taller than in the WPF app.
+    /// [UI] Shrinks a window that just opened so its XAML Width and Height measure the whole window, and keeps it centred where it opened.
+    /// Avalonia's Width and Height measure only the inside, so without this every window comes out 16 pixels wider and about 39 taller than its XAML size.
     /// </summary>
     private static void CountFrameInSize(Window window)
     {

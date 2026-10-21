@@ -6,7 +6,7 @@ namespace BuyTheBoat.App;
 /// <summary>
 /// Splits the confirmation popup's rows into pages by height only; a row and its nested rows always stay on one page.
 /// Each row is measured as if every nested question were shown, so a page can't outgrow its budget as the user expands things.
-/// Free of WPF so BuyTheBoat.App.Tests can test it without the real window.
+/// Free of UI code so BuyTheBoat.App.Tests can test it without the real window.
 /// </summary>
 internal static class ConfirmationPaginator
 {
@@ -53,7 +53,7 @@ internal static class ConfirmationPaginator
 
 /// <summary>
 /// A rough pixel estimate of how tall a row draws in EditingHistoryConfirmationWindow, used only for page breaks.
-/// It needn't be exact, since the window scrolls a page that still runs over; free of WPF so it's testable.
+/// It needn't be exact, since the window scrolls a page that still runs over; free of UI code so it's testable.
 /// </summary>
 internal static class ConfirmationRowHeights
 {

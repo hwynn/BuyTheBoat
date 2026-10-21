@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="BuyTheBoat.App.RecurrenceRuleEditor">
     <UserControl.Styles>
-        <!-- Fluent's calendar is sized for touch (40-pixel days); these shrink the preview to the WPF app's size, about 180 × 170.
+        <!-- Fluent's calendar is sized for touch (40-pixel days); these shrink the preview to about 180 × 170.
              RecurrenceRuleEditor.ShrinkPreviewCalendar does the parts of the template that styles can't reach. -->
         <Style Selector="Calendar#PreviewCalendar CalendarDayButton">
             <Setter Property="MinWidth" Value="0"/>
@@ -30,12 +30,12 @@
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
 
-        <!-- Day colors as in WPF's calendar: plain white days, faded out-of-month days, today a grey square with white text, and the highlighted occurrences pale blue. -->
+        <!-- Day colors: plain white days, faded out-of-month days, today a grey square with white text, and the highlighted occurrences pale blue. -->
         <Style Selector="Calendar#PreviewCalendar CalendarDayButton">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
-        <!-- Fluent colors these states on the parts inside each day (Root and its text), so these reach in there. Later rules win: a selected today stays pale blue, as in WPF. -->
+        <!-- Fluent colors these states on the parts inside each day (Root and its text), so these reach in there. Later rules win: a selected today stays pale blue. -->
         <Style Selector="Calendar#PreviewCalendar CalendarDayButton:inactive /template/ Border#Root">
             <Setter Property="Background" Value="Transparent"/>
         </Style>

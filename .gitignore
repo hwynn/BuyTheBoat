@@ -24,6 +24,7 @@
 # Portable demo build artifacts (large binaries, not source)
 BuyTheBoatDemo/
 BuyTheBoatDemo.zip
+dist/
 
 # OS cruft
 .DS_Store

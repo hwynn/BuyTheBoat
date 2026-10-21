@@ -333,7 +333,7 @@ public sealed class FinancePatternSaveConfirmation
 
     /// <summary>
     /// Shows the confirmation: one combined popup covering every question, rather than several stacked.
-    /// This class builds the request and applies the answer but never creates a window, so it stays free of WPF; MainWindow shows it.
+    /// This class builds the request and applies the answer but never creates a window, so it stays free of UI code; MainWindow shows it.
     /// Null (most tests) uses DefaultOutcome's safest answer to every question, so Run() still completes without a UI.
     /// </summary>
     public Func<ImplicitChangeConfirmationRequest, ConfirmationOutcome>? ConfirmImplicitChanges { get; set; }

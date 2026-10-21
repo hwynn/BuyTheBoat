@@ -2,24 +2,26 @@
 <#
   make-portable.ps1
 
-  Builds the self-contained portable copy of BuyTheBoat into BuyTheBoatDemo\ at
-  the repository root. It publishes as a SINGLE bulky .exe — the whole .NET
+  Builds the self-contained Windows portable copy of BuyTheBoat into
+  dist\BuyTheBoat-<version>-<runtime>\ at the repository root, e.g. dist\BuyTheBoat-0.9-win-x64\.
+  The version is read from BuyTheBoat.Desktop.csproj, and dist\ is created if it isn't there.
+  (For Linux, see make-portable.sh.) It publishes as a SINGLE bulky .exe — the whole .NET
   runtime is bundled inside the one executable, so there's no loose pile of DLLs
   to keep together and nothing to install on the machine that runs it. The
   folder ends up holding:
-    - BuyTheBoat.App.exe (the one big self-contained executable),
+    - BuyTheBoat.exe (the one big self-contained executable),
     - the labeled data\ / logs\ / backups\ / exports\ subfolders, and
     - portable.marker, the file that tells the app to keep its data here.
 
   It ships EMPTY on purpose: the app creates a fresh, empty database in data\ the
   first time it's run. Re-run this any time to produce a fresh copy from the
-  current source; hand off (or keep) the whole BuyTheBoatDemo folder.
+  current source; hand off (or keep) the whole folder.
 
   Usage:
     powershell -ExecutionPolicy Bypass -File make-portable.ps1
   Options:
     -Runtime win-x64   Target the copy will run on (default win-x64).
-    -Zip               Also produce BuyTheBoatDemo.zip beside the folder.
+    -Zip               Also produce dist\BuyTheBoat-<version>-<runtime>.zip beside the folder.
 #>
 [CmdletBinding()]
 param(
@@ -33,12 +35,20 @@ $ErrorActionPreference = "Stop"
 $buildDir     = $PSScriptRoot                                    # ...\BuyTheBoat\BuyTheBoat\build
 $projectRoot  = Split-Path $buildDir -Parent                    # ...\BuyTheBoat\BuyTheBoat
 $repoRoot     = Split-Path $projectRoot -Parent                 # ...\BuyTheBoat (repository root)
-$appProject   = Join-Path $projectRoot "src\BuyTheBoat.App\BuyTheBoat.App.csproj"
-$demoDir      = Join-Path $repoRoot "BuyTheBoatDemo"
+$appProject   = Join-Path $projectRoot "src\BuyTheBoat.Desktop\BuyTheBoat.Desktop.csproj"
+$distDir      = Join-Path $repoRoot "dist"
+
+# --- Name the output after the app's version and the target ----------------
+$version = (dotnet msbuild $appProject -getProperty:Version).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $version) { throw "Couldn't read the app's version from $appProject." }
+$buildName = "BuyTheBoat-$version-$Runtime"
+$demoDir   = Join-Path $distDir $buildName
 
 Write-Host "Portable build target: $demoDir"
 
 # --- Fresh output folder ---------------------------------------------------
+# Only this version and target's folder is replaced; other builds in dist\ stay.
+New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 if (Test-Path $demoDir) {
     Write-Host "Removing previous build folder..."
     Remove-Item $demoDir -Recurse -Force
@@ -46,7 +56,7 @@ if (Test-Path $demoDir) {
 
 # --- Publish the app as a single self-contained .exe -----------------------
 # PublishSingleFile           collapses the app + its DLLs into one executable.
-# IncludeNativeLibraries...    pulls the native pieces (SQLite, WPF) into it too,
+# IncludeNativeLibraries...    pulls the native pieces (SQLite, Skia graphics) into it too,
 #                             so they don't sit loose beside the exe.
 # DebugType=embedded          keeps the debug symbols inside the exe (good error
 #                             logs, no loose .pdb) instead of a separate file.
@@ -57,6 +67,9 @@ dotnet publish $appProject -c Release -r $Runtime --self-contained true `
     -p:DebugType=embedded `
     -o $demoDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)." }
+
+# The graphics libraries (SkiaSharp, HarfBuzzSharp) ship debug-symbol files that land loose beside the exe (~100 MB); the app never reads them.
+Get-ChildItem $demoDir -Filter *.pdb | Remove-Item -Force
 
 # --- Labeled subfolders + the portable marker ------------------------------
 # data\ is left empty: the app creates the database there on first launch.
@@ -72,7 +85,7 @@ Buy The Boat Demo - portable
 ==========================
 
 How to run this:
-  Just double click the BuyTheBoat.App.exe file. You don't have to install anything.
+  Just double click the BuyTheBoat.exe file. You don't have to install anything.
 
 What are all these folders?:
   This demo of the program is self contained inside this folder. 
@@ -95,7 +108,7 @@ Set-Content -Path (Join-Path $demoDir "README.txt") -Value $readme -Encoding utf
 
 # --- Optional zip ----------------------------------------------------------
 if ($Zip) {
-    $zipPath = Join-Path $repoRoot "BuyTheBoatDemo.zip"
+    $zipPath = Join-Path $distDir "$buildName.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Write-Host "Zipping to $zipPath ..."
     Compress-Archive -Path $demoDir -DestinationPath $zipPath

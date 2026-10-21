@@ -67,4 +67,4 @@ The C#-vs-SQLite / pure-domain-no-ORM stack decision is simply the shape of `src
 
 ## The code
 
-- **`src/`** — the C# implementation: `.Domain` (pure model, no persistence), `.Persistence` (SQLite repositories), `.App` (WPF UI). Read the code when a doc's claim needs confirming against reality, or before editing a specific class. **The tests in `tests/` are the behavioral oracles** — the truest statement of what the engine actually does.
+- **`src/`** — the C# implementation: `.Domain` (pure model, no persistence), `.Persistence` (SQLite repositories), `.App.Core` (the app's non-UI code: save confirmations, spreadsheet model and exporters, message text), `.Desktop` (the Avalonia UI, for Windows and Linux). Read the code when a doc's claim needs confirming against reality, or before editing a specific class. **The tests in `tests/` are the behavioral oracles** — the truest statement of what the engine actually does.

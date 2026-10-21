@@ -26,7 +26,7 @@
     </Window.Resources>
 
     <Window.Styles>
-        <!-- Fluent's tab headers are sized for touch; these match the WPF app's compact strip. -->
+        <!-- Fluent's tab headers are sized for touch; these make a compact strip. -->
         <Style Selector="TabItem">
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="MinHeight" Value="32"/>
@@ -78,7 +78,7 @@
             <Setter Property="VerticalAlignment" Value="Stretch"/>
         </Style>
 
-        <!-- Day cells. Later rules win, so a selected day's tint covers the attention tint, as in the WPF app. -->
+        <!-- Day cells. Later rules win, so a selected day's tint covers the attention tint. -->
         <Style Selector="Border.cell">
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="{StaticResource CellBorderBrush}"/>
