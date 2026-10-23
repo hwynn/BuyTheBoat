@@ -1,0 +1,22 @@
+
+name: test-and-release
+run-name: ${{ github.actor }} is testing for windows
+on: [push]
+jobs:
+    build-for-windows:
+        runs-on: [windows-latest]
+        strategy:
+            matrix:
+                dotnet-version: ['10.x']
+        steps:
+            - uses: actions/checkout@v7
+            - name: Setup dotnet
+              uses: actions/setup-dotnet@v6
+              with:
+                dotnet-version: ${{ matrix.dotnet-version }}
+            - name: Install dependencies
+              run: dotnet restore ./BuyTheBoat/BuyTheBoat.slnx
+            - name: Build
+              run: dotnet build --no-restore ./BuyTheBoat/BuyTheBoat.slnx
+            - name: Test with the dotnet CLI
+              run: dotnet test --no-build ./BuyTheBoat/BuyTheBoat.slnx
