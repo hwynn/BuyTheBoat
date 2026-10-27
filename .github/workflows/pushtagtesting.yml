@@ -1,0 +1,16 @@
+name: Push tag testing
+run-name: ${{ github.actor }} is pushing with a tag
+on:
+    push:
+      tags:
+          - v*.**
+jobs: 
+    Learning-Tag-Pushing:
+        runs-on: ubuntu-latest
+        steps:
+            - id: echo1
+              run: echo "this has a tag. it was triggered by a ${{ github.event_name }}!"
+            - run: echo "First step started with: ${{ steps.echo1.outcome }}."
+            - name: Print tag
+              if: steps.echo1.outcome == 'success'
+              run: echo "Tag: ${{ github.ref_name }}"
