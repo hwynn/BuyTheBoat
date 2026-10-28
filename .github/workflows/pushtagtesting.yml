@@ -10,7 +10,9 @@ jobs:
         steps:
             - id: echo1
               run: echo "this has a tag. it was triggered by a ${{ github.event_name }}!"
-            - run: echo "First step started with: ${{ steps.echo1.outcome }}."
+            - run:  |
+                echo "First step started with: ${{ steps.echo1.outcome }}."
             - name: Print tag
               if: steps.echo1.outcome == 'success'
-              run: echo "Tag: ${{ github.ref_name }}"
+              run: |
+                  echo "Tag: ${{ github.ref_name }}"
