@@ -1,13 +1,16 @@
-
 name: test-and-release
-run-name: ${{ github.actor }} is testing for windows
-on: [push]
+run-name: ${{ github.actor }} is testing for windows and linux for a release
+on:
+    push:
+      tags:
+          - v*.**
 jobs:
-    build-for-windows:
-        runs-on: [windows-latest]
+    build:
         strategy:
             matrix:
                 dotnet-version: ['10.x']
+                os: [ubuntu-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v7
             - name: Setup dotnet
@@ -19,4 +22,39 @@ jobs:
             - name: Build
               run: dotnet build --no-restore ./BuyTheBoat/BuyTheBoat.slnx
             - name: Test with the dotnet CLI
+              id: test1
               run: dotnet test --no-build ./BuyTheBoat/BuyTheBoat.slnx
+            - name: Release Build Script Linux
+              if: ${{ steps.test1.outcome == 'success' && runner.os == 'Linux' }}
+              run: bash ./BuyTheBoat/build/make-portable.sh --archive
+            - name: Release Build Script Windows
+              if: ${{ steps.test1.outcome == 'success' && runner.os == 'Windows' }}
+              run: ./BuyTheBoat/build/make-portable.ps1 -Zip
+            - name: Store Build
+              if: ${{ steps.test1.outcome == 'success' }}
+              uses: actions/upload-artifact@v7
+              with:
+                  name: my-artifact-${{ runner.os }}
+                  path: |
+                    ./dist/*.tar.gz
+                    ./dist/*.zip
+    release:
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@v8
+              with:
+                path: dist
+                merge-multiple: true
+            - name: Create Release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_REPO: ${{ github.repository }}
+              run: |
+                  gh release create --draft "${{ github.ref_name }}" \
+                  dist/* \
+                  --title "Release ${{ github.ref_name }}" \
+                  --generate-notes

@@ -22,8 +22,6 @@
 *.db-journal
 
 # Portable demo build artifacts (large binaries, not source)
-BuyTheBoatDemo/
-BuyTheBoatDemo.zip
 dist/
 
 # OS cruft
