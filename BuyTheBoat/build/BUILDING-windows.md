@@ -82,7 +82,7 @@ Other handy commands, also from the repo root:
 3. Runs `dotnet publish` on the app as **one self-contained .exe** (see the command below), then
    deletes the graphics libraries' loose debug-symbol (`.pdb`) files, which the app never reads.
 4. Creates the labeled subfolders `data\ logs\ backups\ exports\` and writes `portable.marker`.
-5. Writes a short `README.txt` for whoever runs the copy.
+5. Writes a short `README.txt` for whoever runs the copy, filled in from `README-template.txt` (shared with the other platform; edit it there), and copies `UserManual.txt` from this folder unchanged.
 6. (Optional) zips the folder.
 
 ### The version number

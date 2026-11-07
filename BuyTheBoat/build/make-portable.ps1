@@ -80,31 +80,25 @@ $markerText = "This file tells BuyTheBoat to run in portable mode, keeping its d
 Set-Content -Path (Join-Path $demoDir "portable.marker") -Value $markerText -Encoding utf8
 
 # --- A short note for whoever runs it --------------------------------------
-$readme = @'
-Buy The Boat Demo - portable
-==========================
-
-How to run this:
+# The wording shared with Linux lives in README-template.txt; only the Windows-specific parts are here.
+$howToRun = @'
   Just double click the BuyTheBoat.exe file. You don't have to install anything.
-
-What are all these folders?:
-  This demo of the program is self contained inside this folder. 
-  You can rename the outer folder all you want, just don't mess with the inner ones. 
-  Everything this copy creates stays inside this one folder:
-    data\      this contains your database. It's created the first time you run the program.
-    backups\   this is a copy automatically created before you try using "Import Data"
-    exports\   this is where "Export Data" and "Export as Spreadsheet" get saved
-    logs\      error logs. I might ask you to send me stuff from here if you have problems.
-
-Where should I put this?
+'@
+$whereToPut = @'
   You can copy this entire folder anywhere. You can even run it on a USB stick.
   Don't do anything weird like stick it in Program Files.
-  Just put it somewhere convenient.
-  
-So how do I actually use this program to manage my budget?
-  By the grace of God and human curiosity. Good luck!
 '@
-Set-Content -Path (Join-Path $demoDir "README.txt") -Value $readme -Encoding utf8
+$readme = (Get-Content -Raw (Join-Path $buildDir "README-template.txt")).
+    Replace("{TITLE}", "Buy The Boat Demo - portable").
+    Replace("{HOW_TO_RUN}", $howToRun).
+    Replace("{SLASH}", "\").
+    Replace("{WHERE_TO_PUT}", $whereToPut)
+# Windows line endings throughout, whichever kind the template was checked out with.
+$readme = $readme -replace "`r?`n", "`r`n"
+Set-Content -Path (Join-Path $demoDir "README.txt") -Value $readme -Encoding utf8 -NoNewline
+
+# The same manual goes into every platform's copy.
+Copy-Item (Join-Path $buildDir "UserManual.txt") $demoDir
 
 # --- Optional zip ----------------------------------------------------------
 if ($Zip) {

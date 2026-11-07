@@ -84,35 +84,31 @@ mkdir -p "$demo_dir/data" "$demo_dir/logs" "$demo_dir/backups" "$demo_dir/export
 echo "This file tells BuyTheBoat to run in portable mode, keeping its data in this folder. Leave it here." > "$demo_dir/portable.marker"
 
 # --- A short note for whoever runs it --------------------------------------
-cat > "$demo_dir/README.txt" <<'EOF'
-Buy The Boat Demo - portable (Linux)
-====================================
-
-How to run this:
+# The wording shared with Windows lives in README-template.txt; only the Linux-specific parts are here.
+how_to_run="$(cat <<'EOF'
   Double click the BuyTheBoat file, or open a terminal in this folder and run:
     ./BuyTheBoat
   You don't have to install anything.
   If double clicking opens it as text or does nothing, your file manager may need
   "Allow executing file as program" turned on for it (right click > Properties > Permissions).
-
-What are all these folders?:
-  This demo of the program is self contained inside this folder.
-  You can rename the outer folder all you want, just don't mess with the inner ones.
-  Everything this copy creates stays inside this one folder:
-    data/      this contains your database. It's created the first time you run the program.
-    backups/   this is a copy automatically created before you try using "Import Data"
-    exports/   this is where "Export Data" and "Export as Spreadsheet" get saved
-    logs/      error logs. I might ask you to send me stuff from here if you have problems.
-
-Where should I put this?
+EOF
+)"
+where_to_put="$(cat <<'EOF'
   You can copy this entire folder anywhere you can write to, like your home folder.
   You can even run it on a USB stick.
   Don't put it somewhere you need sudo to write, like /opt or /usr.
-  Just put it somewhere convenient.
-
-So how do I actually use this program to manage my budget?
-  By the grace of God and human curiosity. Good luck!
 EOF
+)"
+# tr drops Windows line endings, in case the template was checked out on Windows.
+readme="$(tr -d '\r' < "$build_dir/README-template.txt")"
+readme="${readme//'{TITLE}'/"Buy The Boat Demo - portable (Linux)"}"
+readme="${readme//'{HOW_TO_RUN}'/"$how_to_run"}"
+readme="${readme//'{SLASH}'/"/"}"
+readme="${readme//'{WHERE_TO_PUT}'/"$where_to_put"}"
+printf '%s\n' "$readme" > "$demo_dir/README.txt"
+
+# The same manual goes into every platform's copy.
+cp "$build_dir/UserManual.txt" "$demo_dir/"
 
 # --- Optional archive ------------------------------------------------------
 # A .tar.gz rather than a .zip, because it keeps BuyTheBoat marked as runnable.

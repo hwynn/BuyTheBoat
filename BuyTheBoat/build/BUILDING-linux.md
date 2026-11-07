@@ -71,7 +71,7 @@ Other handy commands, also from the repo root:
    and marks it runnable, then deletes the graphics libraries' loose debug-symbol (`.pdb`) files,
    which the app never reads.
 4. Creates the labeled subfolders `data/ logs/ backups/ exports/` and writes `portable.marker`.
-5. Writes a short `README.txt` for whoever runs the copy.
+5. Writes a short `README.txt` for whoever runs the copy, filled in from `README-template.txt` (shared with the other platform; edit it there), and copies `UserManual.txt` from this folder unchanged.
 6. (Optional, `--archive`) packs the folder into `dist/BuyTheBoat-<version>-<runtime>.tar.gz`. A `.tar.gz` rather than
    a `.zip`, because it keeps the executable marked as runnable.
 
